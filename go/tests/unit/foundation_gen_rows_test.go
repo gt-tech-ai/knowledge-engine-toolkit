@@ -30,20 +30,31 @@ func TestFoundationGen_RunRow(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
 	tools := mocks.NewMockToolRunner(ctrl)
-	row := types.GenRow{Name: "proto", Kind: types.GenRun, Out: "gen/go",
-		Run: types.ToolRun{Name: "buf", Tool: "buf", Args: []string{"generate", "-o", "{out}"}}}
-	tools.EXPECT().Run(gomock.Any(), gomock.Any(), row.Run, gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ interfaces.Codebase, _ types.ToolRun,
+	row := types.GenRow{
+		Name: "proto",
+		Kind: types.GenRun,
+		Out:  "gen/go",
+		Run: types.ToolRun{
+			Name: textBuf,
+			Tool: textBuf,
+			Args: []string{"generate", "-o", "{out}"},
+		},
+	}
+	tools.EXPECT().Run(gomock.Any(), gomock.Any(), any(&row.Run), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ interfaces.Codebase, _ *types.ToolRun,
 			opts types.RunOptions,
 		) (types.StepResults, error) {
-			dir := filepath.Join(opts.Vars["out"], "v1")
+			dir := filepath.Join(opts.Vars[textOut], textV1)
 			require.NoError(t, os.MkdirAll(dir, 0o750))
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "a.pb.go"), []byte("new\n"), 0o600))
-			return types.OneStep("buf", types.StatusPass, nil), nil
+			require.NoError(
+				t,
+				os.WriteFile(filepath.Join(dir, "a.pb.go"), []byte("new\n"), 0o600),
+			)
+			return types.OneStep(textBuf, types.StatusPass, nil), nil
 		}).Times(2)
 	g, err := gen.NewFromRow(row, gen.Deps{Tools: tools})
 	require.NoError(t, err)
-	cb := memoryCodebase(t, map[string]string{"gen/go/v1/a.pb.go": "old\n"})
+	cb := memoryCodebase(t, map[string]string{"gen/go/v1/a.pb.go": textOld})
 
 	out, err := g.Render(t.Context(), cb)
 	require.NoError(t, err)
@@ -53,7 +64,7 @@ func TestFoundationGen_RunRow(t *testing.T) {
 	assert.Equal(t, []string{"gen/go/v1/a.pb.go"}, d.Paths)
 
 	tools.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(types.OneStep("buf", types.StatusFail, nil), nil)
+		Return(types.OneStep(textBuf, types.StatusFail, nil), nil)
 	_, err = g.Render(t.Context(), cb)
 	require.Error(t, err)
 }
@@ -69,29 +80,35 @@ func TestFoundationGen_RunRow(t *testing.T) {
 //     an unknown kind or provider are errors.
 func TestFoundationGen_TemplateRow(t *testing.T) {
 	t.Parallel()
-	data := map[string]gen.DataFunc{"svcs": func(context.Context, interfaces.Codebase) (any, error) {
-		return map[string]any{"Names": []string{"api", "web"}}, nil
-	}}
+	data := map[string]gen.DataFunc{
+		textSvcs: func(context.Context, interfaces.Codebase) (any, error) {
+			return map[string]any{"Names": []string{textAPI, textWeb}}, nil
+		},
+	}
 	cb := memoryCodebase(t, map[string]string{
 		"t/list.tmpl": "{{range .Names}}- {{.}}\n{{end}}", "t/bad.tmpl": "{{.Missing}}",
 	})
-	g, err := gen.NewFromRow(types.GenRow{Name: "list", Kind: types.GenTemplate,
-		Template: "t/list.tmpl", Data: "svcs", Out: "docs/list.md"}, gen.Deps{Data: data})
+	g, err := gen.NewFromRow(types.GenRow{
+		Name: textList, Kind: types.GenTemplate,
+		Template: "t/list.tmpl", Data: textSvcs, Out: "docs/list.md",
+	}, gen.Deps{Data: data})
 	require.NoError(t, err)
 	out, err := g.Render(t.Context(), cb)
 	require.NoError(t, err)
 	assert.Equal(t, "- api\n- web\n", string(out["docs/list.md"]))
 
-	bad, err := gen.NewFromRow(types.GenRow{Name: "bad", Kind: types.GenTemplate,
-		Template: "t/bad.tmpl", Data: "svcs", Out: "x"}, gen.Deps{Data: data})
+	bad, err := gen.NewFromRow(types.GenRow{
+		Name: textBad, Kind: types.GenTemplate,
+		Template: "t/bad.tmpl", Data: textSvcs, Out: textX,
+	}, gen.Deps{Data: data})
 	require.NoError(t, err)
 	_, err = bad.Render(t.Context(), cb)
 	require.Error(t, err)
 
 	for _, r := range []types.GenRow{
-		{Name: "k", Kind: "copy"},
+		{Name: textK, Kind: "copy"},
 		{Name: "r", Kind: types.GenRun},
-		{Name: "d", Kind: types.GenTemplate, Template: "t/list.tmpl", Data: "nope"},
+		{Name: textDLower, Kind: types.GenTemplate, Template: "t/list.tmpl", Data: textNope},
 	} {
 		_, err := gen.NewFromRow(r, gen.Deps{Data: data})
 		require.Error(t, err, r.Name)
@@ -119,24 +136,29 @@ func TestFoundationGen_TemplateRowEach(t *testing.T) {
 	cb := memoryCodebase(t, map[string]string{
 		"t/go.tmpl": "go {{.Name}}\n", "t/py.tmpl": "py {{.Name}}\n",
 	})
-	row := types.GenRow{Name: "images", Kind: types.GenTemplate, Each: true,
-		Template: "t/{{.Lang}}.tmpl", Data: "svcs", Out: "docker/{{.Name}}/Dockerfile"}
+	row := types.GenRow{
+		Name: "images", Kind: types.GenTemplate, Each: true,
+		Template: "t/{{.Lang}}.tmpl", Data: textSvcs, Out: "docker/{{.Name}}/Dockerfile",
+	}
 	render := func(data any) (types.Artifacts, error) {
-		g, err := gen.NewFromRow(row, gen.Deps{Data: map[string]gen.DataFunc{"svcs": list(data)}})
+		g, err := gen.NewFromRow(
+			row,
+			gen.Deps{Data: map[string]gen.DataFunc{textSvcs: list(data)}},
+		)
 		require.NoError(t, err)
 		return g.Render(t.Context(), cb)
 	}
 
-	out, err := render([]svc{{"api", "go"}, {"ingest", "py"}})
+	out, err := render([]svc{{textAPI, textGoLower}, {"ingest", "py"}})
 	require.NoError(t, err)
 	assert.Equal(t, types.Artifacts{
-		"docker/api/Dockerfile":    []byte("go api\n"),
+		textDockerAPIDockerfile:    []byte("go api\n"),
 		"docker/ingest/Dockerfile": []byte("py ingest\n"),
 	}, out)
 
-	_, err = render(svc{"api", "go"})
+	_, err = render(svc{textAPI, textGoLower})
 	require.Error(t, err, "not a list")
-	_, err = render([]svc{{"api", "go"}, {"api", "py"}})
+	_, err = render([]svc{{textAPI, textGoLower}, {textAPI, "py"}})
 	require.Error(t, err, "one output twice")
 }
 
@@ -153,25 +175,33 @@ func TestFoundationGen_TemplateRowEach(t *testing.T) {
 //     marker, keeping the text around them; a file missing a marker is an error.
 func TestFoundationGen_TemplateRowRegion(t *testing.T) {
 	t.Parallel()
-	data := map[string]gen.DataFunc{"rules": func(context.Context, interfaces.Codebase) (any, error) {
-		return []string{"a", "b"}, nil
-	}}
-	row := types.GenRow{Name: "rules", Kind: types.GenTemplate, Template: "t/rules.tmpl",
+	data := map[string]gen.DataFunc{
+		"rules": func(context.Context, interfaces.Codebase) (any, error) {
+			return []string{textA, textB}, nil
+		},
+	}
+	row := types.GenRow{
+		Name: "rules", Kind: types.GenTemplate, Template: "t/rules.tmpl",
 		Data: "rules", Out: "lint.yml",
-		Region: types.GenRegion{Begin: "# BEGIN rules", End: "# END rules"}}
+		Region: types.GenRegion{Begin: "# BEGIN rules", End: "# END rules"},
+	}
 	tmpl := "  # BEGIN rules\n{{range .}}  - {{.}}\n{{end}}  # END rules\n"
 	g, err := gen.NewFromRow(row, gen.Deps{Data: data})
 	require.NoError(t, err)
 
-	cb := memoryCodebase(t, map[string]string{"t/rules.tmpl": tmpl,
-		"lint.yml": "head:\n  # BEGIN rules\n  - old\n  # END rules\ntail: 1\n"})
+	cb := memoryCodebase(t, map[string]string{
+		"t/rules.tmpl": tmpl,
+		"lint.yml":     "head:\n  # BEGIN rules\n  - old\n  # END rules\ntail: 1\n",
+	})
 	out, err := g.Render(t.Context(), cb)
 	require.NoError(t, err)
 	assert.Equal(t, "head:\n  # BEGIN rules\n  - a\n  - b\n  # END rules\ntail: 1\n",
 		string(out["lint.yml"]))
 
-	_, err = g.Render(t.Context(), memoryCodebase(t, map[string]string{"t/rules.tmpl": tmpl,
-		"lint.yml": "head:\n  # BEGIN rules\n"}))
+	_, err = g.Render(t.Context(), memoryCodebase(t, map[string]string{
+		"t/rules.tmpl": tmpl,
+		"lint.yml":     "head:\n  # BEGIN rules\n",
+	}))
 	require.Error(t, err, "no end marker")
 }
 
@@ -191,14 +221,21 @@ func TestFoundationGen_EditRow(t *testing.T) {
 	t.Parallel()
 	type env struct{ Path, ID string }
 	data := func(v any) map[string]gen.DataFunc {
-		return map[string]gen.DataFunc{"envs": func(context.Context, interfaces.Codebase) (any, error) {
-			return v, nil
-		}}
+		return map[string]gen.DataFunc{
+			textEnvs: func(context.Context, interfaces.Codebase) (any, error) {
+				return v, nil
+			},
+		}
 	}
-	row := types.GenRow{Name: "cdn", Kind: types.GenEdit, Each: true, Data: "envs",
-		Out: "{{.Path}}", Set: map[string]string{"$.cdn.id": "{{.ID}}"}}
+	row := types.GenRow{
+		Name: "cdn", Kind: types.GenEdit, Each: true, Data: textEnvs,
+		Out: "{{.Path}}", Set: map[string]string{"$.cdn.id": "{{.ID}}"},
+	}
 	src := "# top\ncdn:\n  id: \"\"  # set by gen\n  keep: 1\nother: x\n"
-	cb := memoryCodebase(t, map[string]string{"a/values.yaml": src, "b/values.yaml": "other: x\n"})
+	cb := memoryCodebase(
+		t,
+		map[string]string{"a/values.yaml": src, "b/values.yaml": "other: x\n"},
+	)
 
 	g, err := gen.NewFromRow(row, gen.Deps{Data: data([]env{{"a/values.yaml", "E123"}})})
 	require.NoError(t, err)
@@ -212,8 +249,10 @@ func TestFoundationGen_EditRow(t *testing.T) {
 	_, err = g.Render(t.Context(), cb)
 	require.Error(t, err, "the file declares no cdn.id")
 
-	_, err = gen.NewFromRow(types.GenRow{Name: "e", Kind: types.GenEdit, Data: "envs", Out: "x"},
-		gen.Deps{Data: data(nil)})
+	_, err = gen.NewFromRow(
+		types.GenRow{Name: textE, Kind: types.GenEdit, Data: textEnvs, Out: textX},
+		gen.Deps{Data: data(nil)},
+	)
 	require.Error(t, err, "an edit row needs a set")
 }
 
@@ -231,6 +270,6 @@ func TestCoreTypes_MergeEnv(t *testing.T) {
 		[]string{"PATH=/bin", "HOME=/h", "GOFLAGS=-mod=mod", "NEW=1"},
 		types.MergeEnv(
 			[]string{"PATH=/bin", "VIRTUAL_ENV=/v", "GOFLAGS=x", "HOME=/h"},
-			[]string{"-VIRTUAL_ENV", "GOFLAGS=-mod=mod", "NEW=1", "-ABSENT"}))
+			[]string{textVirtualEnv, "GOFLAGS=-mod=mod", "NEW=1", "-ABSENT"}))
 	assert.Equal(t, []string{"A=1"}, types.MergeEnv([]string{"A=1"}, nil))
 }

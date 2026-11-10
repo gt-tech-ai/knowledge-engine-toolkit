@@ -8,4 +8,10 @@ LangDetectException: type[Exception]
 class DetectorFactory:
     seed: int | None
 
+# One candidate language and its probability (the items detect_langs returns).
+class Language:
+    lang: str
+    prob: float
+
 def detect(text: str) -> str: ...
+def detect_langs(text: str) -> list[Language]: ...

@@ -9,6 +9,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from techai_webutils.controllers.grpc.interceptors import (
+    AuthServerInterceptor as PackageInterceptor,
+)
+from techai_webutils.controllers.grpc.interceptors import (
+    HeaderClaimMapping as PackageMapping,
+)
 from techai_webutils.controllers.grpc.interceptors.auth import (
     AuthClaims,
     AuthServerInterceptor,
@@ -27,17 +33,36 @@ if TYPE_CHECKING:
 
 
 async def _in_fresh_context[T](body: Coroutine[object, object, T]) -> T:
-    """Await ``body`` in an empty context: no claims are visible to it and none leak out."""
+    """Await ``body`` in an empty context: no claims are visible to it and none leak out.
+
+    Args:
+        body: The coroutine to run.
+
+    Returns:
+        What ``body`` returns.
+
+    """
     return await asyncio.create_task(body, context=contextvars.Context())
 
 
 async def _claims_after(
     interceptor: AuthServerInterceptor, metadata: list[tuple[str, str]]
 ) -> AuthClaims | None:
-    """Run ``interceptor`` over ``metadata`` in a fresh context; return the claims it stored."""
+    """Run ``interceptor`` over ``metadata`` in a fresh context.
+
+    Return the claims it stored.
+
+    Args:
+        interceptor: The auth interceptor.
+        metadata: The call's metadata.
+
+    Returns:
+        The claims left in context, or ``None``.
+
+    """
 
     async def run() -> AuthClaims | None:
-        await interceptor.intercept_service(
+        _ = await interceptor.intercept_service(
             AsyncMock(return_value="handler"), MagicMock(invocation_metadata=metadata)
         )
         return get_auth_claims()
@@ -46,7 +71,15 @@ async def _claims_after(
 
 
 async def _roles(raw: str) -> frozenset[str]:
-    """Return the roles the interceptor parses from an ``x-roles`` header of ``raw``."""
+    """Return the roles the interceptor parses from an ``x-roles`` header of ``raw``.
+
+    Args:
+        raw: The roles claim.
+
+    Returns:
+        The roles the interceptor parses from an ``x-roles`` header of ``raw``.
+
+    """
     claims = await _claims_after(
         AuthServerInterceptor(_HEADERS), [("x-user-id", "u-1"), ("x-roles", raw)]
     )
@@ -57,12 +90,14 @@ async def _roles(raw: str) -> frozenset[str]:
 class TestAuthClaims:
     """Test suite for AuthClaims dataclass."""
 
-    def test_default_values(self) -> None:
+    @staticmethod
+    def test_default_values() -> None:
         """Test that a default-constructed AuthClaims represents an anonymous principal.
 
         **Why this test is important:**
           - Downstream authorization treats empty identity fields as "no identity"
-          - A non-empty default (e.g. a stray role) would silently grant access nobody intended
+          - A non-empty default (e.g. a stray role) would silently grant access nobody
+            intended
           - Confirms the safe, deny-by-default starting point for every claims object
 
         **What it tests:**
@@ -74,12 +109,14 @@ class TestAuthClaims:
         assert not claims.tenant_id
         assert claims.roles == frozenset()
 
-    def test_constructed_values(self) -> None:
+    @staticmethod
+    def test_constructed_values() -> None:
         """Test that explicitly supplied identity fields are retained verbatim.
 
         **Why this test is important:**
           - Claims carry the authenticated user, tenant, and roles to business logic
-          - Any corruption or drop of these fields would mis-attribute or mis-authorize a request
+          - Any corruption or drop of these fields would mis-attribute or mis-authorize a
+            request
           - Confirms the dataclass faithfully stores the gateway-provided identity
 
         **What it tests:**
@@ -95,34 +132,37 @@ class TestAuthClaims:
         assert claims.tenant_id == "o-1"
         assert "admin" in claims.roles
 
-    def test_frozen(self) -> None:
+    @staticmethod
+    def test_frozen() -> None:
         """Test that AuthClaims is immutable after construction.
 
         **Why this test is important:**
-          - Claims are shared across a request via contextvars; in-place mutation would be a security hazard
-          - Immutability guarantees that no handler can escalate its own privileges by editing the claims
+          - Claims are shared across a request via contextvars; in-place mutation would be
+            a security hazard
+          - Immutability guarantees that no handler can escalate its own privileges by
+            editing the claims
           - Confirms the frozen dataclass contract that the auth model relies on
 
         **What it tests:**
           - Assigning to user_id on an existing instance raises AttributeError
         """
-        import pytest
-
         claims = AuthClaims(user_id="u-1")
         with pytest.raises(AttributeError):
-            claims.user_id = "u-2"  # type: ignore[misc]
+            claims.user_id = "u-2"
 
 
 class TestSplitRoles:
     """Test suite for role header parsing."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_empty_string(self) -> None:
+    async def test_empty_string() -> None:
         """Test that an empty x-roles header parses to no roles.
 
         **Why this test is important:**
           - A request with no roles header must grant zero privileges, not crash or guess
-          - Treating an empty string as a role would inject a bogus "" role into authorization checks
+          - Treating an empty string as a role would inject a bogus "" role into
+            authorization checks
           - Confirms the deny-by-default behavior for role-free requests
 
         **What it tests:**
@@ -130,13 +170,15 @@ class TestSplitRoles:
         """
         assert await _roles("") == frozenset()
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_single_role(self) -> None:
+    async def test_single_role() -> None:
         """Test that a single-role header parses to exactly that role.
 
         **Why this test is important:**
           - Single-role principals are the common case and must map to the right privilege
-          - A parsing slip here would deny or over-grant access for the most frequent request shape
+          - A parsing slip here would deny or over-grant access for the most frequent
+            request shape
           - Confirms the base case of the comma-split logic
 
         **What it tests:**
@@ -144,17 +186,20 @@ class TestSplitRoles:
         """
         assert await _roles("admin") == frozenset({"admin"})
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_multiple_roles(self) -> None:
+    async def test_multiple_roles() -> None:
         """Test that a comma-separated header yields every distinct role.
 
         **Why this test is important:**
-          - Multi-role users (e.g. admin + member) need all their roles surfaced for authorization
+          - Multi-role users (e.g. admin + member) need all their roles surfaced for
+            authorization
           - Dropping a role would deny legitimate access; inventing one would over-grant
           - Confirms the splitter preserves each role across separators
 
         **What it tests:**
-          - an ``x-roles`` header of "admin,member,viewer" yields all three roles as a frozenset
+          - an ``x-roles`` header of "admin,member,viewer" yields all three roles as a
+            frozenset
         """
         assert await _roles("admin,member,viewer") == frozenset({
             "admin",
@@ -162,31 +207,38 @@ class TestSplitRoles:
             "viewer",
         })
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_strips_whitespace(self) -> None:
+    async def test_strips_whitespace() -> None:
         """Test that surrounding whitespace around roles is trimmed.
 
         **Why this test is important:**
-          - Gateways may emit padded role lists; " admin" must match the "admin" privilege check
-          - Untrimmed roles would silently never match any authorization rule, locking users out
+          - Gateways may emit padded role lists; " admin" must match the "admin" privilege
+            check
+          - Untrimmed roles would silently never match any authorization rule, locking
+            users out
           - Confirms normalization so equality comparisons against role names work
 
         **What it tests:**
-          - an ``x-roles`` header of " admin , member " yields the trimmed roles {"admin", "member"}
+          - an ``x-roles`` header of " admin , member " yields the trimmed roles {"admin",
+            "member"}
         """
         assert await _roles(" admin , member ") == frozenset({"admin", "member"})
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_discards_empty_segments(self) -> None:
+    async def test_discards_empty_segments() -> None:
         """Test that empty segments from trailing or doubled commas are dropped.
 
         **Why this test is important:**
           - Malformed headers ("admin,,member,") must not introduce an empty "" role
-          - An empty role in the set would be a spurious privilege token in authorization logic
+          - An empty role in the set would be a spurious privilege token in authorization
+            logic
           - Confirms the parser is resilient to sloppy header formatting
 
         **What it tests:**
-          - an ``x-roles`` header of "admin,,member," yields only the real roles {"admin", "member"}
+          - an ``x-roles`` header of "admin,,member," yields only the real roles {"admin",
+            "member"}
         """
         assert await _roles("admin,,member,") == frozenset({"admin", "member"})
 
@@ -194,16 +246,21 @@ class TestSplitRoles:
 class TestContextVars:
     """Test suite for auth claims context management."""
 
-    def test_set_and_get_claims(self) -> None:
+    @staticmethod
+    def test_set_and_get_claims() -> None:
         """Test that claims stored in the current context are retrievable by handlers.
 
         **Why this test is important:**
-          - The interceptor sets claims and downstream handlers read them via this same contextvar
-          - A broken set/get round-trip would leave every authenticated handler without an identity
-          - Confirms the contextvar plumbing that the entire per-request auth model depends on
+          - The interceptor sets claims and downstream handlers read them via this same
+            contextvar
+          - A broken set/get round-trip would leave every authenticated handler without an
+            identity
+          - Confirms the contextvar plumbing that the entire per-request auth model
+            depends on
 
         **What it tests:**
-          - get_auth_claims() after set_auth_claims() returns the same user_id and tenant_id
+          - get_auth_claims() after set_auth_claims() returns the same user_id and
+            tenant_id
         """
         claims = AuthClaims(user_id="u-1", tenant_id="o-1")
         token = set_auth_claims(claims)
@@ -215,12 +272,15 @@ class TestContextVars:
         finally:
             token.var.reset(token)
 
-    def test_default_is_none(self) -> None:
+    @staticmethod
+    def test_default_is_none() -> None:
         """Test that a context with no claims set reports None, not a default identity.
 
         **Why this test is important:**
-          - Absent claims must read as None so handlers can reject or treat the request as anonymous
-          - A non-None default would fabricate an identity for unauthenticated requests (privilege bug)
+          - Absent claims must read as None so handlers can reject or treat the request as
+            anonymous
+          - A non-None default would fabricate an identity for unauthenticated requests
+            (privilege bug)
           - Confirms the deny-by-default behavior at the context layer
 
         **What it tests:**
@@ -234,7 +294,15 @@ class TestAuthServerInterceptor:
 
     @staticmethod
     def _details(metadata: list[tuple[str, str]]) -> MagicMock:
-        """Build minimal HandlerCallDetails-shaped data carrying invocation metadata."""
+        """Build minimal HandlerCallDetails-shaped data carrying invocation metadata.
+
+        Args:
+            metadata: The call's metadata.
+
+        Returns:
+            The call details.
+
+        """
         return MagicMock(invocation_metadata=metadata)
 
     @pytest.mark.asyncio
@@ -243,7 +311,8 @@ class TestAuthServerInterceptor:
 
         **Why this test is important:**
           - Downstream handlers read identity exclusively from these context claims
-          - A gateway-authenticated request must surface its user/org/roles to business logic
+          - A gateway-authenticated request must surface its user/org/roles to business
+            logic
           - Getting the header-to-claim mapping wrong would mis-attribute or leak access
 
         **What it tests:**
@@ -258,6 +327,12 @@ class TestAuthServerInterceptor:
         continuation = AsyncMock(return_value="handler")
 
         async def run() -> tuple[object, AuthClaims | None]:
+            """Intercept the call and read the claims it set.
+
+            Returns:
+                The handler and the claims.
+
+            """
             result = await AuthServerInterceptor(_HEADERS).intercept_service(
                 continuation, details
             )
@@ -289,6 +364,12 @@ class TestAuthServerInterceptor:
         continuation = AsyncMock(return_value="handler")
 
         async def run() -> tuple[object, AuthClaims | None]:
+            """Intercept the call and read the claims it set.
+
+            Returns:
+                The handler and the claims.
+
+            """
             result = await AuthServerInterceptor(_HEADERS).intercept_service(
                 continuation, details
             )
@@ -300,13 +381,14 @@ class TestAuthServerInterceptor:
         assert claims is None
         continuation.assert_called_once_with(details)
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_reads_claims_from_the_consumers_header_mapping(self) -> None:
+    async def test_reads_claims_from_the_consumers_header_mapping() -> None:
         """A consumer's header mapping decides which metadata keys become claims.
 
         **Why this test is important:**
-          - Gateways name identity headers differently; a fixed mapping ties the library to one
-            deployment's header contract.
+          - Gateways name identity headers differently; a fixed mapping ties the library
+            to one deployment's header contract.
 
         **What it tests:**
           - With a custom HeaderClaimMapping, claims come from the custom keys.
@@ -331,29 +413,23 @@ class TestAuthServerInterceptor:
 class TestHeaderClaimMapping:
     """Validation and normalisation of the consumer's gateway header names."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_normalises_header_names_to_the_lowercase_grpc_metadata_keys(
-        self,
-    ) -> None:
-        """Header names written as the gateway spells them still match gRPC's lowercase metadata keys.
+    async def test_normalises_header_names_to_the_lowercase_grpc_metadata_keys() -> None:
+        """Header names written as the gateway spells them still match.
+
+        gRPC's metadata keys are lowercase.
 
         **Why this test is important:**
           - gRPC metadata keys are always lowercase. A mapping copied from gateway config
-            ("X-User-Sub") never matched, so no request ever got claims, while a Go service built from
-            the same names (case-insensitive http.Header) worked.
+            ("X-User-Sub") never matched, so no request ever got claims, while a Go
+            service built from the same names (case-insensitive http.Header) worked.
 
         **What it tests:**
-          - HeaderClaimMapping(" X-User-Sub ", "X-Tenant", "X-Roles") stores the lowercase, trimmed names,
-            and an interceptor built from it (imported from the interceptors package) extracts claims from
-            lowercase metadata.
+          - HeaderClaimMapping(" X-User-Sub ", "X-Tenant", "X-Roles") stores the
+            lowercase, trimmed names, and an interceptor built from it (imported from the
+            interceptors package) extracts claims from lowercase metadata.
         """
-        from techai_webutils.controllers.grpc.interceptors import (
-            AuthServerInterceptor as PackageInterceptor,
-        )
-        from techai_webutils.controllers.grpc.interceptors import (
-            HeaderClaimMapping as PackageMapping,
-        )
-
         mapping = PackageMapping(
             user_id=" X-User-Sub ", tenant_id="X-Tenant", roles="X-Roles"
         )
@@ -371,18 +447,25 @@ class TestHeaderClaimMapping:
             user_id="u-1", tenant_id="t-1", roles=frozenset({"a"})
         )
 
+    @staticmethod
     @pytest.mark.parametrize("field", ["user_id", "tenant_id", "roles"])
     @pytest.mark.parametrize("blank", ["", "   "])
-    def test_rejects_an_empty_or_blank_header_name(self, field: str, blank: str) -> None:
+    def test_rejects_an_empty_or_blank_header_name(field: str, blank: str) -> None:
         """A mapping with an empty or blank header name fails at construction.
 
         **Why this test is important:**
-          - An unset config value would map a claim to the "" key: an empty user key means no request
-            ever gets claims and nothing says why; an empty tenant key stamps tenant_id="" on every claim,
-            which a scope policy could then match.
+          - An unset config value would map a claim to the "" key: an empty user key means
+            no request ever gets claims and nothing says why; an empty tenant key stamps
+            tenant_id="" on every claim, which a scope policy could then match.
 
         **What it tests:**
-          - Each of user_id, tenant_id and roles set to "" or whitespace raises ValueError naming it.
+          - Each of user_id, tenant_id and roles set to "" or whitespace raises ValueError
+            naming it.
+
+        Args:
+            field: The setting left blank.
+            blank: The blank header name.
+
         """
         names = {
             "user_id": "x-sub",
@@ -392,4 +475,4 @@ class TestHeaderClaimMapping:
         }
 
         with pytest.raises(ValueError, match=field):
-            HeaderClaimMapping(**names)
+            _ = HeaderClaimMapping(**names)

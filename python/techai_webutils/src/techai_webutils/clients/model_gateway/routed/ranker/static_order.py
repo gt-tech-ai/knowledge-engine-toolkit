@@ -1,4 +1,7 @@
-"""The ``static_order`` ranker: the route's default model, its preferred models, then catalog order."""
+"""The ``static_order`` ranker.
+
+The route's default model, its preferred models, then catalog order.
+"""
 
 from __future__ import annotations
 
@@ -9,9 +12,9 @@ from techai_webutils.core.types.routing import RankResult
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from techai_webutils.clients.token_ledger.cost import PriceTable
     from techai_webutils.core.interfaces.model_gateway import RouteContext
     from techai_webutils.core.types.routing import CatalogEndpointRef, PlanInput, Route
+    from techai_webutils.foundation.tokens.cost import PriceTable
 
 
 class StaticOrderRanker:
@@ -19,12 +22,24 @@ class StaticOrderRanker:
 
     @staticmethod
     async def rank(
-        ctx: RouteContext,  # noqa: ARG004 - the static order ignores the request
+        ctx: RouteContext,
         route: Route,
         candidates: Sequence[CatalogEndpointRef],
-        route_input: PlanInput,  # noqa: ARG004 - the static order ignores the request
+        route_input: PlanInput,
     ) -> RankResult:
-        """Return the candidates with the route's models first, the rest in catalog order."""
+        """Return the candidates with the route's models first, the rest in catalog order.
+
+        Args:
+            ctx: The request's routing context.
+            route: The route being planned.
+            candidates: The endpoints the policy filter allowed.
+            route_input: The request's size and requirements.
+
+        Returns:
+            The candidates with the route's models first.
+
+        """
+        del ctx, route_input
         preference = list(dict.fromkeys((route.default_model, *route.preferred)))
         rank_of = {model_id: index for index, model_id in enumerate(preference)}
         last = len(preference)
@@ -38,7 +53,20 @@ class StaticOrderRanker:
         route: Route,
         candidates: Sequence[CatalogEndpointRef],
         route_input: PlanInput,
-        prices: PriceTable,  # noqa: ARG003 - the static order ignores prices
+        prices: PriceTable,
     ) -> RankResult:
-        """Return ``rank``'s order; the static order never reads the call's prices."""
+        """Return ``rank``'s order; the static order never reads the call's prices.
+
+        Args:
+            ctx: Ignored.
+            route: The call's route.
+            candidates: The endpoints that passed the filter.
+            route_input: Ignored.
+            prices: Ignored.
+
+        Returns:
+            ``rank``'s order; the static order never reads the call's prices.
+
+        """
+        del prices
         return await cls.rank(ctx, route, candidates, route_input)

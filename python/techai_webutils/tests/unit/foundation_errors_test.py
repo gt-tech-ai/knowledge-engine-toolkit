@@ -24,6 +24,8 @@ since these are pure utility functions operating on error instances.
 Run with: pytest tests/python/test_foundation/test_errors.py
 """
 
+from unittest.mock import MagicMock
+
 from techai_webutils.core.errors.errors import (
     AppError,
     AppTimeoutError,
@@ -41,11 +43,21 @@ from techai_webutils.foundation.errors.errors import (
     to_http_status,
 )
 
+_EXPECTED_TO_GRPC_STATUS = 5
+_EXPECTED_TO_GRPC_STATUS_4 = 4
+_EXPECTED_TO_GRPC_STATUS_14 = 14
+_EXPECTED_TO_GRPC_STATUS_13 = 13
+_EXPECTED_TO_HTTP_STATUS = 404
+_EXPECTED_TO_HTTP_STATUS_500 = 500
+_EXPECTED_EXCEPTIONS_COUNT = 2
+_EXPECTED_ERRORS_COUNT = 2
+
 
 class TestErrorClassification:
     """Test suite for classify_error categorization function."""
 
-    def test_timeout_is_transient(self) -> None:
+    @staticmethod
+    def test_timeout_is_transient() -> None:
         """Test that classify_error returns 'transient' for AppTimeoutError.
 
         **Why this test is important:**
@@ -59,7 +71,8 @@ class TestErrorClassification:
         err = AppTimeoutError("timed out")
         assert classify_error(err) == "transient"
 
-    def test_unavailable_is_transient(self) -> None:
+    @staticmethod
+    def test_unavailable_is_transient() -> None:
         """Test that classify_error returns 'transient' for UnavailableError.
 
         **Why this test is important:**
@@ -73,13 +86,15 @@ class TestErrorClassification:
         err = UnavailableError("down")
         assert classify_error(err) == "transient"
 
-    def test_not_found_is_permanent(self) -> None:
+    @staticmethod
+    def test_not_found_is_permanent() -> None:
         """Test that classify_error returns 'permanent' for NotFoundError.
 
         **Why this test is important:**
           - Retrying a NOT_FOUND error will never succeed without caller action
           - Permanent classification prevents wasteful retry attempts
-          - Metrics systems use this to distinguish client errors from infrastructure issues
+          - Metrics systems use this to distinguish client errors from infrastructure
+            issues
 
         **What it tests:**
           - classify_error(NotFoundError) returns "permanent"
@@ -87,7 +102,8 @@ class TestErrorClassification:
         err = NotFoundError("gone")
         assert classify_error(err) == "permanent"
 
-    def test_internal_is_internal(self) -> None:
+    @staticmethod
+    def test_internal_is_internal() -> None:
         """Test that classify_error returns 'internal' for InternalError.
 
         **Why this test is important:**
@@ -101,7 +117,8 @@ class TestErrorClassification:
         err = InternalError("bug")
         assert classify_error(err) == "internal"
 
-    def test_non_app_error_is_unknown(self) -> None:
+    @staticmethod
+    def test_non_app_error_is_unknown() -> None:
         """Test that classify_error returns 'unknown' for non-AppError exceptions.
 
         **Why this test is important:**
@@ -114,13 +131,15 @@ class TestErrorClassification:
         """
         assert classify_error(ValueError("bad")) == "unknown"
 
-    def test_ingestion_error_is_internal(self) -> None:
+    @staticmethod
+    def test_ingestion_error_is_internal() -> None:
         """Test that classify_error returns 'internal' for an IngestionError.
 
         **Why this test is important:**
-          - An ingestion-pipeline failure is a server-side failure operators must see, not a
-            client error or a retryable blip
-          - Pinning the category stops the INGESTION_ERROR code from silently drifting to "unknown"
+          - An ingestion-pipeline failure is a server-side failure operators must see, not
+            a client error or a retryable blip
+          - Pinning the category stops the INGESTION_ERROR code from silently drifting to
+            "unknown"
 
         **What it tests:**
           - classify_error(IngestionError) returns "internal"
@@ -129,7 +148,8 @@ class TestErrorClassification:
             classify_error(IngestionError("parse failed", document_id="d1")) == "internal"
         )
 
-    def test_quality_failed_is_internal(self) -> None:
+    @staticmethod
+    def test_quality_failed_is_internal() -> None:
         """Test that classify_error returns 'internal' for a QUALITY_FAILED error.
 
         **Why this test is important:**
@@ -144,25 +164,32 @@ class TestErrorClassification:
             == "internal"
         )
 
-    def test_upstream_is_internal_and_non_transient(self) -> None:
-        """Test that classify_error returns 'internal' (not 'transient') for an UPSTREAM error.
+    @staticmethod
+    def test_upstream_is_internal_and_non_transient() -> None:
+        """Test that classify_error returns 'internal' for an UPSTREAM error.
+
+        Not 'transient'.
 
         **Why this test is important:**
-          - UPSTREAM is deliberately non-transient: Go's classify.go IsTransient omits it, so it is
-            surfaced for investigation rather than silently retried, even though it maps to gRPC
-            UNAVAILABLE on the wire
-          - Classifying it as "transient" would wrongly trigger retry loops on a dependency failure
+          - UPSTREAM is deliberately non-transient: Go's classify.go IsTransient omits it,
+            so it is surfaced for investigation rather than silently retried, even though
+            it maps to gRPC UNAVAILABLE on the wire
+          - Classifying it as "transient" would wrongly trigger retry loops on a
+            dependency failure
 
         **What it tests:**
-          - classify_error(AppError(UPSTREAM)) returns "internal" (and therefore not "transient")
+          - classify_error(AppError(UPSTREAM)) returns "internal" (and therefore not
+            "transient")
         """
         assert classify_error(AppError(ErrorCode.UPSTREAM, "dep down")) == "internal"
 
-    def test_unknown_code_is_unknown(self) -> None:
+    @staticmethod
+    def test_unknown_code_is_unknown() -> None:
         """Test that classify_error returns 'unknown' for the UNKNOWN code.
 
         **Why this test is important:**
-          - UNKNOWN is the explicit fallback code; Go classifies it neither transient nor permanent
+          - UNKNOWN is the explicit fallback code; Go classifies it neither transient nor
+            permanent
           - The catch-all category is the honest home for an unclassifiable error
 
         **What it tests:**
@@ -170,12 +197,14 @@ class TestErrorClassification:
         """
         assert classify_error(AppError(ErrorCode.UNKNOWN, "no code")) == "unknown"
 
-    def test_canceled_is_unknown(self) -> None:
+    @staticmethod
+    def test_canceled_is_unknown() -> None:
         """Test that classify_error returns 'unknown' for a CANCELED error.
 
         **Why this test is important:**
-          - A caller-initiated cancellation is neither transient nor permanent in Go's classify.go,
-            so it falls to the catch-all category rather than being retried or treated as a bug
+          - A caller-initiated cancellation is neither transient nor permanent in Go's
+            classify.go, so it falls to the catch-all category rather than being retried
+            or treated as a bug
 
         **What it tests:**
           - classify_error(AppError(CANCELED)) returns "unknown"
@@ -186,7 +215,8 @@ class TestErrorClassification:
 class TestGRPCMapping:
     """Test suite for to_grpc_status mapping function."""
 
-    def test_not_found_maps_to_5(self) -> None:
+    @staticmethod
+    def test_not_found_maps_to_5() -> None:
         """Test that to_grpc_status returns 5 (NOT_FOUND) for NotFoundError.
 
         **Why this test is important:**
@@ -198,13 +228,15 @@ class TestGRPCMapping:
           - to_grpc_status(NotFoundError) returns 5
         """
         err = NotFoundError("missing")
-        assert to_grpc_status(err) == 5
+        assert to_grpc_status(err) == _EXPECTED_TO_GRPC_STATUS
 
-    def test_timeout_maps_to_4(self) -> None:
+    @staticmethod
+    def test_timeout_maps_to_4() -> None:
         """Test that to_grpc_status returns 4 (DEADLINE_EXCEEDED) for AppTimeoutError.
 
         **Why this test is important:**
-          - gRPC DEADLINE_EXCEEDED signals the client to potentially retry with longer timeout
+          - gRPC DEADLINE_EXCEEDED signals the client to potentially retry with longer
+            timeout
           - Incorrect mapping (e.g., UNKNOWN) would prevent client-side retry logic
           - Must align with Go gateway's deadline propagation behavior
 
@@ -212,9 +244,10 @@ class TestGRPCMapping:
           - to_grpc_status(AppTimeoutError) returns 4
         """
         err = AppTimeoutError()
-        assert to_grpc_status(err) == 4
+        assert to_grpc_status(err) == _EXPECTED_TO_GRPC_STATUS_4
 
-    def test_unavailable_maps_to_14(self) -> None:
+    @staticmethod
+    def test_unavailable_maps_to_14() -> None:
         """Test that to_grpc_status returns 14 (UNAVAILABLE) for UnavailableError.
 
         **Why this test is important:**
@@ -226,28 +259,33 @@ class TestGRPCMapping:
           - to_grpc_status(UnavailableError) returns 14
         """
         err = UnavailableError()
-        assert to_grpc_status(err) == 14
+        assert to_grpc_status(err) == _EXPECTED_TO_GRPC_STATUS_14
 
-    def test_non_app_error_maps_to_internal(self) -> None:
+    @staticmethod
+    def test_non_app_error_maps_to_internal() -> None:
         """Test that to_grpc_status returns 13 (INTERNAL) for a non-AppError exception.
 
         **Why this test is important:**
-          - A plain error has no code; Go's Sanitize maps Code(err)=CodeUnknown through its default
-            to connect.CodeInternal, so the Python edge must sanitize it to INTERNAL for parity
+          - A plain error has no code; Go's Sanitize maps Code(err)=CodeUnknown through
+            its default to connect.CodeInternal, so the Python edge must sanitize it to
+            INTERNAL for parity
           - This keeps every "unknown" path consistent (AppError.grpc_status fallback,
-            AppError(UNKNOWN).grpc_status, and the clients gRPC mapper all return INTERNAL)
-          - INTERNAL still hides the raw detail from clients, preventing information disclosure
+            AppError(UNKNOWN).grpc_status, and the clients gRPC mapper all return
+            INTERNAL)
+          - INTERNAL still hides the raw detail from clients, preventing information
+            disclosure
 
         **What it tests:**
           - to_grpc_status(RuntimeError) returns 13 (INTERNAL)
         """
-        assert to_grpc_status(RuntimeError("oops")) == 13
+        assert to_grpc_status(RuntimeError("oops")) == _EXPECTED_TO_GRPC_STATUS_13
 
 
 class TestHTTPMapping:
     """Test suite for to_http_status mapping function."""
 
-    def test_not_found_maps_to_404(self) -> None:
+    @staticmethod
+    def test_not_found_maps_to_404() -> None:
         """Test that to_http_status returns 404 for NotFoundError.
 
         **Why this test is important:**
@@ -259,9 +297,10 @@ class TestHTTPMapping:
           - to_http_status(NotFoundError) returns 404
         """
         err = NotFoundError("missing")
-        assert to_http_status(err) == 404
+        assert to_http_status(err) == _EXPECTED_TO_HTTP_STATUS
 
-    def test_internal_maps_to_500(self) -> None:
+    @staticmethod
+    def test_internal_maps_to_500() -> None:
         """Test that to_http_status returns 500 for InternalError.
 
         **Why this test is important:**
@@ -273,18 +312,21 @@ class TestHTTPMapping:
           - to_http_status(InternalError) returns 500
         """
         err = InternalError()
-        assert to_http_status(err) == 500
+        assert to_http_status(err) == _EXPECTED_TO_HTTP_STATUS_500
 
 
 class TestIngestionErrors:
     """Test suite for IngestionErrors ExceptionGroup."""
 
-    def test_collects_multiple_errors(self) -> None:
+    @staticmethod
+    def test_collects_multiple_errors() -> None:
         """Test that IngestionErrors aggregates multiple IngestionError instances.
 
         **Why this test is important:**
-          - Batch ingestion processes many documents; individual failures must not halt the batch
-          - Aggregated errors enable partial success reporting with per-document failure details
+          - Batch ingestion processes many documents; individual failures must not halt
+            the batch
+          - Aggregated errors enable partial success reporting with per-document failure
+            details
           - Downstream retry logic uses the error list to identify failed documents
 
         **What it tests:**
@@ -295,15 +337,17 @@ class TestIngestionErrors:
             IngestionError("embed failed", document_id="doc2", stage="embed"),
         ]
         group = IngestionErrors("batch failed", errors)
-        assert len(group.exceptions) == 2
+        assert len(group.exceptions) == _EXPECTED_EXCEPTIONS_COUNT
 
-    def test_except_star_compatible(self) -> None:
+    @staticmethod
+    def test_except_star_compatible() -> None:
         """Test that IngestionErrors is catchable with Python 3.11+ except* syntax.
 
         **Why this test is important:**
           - except* enables granular handling of individual errors within a group
           - Batch processing callers can retry specific document failures
-          - Python 3.11+ ExceptionGroup compatibility is required for modern error handling
+          - Python 3.11+ ExceptionGroup compatibility is required for modern error
+            handling
 
         **What it tests:**
           - IngestionErrors raised and caught with except* IngestionError succeeds
@@ -312,7 +356,7 @@ class TestIngestionErrors:
         group = IngestionErrors("batch", errors)
         caught = False
         try:
-            raise group
+            MagicMock(side_effect=group)()
         except* IngestionError:
             caught = True
         assert caught
@@ -321,7 +365,8 @@ class TestIngestionErrors:
 class TestMultiError:
     """Test suite for MultiError aggregation."""
 
-    def test_multi_error_collects(self) -> None:
+    @staticmethod
+    def test_multi_error_collects() -> None:
         """Test that MultiError stores errors and provides a readable summary.
 
         **Why this test is important:**
@@ -335,5 +380,5 @@ class TestMultiError:
         """
         errs: list[BaseException] = [NotFoundError("a"), AppTimeoutError("b")]
         multi = MultiError(errs)
-        assert len(multi.errors) == 2
+        assert len(multi.errors) == _EXPECTED_ERRORS_COUNT
         assert "2 errors" in str(multi)

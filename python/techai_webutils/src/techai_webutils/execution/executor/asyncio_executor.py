@@ -8,7 +8,7 @@ satisfies the same protocol so callers swap executors without touching mapper co
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.execution.engine.fan_out import fan_out
 
@@ -22,13 +22,20 @@ if TYPE_CHECKING:
     )
 
 
+@final
 class AsyncioExecutor:
     """Run a mapper over items in-process with bounded concurrency via ``fan_out``."""
 
     def __init__(
         self, observer: ExecutionObserver | None = None, *, name: str = "executor"
     ) -> None:
-        """Store the observer + batch name forwarded to ``fan_out`` on each ``run``."""
+        """Store the observer + batch name forwarded to ``fan_out`` on each ``run``.
+
+        Args:
+            observer: Observes each item's start and result; ``None`` observes nothing.
+            name: The batch's name.
+
+        """
         self._observer = observer
         self._name = name
 
@@ -39,5 +46,15 @@ class AsyncioExecutor:
         *,
         concurrency: int,
     ) -> BatchResult:
-        """Apply ``fn`` to each item with bounded concurrency, isolating per-item failure."""
+        """Apply ``fn`` to each item with bounded concurrency, isolating per-item failure.
+
+        Args:
+            fn: The step applied to each item.
+            items: The work items.
+            concurrency: The most items run at once.
+
+        Returns:
+            The batch result.
+
+        """
         return await fan_out(items, concurrency, fn, self._observer, name=self._name)

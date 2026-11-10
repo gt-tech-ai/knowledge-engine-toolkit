@@ -5,9 +5,18 @@ import (
 
 	"github.com/DataDog/sketches-go/ddsketch"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// medianQuantile is the quantile of the median.
+const medianQuantile = 0.5
+
+// p95Quantile is the quantile of p95.
+const p95Quantile = 0.95
+
+// p99Quantile is the quantile of p99.
+const p99Quantile = 0.99
 
 // SketchRelativeAccuracy is the relative accuracy of every quantile sketch: a
 // p50/p95/p99 is within 1% of the exact value at its rank.
@@ -39,6 +48,7 @@ func NewPartial(value float64) (Partial, error) {
 			"chartspec: observation must be finite",
 		)
 	}
+
 	sketch, err := ddsketch.NewDefaultDDSketch(SketchRelativeAccuracy)
 	if err != nil {
 		return Partial{}, apperr.Wrap(
@@ -47,38 +57,46 @@ func NewPartial(value float64) (Partial, error) {
 			"chartspec: create sketch",
 		)
 	}
-	if err := sketch.Add(value); err != nil {
+
+	err = sketch.Add(value)
+	if err != nil {
 		return Partial{}, apperr.Wrap(
 			err,
 			apperr.CodeInvalidInput,
 			"chartspec: add observation",
 		)
 	}
+
 	return Partial{Sketch: sketch, Sum: value, Count: 1, Min: value, Max: value}, nil
 }
 
 // Merge folds o into p. o is not modified and p never shares o's sketch.
-func (p *Partial) Merge(o Partial) {
-	if o.Count == 0 {
+func (p *Partial) Merge(partial Partial) {
+	if partial.Count == 0 {
 		return
 	}
+
 	if p.Count == 0 {
-		*p = o
-		if o.Sketch != nil {
-			p.Sketch = o.Sketch.Copy()
+		*p = partial
+		if partial.Sketch != nil {
+			p.Sketch = partial.Sketch.Copy()
 		}
+
 		return
 	}
-	p.Sum += o.Sum
-	p.Count += o.Count
-	p.Min = math.Min(p.Min, o.Min)
-	p.Max = math.Max(p.Max, o.Max)
+
+	p.Sum += partial.Sum
+	p.Count += partial.Count
+
+	p.Min = math.Min(p.Min, partial.Min)
+	p.Max = math.Max(p.Max, partial.Max)
+
 	switch {
-	case o.Sketch == nil:
+	case partial.Sketch == nil:
 	case p.Sketch == nil:
-		p.Sketch = o.Sketch.Copy()
+		p.Sketch = partial.Sketch.Copy()
 	default:
-		mergeSketch(p.Sketch, o.Sketch)
+		mergeSketch(p.Sketch, partial.Sketch)
 	}
 }
 
@@ -86,14 +104,17 @@ func (p *Partial) Merge(o Partial) {
 // mapping, so MergeWith succeeds; a sketch decoded with a different mapping is
 // re-binned value by value instead, which keeps the relative-accuracy bound.
 func mergeSketch(dst, src *ddsketch.DDSketch) {
-	if err := dst.MergeWith(src); err == nil {
+	err := dst.MergeWith(src)
+	if err == nil {
 		return
 	}
+
 	src.ForEach(func(value, count float64) bool {
 		_ = dst.AddWithCount(
 			value,
 			count,
 		) // value came from a valid sketch bin; Add cannot reject it
+
 		return false
 	})
 }
@@ -102,12 +123,12 @@ func mergeSketch(dst, src *ddsketch.DDSketch) {
 // p50/p95/p99 from the sketch. An empty summary yields NaN for the
 // value-dependent aggregates; count_distinct, which additive partials cannot
 // answer, yields NaN.
-func Finalize(p Partial, agg types.Aggregate) float64 {
+func Finalize(partial Partial, agg types.Aggregate) float64 {
 	switch agg {
 	case types.AggSum:
-		return p.Sum
+		return partial.Sum
 	case types.AggCount:
-		return p.Count
+		return partial.Count
 	case types.AggNone, types.AggCountDistinct:
 		return math.NaN()
 	case types.AggAvg,
@@ -116,35 +137,40 @@ func Finalize(p Partial, agg types.Aggregate) float64 {
 		types.AggP50,
 		types.AggP95,
 		types.AggP99:
-		return finalizeValue(p, agg)
+		return finalizeValue(partial, agg)
 	default:
-		return math.NaN()
+		// Any other value takes the shared result below.
 	}
+
+	return math.NaN()
 }
 
 // finalizeValue finalizes a value-dependent aggregate, NaN for an empty summary.
-func finalizeValue(p Partial, agg types.Aggregate) float64 {
-	if p.Count == 0 {
+func finalizeValue(partial Partial, agg types.Aggregate) float64 {
+	if partial.Count == 0 {
 		return math.NaN()
 	}
+
 	switch agg {
 	case types.AggAvg:
-		return p.Sum / p.Count
+		return partial.Sum / partial.Count
 	case types.AggMin:
-		return p.Min
+		return partial.Min
 	case types.AggMax:
-		return p.Max
+		return partial.Max
 	case types.AggP50:
-		return quantile(p.Sketch, 0.5)
+		return quantile(partial.Sketch, medianQuantile)
 	case types.AggP95:
-		return quantile(p.Sketch, 0.95)
+		return quantile(partial.Sketch, p95Quantile)
 	case types.AggP99:
-		return quantile(p.Sketch, 0.99)
+		return quantile(partial.Sketch, p99Quantile)
 	case types.AggNone, types.AggSum, types.AggCount, types.AggCountDistinct:
 		return math.NaN()
 	default:
-		return math.NaN()
+		// Any other value takes the shared result below.
 	}
+
+	return math.NaN()
 }
 
 // quantile reads q from s, NaN when the sketch is missing or empty.
@@ -152,9 +178,11 @@ func quantile(s *ddsketch.DDSketch, q float64) float64 {
 	if s == nil {
 		return math.NaN()
 	}
+
 	v, err := s.GetValueAtQuantile(q)
 	if err != nil {
 		return math.NaN()
 	}
+
 	return v
 }

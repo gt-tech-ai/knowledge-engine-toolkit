@@ -10,6 +10,7 @@ Run with: pytest tests/python/test_foundation/test_cache_builder.py -v
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -23,12 +24,16 @@ from techai_webutils.clients.cache.builder import (
 from techai_webutils.clients.cache.local import LocalCache
 from techai_webutils.clients.cache.null import NullCache
 from techai_webutils.clients.cache.redis import RedisCache
+from techai_webutils.core.errors import AppValueError
+
+_EXPECTED_DEFAULT_TTL = 300
 
 
 class TestCacheBuilder:
     """Test suite for cache builder factory."""
 
-    def test_new_cache_local(self) -> None:
+    @staticmethod
+    def test_new_cache_local() -> None:
         """Test that CacheKind.LOCAL creates a LocalCache.
 
         **Why this test is important:**
@@ -42,7 +47,8 @@ class TestCacheBuilder:
         cache = new_cache_from_config(config)
         assert isinstance(cache, LocalCache)
 
-    def test_new_cache_null(self) -> None:
+    @staticmethod
+    def test_new_cache_null() -> None:
         """Test that CacheKind.NULL creates a NullCache.
 
         **Why this test is important:**
@@ -56,7 +62,8 @@ class TestCacheBuilder:
         cache = new_cache_from_config(config)
         assert isinstance(cache, NullCache)
 
-    def test_new_cache_redis(self) -> None:
+    @staticmethod
+    def test_new_cache_redis() -> None:
         """Test that CacheKind.REDIS creates a RedisCache with the provided client.
 
         **Why this test is important:**
@@ -71,7 +78,8 @@ class TestCacheBuilder:
         cache = new_cache_from_config(config)
         assert isinstance(cache, RedisCache)
 
-    def test_new_cache_redis_requires_client(self) -> None:
+    @staticmethod
+    def test_new_cache_redis_requires_client() -> None:
         """Test that CacheKind.REDIS raises ValueError when no client is provided.
 
         **Why this test is important:**
@@ -82,10 +90,11 @@ class TestCacheBuilder:
           - ValueError is raised when redis_client is None with CacheKind.REDIS
         """
         config = CacheConfig(kind=CacheKind.REDIS)
-        with pytest.raises(ValueError, match="redis_client"):
-            new_cache_from_config(config)
+        with pytest.raises(AppValueError, match="redis_client"):
+            _ = new_cache_from_config(config)
 
-    def test_new_cache_unknown_kind_raises(self) -> None:
+    @staticmethod
+    def test_new_cache_unknown_kind_raises() -> None:
         """Test that an unknown kind raises ValueError.
 
         **Why this test is important:**
@@ -95,11 +104,12 @@ class TestCacheBuilder:
         **What it tests:**
           - ValueError is raised for an invalid kind
         """
-        config = CacheConfig(kind="unknown")  # type: ignore[arg-type]
-        with pytest.raises(ValueError, match="unknown"):
-            new_cache_from_config(config)
+        config = CacheConfig(kind=cast("CacheKind", cast("object", "unknown")))
+        with pytest.raises(AppValueError, match="unknown"):
+            _ = new_cache_from_config(config)
 
-    def test_default_config_returns_local(self) -> None:
+    @staticmethod
+    def test_default_config_returns_local() -> None:
         """Test that default_config returns LOCAL kind with 300s TTL.
 
         **Why this test is important:**
@@ -112,4 +122,4 @@ class TestCacheBuilder:
         """
         config = default_config()
         assert config.kind == CacheKind.LOCAL
-        assert config.default_ttl == 300
+        assert config.default_ttl == _EXPECTED_DEFAULT_TTL

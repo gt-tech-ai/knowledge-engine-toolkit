@@ -8,7 +8,7 @@ max-concurrent-streams. (Channel pooling / idle timeout are not configured here 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import grpc
 
@@ -24,7 +24,8 @@ class ChannelConfig:
     """gRPC channel configuration (the options actually applied by ``create_channel``)."""
 
     target: str = "localhost:50051"
-    """Default dial target when ``create_channel`` is called without an explicit target."""
+    """Default dial target when ``create_channel`` is called without an explicit
+    target."""
     max_send_message_length: int = _16MB
     """Max outbound message size in bytes."""
     max_receive_message_length: int = _16MB
@@ -40,14 +41,23 @@ def create_channel(
 ) -> grpc.aio.Channel:
     """Create a configured async ``grpc.aio`` channel.
 
-    ``target`` overrides ``config.target`` when provided; ``config`` defaults to ``ChannelConfig()``.
-    Returns an insecure channel carrying the message-size + concurrent-stream options, every call
-    run through ``interceptors`` (first outermost).
+    ``target`` overrides ``config.target`` when provided; ``config`` defaults to
+    ``ChannelConfig()``. Returns an insecure channel carrying the message-size +
+    concurrent-stream options, every call run through ``interceptors`` (first outermost).
+
+    Args:
+        target: The server address; ``None`` uses the config's.
+        config: The channel settings; ``None`` uses the defaults.
+        interceptors: Run around every call, outermost first.
+
+    Returns:
+        A configured async ``grpc.aio`` channel.
+
     """
     cfg = config or ChannelConfig()
     addr = target or cfg.target
 
-    options: list[tuple[str, Any]] = [
+    options: list[tuple[str, int]] = [
         ("grpc.max_send_message_length", cfg.max_send_message_length),
         ("grpc.max_receive_message_length", cfg.max_receive_message_length),
         ("grpc.max_concurrent_streams", cfg.max_concurrent_streams),

@@ -18,17 +18,18 @@ type stagedFiles struct {
 }
 
 // Select returns the staged files matching spec.Glob or spec.Globs (every staged file
-// when both are empty),
-// sorted.
+// when both are empty), sorted. spec must not be nil.
 func (s stagedFiles) Select(
 	ctx context.Context,
 	_ interfaces.Codebase,
-	spec types.TargetSpec,
+	spec *types.TargetSpec,
 ) ([]string, error) {
 	out, err := s.git.StagedFiles(ctx, s.root, globs(spec))
 	if err != nil {
 		return nil, err
 	}
+
 	slices.Sort(out)
+
 	return out, nil
 }

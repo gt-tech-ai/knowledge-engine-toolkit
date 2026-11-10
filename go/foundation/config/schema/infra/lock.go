@@ -3,8 +3,14 @@ package infra
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultLockConfigTTL is the default TTL of LockConfig.
+const defaultLockConfigTTL = 30 * time.Second
+
+// defaultLockConfigRenewInterval is the default RenewInterval of LockConfig.
+const defaultLockConfigRenewInterval = 10 * time.Second
 
 // LockConfig selects and tunes the distributed lock that enforces at most one
 // active operation per key across service replicas.
@@ -33,8 +39,8 @@ const lockKindLocal = "local"
 func DefaultLockConfig() LockConfig {
 	return LockConfig{
 		Kind:          lockKindLocal,
-		TTL:           30 * time.Second,
-		RenewInterval: 10 * time.Second,
+		TTL:           defaultLockConfigTTL,
+		RenewInterval: defaultLockConfigRenewInterval,
 	}
 }
 
@@ -47,14 +53,18 @@ func (c LockConfig) Validate() error {
 	default:
 		return apperr.InvalidInput("lock.kind must be \"local\" or \"redis\"")
 	}
+
 	if c.TTL <= 0 {
 		return apperr.InvalidInput("lock.ttl must be > 0")
 	}
+
 	if c.RenewInterval <= 0 {
 		return apperr.InvalidInput("lock.renew_interval must be > 0")
 	}
-	if c.RenewInterval*3 > c.TTL {
+
+	if c.RenewInterval*minRenewalsPerTTL > c.TTL {
 		return apperr.InvalidInput("lock.renew_interval must be <= lock.ttl/3")
 	}
+
 	return nil
 }

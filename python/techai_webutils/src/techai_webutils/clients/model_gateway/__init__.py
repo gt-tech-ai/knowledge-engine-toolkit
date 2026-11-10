@@ -3,9 +3,9 @@
 from techai_webutils.clients.model_gateway.builder import (
     GatewayConfig,
     GatewayKind,
-    RoutedConfig,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.routed.config import RoutedConfig
 
 __all__ = [
     "GatewayConfig",

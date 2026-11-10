@@ -1,21 +1,28 @@
-"""Config-selected single-writer lock factory (the foundation/logger ``NewFromConfig`` pattern).
+"""Config-selected single-writer lock factory.
 
-Selects the in-process ``InMemoryLock`` (single replica) or the cross-pod ``PostgresAdvisoryLock``
-from config (``LockConfig.kind``). Unknown kinds fail loudly. The Postgres backend and
-its ``asyncpg`` dependency are imported lazily so the dev/memory path never loads asyncpg.
+It follows the foundation/logger ``NewFromConfig`` pattern.
+
+Selects the in-process ``InMemoryLock`` (single replica) or the cross-pod
+``PostgresAdvisoryLock`` from config (``LockConfig.kind``). Unknown kinds fail loudly. The
+Postgres backend and its ``asyncpg`` dependency are imported lazily so the dev/memory path
+never loads asyncpg.
 """
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from urllib.parse import quote
 
 from techai_webutils.clients.lock.memory import InMemoryLock
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
+    from techai_webutils.clients.lock.postgres import (
+        PostgresAdvisoryLock as _LazyPostgresAdvisoryLock,
+    )
     from techai_webutils.core.interfaces.lock import ManagedLock
 
 
@@ -25,12 +32,16 @@ class LockKind(StrEnum):
     MEMORY = "memory"
     """In-process lock (dev / tests / single replica); no external dependency."""
     POSTGRES = "postgres"
-    """Cross-pod Postgres advisory lock (stage/prod; needs the ``techai-webutils[postgres]`` extra)."""
+    """Cross-pod Postgres advisory lock (stage/prod; needs the
+    ``techai-webutils[postgres]`` extra)."""
 
 
 @dataclass(frozen=True, slots=True)
 class LockConfig:
-    """Single-writer lock configuration: the backend, its connection, and the lock's identity."""
+    """Single-writer lock configuration.
+
+    The backend, its connection and the lock's identity.
+    """
 
     kind: LockKind = LockKind.MEMORY
     """Selects the backend (``memory`` in dev / replica=1, ``postgres`` in stage/prod)."""
@@ -39,27 +50,42 @@ class LockConfig:
     port: int = 5432
     """Postgres port."""
     user: str = ""
-    """Postgres user (callers project it from DatabaseSettings; unused by the memory backend)."""
+    """Postgres user (callers project it from DatabaseSettings; unused by the memory
+    backend)."""
     password: str = ""
     """Postgres password."""
     database: str = ""
     """Postgres database name (callers project it from DatabaseSettings)."""
     sslmode: str = "disable"
-    """libpq sslmode for the lock connection (``disable`` in dev; ``require``/``verify-*`` on RDS)."""
+    """libpq sslmode for the lock connection (``disable`` in dev; ``require``/``verify-*``
+    on RDS)."""
     key: str = ""
     """What the lock guards (e.g. one resource id); hashed into the advisory-lock key."""
     namespace: int | None = None
-    """Signed-int32 namespace for the advisory lock, separating this lock class from others. Required
-    for the postgres kind (it is half of the lock identity, so it has no default); unused by memory."""
+    """Signed-int32 namespace for the advisory lock, separating this lock class from
+    others. Required for the postgres kind (it is half of the lock identity, so it has no
+    default); unused by memory."""
     application_name: str = "advisory-lock"
-    """Postgres ``application_name`` tagging the lock session in ``pg_stat_activity`` (postgres only)."""
+    """Postgres ``application_name`` tagging the lock session in ``pg_stat_activity``
+    (postgres only)."""
 
 
-def _postgres_dsn(config: LockConfig) -> str:
-    """Build a libpq DSN URI for the lock connection.
+def postgres_dsn(config: LockConfig) -> str:
+    """Build a libpq DSN URI for ``config``'s database.
 
-    asyncpg has no ``sslmode`` kwarg but parses it from the DSN URI, so TLS travels in the query
-    string; credentials are percent-encoded to survive special characters.
+    It serves the lock's connection or a pool beside it.
+
+    asyncpg has no ``sslmode`` kwarg but parses it from the DSN URI, so TLS travels in the
+    query string; credentials are percent-encoded to survive special characters. A caller
+    that opens a pool on the lock's database (the postgres ``StartBudget``'s start-rate
+    row) uses it too, so both connect the same way.
+
+    Args:
+        config: Selects the backend and carries its settings.
+
+    Returns:
+        A libpq DSN URI for ``config``'s database: the lock's connection.
+
     """
     user = quote(config.user, safe="")
     password = quote(config.password, safe="")
@@ -68,22 +94,44 @@ def _postgres_dsn(config: LockConfig) -> str:
 
 
 def new_lock_from_config(config: LockConfig) -> ManagedLock:
-    """Build the ``DistributedLock`` backend selected by ``config.kind`` (memory or postgres).
+    """Build the ``DistributedLock`` backend selected by ``config.kind``.
 
-    The postgres kind requires ``config.namespace`` (``ValueError`` when unset) and a non-empty
-    ``config.key``: both make up the advisory-lock identity, so neither may silently default.
+    The kinds are memory and postgres.
+
+    The postgres kind requires ``config.namespace`` (``ValueError`` when unset) and a
+    non-empty ``config.key``: both make up the advisory-lock identity, so neither may
+    silently default.
+
+    Args:
+        config: Selects the backend and carries its settings.
+
+    Returns:
+        The ``DistributedLock`` backend selected by ``config.kind``.
+
+    Raises:
+        AppValueError: Postgres lock kind requires LockConfig.namespace (it is half of the
+            lock identity); unknown lock kind: ``config.kind``.
+
     """
     if config.kind is LockKind.MEMORY:
         return InMemoryLock()
     if config.kind is LockKind.POSTGRES:
         if config.namespace is None:
-            msg = "postgres lock kind requires LockConfig.namespace (it is half of the lock identity)"
+            msg = (
+                "postgres lock kind requires LockConfig.namespace (it is half of the "
+                "lock identity)"
+            )
             raise AppValueError(msg)
         # Lazy import: keep asyncpg off the dev/memory path (loaded only in stage/prod).
-        from techai_webutils.clients.lock.postgres import PostgresAdvisoryLock  # noqa: PLC0415
+        postgres_advisory_lock_cls = cast(
+            "type[_LazyPostgresAdvisoryLock]",
+            importlib.import_module(
+                "techai_webutils.clients.lock.postgres"
+            ).PostgresAdvisoryLock,
+        )
 
-        return PostgresAdvisoryLock(
-            dsn=_postgres_dsn(config),
+        return postgres_advisory_lock_cls(
+            dsn=postgres_dsn(config),
             key=config.key,
             namespace=config.namespace,
             application_name=config.application_name,

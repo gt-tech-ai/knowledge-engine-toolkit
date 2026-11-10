@@ -30,32 +30,79 @@ class Repository[T, P, ID](ABC):
 
     @abstractmethod
     async def get(self, entity_id: ID) -> T:
-        """Retrieve an entity by ID. Raises NotFoundError if not found."""
+        """Retrieve an entity by ID. Raises NotFoundError if not found.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        Returns:
+            The stored entity.
+
+        """
         ...
 
     @abstractmethod
     async def list(self, params: P, page: PageRequest) -> Page[T]:
-        """Retrieve entities matching parameters with pagination."""
+        """Retrieve entities matching parameters with pagination.
+
+        Args:
+            params: The filter the entities must match.
+            page: Which page of results to return.
+
+        Returns:
+            One page of matching entities.
+
+        """
         ...
 
     @abstractmethod
     async def create(self, entity: T) -> T:
-        """Create a new entity and return it with generated fields populated."""
+        """Create a new entity and return it with generated fields populated.
+
+        Args:
+            entity: The entity to store.
+
+        Returns:
+            The stored entity, with generated fields (ids, timestamps) filled.
+
+        """
         ...
 
     @abstractmethod
     async def update(self, entity_id: ID, entity: T) -> T:
-        """Update an existing entity. Raises NotFoundError if not found."""
+        """Update an existing entity. Raises NotFoundError if not found.
+
+        Args:
+            entity_id: The entity's identifier.
+            entity: The entity's new state.
+
+        Returns:
+            The stored entity after the update.
+
+        """
         ...
 
     @abstractmethod
     async def delete(self, entity_id: ID) -> None:
-        """Remove an entity by ID. Raises NotFoundError if not found."""
+        """Remove an entity by ID. Raises NotFoundError if not found.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        """
         ...
 
     @abstractmethod
     async def exists(self, entity_id: ID) -> bool:
-        """Check if an entity with the given ID exists."""
+        """Check if an entity with the given ID exists.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        Returns:
+            ``True`` when an entity with ``entity_id`` is stored.
+
+        """
         ...
 
 
@@ -78,12 +125,25 @@ class TransactionManager(ABC):
 
     @abstractmethod
     async def begin(self) -> Transaction:
-        """Start a new transaction."""
+        """Start a new transaction.
+
+        Returns:
+            The open transaction; the caller commits or rolls it back.
+
+        """
         ...
 
     @abstractmethod
     async def with_transaction(self, fn: Callable[[], Awaitable[R]]) -> R:
-        """Execute fn within a transaction, auto-committing or rolling back."""
+        """Execute fn within a transaction, auto-committing or rolling back.
+
+        Args:
+            fn: The work to run inside the transaction.
+
+        Returns:
+            What ``fn`` returns, after the transaction commits.
+
+        """
         ...
 
 
@@ -93,13 +153,21 @@ _in_transaction: contextvars.ContextVar[bool] = contextvars.ContextVar(
 
 
 def in_transaction() -> bool:
-    """Report whether the current task runs inside a workflow's transaction (Go ``InTx``)."""
+    """Report whether the current task runs inside a workflow's transaction (Go ``InTx``).
+
+    Returns:
+        Whether a transaction is active.
+
+    """
     return _in_transaction.get()
 
 
 @contextmanager
 def marking_transaction() -> Generator[None]:
-    """Mark the current task as inside a transaction until the block exits (Go ``WithInTx``)."""
+    """Mark the current task as inside a transaction until the block exits.
+
+    Go's ``WithInTx``.
+    """
     token = _in_transaction.set(True)
     try:
         yield

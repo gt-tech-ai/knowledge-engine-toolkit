@@ -22,7 +22,7 @@ package config
 import (
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	viperloader "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/viper"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
@@ -60,21 +60,27 @@ func (k Kind) String() string {
 //	port := cfg.GetInt("server.port")
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.ConfigLoader, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
-	return NewFromConfig(cfg)
+
+	return NewFromConfig(&cfg)
 }
 
 // NewFromConfig creates a ConfigLoader from a Config struct. The loader is
 // fully initialized (Load called internally). Returns an error if the kind is
 // unknown or loading fails.
-func NewFromConfig(cfg Config) (interfaces.ConfigLoader, error) {
+// cfg must not be nil.
+func NewFromConfig(cfg *Config) (interfaces.ConfigLoader, error) {
 	switch cfg.Kind {
 	case KindViper:
 		loader := viperloader.New(cfg.Viper)
-		if err := loader.Load(); err != nil {
+
+		err := loader.Load()
+		if err != nil {
 			return nil, err
 		}
+
 		return loader, nil
 
 	default:

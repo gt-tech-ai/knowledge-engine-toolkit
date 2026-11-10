@@ -56,7 +56,7 @@ func (mr *MockHelmClientMockRecorder) DependencyBuild(ctx, chartDir any) *gomock
 }
 
 // Lint mocks base method.
-func (m *MockHelmClient) Lint(ctx context.Context, spec types.RenderSpec) error {
+func (m *MockHelmClient) Lint(ctx context.Context, spec *types.RenderSpec) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Lint", ctx, spec)
 	ret0, _ := ret[0].(error)
@@ -70,7 +70,7 @@ func (mr *MockHelmClientMockRecorder) Lint(ctx, spec any) *gomock.Call {
 }
 
 // Template mocks base method.
-func (m *MockHelmClient) Template(ctx context.Context, spec types.RenderSpec) ([]byte, error) {
+func (m *MockHelmClient) Template(ctx context.Context, spec *types.RenderSpec) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Template", ctx, spec)
 	ret0, _ := ret[0].([]byte)

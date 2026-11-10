@@ -7,7 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/wire"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
 )
@@ -41,32 +41,32 @@ type Edge struct {
 //
 // A handler's error reaches the caller unchanged; a rejection the tier produced itself
 // (a panic, a shed request, a denial, a timeout) becomes a *connect.Error of its code.
-func ServerOptions(name string, d decorate.Deps, edge Edge) []connect.HandlerOption {
+// d must not be nil.
+func ServerOptions(name string, d *decorate.Deps, edge Edge) []connect.HandlerOption {
 	chain := transport.Interceptors(name, d, native(d), adapt, edge.Authn)
+
 	chain = append(chain, edge.Inner...)
+
 	if len(chain) == 0 {
 		return nil
 	}
+
 	return []connect.HandlerOption{connect.WithInterceptors(chain...)}
 }
 
 // native returns the Connect interceptors standing in for the tier's observability
 // layers.
-func native(d decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) {
+func native(dRef *decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) {
+	deps := *dRef
+
 	return func(layer decorate.Layer) ([]connect.Interceptor, bool) {
 		switch layer {
 		case decorate.LayerTracing:
-			return when(d.Tracer != nil, func() connect.Interceptor {
-				return TracingInterceptor(d.Tracer)
-			}), true
+			return nativeTracing(&deps), true
 		case decorate.LayerMetrics:
-			return when(d.Metrics != nil, func() connect.Interceptor {
-				return MetricsInterceptor(d.Metrics)
-			}), true
+			return nativeMetrics(&deps), true
 		case decorate.LayerLogging:
-			return when(d.Logger != nil, func() connect.Interceptor {
-				return NewLoggingInterceptor(d.Logger)
-			}), true
+			return nativeLogging(&deps), true
 		case decorate.LayerRecovery,
 			decorate.LayerAuth,
 			decorate.LayerTimeout,
@@ -76,16 +76,54 @@ func native(d decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) 
 			decorate.LayerRateLimit:
 			return nil, false
 		default:
-			return nil, false
+			// Any other value takes the shared result below.
 		}
+
+		return nil, false
 	}
 }
 
-// when returns the interceptor build makes, or none when its collaborator is absent.
-func when(present bool, build func() connect.Interceptor) []connect.Interceptor {
-	if !present {
+// nativeTracing is the tracing interceptor, when a tracer is wired.
+func nativeTracing(dRef *decorate.Deps) []connect.Interceptor {
+	d := *dRef
+
+	return when(
+		d.Tracer,
+		func() connect.Interceptor { return TracingInterceptor(d.Tracer) },
+	)
+}
+
+// nativeMetrics is the metrics interceptor, when a recorder is wired.
+func nativeMetrics(dRef *decorate.Deps) []connect.Interceptor {
+	d := *dRef
+
+	return when(
+		d.Metrics,
+		func() connect.Interceptor { return MetricsInterceptor(d.Metrics) },
+	)
+}
+
+// nativeLogging is the access-log interceptor, when a logger is wired.
+func nativeLogging(dRef *decorate.Deps) []connect.Interceptor {
+	d := *dRef
+
+	return when(
+		d.Logger,
+		func() connect.Interceptor { return NewLoggingInterceptor(d.Logger) },
+	)
+}
+
+// when returns the interceptor build makes, or none when its collaborator is unset.
+func when[C comparable](
+	collaborator C,
+	build func() connect.Interceptor,
+) []connect.Interceptor {
+	var unset C
+
+	if collaborator == unset {
 		return nil
 	}
+
 	return []connect.Interceptor{build()}
 }
 
@@ -110,20 +148,23 @@ func (i tierInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 			resp       connect.AnyResponse
 			handlerErr error
 		)
+
 		err := i.unary.WrapOp(
 			ctx,
 			operation(req.Spec()),
 			func(ctx context.Context) error {
 				resp, handlerErr = next(ctx, req)
+
 				return handlerErr
 			},
 		)
+
 		return resp, connectError(ctx, err, handlerErr)
 	}
 }
 
 // WrapStreamingClient is a no-op — this is a server-side interceptor.
-func (i tierInterceptor) WrapStreamingClient(
+func (tierInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -135,27 +176,31 @@ func (i tierInterceptor) WrapStreamingHandler(
 ) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		var handlerErr error
+
 		err := i.stream.WrapOp(
 			ctx,
 			operation(conn.Spec()),
 			func(ctx context.Context) error {
 				handlerErr = next(ctx, conn)
+
 				return handlerErr
 			},
 		)
+
 		return connectError(ctx, err, handlerErr)
 	}
 }
 
 // connectError returns the handler's own error unchanged, and an error the tier
 // produced (or rewrapped) as a sanitized *connect.Error of its code; the real error is
-// captured for the request log (core/errors.Capture).
+// captured for the request log (core/apperr.Capture).
 func connectError(ctx context.Context, err, handlerErr error) error {
-	if err == nil ||
-		err == handlerErr { //nolint:errorlint // identity: the handler's own error
+	if err == nil || apperr.Identical(err, handlerErr) {
 		return err
 	}
+
 	apperr.Capture(ctx, err)
+
 	return wire.SanitizeConnect(err)
 }
 

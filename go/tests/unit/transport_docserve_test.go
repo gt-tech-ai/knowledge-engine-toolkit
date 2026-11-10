@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
@@ -28,9 +29,9 @@ import (
 // services/<svc>/docs/openapi.json and the Python packages under python/.
 func docserveCfg(root, apiPort string) docserve.Config {
 	return docserve.Config{
-		Root: root, ServerDir: "services", OpenAPISpec: "docs/openapi.json",
+		Root: root, ServerDir: textServices, OpenAPISpec: "docs/openapi.json",
 		PkgsiteHint: "go install pkgsite", GoPort: "16060", PythonPort: "16061",
-		APIPort: apiPort, PythonRoots: []string{"python"},
+		APIPort: apiPort, PythonRoots: []string{textPython},
 	}
 }
 
@@ -42,50 +43,78 @@ func docserveDeps(
 	return docserve.Deps{
 		Runner: runner, Supervisor: sup, Log: fixtures.NopLogger(),
 		Streams: types.Streams{Out: io.Discard, Err: io.Discard},
+		Keep:    nil,
 	}
 }
 
 // freePort returns a TCP port free at the time of the call.
 func freePort(t *testing.T) string {
 	t.Helper()
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+
+	ln, err := new(net.ListenConfig).Listen(t.Context(), textTCP, text127001)
 	require.NoError(t, err)
-	port := ln.Addr().(*net.TCPAddr).Port
+
+	port := asType[*net.TCPAddr](t, ln.Addr()).Port
 	require.NoError(t, ln.Close())
+
 	return strconv.Itoa(port)
 }
 
 // writeSpec writes a minimal OpenAPI spec for svc under root.
 func writeSpec(t *testing.T, root, svc string) {
 	t.Helper()
-	dir := filepath.Join(root, "services", svc, "docs")
-	require.NoError(t, os.MkdirAll(dir, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "openapi.json"),
-		[]byte(`{"openapi":"3.0.0","svc":"`+svc+`"}`), 0o600))
+
+	dir := filepath.Join(root, textServices, svc, textDocsLower)
+	require.NoError(t, os.MkdirAll(dir, mkdirAllInputSpec))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, textOpenapiJSONLower),
+		[]byte(`{"openapi":"3.0.0","svc":"`+svc+`"}`), writeFileInput))
 }
 
 // getBody GETs the API server's path and returns its status and body.
 func getBody(t *testing.T, port, path string) (code int, body string) {
 	t.Helper()
+
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
 		"http://127.0.0.1:"+port+path, http.NoBody)
 	require.NoError(t, err)
+
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
+
 	defer func() { _ = resp.Body.Close() }()
+
 	raw, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
+
 	return resp.StatusCode, string(raw)
 }
 
-// serveAPI starts the API server over root on a free port and stops it at cleanup.
+// serveAPI starts the API server over root on a free port and stops it at cleanup,
+// retrying when a parallel test took the port first.
 func serveAPI(t *testing.T, root string) string {
 	t.Helper()
-	port := freePort(t)
-	srv, err := docserve.New(docserveCfg(root, port), docserveDeps(nil, nil)).
-		ServeAPIDocs(t.Context())
+
+	// freePort can only report a port free when it asks, and tests run in parallel, so
+	// another test may bind it first: a bind failure takes a fresh port.
+	var (
+		port string
+		srv  *http.Server
+		err  error
+	)
+
+	for range iterationsAPI {
+		port = freePort(t)
+		srv, err = docserve.New(new(docserveCfg(root, port)), new(docserveDeps(nil, nil))).
+			ServeAPIDocs(t.Context())
+
+		if err == nil || !strings.Contains(err.Error(), "address already in use") {
+			break
+		}
+	}
+
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+
 	return port
 }
 
@@ -102,30 +131,43 @@ func serveAPI(t *testing.T, root string) string {
 //     its handle is returned.
 func TestDocserve_GoDocs(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	sup := mocks.NewMockSupervisor(ctrl)
 	root := t.TempDir()
+
 	var out, errOut bytes.Buffer
+
 	deps := docserveDeps(runner, sup)
+
 	deps.Streams = types.Streams{Out: &out, Err: &errOut}
-	ds := docserve.New(docserveCfg(root, "0"), deps)
+
+	server := docserve.New(new(docserveCfg(root, text0)), &deps)
 
 	runner.EXPECT().RequireTool("pkgsite", "go install pkgsite").Return(assert.AnError)
-	_, err := ds.ServeGoDocs(t.Context())
+
+	_, err := server.ServeGoDocs(t.Context())
 	require.ErrorIs(t, err, assert.AnError)
 
 	handle := mocks.NewMockProcessHandle(ctrl)
+
 	var spec types.ProcessSpec
+
 	runner.EXPECT().RequireTool("pkgsite", "go install pkgsite").Return(nil)
 	sup.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
-			_ context.Context, s types.ProcessSpec, _ interfaces.Probe[interfaces.ProcessHandle],
+			_ context.Context, sRef *types.ProcessSpec,
+			_ interfaces.Probe[interfaces.ProcessHandle],
 		) (interfaces.ProcessHandle, error) {
+			s := *sRef
+
 			spec = s
+
 			return handle, nil
 		})
-	got, err := ds.ServeGoDocs(t.Context())
+
+	got, err := server.ServeGoDocs(t.Context())
 	require.NoError(t, err)
 	assert.Same(t, handle, got)
 	assert.Equal(t, []string{"pkgsite", "-http=:16060"}, spec.Args)
@@ -146,36 +188,51 @@ func TestDocserve_GoDocs(t *testing.T) {
 //     PythonPort; a start failure names the process.
 func TestDocserve_PythonDocs(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	sup := mocks.NewMockSupervisor(ctrl)
 	root := t.TempDir()
-	ds := docserve.New(docserveCfg(root, "0"), docserveDeps(nil, sup))
+	server := docserve.New(new(docserveCfg(root, text0)), new(docserveDeps(nil, sup)))
 
-	_, err := ds.ServePythonDocs(t.Context())
-	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%v", err)
+	_, err := server.ServePythonDocs(t.Context())
+	require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
 
-	pkg := filepath.Join(root, "python", "demo")
-	require.NoError(t, os.MkdirAll(filepath.Join(pkg, "src", "demo_mod"), 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(pkg, "pyproject.toml"), nil, 0o600))
+	pkg := filepath.Join(root, textPython, "demo")
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(pkg, textSrc, "demo_mod"), mkdirAllInputDocs),
+	)
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(pkg, textPyprojectToml), nil, writeFileInput),
+	)
+
 	var spec types.ProcessSpec
+
 	sup.EXPECT().Start(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
-			_ context.Context, s types.ProcessSpec, _ interfaces.Probe[interfaces.ProcessHandle],
+			_ context.Context, sRef *types.ProcessSpec,
+			_ interfaces.Probe[interfaces.ProcessHandle],
 		) (interfaces.ProcessHandle, error) {
+			s := *sRef
+
 			spec = s
+
 			return mocks.NewMockProcessHandle(ctrl), nil
 		})
-	_, err = ds.ServePythonDocs(t.Context())
+
+	_, err = server.ServePythonDocs(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"uvx", "pdoc", "--no-browser", "--host", "localhost", "--port", "16061",
-		filepath.Join(pkg, "src", "demo_mod"),
+		filepath.Join(pkg, textSrc, "demo_mod"),
 	}, spec.Args)
 
 	sup.EXPECT().
 		Start(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, assert.AnError)
-	_, err = ds.ServePythonDocs(t.Context())
+
+	_, err = server.ServePythonDocs(t.Context())
 	require.ErrorContains(t, err, "start uvx")
 }
 
@@ -190,22 +247,24 @@ func TestDocserve_PythonDocs(t *testing.T) {
 //     integrity hash; /openapi.json is the spec; any other path is 404.
 func TestDocserve_APIDocsSingleSpec(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
-	writeSpec(t, root, "api")
+	writeSpec(t, root, textAPI)
 	require.NoError(
 		t,
-		os.WriteFile(filepath.Join(root, "services", "README.md"), nil, 0o600),
+		os.WriteFile(filepath.Join(root, textServices, "README.md"), nil, writeFileInput),
 	)
+
 	port := serveAPI(t, root)
 
-	code, body := getBody(t, port, "/")
+	code, body := getBody(t, port, textSlash)
 	assert.Equal(t, http.StatusOK, code)
 	assert.Contains(t, body, "<title>Api")
 	assert.Contains(t, body, `spec-url="/openapi.json"`)
 	assert.Contains(t, body, "/redoc/v3.0.1/bundles/redoc.standalone.js")
 	assert.Contains(t, body, `integrity="sha384-`)
 
-	code, body = getBody(t, port, "/openapi.json")
+	code, body = getBody(t, port, textOpenapiJSON)
 	assert.Equal(t, http.StatusOK, code)
 	assert.Contains(t, body, `"svc":"api"`)
 
@@ -223,16 +282,20 @@ func TestDocserve_APIDocsSingleSpec(t *testing.T) {
 //   - / links every service; /<svc> is its Redoc page and /<svc>/openapi.json its spec.
 func TestDocserve_APIDocsMultipleSpecs(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
-	writeSpec(t, root, "api")
+	writeSpec(t, root, textAPI)
 	writeSpec(t, root, "identity")
+
 	port := serveAPI(t, root)
 
-	_, body := getBody(t, port, "/")
+	_, body := getBody(t, port, textSlash)
 	assert.Contains(t, body, `href="/api"`)
 	assert.Contains(t, body, `href="/identity"`)
+
 	_, body = getBody(t, port, "/identity")
 	assert.Contains(t, body, `spec-url="/identity/openapi.json"`)
+
 	_, body = getBody(t, port, "/identity/openapi.json")
 	assert.Contains(t, body, `"svc":"identity"`)
 }
@@ -248,33 +311,55 @@ func TestDocserve_APIDocsMultipleSpecs(t *testing.T) {
 //     cannot be read is CodeInternal naming it; a busy port is CodeInternal.
 func TestDocserve_APIDocsFailures(t *testing.T) {
 	t.Parallel()
+
 	serve := func(root, port string) error {
-		_, err := docserve.New(docserveCfg(root, port), docserveDeps(nil, nil)).
+		_, err := docserve.New(new(docserveCfg(root, port)), new(docserveDeps(nil, nil))).
 			ServeAPIDocs(t.Context())
+
 		return err
 	}
 
-	err := serve(t.TempDir(), "0")
-	assert.True(t, apperr.Is(err, apperr.CodeInternal), "%v", err)
+	err := serve(t.TempDir(), text0)
+	assert.True(t, apperr.Is(err, apperr.CodeInternal), textVLowerAlt, err)
 
 	empty := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(empty, "services", "api"), 0o750))
-	err = serve(empty, "0")
-	assert.True(t, apperr.Is(err, apperr.CodeNotFound), "%v", err)
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(empty, textServices, textAPI), mkdirAllInputFailures),
+	)
+
+	err = serve(empty, text0)
+	assert.True(t, apperr.Is(err, apperr.CodeNotFound), textVLowerAlt, err)
 
 	unreadable := t.TempDir()
 	require.NoError(t, os.MkdirAll(
-		filepath.Join(unreadable, "services", "api", "docs", "openapi.json"), 0o750))
-	err = serve(unreadable, "0")
-	assert.True(t, apperr.Is(err, apperr.CodeInternal), "%v", err)
-	assert.Contains(t, err.Error(), filepath.Join("api", "docs", "openapi.json"))
+		filepath.Join(
+			unreadable,
+			textServices,
+			textAPI,
+			textDocsLower,
+			textOpenapiJSONLower,
+		),
+		mkdirAllInputFailures,
+	))
+
+	err = serve(unreadable, text0)
+	assert.True(t, apperr.Is(err, apperr.CodeInternal), textVLowerAlt, err)
+	assert.Contains(
+		t,
+		err.Error(),
+		filepath.Join(textAPI, textDocsLower, textOpenapiJSONLower),
+	)
 
 	busy := t.TempDir()
-	writeSpec(t, busy, "api")
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", ":0")
+	writeSpec(t, busy, textAPI)
+
+	ln, err := new(net.ListenConfig).Listen(t.Context(), textTCP, ":0")
 	require.NoError(t, err)
+
 	defer func() { _ = ln.Close() }()
-	err = serve(busy, strconv.Itoa(ln.Addr().(*net.TCPAddr).Port))
+
+	err = serve(busy, strconv.Itoa(asType[*net.TCPAddr](t, ln.Addr()).Port))
 	assert.ErrorContains(t, err, "listen")
 }
 
@@ -290,37 +375,69 @@ func TestDocserve_APIDocsFailures(t *testing.T) {
 //   - an API-only Serve whose server cannot start returns its error.
 func TestDocserve_ServeRunsUntilCancelled(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
-	writeSpec(t, root, "api")
+	writeSpec(t, root, textAPI)
+
 	port := freePort(t)
 	cfg := docserveCfg(root, port)
 
-	err := docserve.New(cfg, docserve.Deps{Log: fixtures.NopLogger()}).
-		Serve(t.Context(), docserve.Targets{API: true})
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%v", err)
+	err := docserve.New(&cfg, fixtures.BuildRef(func(row *docserve.Deps) {
+		row.Log = fixtures.NopLogger()
+	})).
+		Serve(t.Context(), docserve.Targets{API: true, Go: false, Python: false})
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
+
 	go func() {
-		ds := docserve.New(cfg, docserveDeps(nil, nil))
-		done <- ds.Serve(ctx, docserve.Targets{API: true})
+		ds := docserve.New(&cfg, new(docserveDeps(nil, nil)))
+		done <- ds.Serve(ctx, docserve.Targets{API: true, Go: false, Python: false})
 	}()
+
 	require.Eventually(t, func() bool {
-		conn, err := (&net.Dialer{}).DialContext(t.Context(), "tcp", "127.0.0.1:"+port)
-		if err == nil {
+		conn, opErr := new(net.Dialer).DialContext(
+			t.Context(),
+			textTCP,
+			"127.0.0.1:"+port,
+		)
+		if opErr == nil {
 			_ = conn.Close()
 		}
-		return err == nil
+
+		return opErr == nil
 	}, 5*time.Second, 20*time.Millisecond)
 	cancel()
+
 	select {
-	case err := <-done:
-		require.NoError(t, err)
+	case opErr := <-done:
+		require.NoError(t, opErr)
 	case <-time.After(10 * time.Second):
 		require.Fail(t, "Serve did not return after cancel")
 	}
 
-	err = docserve.New(docserveCfg(t.TempDir(), "0"), docserveDeps(nil, nil)).
-		Serve(t.Context(), docserve.Targets{API: true})
+	err = docserve.New(new(docserveCfg(t.TempDir(), text0)), new(docserveDeps(nil, nil))).
+		Serve(t.Context(), docserve.Targets{API: true, Go: false, Python: false})
 	assert.Error(t, err)
 }
+
+const (
+	// iterationsAPI is the iteration count in serveAPI.
+	iterationsAPI = 5
+
+	// mkdirAllInputDocs is the perm passed to MkdirAll in TestDocserve_PythonDocs.
+	mkdirAllInputDocs = 0o750
+
+	// mkdirAllInputFailures is the perm passed to MkdirAll in
+	// TestDocserve_APIDocsFailures.
+	mkdirAllInputFailures = 0o750
+
+	// mkdirAllInputSpec is the perm passed to MkdirAll in writeSpec.
+	mkdirAllInputSpec = 0o750
+)
+
+const (
+	// textOpenapiJSONLower is the literal "openapi.json".
+	textOpenapiJSONLower = "openapi.json"
+)

@@ -8,8 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/stream"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -25,23 +26,30 @@ import (
 //     error) and keeps reporting it; Close is idempotent.
 func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 	t.Parallel()
-	s := stream.FromSlice([]string{"a", "b", "c"})
+
+	currentStream := stream.FromSlice([]string{textA, textB, textC})
+
 	var got []string
+
 	for {
-		item, ok, err := s.Next(t.Context())
+		item, ok, err := currentStream.Next(t.Context())
 		require.NoError(t, err)
+
 		if !ok {
 			break
 		}
+
 		got = append(got, item)
 	}
-	require.Equal(t, []string{"a", "b", "c"}, got)
-	item, ok, err := s.Next(t.Context())
+
+	require.Equal(t, []string{textA, textB, textC}, got)
+
+	item, ok, err := currentStream.Next(t.Context())
 	require.NoError(t, err)
 	require.False(t, ok)
 	require.Empty(t, item)
-	require.NoError(t, s.Close())
-	require.NoError(t, s.Close())
+	require.NoError(t, currentStream.Close())
+	require.NoError(t, currentStream.Close())
 }
 
 // TestChunk_SplitsAtMaxBytesKeepingOrder tests the byte-bounded chunker as a property.
@@ -57,32 +65,62 @@ func TestStream_FromSliceYieldsInOrderThenEnds(t *testing.T) {
 //     chunks could have been one (the split is greedy).
 func TestChunk_SplitsAtMaxBytesKeepingOrder(t *testing.T) {
 	t.Parallel()
+
+	testChunkSplitsAtMaxBytesKeepingOrderRunsLaw(t)
+}
+
+// chunksAreMaximal reports whether every chunk is non-empty, fits maxBytes, and could not
+// have absorbed the first item of its successor.
+func chunksAreMaximal(chunks [][]int, maxBytes int) bool {
+	prev := -1
+
+	for _, items := range chunks {
+		total := 0
+		for _, n := range items {
+			total += n
+		}
+
+		if len(items) == 0 || total > maxBytes ||
+			(prev >= 0 && prev+items[0] <= maxBytes) {
+			return false
+		}
+
+		prev = total
+	}
+
+	return true
+}
+
+// testChunkSplitsAtMaxBytesKeepingOrderRunsLaw continues
+// testChunkSplitsAtMaxBytesKeepingOrder: runs law.
+func testChunkSplitsAtMaxBytesKeepingOrderRunsLaw(t *testing.T) {
+	t.Helper()
+
 	law := func(raw []uint8, budget uint8) bool {
-		maxBytes := int(budget)%64 + 1
+		maxBytes := int(budget)%wantInt + 1
 		items := make([]int, len(raw))
+
 		for i, r := range raw {
 			items[i] = int(r)%maxBytes + 1
 		}
+
 		chunks, err := stream.Chunk(items, func(n int) int { return n }, maxBytes)
 		if err != nil {
 			return false
 		}
-		var flat []int
-		prev := -1
-		for _, c := range chunks {
-			total := 0
-			for _, n := range c {
-				total += n
-			}
-			if len(c) == 0 || total > maxBytes || (prev >= 0 && prev+c[0] <= maxBytes) {
-				return false
-			}
-			prev = total
-			flat = append(flat, c...)
-		}
-		return slices.Equal(flat, items)
+
+		return chunksAreMaximal(chunks, maxBytes) &&
+			slices.Equal(slices.Concat(chunks...), items)
 	}
-	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
+	require.NoError(
+		t,
+		quick.Check(
+			law,
+			fixtures.BuildRef(func(row *quick.Config) {
+				row.MaxCount = 300
+			}),
+		),
+	)
 }
 
 // TestChunk_OversizedItemIsResourceExhausted tests the chunker's failure modes.
@@ -97,15 +135,16 @@ func TestChunk_SplitsAtMaxBytesKeepingOrder(t *testing.T) {
 //     CodeInvalidInput; no input yields no chunks.
 func TestChunk_OversizedItemIsResourceExhausted(t *testing.T) {
 	t.Parallel()
+
 	size := func(s string) int { return len(s) }
 
-	_, err := stream.Chunk([]string{"ab", "toolong"}, size, 4)
+	_, err := stream.Chunk([]string{"ab", "toolong"}, size, chunkInput)
 	require.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 
-	_, err = stream.Chunk([]string{"a"}, size, 0)
+	_, err = stream.Chunk([]string{textA}, size, 0)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	chunks, err := stream.Chunk(nil, size, 4)
+	chunks, err := stream.Chunk(nil, size, chunkInput)
 	require.NoError(t, err)
 	require.Empty(t, chunks)
 }
@@ -125,10 +164,12 @@ func TestChunk_OversizedItemIsResourceExhausted(t *testing.T) {
 //   - A non-positive budget is CodeInvalidInput, and the source is still closed.
 func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 	t.Parallel()
+
 	size := func(s string) int { return len(s) }
 
 	t.Run("within budget", func(t *testing.T) {
 		t.Parallel()
+
 		src := scriptedStream(t, []string{"aa", "bb"}, nil)
 		got, err := stream.Collect(t.Context(), src, size, 4)
 		require.NoError(t, err)
@@ -137,6 +178,7 @@ func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 
 	t.Run("over budget", func(t *testing.T) {
 		t.Parallel()
+
 		// Exactly three reads are expected: a fourth fails the test as unexpected.
 		src := mocks.NewMockStream[string](gomock.NewController(t))
 		gomock.InOrder(
@@ -145,12 +187,14 @@ func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 			src.EXPECT().Next(gomock.Any()).Return("cc", true, nil),
 		)
 		src.EXPECT().Close().Return(nil).Times(1)
+
 		_, err := stream.Collect(t.Context(), src, size, 5)
 		require.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	})
 
 	t.Run("non-positive budget", func(t *testing.T) {
 		t.Parallel()
+
 		src := scriptedStream(t, nil, nil)
 		_, err := stream.Collect(t.Context(), src, size, 0)
 		require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -158,6 +202,7 @@ func TestCollect_StopsAtBudgetAndClosesSource(t *testing.T) {
 
 	t.Run("source error", func(t *testing.T) {
 		t.Parallel()
+
 		boom := apperr.New(apperr.CodeUnavailable, "store down")
 		src := scriptedStream(t, []string{"aa"}, boom)
 		_, err := stream.Collect(t.Context(), src, size, 8)
@@ -174,16 +219,29 @@ func scriptedStream(
 	endErr error,
 ) *mocks.MockStream[string] {
 	t.Helper()
+
 	src := mocks.NewMockStream[string](gomock.NewController(t))
 	calls := make([]any, 0, len(items)+1)
+
 	for _, item := range items {
 		calls = append(calls, src.EXPECT().Next(gomock.Any()).Return(item, true, nil))
 	}
+
 	calls = append(
 		calls,
 		src.EXPECT().Next(gomock.Any()).Return("", false, endErr).MaxTimes(1),
 	)
 	gomock.InOrder(calls...)
 	src.EXPECT().Close().Return(nil).Times(1)
+
 	return src
 }
+
+const (
+	// chunkInput is the maxBytes passed to Chunk in
+	// TestChunk_OversizedItemIsResourceExhausted.
+	chunkInput = 4
+
+	// wantInt is the expected int.
+	wantInt = 64
+)

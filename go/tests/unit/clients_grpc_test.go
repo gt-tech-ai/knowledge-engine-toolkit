@@ -17,6 +17,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	grpcserver "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/grpc"
 )
 
@@ -35,9 +36,9 @@ import (
 func TestGRPCServerFactory(t *testing.T) {
 	t.Parallel()
 
-	cfg := grpcserver.ServerConfig{
-		MaxMessageSize: 16 * 1024 * 1024, // 16MB
-	}
+	cfg := fixtures.Build(func(row *grpcserver.ServerConfig) {
+		row.MaxMessageSize = maxMessageSize * maxMessageSizeFactory * maxMessageSizeFactory
+	})
 
 	server := grpcserver.NewServer(cfg)
 	require.NotNil(t, server, "expected non-nil gRPC server")
@@ -46,12 +47,13 @@ func TestGRPCServerFactory(t *testing.T) {
 	grpcserver.RegisterHealthService(server)
 
 	// Start the server
-	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	lis, err := new(net.ListenConfig).Listen(t.Context(), textTCP, text127001)
 	require.NoError(t, err, "failed to create listener")
 
 	go func() {
 		_ = server.Serve(lis)
 	}()
+
 	defer server.GracefulStop()
 
 	// Connect a client and verify health check works
@@ -60,10 +62,11 @@ func TestGRPCServerFactory(t *testing.T) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err, "failed to connect to server")
+
 	defer func() { _ = conn.Close() }()
 
 	client := healthpb.NewHealthClient(conn)
-	resp, err := client.Check(context.Background(), &healthpb.HealthCheckRequest{})
+	resp, err := client.Check(context.Background(), new(healthpb.HealthCheckRequest))
 	require.NoError(t, err, "health check failed")
 	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.GetStatus())
 }
@@ -89,23 +92,25 @@ func TestGRPCClientFactory(t *testing.T) {
 	server := grpcserver.NewServer(cfg)
 	grpcserver.RegisterHealthService(server)
 
-	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	lis, err := new(net.ListenConfig).Listen(t.Context(), textTCP, text127001)
 	require.NoError(t, err, "failed to create listener")
 
 	go func() {
 		_ = server.Serve(lis)
 	}()
+
 	defer server.GracefulStop()
 
 	// Use the package's client factory
 	clientCfg := platformgrpc.DefaultClientConfig(lis.Addr().String())
 	conn, err := platformgrpc.NewClient(clientCfg)
 	require.NoError(t, err, "failed to create gRPC client")
+
 	defer func() { _ = conn.Close() }()
 
 	// Verify actual connectivity via health check
 	client := healthpb.NewHealthClient(conn)
-	resp, err := client.Check(context.Background(), &healthpb.HealthCheckRequest{})
+	resp, err := client.Check(context.Background(), new(healthpb.HealthCheckRequest))
 	require.NoError(t, err, "health check via client factory failed")
 	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.GetStatus())
 }
@@ -125,28 +130,46 @@ func TestGRPCClientFactory(t *testing.T) {
 //     "grpc.health.v1.Health/Check".
 func TestRPCNewFromConfig_DecoratesEveryCall(t *testing.T) {
 	t.Parallel()
+
 	server := grpcserver.NewServer(grpcserver.DefaultServerConfig())
 	grpcserver.RegisterHealthService(server)
-	lis, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+
+	lis, err := new(net.ListenConfig).Listen(t.Context(), textTCP, text127001)
 	require.NoError(t, err)
+
 	go func() { _ = server.Serve(lis) }()
+
 	t.Cleanup(server.GracefulStop)
 
 	reg := promclient.NewRegistry()
 	defaults := decoration.DefaultConfig()
-	rpcClient, err := rpc.NewFromConfig(t.Context(), rpc.Config{
-		Name: "health-probe",
-		GRPC: platformgrpc.DefaultClientConfig(lis.Addr().String()),
-	}, rpc.Deps{Decorations: decorate.NewDecorations(&defaults, decorate.Collaborators{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
-	})})
+	rpcClient, err := rpc.NewFromConfig(t.Context(), &rpc.Config{
+		Name:         "health-probe",
+		GRPC:         platformgrpc.DefaultClientConfig(lis.Addr().String()),
+		Kind:         "",
+		ServiceToken: "",
+	}, rpc.Deps{Decorations: decorate.NewDecorations(&defaults,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Metrics = prom.NewFromRegistry(reg)
+		}))})
 	require.NoError(t, err)
 	require.NoError(t, rpcClient.Start(t.Context()))
 	t.Cleanup(func() { _ = rpcClient.Stop(context.Background()) })
 
 	resp, err := healthpb.NewHealthClient(rpcClient.Conn()).
-		Check(t.Context(), &healthpb.HealthCheckRequest{})
+		Check(t.Context(), new(healthpb.HealthCheckRequest))
 	require.NoError(t, err)
 	assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.GetStatus())
 	assert.InDelta(t, 1, clientOpCounter(t, reg, "grpc.health.v1.Health/Check"), 0)
 }
+
+const (
+	// maxMessageSize is the factor multiplying maxMessageSizeFactory in
+	// TestGRPCServerFactory.
+	maxMessageSize = 16
+
+	// maxMessageSizeFactory is the factor multiplying maxMessageSize in
+	// TestGRPCServerFactory, and the factor multiplying maxMessageSize *
+	// maxMessageSizeFactory in TestGRPCServerFactory.
+	maxMessageSizeFactory = 1024
+)

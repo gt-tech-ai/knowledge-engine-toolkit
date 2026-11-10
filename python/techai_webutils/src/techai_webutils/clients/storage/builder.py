@@ -1,22 +1,31 @@
-"""Storage client builder — ``new_storage_from_config`` (shape; mirrors Go ``storage.NewFromConfig``).
+"""Storage client builder: ``new_storage_from_config``.
 
-The tier-root factory: selects an object-storage backend by ``StorageKind`` — S3-compatible (AWS
-S3 or MinIO, via the ``s3/`` backend) or an in-memory stub (``memory/``) that needs no
-infra — and returns the ``StorageClient`` interface. The concrete backend is imported lazily so
-selecting a different kind never loads aiobotocore. Unknown kinds fail loudly, matching the Go
-``NewFromConfig`` contract.
+It mirrors Go's ``storage.NewFromConfig``.
+
+The tier-root factory: selects an object-storage backend by ``StorageKind`` —
+S3-compatible (AWS S3 or MinIO, via the ``s3/`` backend) or an in-memory stub
+(``memory/``) that needs no infra — and returns the ``StorageClient`` interface. The
+concrete backend is imported lazily so selecting a different kind never loads aiobotocore.
+Unknown kinds fail loudly, matching the Go ``NewFromConfig`` contract.
 """
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
     from techai_webutils.clients.storage.config import S3Config
+    from techai_webutils.clients.storage.memory import (
+        InMemoryStorageClient as _LazyInMemoryStorageClient,
+    )
+    from techai_webutils.clients.storage.s3.s3_client import (
+        S3StorageClient as _LazyS3StorageClient,
+    )
     from techai_webutils.core.interfaces.storage import StorageClient
 
 
@@ -40,16 +49,39 @@ class StorageConfig:
 
 
 def new_storage_from_config(config: StorageConfig) -> StorageClient:
-    """Build the ``StorageClient`` selected by ``config.kind`` (heavy backend imported lazily)."""
+    """Build the ``StorageClient`` selected by ``config.kind``.
+
+    The heavy backend is imported lazily.
+
+    Args:
+        config: Selects the backend and carries its settings.
+
+    Returns:
+        The ``StorageClient`` selected by ``config.kind``.
+
+    Raises:
+        AppValueError: Unknown storage kind: ``config.kind``.
+
+    """
     if config.kind is StorageKind.S3:
         # Lazy import: skip aiobotocore until selected.
-        from techai_webutils.clients.storage.s3.s3_client import S3StorageClient  # noqa: PLC0415
+        s3_storage_client_cls = cast(
+            "type[_LazyS3StorageClient]",
+            importlib.import_module(
+                "techai_webutils.clients.storage.s3.s3_client"
+            ).S3StorageClient,
+        )
 
-        return S3StorageClient(config.s3)
+        return s3_storage_client_cls(config.s3)
     if config.kind is StorageKind.MEMORY:
         # Lazy import (and no SDK to load).
-        from techai_webutils.clients.storage.memory import InMemoryStorageClient  # noqa: PLC0415
+        in_memory_storage_client_cls = cast(
+            "type[_LazyInMemoryStorageClient]",
+            importlib.import_module(
+                "techai_webutils.clients.storage.memory"
+            ).InMemoryStorageClient,
+        )
 
-        return InMemoryStorageClient()
+        return in_memory_storage_client_cls()
     msg = f"unknown storage kind: {config.kind!r}"
     raise AppValueError(msg)

@@ -8,8 +8,11 @@ package listquery
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultConfigRowThreshold is the default RowThreshold of Config.
+const defaultConfigRowThreshold = 100000
 
 // Config groups the list-query platform's tunable knobs under the "listquery" key.
 type Config struct {
@@ -36,7 +39,7 @@ type FacetConfig struct {
 func DefaultConfig() Config {
 	return Config{
 		Facet: FacetConfig{
-			RowThreshold:      100000,
+			RowThreshold:      defaultConfigRowThreshold,
 			ReconcileInterval: time.Hour,
 		},
 	}
@@ -47,8 +50,10 @@ func (c Config) Validate() error {
 	if c.Facet.RowThreshold < 1 {
 		return apperr.InvalidInput("listquery.facet.row_threshold must be >= 1")
 	}
+
 	if c.Facet.ReconcileInterval <= 0 {
 		return apperr.InvalidInput("listquery.facet.reconcile_interval must be > 0")
 	}
+
 	return nil
 }

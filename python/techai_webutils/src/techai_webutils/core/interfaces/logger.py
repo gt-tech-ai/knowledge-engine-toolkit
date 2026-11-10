@@ -18,30 +18,68 @@ class Logger(ABC):
 
     @abstractmethod
     def debug(self, msg: str, **kwargs: object) -> None:
-        """Log at DEBUG level with optional key-value context."""
+        """Log at DEBUG level with optional key-value context.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         ...
 
     @abstractmethod
     def info(self, msg: str, **kwargs: object) -> None:
-        """Log at INFO level with optional key-value context."""
+        """Log at INFO level with optional key-value context.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         ...
 
     @abstractmethod
     def warning(self, msg: str, **kwargs: object) -> None:
-        """Log at WARNING level with optional key-value context."""
+        """Log at WARNING level with optional key-value context.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         ...
 
     @abstractmethod
     def error(self, msg: str, **kwargs: object) -> None:
-        """Log at ERROR level with optional key-value context."""
+        """Log at ERROR level with optional key-value context.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         ...
 
     @abstractmethod
     def exception(self, msg: str, **kwargs: object) -> None:
-        """Log at ERROR level with exception info attached."""
+        """Log at ERROR level with exception info attached.
+
+        Args:
+            msg: The event, as a short constant message.
+            **kwargs: Structured context logged as fields.
+
+        """
         ...
 
     @abstractmethod
     def bind(self, **kwargs: object) -> Logger:
-        """Return a new Logger with the given key-value pairs pre-bound."""
+        """Return a new Logger with the given key-value pairs pre-bound.
+
+        Args:
+            **kwargs: Fields every record from the returned logger carries.
+
+        Returns:
+            A logger that adds ``kwargs`` to each record; this one is unchanged.
+
+        """
         ...

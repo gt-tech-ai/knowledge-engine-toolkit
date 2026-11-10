@@ -1,17 +1,17 @@
 """A routing policy store over a periodically refreshed snapshot of stored policies.
 
-``RoutingPolicyStore.policy`` is synchronous and runs on every routed call, so policies kept
-in a database cannot be read per request. This store holds an in-memory snapshot an injected
-async loader fills, refreshes it on an interval, and answers from it without I/O:
+``RoutingPolicyStore.policy`` is synchronous and runs on every routed call, so policies
+kept in a database cannot be read per request. This store holds an in-memory snapshot an
+injected async loader fills, refreshes it on an interval, and answers from it without I/O:
 
-- the snapshot's ``(tenant, workspace)`` entry, else its tenant-wide ``(tenant, "")`` entry,
-  else the fallback store (the policies configuration gives), so a tenant with nothing stored
-  keeps routing exactly as before;
-- a refresh replaces the snapshot as a whole, and a failed one keeps the last good snapshot,
-  logs the failure and counts it.
+- the snapshot's ``(tenant, workspace)`` entry, else its tenant-wide ``(tenant, "")``
+  entry, else the fallback store (the policies configuration gives), so a tenant with
+  nothing stored keeps routing exactly as before;
+- a refresh replaces the snapshot as a whole, and a failed one keeps the last good
+  snapshot, logs the failure and counts it.
 
-It is a ``ManagedResource``: entering performs one refresh (a failure does not stop startup)
-and starts the refresh loop; exiting cancels the loop.
+It is a ``ManagedResource``: entering performs one refresh (a failure does not stop
+startup) and starts the refresh loop; exiting cancels the loop.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final
 
 from techai_webutils.clients.model_gateway.routed.catalog import invalid
 from techai_webutils.foundation.logger.logger import get_logger
@@ -42,6 +42,7 @@ _TENANT_WIDE = ""
 """The workspace id of a tenant-wide policy."""
 
 
+@final
 class RefreshingPolicyStore:
     """Answers policy lookups from a snapshot an async loader refreshes on an interval."""
 
@@ -63,8 +64,11 @@ class RefreshingPolicyStore:
             metrics: Counts ``routing_policy_refresh_total{outcome}`` when given.
             sleep: Waits between refreshes (injected so tests drive the loop).
 
+        A callee raises ``AppError``: ``INVALID_INPUT`` when ``interval_s`` is not
+        positive.
+
         Raises:
-            AppError: ``INVALID_INPUT`` when ``interval_s`` is not positive.
+            invalid: Routing policy refresh interval must be positive, got ``interval_s``.
 
         """
         if interval_s <= 0:
@@ -86,7 +90,18 @@ class RefreshingPolicyStore:
             )
 
     def policy(self, tenant_id: str, workspace_id: str) -> RoutingPolicy:
-        """Return the stored workspace policy, else the stored tenant one, else the fallback's."""
+        """Return the stored workspace policy, else the stored tenant one.
+
+        Otherwise the fallback's.
+
+        Args:
+            tenant_id: The tenant.
+            workspace_id: The workspace within the tenant.
+
+        Returns:
+            The stored workspace policy, else the stored tenant one.
+
+        """
         snapshot = self._snapshot
         stored = snapshot.get((tenant_id, workspace_id))
         if stored is None:
@@ -100,14 +115,19 @@ class RefreshingPolicyStore:
         try:
             loaded = await self._loader()
         except Exception as exc:
-            self._logger.warning("routing policy refresh failed", error=str(exc))
+            self._logger.exception("routing policy refresh failed", error=str(exc))
             self._count("failed")
             return
         self._snapshot = MappingProxyType(dict(loaded))
         self._count("ok")
 
     async def __aenter__(self) -> Self:
-        """Refresh once, then start the refresh loop."""
+        """Refresh once, then start the refresh loop.
+
+        Returns:
+            This instance.
+
+        """
         await self.refresh()
         self._task = asyncio.create_task(self._run())
         return self
@@ -118,11 +138,18 @@ class RefreshingPolicyStore:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Cancel the refresh loop and wait for it to stop."""
+        """Cancel the refresh loop and wait for it to stop.
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """
         task, self._task = self._task, None
         if task is None:
             return
-        task.cancel()
+        _ = task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
 
@@ -133,6 +160,11 @@ class RefreshingPolicyStore:
             await self.refresh()
 
     def _count(self, outcome: str) -> None:
-        """Count one refresh with its outcome, when metrics are wired."""
+        """Count one refresh with its outcome, when metrics are wired.
+
+        Args:
+            outcome: ``ok`` or ``failed``.
+
+        """
         if self._refreshes is not None:
             self._refreshes.inc(outcome=outcome)

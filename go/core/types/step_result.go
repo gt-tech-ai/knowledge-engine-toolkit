@@ -75,6 +75,7 @@ func (rs StepResults) HasFailures() bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -86,6 +87,7 @@ func (rs StepResults) AllPassed() bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -95,34 +97,56 @@ func (rs StepResults) CountByStatus() map[StepStatus]int {
 	for _, r := range rs {
 		counts[r.Status]++
 	}
+
 	return counts
 }
 
 // FailedNames returns the names of all failed steps.
 func (rs StepResults) FailedNames() []string {
 	var names []string
+
 	for _, r := range rs {
 		if r.Status == StatusFail {
 			names = append(names, r.Name)
 		}
 	}
+
 	return names
 }
 
 // NewStep returns the result of the step name: status, and err's text as Error when
 // err is non-nil.
 func NewStep(name string, status StepStatus, err error) StepResult {
-	r := StepResult{Name: name, Status: status}
-	if err != nil {
-		r.Error = err.Error()
+	stepResult := StepResult{
+		Name:     name,
+		Status:   status,
+		Group:    "",
+		Error:    "",
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
 	}
-	return r
+	if err != nil {
+		stepResult.Error = err.Error()
+	}
+
+	return stepResult
 }
 
 // DetailStep returns the result of the step name: status, with detail as its detail
 // text and no error (a report row that explains itself rather than failing).
 func DetailStep(name string, status StepStatus, detail string) StepResult {
-	return StepResult{Name: name, Status: status, Detail: []byte(detail)}
+	return StepResult{
+		Name:     name,
+		Status:   status,
+		Detail:   []byte(detail),
+		Group:    "",
+		Error:    "",
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+	}
 }
 
 // OneStep returns NewStep's result as a one-step StepResults.
@@ -137,6 +161,7 @@ func CheckStep(name string, err error) (StepResults, error) {
 	if err != nil {
 		return OneStep(name, StatusFail, err), err
 	}
+
 	return OneStep(name, StatusPass, nil), nil
 }
 

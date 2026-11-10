@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
@@ -69,6 +69,8 @@ func kinds() client.Kinds[Config, Deps, API] {
 			KindStub: func(context.Context, Config, Deps) (API, error) { return Stub{}, nil },
 			KindSDK:  newSDK,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -78,9 +80,11 @@ func newSDK(_ context.Context, _ Config, deps Deps) (API, error) {
 	if deps.API != nil {
 		return deps.API, nil
 	}
+
 	if deps.AWS == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "route53 sdk: no aws config")
 	}
+
 	return route53.NewFromConfig(*deps.AWS), nil
 }
 
@@ -102,16 +106,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorator{base: base, Base: b}, nil
+
+	return &decorator{base: base, Base: &b}, nil
 }
 
 // decorator runs each call through the client tier.
 type decorator struct {
+	// Base runs each call through the client tier.
+	*client.Base
+
 	// base is the wrapped client.
 	base API
-
-	// Base runs each call through the client tier.
-	client.Base
 }
 
 // Compile-time assertion that decorator satisfies API.
@@ -120,7 +125,7 @@ var _ API = (*decorator)(nil)
 // ListHostedZonesByName runs the call.
 func (d *decorator) ListHostedZonesByName(
 	ctx context.Context,
-	in *route53.ListHostedZonesByNameInput,
+	listHostedZonesByNameInput *route53.ListHostedZonesByNameInput,
 	optFns ...func(*route53.Options),
 ) (*route53.ListHostedZonesByNameOutput, error) {
 	return client.Call(
@@ -128,7 +133,7 @@ func (d *decorator) ListHostedZonesByName(
 		d.Base,
 		"list_hosted_zones_by_name",
 		d.base.ListHostedZonesByName,
-		in,
+		listHostedZonesByNameInput,
 		optFns...)
 }
 
@@ -144,5 +149,5 @@ func (Stub) ListHostedZonesByName(
 	_ *route53.ListHostedZonesByNameInput,
 	_ ...func(*route53.Options),
 ) (*route53.ListHostedZonesByNameOutput, error) {
-	return &route53.ListHostedZonesByNameOutput{}, nil
+	return new(route53.ListHostedZonesByNameOutput), nil
 }

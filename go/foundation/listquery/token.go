@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -43,20 +43,23 @@ type keysetWire struct {
 // int64); the caller (Run) converts a time.Time before minting, so this never sees an
 // unencodable value.
 func EncodeToken(tok types.PageToken) (string, error) {
-	var w tokenWire
+	var currentTokenWire tokenWire
+
 	if tok.Keyset != nil {
-		w.Keyset = &keysetWire{
+		currentTokenWire.Keyset = &keysetWire{
 			SortValues:  tok.Keyset.SortValues,
 			ID:          tok.Keyset.ID,
 			Fingerprint: tok.Keyset.Fingerprint,
 		}
 	} else {
-		w.OffsetPage = tok.OffsetPage
+		currentTokenWire.OffsetPage = tok.OffsetPage
 	}
-	raw, err := json.Marshal(w)
+
+	raw, err := json.Marshal(currentTokenWire)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "marshal page token")
 	}
+
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
@@ -68,22 +71,31 @@ func EncodeToken(tok types.PageToken) (string, error) {
 // compiling the seek.
 func DecodeToken(token string) (types.PageToken, error) {
 	if token == "" {
-		return types.PageToken{OffsetPage: 1}, nil
+		return types.PageToken{OffsetPage: 1, Keyset: nil}, nil
 	}
+
 	raw, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
 		return types.PageToken{}, apperr.InvalidInput("malformed page token")
 	}
-	var w tokenWire
-	if err := json.Unmarshal(raw, &w); err != nil {
+
+	var currentTokenWire tokenWire
+
+	err = json.Unmarshal(raw, &currentTokenWire)
+	if err != nil {
 		return types.PageToken{}, apperr.InvalidInput("malformed page token")
 	}
-	if w.Keyset != nil {
-		return types.PageToken{Keyset: &types.KeysetCursor{
-			SortValues:  w.Keyset.SortValues,
-			ID:          w.Keyset.ID,
-			Fingerprint: w.Keyset.Fingerprint,
-		}}, nil
+
+	if currentTokenWire.Keyset != nil {
+		return types.PageToken{
+			Keyset: &types.KeysetCursor{
+				SortValues:  currentTokenWire.Keyset.SortValues,
+				ID:          currentTokenWire.Keyset.ID,
+				Fingerprint: currentTokenWire.Keyset.Fingerprint,
+			},
+			OffsetPage: 0,
+		}, nil
 	}
-	return types.PageToken{OffsetPage: w.OffsetPage}, nil
+
+	return types.PageToken{OffsetPage: currentTokenWire.OffsetPage, Keyset: nil}, nil
 }

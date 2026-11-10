@@ -31,9 +31,19 @@ import asyncio
 from typing import NoReturn
 
 import pytest
+from prometheus_client import CollectorRegistry
 
-from techai_webutils.core.errors.errors import AppTimeoutError, UnavailableError
+from techai_webutils.core.errors.errors import (
+    AppTimeoutError,
+    NotFoundError,
+    UnavailableError,
+)
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
+from techai_webutils.foundation.config import decoration
+from techai_webutils.foundation.decorate import Collaborators
+from techai_webutils.foundation.decorate.decorations import build
+from techai_webutils.foundation.decorate.tier import Observability
+from techai_webutils.foundation.metrics.metrics import new_metrics
 from techai_webutils.foundation.resilience.circuit_breaker import (
     CircuitBreaker,
     CircuitOpenError,
@@ -41,9 +51,18 @@ from techai_webutils.foundation.resilience.circuit_breaker import (
 from techai_webutils.foundation.resilience.retry import retry_transient
 from techai_webutils.foundation.resilience.timeout import with_timeout
 
+_EXPECTED_ATTEMPTS_COUNT = 3
+_EXPECTED_SAMPLE = 2
+_EXPECTED_REOPENED = 2
+
 
 def _raise_unavailable() -> NoReturn:
-    """Raise the transient error a failing protected call raises."""
+    """Raise the transient error a failing protected call raises.
+
+    Raises:
+        UnavailableError: Fail.
+
+    """
     msg = "fail"
     raise UnavailableError(msg)
 
@@ -51,11 +70,13 @@ def _raise_unavailable() -> NoReturn:
 class TestRetry:
     """Test suite for retry_transient decorator."""
 
-    def test_retries_on_transient_error(self) -> None:
+    @staticmethod
+    def test_retries_on_transient_error() -> None:
         """Test that retry_transient re-invokes the function on transient errors.
 
         **Why this test is important:**
-          - Transient errors (network blips, temporary unavailability) are common in distributed systems
+          - Transient errors (network blips, temporary unavailability) are common in
+            distributed systems
           - Without retry, every transient failure becomes a user-visible error
           - The retry count must be bounded to prevent infinite loops
 
@@ -69,16 +90,17 @@ class TestRetry:
         @retry_transient(max_attempts=3, base_delay=0.01)
         def flaky() -> str:
             attempts.append(1)
-            if len(attempts) < 3:
+            if len(attempts) < _EXPECTED_ATTEMPTS_COUNT:
                 msg = "down"
                 raise UnavailableError(msg)
             return "ok"
 
         result = flaky()
         assert result == "ok"
-        assert len(attempts) == 3
+        assert len(attempts) == _EXPECTED_ATTEMPTS_COUNT
 
-    def test_no_retry_on_permanent_error(self) -> None:
+    @staticmethod
+    def test_no_retry_on_permanent_error() -> None:
         """Test that retry_transient propagates permanent errors immediately.
 
         **Why this test is important:**
@@ -90,8 +112,6 @@ class TestRetry:
           - NotFoundError is raised without retry
           - Function is called exactly once (no retries)
         """
-        from techai_webutils.core.errors.errors import NotFoundError
-
         attempts: list[int] = []
 
         @retry_transient(max_attempts=3, base_delay=0.01)
@@ -101,10 +121,11 @@ class TestRetry:
             raise NotFoundError(msg)
 
         with pytest.raises(NotFoundError):
-            always_missing()
+            _ = always_missing()
         assert len(attempts) == 1
 
-    def test_raises_after_max_retries(self) -> None:
+    @staticmethod
+    def test_raises_after_max_retries() -> None:
         """Test that retry_transient raises the last error after exhausting attempts.
 
         **Why this test is important:**
@@ -122,13 +143,14 @@ class TestRetry:
             raise UnavailableError(msg)
 
         with pytest.raises(UnavailableError):
-            always_fails()
+            _ = always_fails()
 
 
 class TestCircuitBreaker:
     """Test suite for CircuitBreaker state management."""
 
-    def test_opens_after_threshold(self) -> None:
+    @staticmethod
+    def test_opens_after_threshold() -> None:
         """Test that CircuitBreaker opens after reaching the failure threshold.
 
         **Why this test is important:**
@@ -150,7 +172,8 @@ class TestCircuitBreaker:
         with pytest.raises(CircuitOpenError), cb:
             pass  # Should not execute
 
-    def test_allows_calls_when_closed(self) -> None:
+    @staticmethod
+    def test_allows_calls_when_closed() -> None:
         """Test that CircuitBreaker allows calls through when in closed state.
 
         **Why this test is important:**
@@ -168,7 +191,8 @@ class TestCircuitBreaker:
             result = "ok"
         assert result == "ok"
 
-    def test_resets_on_success(self) -> None:
+    @staticmethod
+    def test_resets_on_success() -> None:
         """Test that CircuitBreaker resets failure counter on success.
 
         **Why this test is important:**
@@ -195,12 +219,16 @@ class TestCircuitBreaker:
         with cb:
             pass
 
-    def test_implements_the_core_interface(self) -> None:
-        """Test that CircuitBreaker is the core ``CircuitBreakerInterface`` and runs ``execute``.
+    @staticmethod
+    def test_implements_the_core_interface() -> None:
+        """Test that CircuitBreaker is the core ``CircuitBreakerInterface``.
+
+        It runs ``execute``.
 
         **Why this test is important:**
-          - The client, cache and repository decorators accept a ``CircuitBreakerInterface``;
-            the shipped breaker must satisfy that contract to be injected into them
+          - The client, cache and repository decorators accept a
+            ``CircuitBreakerInterface``; the shipped breaker must satisfy that contract to
+            be injected into them
           - ``execute`` is the interface's call path, so it must gate exactly like the
             context-manager form
 
@@ -220,37 +248,46 @@ class TestCircuitBreaker:
         assert isinstance(cb, CircuitBreakerInterface)
         assert cb.execute(_work) == "ok"
         with pytest.raises(UnavailableError):
-            cb.execute(_raise_unavailable)
+            _ = cb.execute(_raise_unavailable)
         with pytest.raises(CircuitOpenError):
-            cb.execute(_work)
+            _ = cb.execute(_work)
         assert calls == [1]
 
 
 class TestTimeout:
     """Test suite for async timeout wrapper."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_completes_within_timeout(self) -> None:
+    async def test_completes_within_timeout() -> None:
         """Test that with_timeout returns the result when completed before deadline.
 
         **Why this test is important:**
           - Normal fast operations must not be affected by the timeout wrapper
           - The return value must pass through unchanged from the wrapped coroutine
-          - Zero overhead on the happy path ensures timeout wrapping is safe to apply broadly
+          - Zero overhead on the happy path ensures timeout wrapping is safe to apply
+            broadly
 
         **What it tests:**
           - Result equals "done" (the awaitable's return value)
         """
 
         async def fast() -> str:
+            """Finish at once.
+
+            Returns:
+                ``done``.
+
+            """
             await asyncio.sleep(0)
             return "done"
 
         result = await with_timeout(fast(), seconds=1.0)
         assert result == "done"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_raises_on_timeout(self) -> None:
+    async def test_raises_on_timeout() -> None:
         """Test that with_timeout raises TimeoutError when exceeding the deadline.
 
         **Why this test is important:**
@@ -261,11 +298,125 @@ class TestTimeout:
         **What it tests:**
           - TimeoutError is raised when the awaitable exceeds the deadline
         """
-        import asyncio
 
         async def slow() -> str:
+            """Run past the deadline.
+
+            Returns:
+                ``never``.
+
+            """
             await asyncio.sleep(10)
             return "never"
 
         with pytest.raises(AppTimeoutError):
-            await with_timeout(slow(), seconds=0.05)
+            _ = await with_timeout(slow(), seconds=0.05)
+
+
+def _sample(registry: CollectorRegistry, name: str, **labels: str) -> float:
+    """Return a metric sample's value, 0 when the series does not exist.
+
+    Args:
+        registry: The registry the series lives in.
+        name: The sample's name.
+        **labels: The series' labels.
+
+    Returns:
+        The sample's value, or 0 when the series does not exist.
+
+    """
+    return registry.get_sample_value(name, labels) or 0.0
+
+
+def _fail_through(breaker: CircuitBreakerInterface) -> None:
+    """Run one call through ``breaker`` that fails transiently.
+
+    Args:
+        breaker: The breaker the call runs through.
+
+    Raises:
+        UnavailableError: Always: the dependency is down, which counts against the
+            breaker.
+
+    """
+    with breaker:
+        msg = "dependency down"
+        raise UnavailableError(msg)
+
+
+def _probe_while_trial(breaker: CircuitBreakerInterface) -> None:
+    """Hold the one admitted half-open trial, see a second caller fail fast, then fail it.
+
+    Args:
+        breaker: The half-open breaker.
+
+    Raises:
+        UnavailableError: Always: the trial fails transiently.
+
+    """
+    with breaker:
+        with pytest.raises(CircuitOpenError), breaker:
+            pass
+        msg = "dependency down"
+        raise UnavailableError(msg)
+
+
+class TestObservedCircuitBreaker:
+    """A decorated breaker exports its state.
+
+    It lets only a bounded number of probes through.
+    """
+
+    @staticmethod
+    def test_breaker_state_is_exported_and_half_open_is_rate_limited() -> None:
+        """Test that a decorated breaker's state is exported.
+
+        Half-open admits ``max_requests``.
+
+        Why this test is important:
+          - An open breaker that nobody can see sheds a dependency's calls silently, and a
+            half-open breaker that admits every caller sends a burst of probes at a
+            dependency that is just recovering.
+
+        What it tests:
+          - Tripping the breaker sets ``circuit_breaker_state`` to 2 and counts one
+            transition to ``open``.
+          - Half-open with ``max_requests=1`` admits one trial and fails a second caller
+            fast; the trial's failure reopens the breaker (state 2, a second ``open``).
+        """
+        registry = CollectorRegistry()
+        layers = decoration.Layers(
+            circuit_breaker=decoration.CircuitBreaker(
+                enabled=True, consecutive_failures=1, timeout=0.0, max_requests=1
+            )
+        )
+        collab = Collaborators(observability=Observability(metrics=new_metrics(registry)))
+        breaker = build("nlp", layers, collab).breaker
+        assert breaker is not None
+        assert _sample(registry, "circuit_breaker_state", dependency="nlp") == 0
+
+        with pytest.raises(UnavailableError):
+            _fail_through(breaker)
+        opened = _sample(
+            registry, "circuit_breaker_transitions_total", dependency="nlp", to="open"
+        )
+        assert opened == 1
+
+        with pytest.raises(UnavailableError):
+            _probe_while_trial(breaker)
+
+        assert (
+            _sample(registry, "circuit_breaker_state", dependency="nlp")
+            == _EXPECTED_SAMPLE
+        )
+        probes = _sample(
+            registry,
+            "circuit_breaker_transitions_total",
+            dependency="nlp",
+            to="half_open",
+        )
+        assert probes == 1
+        reopened = _sample(
+            registry, "circuit_breaker_transitions_total", dependency="nlp", to="open"
+        )
+        assert reopened == _EXPECTED_REOPENED

@@ -1,9 +1,12 @@
-"""Tests for the controller tier: ``ControllerBase`` and ``lay_out`` (Go ``transport.Base`` / ``Interceptors``)."""
+"""Tests for the controller tier: ``ControllerBase`` and ``lay_out``.
+
+Go's are ``transport.Base`` / ``Interceptors``.
+"""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -36,7 +39,15 @@ class _Search(Protocol):
     """The test controller's contract: one operation per handler tested."""
 
     async def query(self, req: str) -> str:
-        """Answer a query."""
+        """Answer a query.
+
+        Args:
+            req: The request.
+
+        Returns:
+            The answer.
+
+        """
         ...
 
     async def delete(self) -> None:
@@ -48,7 +59,15 @@ class _Search(Protocol):
         ...
 
     async def get(self, req: str) -> str:
-        """Get."""
+        """Get.
+
+        Args:
+            req: The request.
+
+        Returns:
+            The result.
+
+        """
         ...
 
 
@@ -59,8 +78,8 @@ def test_tier_order_matches_go() -> None:
       - A shed, denied or panicking request must still be observed.
 
     What it tests:
-      - tracing → metrics → logging → recovery → rate limit → bulkhead → auth → timeout; the
-        tier is the edge, so it logs failures above Debug.
+      - tracing → metrics → logging → recovery → rate limit → bulkhead → auth → timeout;
+        the tier is the edge, so it logs failures above Debug.
     """
     assert tier().order == (
         Layer.TRACING,
@@ -86,6 +105,10 @@ async def test_handler_runs_through_the_tier(observed: Observed) -> None:
     What it tests:
       - The response is returned in a ``search.Query`` SERVER span; a denied action raises
         ``ForbiddenError``; a crash is coded ``InternalError`` and still observed.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     deps = Deps(observability=observed.observability)
     base = ControllerBase(_Search, Decorations.fixed(deps), "search")
@@ -116,6 +139,10 @@ async def test_handler_failures_are_logged_as_the_edge(observed: Observed) -> No
     What it tests:
       - A denial (403) logs ``controller.delete failed`` at Warning; a crash (500) logs
         ``controller.crash failed`` at Error; neither is logged at Debug.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     auth = AsyncMock(return_value=False)
     base = ControllerBase(
@@ -144,11 +171,11 @@ async def test_rate_limit_rejects_resource_exhausted() -> None:
       - A shed request must be the retry-later status, never a generic error.
 
     What it tests:
-      - A refusing limiter raises an ``AppError`` coded RESOURCE_EXHAUSTED; the handler is not
-        run.
+      - A refusing limiter raises an ``AppError`` coded RESOURCE_EXHAUSTED; the handler is
+        not run.
     """
     limiter = MagicMock(spec=RateLimiter)
-    limiter.allow.return_value = False
+    cast("MagicMock", limiter.allow).return_value = False
     handler = AsyncMock()
     base = ControllerBase(_Search, Decorations.fixed(Deps(rate_limiter=limiter)), "api")
 
@@ -165,7 +192,8 @@ def test_lay_out_splits_runs_around_native_layers_and_authn() -> None:
     """``lay_out`` stands native interceptors in for their layers and authn before auth.
 
     Why this test is important:
-      - Every server framework lays the tier out the same way (Go ``transport.Interceptors``).
+      - Every server framework lays the tier out the same way (Go
+        ``transport.Interceptors``).
 
     What it tests:
       - With native tracing only, the result is [native tracing, run(metrics…rate limit),
@@ -211,16 +239,32 @@ async def test_lay_out_streams_get_no_timeout() -> None:
     runs: list[tuple[OpMiddleware, OpMiddleware]] = []
 
     def adapt(unary: OpMiddleware, stream: OpMiddleware) -> int:
+        """Record the unary and stream layers.
+
+        Args:
+            unary: The unary layers.
+            stream: The stream layers.
+
+        Returns:
+            How many runs were recorded.
+
+        """
         runs.append((unary, stream))
         return len(runs)
 
-    lay_out("api", Deps(timeout=0.01, skip_recovery=True), lambda _: None, adapt)
+    _ = lay_out("api", Deps(timeout=0.01, skip_recovery=True), lambda _: None, adapt)
     [(unary, stream)] = runs
 
     async def slow() -> str:
+        """Finish after a short sleep.
+
+        Returns:
+            ``done``.
+
+        """
         await asyncio.sleep(0.05)
         return "done"
 
     with pytest.raises(AppError):
-        await exec_op(unary, "Op", slow)
+        _ = await exec_op(unary, "Op", slow)
     assert await exec_op(stream, "Op", slow) == "done"

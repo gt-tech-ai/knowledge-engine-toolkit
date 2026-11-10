@@ -22,41 +22,72 @@ func Runs(
 ) []Entry {
 	out := make([]Entry, 0, len(runs))
 	for i := range runs {
-		r := runs[i]
-		group := r.Group
-		if group == "" {
-			group = r.Verb
-		}
-		var shells []string
-		if r.Tool != "" {
-			shells = []string{r.Tool}
-		}
-		out = append(out, Entry{
-			Name: r.Name, Verb: r.Verb, Group: group, Kind: KindRun, Tags: r.Tags,
-			Tools: shells,
-			Job: func(env Env) interfaces.AnyJob {
-				return Build(env, r.Verb, r.Name, group, func(
-					ctx context.Context, _ interfaces.CommandRunner, _ string,
-				) (types.StepResults, error) {
-					res, err := tools.Run(ctx, cb, r, env.Opts)
-					if err != nil {
-						return types.OneStep(r.Name, types.StatusFail, err), nil
-					}
-					return res, nil
-				})
-			},
-		})
+		out = append(out, runEntry(tools, cb, &runs[i]))
 	}
+
 	return out
+}
+
+// runEntry is the catalog entry of one tool run, grouped by its verb when it names
+// no group.
+func runEntry(
+	tools interfaces.ToolRunner,
+	codebase interfaces.Codebase,
+	rRef *types.ToolRun,
+) Entry {
+	toolRun := *rRef
+
+	group := toolRun.Group
+	if group == "" {
+		group = toolRun.Verb
+	}
+
+	var shells []string
+
+	if toolRun.Tool != "" {
+		shells = []string{toolRun.Tool}
+	}
+
+	return Entry{
+		Name:  toolRun.Name,
+		Verb:  toolRun.Verb,
+		Group: group,
+		Kind:  KindRun,
+		Tags:  toolRun.Tags,
+		Tools: shells,
+		Job: func(env Env) interfaces.AnyJob {
+			return Build(env, toolRun.Verb, toolRun.Name, group, func(
+				ctx context.Context, _ interfaces.CommandRunner, _ string,
+			) (types.StepResults, error) {
+				return runStepResults(ctx, tools, codebase, &toolRun, env.Opts), nil
+			})
+		},
+	}
+}
+
+// runStepResults runs the tool, reporting a run error as one failed step.
+func runStepResults(
+	ctx context.Context,
+	tools interfaces.ToolRunner,
+	cb interfaces.Codebase,
+	r *types.ToolRun,
+	opts types.RunOptions,
+) types.StepResults {
+	res, err := tools.Run(ctx, cb, r, opts)
+	if err != nil {
+		return types.OneStep(r.Name, types.StatusFail, err)
+	}
+
+	return res
 }
 
 // StepEnv is what a registered step runs against.
 type StepEnv struct {
-	// Runner runs the step's commands (the gate's runner).
-	Runner interfaces.CommandRunner
-
 	// Env is the suite environment.
 	Env
+
+	// Runner runs the step's commands (the gate's runner).
+	Runner interfaces.CommandRunner
 
 	// Root is the repository root (the gate's root).
 	Root string
@@ -83,21 +114,24 @@ type Step struct {
 // runs a step entry only when its Steps list names it.
 func Steps(steps map[string]Step) []Entry {
 	out := make([]Entry, 0, len(steps))
-	for name, st := range steps {
+	for name, step := range steps {
 		verb, _, _ := strings.Cut(name, ".")
+
 		out = append(out, Entry{
-			Name: name, Verb: verb, Group: st.Group, Kind: KindStep, Tags: st.Tags,
-			Tools: st.Tools,
+			Name: name, Verb: verb, Group: step.Group, Kind: KindStep, Tags: step.Tags,
+			Tools: step.Tools,
 			Job: func(env Env) interfaces.AnyJob {
-				return Build(env, verb, name, st.Group, func(
+				return Build(env, verb, name, step.Group, func(
 					ctx context.Context, runner interfaces.CommandRunner, root string,
 				) (types.StepResults, error) {
-					return st.Run(ctx, &StepEnv{Runner: runner, Env: env, Root: root})
+					return step.Run(ctx, &StepEnv{Runner: runner, Env: env, Root: root})
 				})
 			},
 		})
 	}
+
 	slices.SortFunc(out, func(a, b Entry) int { return strings.Compare(a.Name, b.Name) })
+
 	return out
 }
 
@@ -110,35 +144,69 @@ const KindGuard = "guard"
 func Guards(gs []interfaces.Guard, cb interfaces.Codebase) []Entry {
 	out := make([]Entry, 0, len(gs))
 	for _, g := range gs {
-		m := g.Meta()
-		out = append(out, Entry{
-			Name: m.Name, Verb: m.Verb, Group: m.Group, Kind: KindGuard, Tags: m.Tags,
-			Tools: m.Tools,
-			Job: func(env Env) interfaces.AnyJob {
-				return Build(env, m.Verb, m.Name, m.Group, func(
-					ctx context.Context, _ interfaces.CommandRunner, _ string,
-				) (types.StepResults, error) {
-					v := g.Run(ctx, cb)
-					if env.Opts.Strict && v.Status == types.StatusSkip &&
-						v.Detail != types.CachedDetail {
-						v.Status = types.StatusFail
-					}
-					step := types.StepResult{
-						Name:   m.Name,
-						Group:  m.Group,
-						Status: v.Status,
-					}
-					if v.Status != types.StatusFail {
-						step.Detail = []byte(v.Detail)
-					} else if step.Error = strings.TrimSpace(v.Detail); step.Error == "" {
-						step.Error = "failed"
-					}
-					return types.StepResults{step}, nil
-				})
-			},
-		})
+		out = append(out, guardEntry(g, cb))
 	}
+
 	return out
+}
+
+// guardEntry is the catalog entry of one guard.
+func guardEntry(guard interfaces.Guard, codebase interfaces.Codebase) Entry {
+	entryMeta := guard.Meta()
+
+	return Entry{
+		Name:  entryMeta.Name,
+		Verb:  entryMeta.Verb,
+		Group: entryMeta.Group,
+		Kind:  KindGuard,
+		Tags:  entryMeta.Tags,
+		Tools: entryMeta.Tools,
+		Job: func(env Env) interfaces.AnyJob {
+			return Build(env, entryMeta.Verb, entryMeta.Name, entryMeta.Group, func(
+				ctx context.Context, _ interfaces.CommandRunner, _ string,
+			) (types.StepResults, error) {
+				step := guardStep(
+					guard.Run(ctx, codebase),
+					entryMeta.Name,
+					entryMeta.Group,
+					&env.Opts,
+				)
+
+				return types.StepResults{step}, nil
+			})
+		},
+	}
+}
+
+// guardStep turns a verdict into a step. Strict mode fails a skip unless it came from
+// the cache; a failure always carries an error text.
+func guardStep(
+	verdict types.Verdict,
+	name, group string,
+	opts *types.RunOptions,
+) types.StepResult {
+	if opts.Strict && verdict.Status == types.StatusSkip &&
+		verdict.Detail != types.CachedDetail {
+		verdict.Status = types.StatusFail
+	}
+
+	step := types.StepResult{
+		Name:     name,
+		Group:    group,
+		Status:   verdict.Status,
+		Error:    "",
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+	}
+	if verdict.Status != types.StatusFail {
+		step.Detail = []byte(verdict.Detail)
+	} else if step.Error = strings.TrimSpace(verdict.Detail); step.Error == "" {
+		step.Error = "failed"
+	}
+
+	return step
 }
 
 // KindProcedure marks a procedure entry.
@@ -154,21 +222,26 @@ func Procedures(
 ) []Entry {
 	out := make([]Entry, 0, len(procs))
 	for i := range procs {
-		p := procs[i]
-		group := p.Group
+		procedure := procs[i]
+		group := procedure.Group
+
 		if group == "" {
-			group = p.Name
+			group = procedure.Name
 		}
+
 		out = append(out, Entry{
-			Name: p.Name, Verb: verb, Group: group, Kind: KindProcedure,
+			Name: procedure.Name, Verb: verb, Group: group, Kind: KindProcedure,
 			Job: func(env Env) interfaces.AnyJob {
-				return Build(env, verb, p.Name, group, func(
+				return Build(env, verb, procedure.Name, group, func(
 					ctx context.Context, _ interfaces.CommandRunner, _ string,
 				) (types.StepResults, error) {
-					return eng.Run(ctx, p.Name, input, env.Opts)
+					return eng.Run(ctx, procedure.Name, input, env.Opts)
 				})
 			},
+			Tags:  nil,
+			Tools: nil,
 		})
 	}
+
 	return out
 }

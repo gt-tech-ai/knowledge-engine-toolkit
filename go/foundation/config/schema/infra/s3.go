@@ -4,8 +4,19 @@ import (
 	"fmt"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// multipartPresignFactor is how many single-part expiries a multipart presign lasts when
+// unset.
+const multipartPresignFactor = 4
+
+// defaultS3ConfigPresignExpiry is the default PresignExpiry of S3Config.
+const defaultS3ConfigPresignExpiry = 15 * time.Minute
+
+// defaultS3ConfigMultipartPresignExpiry is the default MultipartPresignExpiry of
+// S3Config.
+const defaultS3ConfigMultipartPresignExpiry = 60 * time.Minute
 
 // S3Config holds S3-compatible storage configuration, including the backend
 // selection (AWS S3 vs MinIO) used by the storage client's Kind-factory.
@@ -61,11 +72,12 @@ type S3Config struct {
 // EffectiveMultipartPresignExpiry returns the multipart part-URL lifetime, falling
 // back to 4× PresignExpiry when unset so a large upload gets a generous window even
 // without explicit configuration.
-func (c S3Config) EffectiveMultipartPresignExpiry() time.Duration {
+func (c *S3Config) EffectiveMultipartPresignExpiry() time.Duration {
 	if c.MultipartPresignExpiry > 0 {
 		return c.MultipartPresignExpiry
 	}
-	return 4 * c.PresignExpiry
+
+	return multipartPresignFactor * c.PresignExpiry
 }
 
 // DefaultS3Config returns an S3Config with defaults for local MinIO. Bucket is left
@@ -79,14 +91,17 @@ func DefaultS3Config() S3Config {
 		AccessKeyID:            "minioadmin",
 		SecretAccessKey:        "minioadmin",
 		ForcePathStyle:         true,
-		PresignExpiry:          15 * time.Minute,
-		MultipartPresignExpiry: 60 * time.Minute,
+		PresignExpiry:          defaultS3ConfigPresignExpiry,
+		MultipartPresignExpiry: defaultS3ConfigMultipartPresignExpiry,
+		PublicEndpoint:         "",
+		Bucket:                 "",
+		SSEKMSKeyID:            "",
 	}
 }
 
 // Validate returns an error if the configuration is invalid: the Kind must be a
 // known backend ("s3" or "minio") and the Bucket must be set.
-func (c S3Config) Validate() error {
+func (c *S3Config) Validate() error {
 	switch c.Kind {
 	case "s3", "minio":
 	default:
@@ -95,9 +110,11 @@ func (c S3Config) Validate() error {
 			fmt.Sprintf("invalid s3 kind %q: must be \"s3\" or \"minio\"", c.Kind),
 		)
 	}
+
 	if c.Bucket == "" {
 		return apperr.InvalidInput("s3 bucket must not be empty")
 	}
+
 	// A multipart part-URL must live at least as long as a single-part PUT URL:
 	// EffectiveMultipartPresignExpiry is what the reaper TTL and cleanup grace are
 	// sized above, so a shorter value would let a live multipart upload be reaped
@@ -108,5 +125,6 @@ func (c S3Config) Validate() error {
 			c.MultipartPresignExpiry, c.PresignExpiry,
 		))
 	}
+
 	return nil
 }

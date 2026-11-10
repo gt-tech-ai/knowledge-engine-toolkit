@@ -36,7 +36,7 @@ func (*Store) Readiness(context.Context) error { return nil }
 // Aggregate returns a stream with one empty, final page.
 func (*Store) Aggregate(
 	context.Context,
-	types.AggregateQuery,
+	*types.AggregateQuery,
 ) (interfaces.RowStream, error) {
 	return &emptyStream{}, nil
 }

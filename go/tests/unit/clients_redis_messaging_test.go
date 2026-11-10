@@ -7,7 +7,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	msgredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging/redis"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -33,9 +33,14 @@ import (
 //     to their core interfaces and construct without panic.
 func TestMessagingCapabilityInterfaces_MocksSatisfyContracts(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	var dyn interfaces.DynamicConsumer = mocks.NewMockDynamicConsumer(ctrl)
-	var pat interfaces.PatternConsumer = mocks.NewMockPatternConsumer(ctrl)
+
+	var (
+		dyn interfaces.DynamicConsumer = mocks.NewMockDynamicConsumer(ctrl)
+		pat interfaces.PatternConsumer = mocks.NewMockPatternConsumer(ctrl)
+	)
+
 	require.NotNil(t, dyn)
 	require.NotNil(t, pat)
 }
@@ -53,12 +58,13 @@ func TestMessagingCapabilityInterfaces_MocksSatisfyContracts(t *testing.T) {
 //     coded InvalidInput error.
 func TestRedisMessaging_NilClient_Rejected(t *testing.T) {
 	t.Parallel()
-	_, _, fromErr := msgredis.NewFromConfig(msgredis.Config{})
+
+	_, _, fromErr := msgredis.NewFromConfig(new(msgredis.Config))
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(fromErr))
 
-	_, pubErr := msgredis.NewPublisher(msgredis.Config{})
+	_, pubErr := msgredis.NewPublisher(new(msgredis.Config))
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(pubErr))
 
-	_, subErr := msgredis.NewSubscriber(msgredis.Config{})
+	_, subErr := msgredis.NewSubscriber(new(msgredis.Config))
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(subErr))
 }

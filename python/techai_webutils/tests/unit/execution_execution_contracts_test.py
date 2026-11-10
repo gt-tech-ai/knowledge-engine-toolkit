@@ -1,4 +1,7 @@
-"""Tests for the execution-engine contracts (StepResult / BatchResult / observer / job)."""
+"""Tests for the execution-engine contracts.
+
+StepResult, BatchResult, the observer and the job.
+"""
 
 from typing import override
 
@@ -14,20 +17,25 @@ from techai_webutils.core.interfaces.execution import (
     StepStatus,
 )
 
+_EXPECTED_TOTAL = 5
+_EXPECTED_SUCCEEDED = 2
+
 
 class TestBatchResult:
     """Tests for the batch result."""
 
-    def test_aggregates_mixed_statuses(self) -> None:
+    @staticmethod
+    def test_aggregates_mixed_statuses() -> None:
         """Test that BatchResult reports counts over a mixed result set.
 
         **Why this test is important:**
-          - The fan-out engine returns a BatchResult; a caller routes DLQ/retry and
-            emits metrics off these counts, so a miscount misroutes work items or corrupts metrics.
+          - The fan-out engine returns a BatchResult; a caller routes DLQ/retry and emits
+            metrics off these counts, so a miscount misroutes work items or corrupts
+            metrics.
 
         **What it tests:**
-          - total, succeeded, failed, warned, skipped, has_failures, all_passed, failed_names
-            over a set containing every status.
+          - total, succeeded, failed, warned, skipped, has_failures, all_passed,
+            failed_names over a set containing every status.
         """
         results = [
             StepResult(name="a", status=StepStatus.PASS),
@@ -37,8 +45,8 @@ class TestBatchResult:
             StepResult(name="e", status=StepStatus.PASS),
         ]
         batch = BatchResult(results=results)
-        assert batch.total == 5
-        assert batch.succeeded == 2
+        assert batch.total == _EXPECTED_TOTAL
+        assert batch.succeeded == _EXPECTED_SUCCEEDED
         assert batch.failed == 1
         assert batch.warned == 1
         assert batch.skipped == 1
@@ -46,12 +54,14 @@ class TestBatchResult:
         assert batch.all_passed is False
         assert batch.failed_names() == ["b"]
 
-    def test_empty_batch_is_all_passed_no_failures(self) -> None:
+    @staticmethod
+    def test_empty_batch_is_all_passed_no_failures() -> None:
         """Test that an empty BatchResult is vacuously all-passed with no failures.
 
         **Why this test is important:**
-          - An empty poll (no messages) must read as "nothing failed", not as a failure, or an
-            idle consumer would emit false failure signals (mirrors Go StepResults.AllPassed).
+          - An empty poll (no messages) must read as "nothing failed", not as a failure,
+            or an idle consumer would emit false failure signals (mirrors Go
+            StepResults.AllPassed).
 
         **What it tests:**
           - total 0, all_passed True, has_failures False on the empty aggregate.
@@ -61,12 +71,14 @@ class TestBatchResult:
         assert batch.all_passed is True
         assert batch.has_failures is False
 
-    def test_step_result_ok_reflects_pass(self) -> None:
+    @staticmethod
+    def test_step_result_ok_reflects_pass() -> None:
         """Test that StepResult.ok is True only for a PASS status.
 
         **Why this test is important:**
           - `ok` is the per-item success predicate a caller reads to decide delete vs
-            redrive; a wrong value deletes a failed message (data loss) or redrives a good one.
+            redrive; a wrong value deletes a failed message (data loss) or redrives a good
+            one.
 
         **What it tests:**
           - ok is True for PASS and False for FAIL.
@@ -78,12 +90,14 @@ class TestBatchResult:
 class TestJobMeta:
     """Tests for the job meta."""
 
-    def test_carries_name_and_group(self) -> None:
+    @staticmethod
+    def test_carries_name_and_group() -> None:
         """Test that JobMeta carries a job's display name and group.
 
         **Why this test is important:**
-          - The gate/observer label every job by its Meta; a wrong or missing name mislabels the
-            step in metrics and logs, breaking per-job attribution (mirrors Go types.JobMeta).
+          - The gate/observer label every job by its Meta; a wrong or missing name
+            mislabels the step in metrics and logs, breaking per-job attribution (mirrors
+            Go types.JobMeta).
 
         **What it tests:**
           - name and group round-trip; group defaults to empty.
@@ -98,47 +112,69 @@ class _StubJob:
     """A minimal in-test AnyJob (contract fixture, not a fake of a real dependency)."""
 
     def __init__(self, result: BatchResult) -> None:
+        """Bind what the job returns.
+
+        Args:
+            result: What the job returns.
+
+        """
         self._result: BatchResult = result
 
-    def meta(self) -> JobMeta:
-        """Return a fixed identity for the stub."""
+    @staticmethod
+    def meta() -> JobMeta:
+        """Return a fixed identity for the stub.
+
+        Returns:
+            A fixed identity for the stub.
+
+        """
         return JobMeta(name="stub", group="test")
 
     async def execute(self) -> BatchResult:
-        """Return the preset BatchResult."""
+        """Return the preset BatchResult.
+
+        Returns:
+            The preset BatchResult.
+
+        """
         return self._result
 
 
 class TestJobProtocols:
     """Tests for the job protocols."""
 
-    def test_stub_satisfies_named_and_anyjob(self) -> None:
+    @staticmethod
+    def test_stub_satisfies_named_and_anyjob() -> None:
         """Test that a concrete job satisfies the Named and AnyJob protocols structurally.
 
         **Why this test is important:**
-          - The gate composes anything shaped like an AnyJob; if the runtime-checkable contract
-            didn't recognise a real job, gate composition would reject valid work units.
+          - The gate composes anything shaped like an AnyJob; if the runtime-checkable
+            contract didn't recognise a real job, gate composition would reject valid work
+            units.
 
         **What it tests:**
-          - isinstance against Named and AnyJob for a class exposing meta() + async execute().
+          - isinstance against Named and AnyJob for a class exposing meta() + async
+            execute().
         """
         job = _StubJob(BatchResult())
         assert isinstance(job, Named)
         assert isinstance(job, AnyJob)
 
-    def test_job_factory_protocol(self) -> None:
+    @staticmethod
+    def test_job_factory_protocol() -> None:
         """Test that a typed producer satisfies the JobFactory protocol.
 
         **Why this test is important:**
-          - JobFactory lets a worker model a job as a value (params as fields) rather than a bare
-            closure; the contract must recognise a `job()`-exposing producer.
+          - JobFactory lets a worker model a job as a value (params as fields) rather than
+            a bare closure; the contract must recognise a `job()`-exposing producer.
 
         **What it tests:**
           - isinstance against JobFactory for a class exposing job() -> AnyJob.
         """
 
         class _Factory:
-            def job(self) -> AnyJob:
+            @staticmethod
+            def job() -> AnyJob:
                 return _StubJob(BatchResult())
 
         assert isinstance(_Factory(), JobFactory)
@@ -147,17 +183,21 @@ class TestJobProtocols:
 class TestNopObserver:
     """Tests for the no-op observer."""
 
-    def test_satisfies_protocol_and_is_noop(self) -> None:
-        """Test that NopObserver conforms to the unified ExecutionObserver and every callback no-ops.
+    @staticmethod
+    def test_satisfies_protocol_and_is_noop() -> None:
+        """Test that NopObserver conforms to the unified ExecutionObserver.
+
+        Every callback no-ops.
 
         **Why this test is important:**
-          - NopObserver is the default the engine + gate use when nothing is wired; if any of the
-            gate/phase/step/batch callbacks raised or broke the isinstance contract, an unobserved
-            gate run would crash.
+          - NopObserver is the default the engine + gate use when nothing is wired; if any
+            of the gate/phase/step/batch callbacks raised or broke the isinstance
+            contract, an unobserved gate run would crash.
 
         **What it tests:**
-          - isinstance(NopObserver(), ExecutionObserver) and that each lifecycle callback across the
-            full gate -> phase -> step / batch surface returns None without raising.
+          - isinstance(NopObserver(), ExecutionObserver) and that each lifecycle callback
+            across the full gate -> phase -> step / batch surface returns None without
+            raising.
         """
         obs = NopObserver()
         assert isinstance(obs, ExecutionObserver)
@@ -172,17 +212,19 @@ class TestNopObserver:
         assert obs.on_phase_complete("phase", BatchResult(), 0.0) is None
         assert obs.on_gate_complete("gate", BatchResult(), 0.0) is None
 
-    def test_subclass_inherits_noops(self) -> None:
+    @staticmethod
+    def test_subclass_inherits_noops() -> None:
         """Test that a subclass overriding one callback inherits the rest as no-ops.
 
         **Why this test is important:**
-          - Concrete observers (e.g. the metrics observer) implement only the events they care
-            about; inheriting NopObserver must supply the remaining gate/phase/step callbacks so the
-            engine never calls a missing method (AttributeError) on a partial observer.
+          - Concrete observers (e.g. the metrics observer) implement only the events they
+            care about; inheriting NopObserver must supply the remaining gate/phase/step
+            callbacks so the engine never calls a missing method (AttributeError) on a
+            partial observer.
 
         **What it tests:**
-          - A NopObserver subclass overriding only on_step_complete still satisfies the protocol and
-            its inherited callbacks run without raising.
+          - A NopObserver subclass overriding only on_step_complete still satisfies the
+            protocol and its inherited callbacks run without raising.
         """
         seen: list[str] = []
 

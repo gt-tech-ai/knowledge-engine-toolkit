@@ -11,7 +11,7 @@ import (
 	"database/sql"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
@@ -42,12 +42,12 @@ type Config struct {
 
 // Deps carries the outbox store's runtime collaborators.
 type Deps struct {
-	// DB is the database KindPostgres runs on.
-	DB *sql.DB
-
 	// Decorations builds the store's layers from the stores tier of the decoration
 	// config, under Config.Name.
 	decorate.Decorations
+
+	// DB is the database KindPostgres runs on.
+	DB *sql.DB
 }
 
 // kinds is the outbox store backend table.
@@ -59,38 +59,45 @@ func kinds() client.Kinds[Config, Deps, interfaces.OutboxStore] {
 			KindStub: func(context.Context, Config, Deps) (interfaces.OutboxStore, error) {
 				return stub.New(), nil
 			},
-			KindPostgres: newPostgres,
+			KindPostgres: client.RefConfig(newPostgres),
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
 // NewFromConfig builds the outbox store cfg.Kind selects, behind the store tier, with
 // no I/O. An unknown kind, an invalid backend config, a postgres kind without a DB, or
 // a decoration that fails to build is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.OutboxStore, error) {
-	s, err := kinds().New(ctx, cfg.Kind, cfg, deps)
+	outboxStore, err := kinds().New(ctx, cfg.Kind, *cfg, deps)
 	if err != nil {
 		return nil, err
 	}
+
 	name := cfg.Name
 	if name == "" {
 		name = "outbox"
 	}
+
 	b, err := store.NewBase[interfaces.OutboxStore](deps.Decorations, name, deps.DB)
 	if err != nil {
 		return nil, err
 	}
-	return decorate.NewOutbox(b.Subject, b.Subject, s), nil
+
+	return new(decorate.NewOutbox(b.Subject, b.Subject, outboxStore)), nil
 }
 
 // newPostgres builds the store over cfg.Postgres's table on deps.DB.
 func newPostgres(
 	_ context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.OutboxStore, error) {
 	if deps.DB == nil {
@@ -99,5 +106,6 @@ func newPostgres(
 			"outbox store: postgres needs a DB",
 		)
 	}
-	return postgres.New(deps.DB, cfg.Postgres)
+
+	return postgres.New(deps.DB, &cfg.Postgres)
 }

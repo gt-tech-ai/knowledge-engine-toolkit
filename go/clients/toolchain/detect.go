@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -36,11 +36,13 @@ func (d *Detector) Check(
 	tool *types.ToolDef,
 ) types.ToolCheckResult {
 	if !d.runner.Exists(tool.Binary) {
-		d.log.Debug("tool lookup: not found", "tool", tool.Name, "binary", tool.Binary)
+		d.log.Debug("tool lookup: not found", textTool, tool.Name, "binary", tool.Binary)
+
 		return types.ToolCheckResult{
 			Tool:    tool,
 			Status:  types.StatusToolMissing,
 			Message: tool.Name + ": not found",
+			Found:   "",
 		}
 	}
 
@@ -56,6 +58,85 @@ func (d *Detector) Check(
 	return d.checkVersion(ctx, root, tool)
 }
 
+// Scan checks every tool, logs each result at its severity, and returns all
+// results in order.
+func (d *Detector) Scan(
+	ctx context.Context,
+	root string,
+	tools []types.ToolDef,
+) []types.ToolCheckResult {
+	results := make([]types.ToolCheckResult, 0, len(tools))
+	for i := range tools {
+		result := d.Check(ctx, root, &tools[i])
+		d.logResult(result)
+
+		results = append(results, result)
+	}
+
+	return results
+}
+
+// CheckPrerequisites checks the prerequisite tools, logging each, and returns a
+// consolidated CodeUnavailable error naming every missing or outdated one (with
+// its fallback URL). Returns nil when all prerequisites are satisfied.
+func (d *Detector) CheckPrerequisites(
+	ctx context.Context,
+	root string,
+	prereqs []types.ToolDef,
+) error {
+	var missing []string
+
+	for index := range prereqs {
+		result := d.Check(ctx, root, &prereqs[index])
+		switch result.Status {
+		case types.StatusToolOK:
+			d.log.Info(result.Message)
+		case types.StatusToolOutdated:
+			d.log.Error(result.Message)
+
+			missing = append(missing, prereqHint(&prereqs[index], fmt.Sprintf(
+				"need >= %s, found %s", prereqs[index].MinVersion, result.Found,
+			)))
+		case types.StatusToolMissing:
+			d.log.Error(result.Message)
+
+			missing = append(missing, prereqHint(&prereqs[index], "not found on PATH"))
+		default:
+			// No other value changes the outcome.
+		}
+	}
+
+	if len(missing) > 0 {
+		return apperr.New(
+			apperr.CodeUnavailable,
+			"missing prerequisites:\n  "+strings.Join(missing, "\n  "),
+		)
+	}
+
+	return nil
+}
+
+// ListOptional logs every optional tool with its install status and description,
+// for a tool listing.
+func (d *Detector) ListOptional(
+	ctx context.Context,
+	root string,
+	optional []types.ToolDef,
+) {
+	d.log.Info("Optional developer tools")
+
+	for i := range optional {
+		toolDef := &optional[i]
+		status := "tool not installed"
+
+		if d.Check(ctx, root, toolDef).Status == types.StatusToolOK {
+			status = "tool installed"
+		}
+
+		d.log.Info(status, "name", toolDef.Name, "desc", toolDef.Description)
+	}
+}
+
 // checkVersion runs the tool's version command and classifies the parsed result
 // against its minimum version.
 func (d *Detector) checkVersion(
@@ -65,28 +146,22 @@ func (d *Detector) checkVersion(
 ) types.ToolCheckResult {
 	d.log.Debug(
 		"running version command",
-		"tool",
+		textTool,
 		tool.Name,
 		"cmd",
 		strings.Join(tool.VersionCmd, " "),
 	)
+
 	result := d.runner.RunBuffered(ctx, root, tool.VersionCmd[0], tool.VersionCmd[1:]...)
 	if result.Err != nil {
-		d.log.Debug("version command failed", "tool", tool.Name, "error", result.Err)
-		return types.ToolCheckResult{
-			Tool:   tool,
-			Status: types.StatusToolOutdated,
-			Found:  "unknown",
-			Message: fmt.Sprintf(
-				"%s: found but version check failed: %v",
-				tool.Name,
-				result.Err,
-			),
-		}
+		d.log.Debug("version command failed", textTool, tool.Name, "error", result.Err)
+
+		return versionRunFailed(tool, result.Err)
 	}
 
 	raw := strings.TrimSpace(string(result.Stdout))
-	d.log.Debug("raw version output", "tool", tool.Name, "output", raw)
+	d.log.Debug("raw version output", textTool, tool.Name, "output", raw)
+
 	verStr := raw
 	if tool.VersionParse != nil {
 		verStr = tool.VersionParse(raw)
@@ -94,17 +169,9 @@ func (d *Detector) checkVersion(
 
 	ver, err := types.ParseVersion(verStr)
 	if err != nil {
-		d.log.Debug("version parse error", "tool", tool.Name, "error", err)
-		return types.ToolCheckResult{
-			Tool:   tool,
-			Status: types.StatusToolOK,
-			Found:  verStr,
-			Message: fmt.Sprintf(
-				"%s: installed (version parse failed: %s)",
-				tool.Name,
-				verStr,
-			),
-		}
+		d.log.Debug("version parse error", textTool, tool.Name, "error", err)
+
+		return versionUnparsed(tool, verStr)
 	}
 
 	if !ver.MeetsMinimum(*tool.MinVersion) {
@@ -129,71 +196,27 @@ func (d *Detector) checkVersion(
 	}
 }
 
-// Scan checks every tool, logs each result at its severity, and returns all
-// results in order.
-func (d *Detector) Scan(
-	ctx context.Context,
-	root string,
-	tools []types.ToolDef,
-) []types.ToolCheckResult {
-	results := make([]types.ToolCheckResult, 0, len(tools))
-	for i := range tools {
-		result := d.Check(ctx, root, &tools[i])
-		d.logResult(result)
-		results = append(results, result)
+// versionRunFailed is the result for a found tool whose version command failed.
+func versionRunFailed(tool *types.ToolDef, err error) types.ToolCheckResult {
+	return types.ToolCheckResult{
+		Tool:    tool,
+		Status:  types.StatusToolOutdated,
+		Found:   "unknown",
+		Message: fmt.Sprintf("%s: found but version check failed: %v", tool.Name, err),
 	}
-	return results
 }
 
-// CheckPrerequisites checks the prerequisite tools, logging each, and returns a
-// consolidated CodeUnavailable error naming every missing or outdated one (with
-// its fallback URL). Returns nil when all prerequisites are satisfied.
-func (d *Detector) CheckPrerequisites(
-	ctx context.Context,
-	root string,
-	prereqs []types.ToolDef,
-) error {
-	var missing []string
-	for i := range prereqs {
-		result := d.Check(ctx, root, &prereqs[i])
-		switch result.Status {
-		case types.StatusToolOK:
-			d.log.Info(result.Message)
-		case types.StatusToolOutdated:
-			d.log.Error(result.Message)
-			missing = append(missing, prereqHint(&prereqs[i], fmt.Sprintf(
-				"need >= %s, found %s", prereqs[i].MinVersion, result.Found,
-			)))
-		case types.StatusToolMissing:
-			d.log.Error(result.Message)
-			missing = append(missing, prereqHint(&prereqs[i], "not found on PATH"))
-		}
-	}
-
-	if len(missing) > 0 {
-		return apperr.New(
-			apperr.CodeUnavailable,
-			"missing prerequisites:\n  "+strings.Join(missing, "\n  "),
-		)
-	}
-	return nil
-}
-
-// ListOptional logs every optional tool with its install status and description,
-// for a tool listing.
-func (d *Detector) ListOptional(
-	ctx context.Context,
-	root string,
-	optional []types.ToolDef,
-) {
-	d.log.Info("Optional developer tools")
-	for i := range optional {
-		t := &optional[i]
-		status := "tool not installed"
-		if d.Check(ctx, root, t).Status == types.StatusToolOK {
-			status = "tool installed"
-		}
-		d.log.Info(status, "name", t.Name, "desc", t.Description)
+// versionUnparsed is the result for an installed tool whose version output is opaque.
+func versionUnparsed(tool *types.ToolDef, verStr string) types.ToolCheckResult {
+	return types.ToolCheckResult{
+		Tool:   tool,
+		Status: types.StatusToolOK,
+		Found:  verStr,
+		Message: fmt.Sprintf(
+			"%s: installed (version parse failed: %s)",
+			tool.Name,
+			verStr,
+		),
 	}
 }
 
@@ -206,6 +229,8 @@ func (d *Detector) logResult(result types.ToolCheckResult) {
 		d.log.Warn(result.Message)
 	case types.StatusToolMissing:
 		d.log.Error(result.Message)
+	default:
+		// No other value changes the outcome.
 	}
 }
 
@@ -215,6 +240,7 @@ func prereqHint(tool *types.ToolDef, reason string) string {
 	if tool.FallbackURL != "" {
 		reason += "\n  Install manually: " + tool.FallbackURL
 	}
+
 	return fmt.Sprintf("%s: %s", tool.Name, reason)
 }
 
@@ -223,23 +249,15 @@ func prereqHint(tool *types.ToolDef, reason string) string {
 // when nothing is missing.
 func SummarizeMissing(prereqErr error, results []types.ToolCheckResult) error {
 	var lines []string
+
 	if prereqErr != nil {
 		lines = append(lines, prereqErr.Error())
 	}
+
 	for i := range results {
-		r := &results[i]
-		if r.Status != types.StatusToolMissing &&
-			r.Status != types.StatusToolOutdated {
-			continue
+		if line := missingLine(&results[i]); line != "" {
+			lines = append(lines, line)
 		}
-		msg := r.Tool.Name
-		if r.Status == types.StatusToolOutdated && r.Found != "" {
-			msg += fmt.Sprintf(" (found %s, need >= %s)", r.Found, r.Tool.MinVersion)
-		}
-		if r.Tool.FallbackURL != "" {
-			msg += "\n    Install: " + r.Tool.FallbackURL
-		}
-		lines = append(lines, msg)
 	}
 
 	if len(lines) > 0 {
@@ -248,5 +266,29 @@ func SummarizeMissing(prereqErr error, results []types.ToolCheckResult) error {
 			"missing dependencies:\n  "+strings.Join(lines, "\n  "),
 		)
 	}
+
 	return nil
+}
+
+// missingLine describes a missing or outdated tool; "" for any other status.
+func missingLine(toolCheckResult *types.ToolCheckResult) string {
+	if toolCheckResult.Status != types.StatusToolMissing &&
+		toolCheckResult.Status != types.StatusToolOutdated {
+		return ""
+	}
+
+	msg := toolCheckResult.Tool.Name
+	if toolCheckResult.Status == types.StatusToolOutdated && toolCheckResult.Found != "" {
+		msg += fmt.Sprintf(
+			" (found %s, need >= %s)",
+			toolCheckResult.Found,
+			toolCheckResult.Tool.MinVersion,
+		)
+	}
+
+	if toolCheckResult.Tool.FallbackURL != "" {
+		msg += "\n    Install: " + toolCheckResult.Tool.FallbackURL
+	}
+
+	return msg
 }

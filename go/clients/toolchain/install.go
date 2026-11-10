@@ -3,16 +3,35 @@ package toolchain
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// wingetNoUpdateAvailable is the winget exit code for an installed package with no
+// update.
+const wingetNoUpdateAvailable = 0x8A15002B
+
+// wingetPackageInstalled is the winget exit code for a package that is already installed.
+const wingetPackageInstalled = 0x8A150061
+
+// wingetOtherVersionInstalled is the winget exit code for another version already
+// installed.
+const wingetOtherVersionInstalled = 0x8A15010D
+
+// wingetVersionNotNewer is the winget exit code for an upgrade no newer than what is
+// installed.
+const wingetVersionNotNewer = 0x8A15004F
+
+// lookupNamesPerTool sizes the lookup that indexes each tool under two names.
+const lookupNamesPerTool = 2
 
 // PlatformKey returns the platform key used to select install methods:
 // "darwin", "windows", or "linux-apt"/"linux-dnf"/"linux-pacman".
@@ -36,6 +55,7 @@ func detectLinuxPackageManager() string {
 	if err != nil {
 		return "linux-apt"
 	}
+
 	content := strings.ToLower(string(data))
 	switch {
 	case strings.Contains(content, "arch"):
@@ -120,19 +140,22 @@ func NewInstaller(
 	prompter interfaces.Prompter,
 	opts ...Option,
 ) *Installer {
-	i := &Installer{
-		runner:     runner,
-		downloader: newHTTPDownloader(),
-		paths:      execPathResolver{},
-		log:        log,
-		platform:   platform,
-		arch:       runtime.GOARCH,
-		prompter:   prompter,
+	installer := &Installer{
+		runner:        runner,
+		downloader:    newHTTPDownloader(),
+		paths:         execPathResolver{},
+		log:           log,
+		platform:      platform,
+		arch:          runtime.GOARCH,
+		prompter:      prompter,
+		reinstallHint: nil,
+		force:         false,
 	}
 	for _, opt := range opts {
-		opt(i)
+		opt(installer)
 	}
-	return i
+
+	return installer
 }
 
 // Install installs one tool using the method resolved for the Installer's
@@ -151,27 +174,30 @@ func (i *Installer) Install(
 			"no install method available for %s on %s", tool.Name, i.platform,
 		))
 	}
+
 	if method.Download != nil {
 		return i.installDownload(ctx, tool.Name, method.Download)
 	}
 
 	inv := i.buildInvocation(method)
-	if inv.command == "winget" {
+	if inv.command == textWinget {
 		return i.runWinget(ctx, root, tool.Name, inv.args)
 	}
+
 	if isGoInstall(method) && (i.platform == osWindows && i.arch == archARM64) {
 		i.log.Info(
 			"cross-compiling as amd64 (Windows ARM64 workaround)",
-			"tool",
+			textTool,
 			tool.Name,
 		)
 	}
+
 	return i.runner.RunWithEnv(ctx, root, inv.env, inv.command, inv.args...)
 }
 
 // Provision runs the required-tool flow for setup: pin the local Go
 // toolchain, ensure the go-install bin dir is on PATH, check prerequisites, scan
-// the required toolchain, and — unless checkOnly — install the missing ones that
+// the required toolchain, and — unless opts.CheckOnly — install the missing ones that
 // have an applicable method, verifying each afterwards. A required tool with no
 // install method for this platform (e.g. gcc off Windows) is reported, not
 // force-installed.
@@ -179,28 +205,23 @@ func (i *Installer) Provision(
 	ctx context.Context,
 	root string,
 	cat *Catalog,
-	autoYes, checkOnly bool,
+	opts *types.InstallToolsOptions,
 ) error {
-	_ = os.Setenv("GOTOOLCHAIN", "local")
-	i.log.Debug("platform detected", "key", i.platform)
-	i.ensureGoBinInPath()
-	if i.platform == osWindows {
-		i.ensureMsys2InPath()
-	}
-	if i.platform == osDarwin && !i.runner.Exists("brew") {
-		i.log.Warn("Homebrew not found; some tools may need manual installation")
-		i.log.Info("Install Homebrew: https://brew.sh")
-	}
+	i.preparePlatform()
 
 	det := NewDetector(i.runner, i.log)
 	i.log.Info("Prerequisites:")
+
 	prereqErr := det.CheckPrerequisites(ctx, root, cat.Prerequisites())
+
 	i.log.Info("")
 
 	i.log.Info("Tools:")
+
 	required := cat.Required()
 	results := det.Scan(ctx, root, required)
-	if checkOnly {
+
+	if opts.CheckOnly {
 		return SummarizeMissing(prereqErr, results)
 	}
 
@@ -208,139 +229,17 @@ func (i *Installer) Provision(
 	if len(toInstall) == 0 || prereqErr != nil {
 		return prereqErr
 	}
-	yes, err := i.confirmRequired(ctx, required, toInstall, autoYes)
+
+	yes, err := i.confirmRequired(ctx, required, toInstall, opts)
 	if err != nil {
 		return err
 	}
+
 	if !yes {
 		return reportSkipped(required, toInstall, i.log)
 	}
+
 	return i.installAndVerify(ctx, root, det, required, toInstall)
-}
-
-// selectInstallable returns the indices of required tools that need installing
-// (missing or outdated, or ANY tool when force is set — the post-Go-bump rebuild)
-// and have an install method applicable to this platform.
-func (i *Installer) selectInstallable(
-	required []types.ToolDef,
-	results []types.ToolCheckResult,
-	force bool,
-) []int {
-	var idxs []int
-	for j := range results {
-		needs := force ||
-			results[j].Status == types.StatusToolMissing ||
-			results[j].Status == types.StatusToolOutdated
-		if !needs {
-			continue
-		}
-		if _, ok := i.resolveMethod(&required[j]); ok {
-			idxs = append(idxs, j)
-		}
-	}
-	return idxs
-}
-
-// confirmRequired asks the Prompter to install the selected required tools
-// (autoYes skips the question) and returns its error, e.g. the --yes guidance when
-// there is no operator to answer.
-func (i *Installer) confirmRequired(
-	ctx context.Context,
-	required []types.ToolDef,
-	idxs []int,
-	autoYes bool,
-) (bool, error) {
-	names := make([]string, len(idxs))
-	for k, idx := range idxs {
-		names[k] = required[idx].Name
-	}
-	return i.confirm(
-		ctx,
-		fmt.Sprintf("Install missing tools (%s)?", strings.Join(names, ", ")),
-		autoYes,
-	)
-}
-
-// confirm reports yes without asking when autoYes is set; otherwise it asks the
-// injected Prompter, failing with a coded error when none was injected.
-func (i *Installer) confirm(
-	ctx context.Context,
-	question string,
-	autoYes bool,
-) (bool, error) {
-	if autoYes {
-		return true, nil
-	}
-	if i.prompter == nil {
-		return false, apperr.New(
-			apperr.CodeInvalidInput,
-			"no Prompter was injected to confirm the install; pass --yes to install without "+
-				"asking",
-		)
-	}
-	return i.prompter.Confirm(ctx, question)
-}
-
-// reportSkipped logs and returns a CodeUnavailable error listing the required
-// tools the user declined to install.
-func reportSkipped(required []types.ToolDef, idxs []int, log interfaces.Logger) error {
-	log.Info("Skipping tool installation")
-	log.Error(fmt.Sprintf("Missing tools (%d):", len(idxs)))
-	for _, idx := range idxs {
-		msg := required[idx].Name
-		if required[idx].FallbackURL != "" {
-			msg += "\n    Install: " + required[idx].FallbackURL
-		}
-		log.Error("  * " + msg)
-	}
-	return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
-		"%d required tool(s) missing from PATH -- install them and retry", len(idxs),
-	))
-}
-
-// installAndVerify installs each selected tool, adds its bin dir to PATH, and
-// re-checks it, returning an error if any tool is still unavailable afterwards.
-func (i *Installer) installAndVerify(
-	ctx context.Context,
-	root string,
-	det *Detector,
-	required []types.ToolDef,
-	idxs []int,
-) error {
-	var failures []string
-	for _, idx := range idxs {
-		tool := &required[idx]
-		if err := i.Install(ctx, root, tool); err != nil {
-			return toolError(
-				tool,
-				apperr.Wrap(err, apperr.CodeInternal, "install failed"),
-			)
-		}
-		i.addInstallDirToPath(tool)
-		if verify := det.Check(ctx, root, tool); verify.Status == types.StatusToolOK {
-			i.log.Info(verify.Message + " (installed)")
-		} else {
-			failures = append(failures, tool.Name)
-			i.log.Error(tool.Name + ": still not available after install")
-		}
-	}
-	if len(failures) > 0 {
-		return apperr.Internal(fmt.Sprintf(
-			"%d tool(s) failed to install: %s",
-			len(failures),
-			strings.Join(failures, ", "),
-		))
-	}
-	return nil
-}
-
-// toolError wraps a tool failure with its manual-install fallback URL.
-func toolError(tool *types.ToolDef, cause error) error {
-	msg := fmt.Sprintf("required tool %s: %s", tool.Name, cause)
-	if tool.FallbackURL != "" {
-		msg += "\n  Install manually: " + tool.FallbackURL
-	}
-	return apperr.Internal(msg)
 }
 
 // InstallTools is the tool-install entry point. It picks the pool the
@@ -361,6 +260,7 @@ func (i *Installer) InstallTools(
 			"--ci installs the whole CI set; drop the tool names or drop --ci")
 	case opts.CI:
 		opts.Force = true
+
 		return i.InstallSet(ctx, root, cat.CI(), opts)
 	case len(opts.Names) > 0:
 		return i.InstallSet(ctx, root, cat.Installable(), opts)
@@ -384,57 +284,247 @@ func (i *Installer) InstallSet(
 		return err
 	}
 
-	det := NewDetector(i.runner, i.log)
-	var toInstall []types.ToolDef
-	for j := range targets {
-		// --force rebuilds even an OK tool (the post-Go-bump case: right version,
-		// stale build-Go); otherwise skip anything already installed + current.
-		if opts.Force ||
-			det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK {
-			toInstall = append(toInstall, targets[j])
-		}
-	}
+	toInstall := i.pendingTargets(ctx, root, targets, &opts)
 	if len(toInstall) == 0 {
 		i.log.Info("All requested tools are already installed")
+
 		return nil
 	}
 
-	names := toolNames(toInstall)
+	names := strings.Join(toolNames(toInstall), textCommaSpace)
 	if opts.DryRun {
-		i.log.Info("Would install "+strconv.Itoa(len(toInstall))+" tool(s)",
-			"tools", strings.Join(names, ", "))
+		i.log.Info(
+			"Would install "+strconv.Itoa(len(toInstall))+" tool(s)",
+			"tools",
+			names,
+		)
+
 		return nil
 	}
+
 	yes, err := i.confirm(
 		ctx,
-		fmt.Sprintf(
-			"Install %d tool(s) (%s)?",
-			len(toInstall),
-			strings.Join(names, ", "),
-		),
-		opts.AutoYes,
+		fmt.Sprintf("Install %d tool(s) (%s)?", len(toInstall), names),
+		&opts,
 	)
 	if err != nil {
 		return err
 	}
+
 	if !yes {
 		i.log.Info("Skipping installation")
+
 		return nil
 	}
 
-	var failed []string
-	for j := range toInstall {
-		if err := i.Install(ctx, root, &toInstall[j]); err != nil {
-			i.log.Warn(fmt.Sprintf("Failed to install %s: %v", toInstall[j].Name, err))
-			failed = append(failed, toInstall[j].Name)
+	return i.installAll(ctx, root, toInstall)
+}
+
+// preparePlatform pins the Go toolchain and puts the platform's tool dirs on PATH.
+func (i *Installer) preparePlatform() {
+	_ = os.Setenv("GOTOOLCHAIN", "local")
+
+	i.log.Debug("platform detected", "key", i.platform)
+	i.ensureGoBinInPath()
+
+	if i.platform == osWindows {
+		i.ensureMsys2InPath()
+	}
+
+	if i.platform == osDarwin && !i.runner.Exists("brew") {
+		i.log.Warn("Homebrew not found; some tools may need manual installation")
+		i.log.Info("Install Homebrew: https://brew.sh")
+	}
+}
+
+// pendingTargets keeps the targets to install: force rebuilds even an OK tool (the
+// post-Go-bump case: right version, stale build-Go); otherwise a current one is skipped.
+func (i *Installer) pendingTargets(
+	ctx context.Context,
+	root string,
+	targets []types.ToolDef,
+	opts *types.InstallToolsOptions,
+) []types.ToolDef {
+	det := NewDetector(i.runner, i.log)
+
+	var pending []types.ToolDef
+
+	for j := range targets {
+		if opts.Force || det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK {
+			pending = append(pending, targets[j])
 		}
 	}
+
+	return pending
+}
+
+// installAll installs every tool, reporting all failures together.
+func (i *Installer) installAll(
+	ctx context.Context, root string, tools []types.ToolDef,
+) error {
+	var failed []string
+
+	for j := range tools {
+		err := i.Install(ctx, root, &tools[j])
+		if err != nil {
+			i.log.Warn(fmt.Sprintf("Failed to install %s: %v", tools[j].Name, err))
+
+			failed = append(failed, tools[j].Name)
+		}
+	}
+
 	if len(failed) > 0 {
 		return apperr.New(apperr.CodeInternal, fmt.Sprintf(
-			"failed to install %d tool(s): %s", len(failed), strings.Join(failed, ", "),
+			"failed to install %d tool(s): %s",
+			len(failed),
+			strings.Join(failed, textCommaSpace),
 		))
 	}
+
 	i.log.Info("All tools installed successfully")
+
+	return nil
+}
+
+// selectInstallable returns the indices of required tools that need installing
+// (missing or outdated, or ANY tool when force is set — the post-Go-bump rebuild)
+// and have an install method applicable to this platform.
+func (i *Installer) selectInstallable(
+	required []types.ToolDef,
+	results []types.ToolCheckResult,
+	force bool,
+) []int {
+	var idxs []int
+
+	for index := range results {
+		needs := force ||
+			results[index].Status == types.StatusToolMissing ||
+			results[index].Status == types.StatusToolOutdated
+		if !needs {
+			continue
+		}
+
+		if _, ok := i.resolveMethod(&required[index]); ok {
+			idxs = append(idxs, index)
+		}
+	}
+
+	return idxs
+}
+
+// reportSkipped logs and returns a CodeUnavailable error listing the required
+// tools the user declined to install.
+func reportSkipped(required []types.ToolDef, idxs []int, log interfaces.Logger) error {
+	log.Info("Skipping tool installation")
+	log.Error(fmt.Sprintf("Missing tools (%d):", len(idxs)))
+
+	for _, idx := range idxs {
+		msg := required[idx].Name
+		if required[idx].FallbackURL != "" {
+			msg += "\n    Install: " + required[idx].FallbackURL
+		}
+
+		log.Error("  * " + msg)
+	}
+
+	return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
+		"%d required tool(s) missing from PATH -- install them and retry", len(idxs),
+	))
+}
+
+// confirmRequired asks the Prompter to install the selected required tools
+// (opts.AutoYes skips the question) and returns its error, e.g. the --yes guidance when
+// there is no operator to answer.
+func (i *Installer) confirmRequired(
+	ctx context.Context,
+	required []types.ToolDef,
+	idxs []int,
+	opts *types.InstallToolsOptions,
+) (bool, error) {
+	names := make([]string, len(idxs))
+	for k, idx := range idxs {
+		names[k] = required[idx].Name
+	}
+
+	return i.confirm(
+		ctx,
+		fmt.Sprintf("Install missing tools (%s)?", strings.Join(names, textCommaSpace)),
+		opts,
+	)
+}
+
+// toolError wraps a tool failure with its manual-install fallback URL.
+func toolError(tool *types.ToolDef, cause error) error {
+	msg := fmt.Sprintf("required tool %s: %s", tool.Name, cause)
+	if tool.FallbackURL != "" {
+		msg += "\n  Install manually: " + tool.FallbackURL
+	}
+
+	return apperr.Internal(msg)
+}
+
+// confirm reports yes without asking when opts.AutoYes is set; otherwise it asks the
+// injected Prompter, failing with a coded error when none was injected.
+func (i *Installer) confirm(
+	ctx context.Context,
+	question string,
+	opts *types.InstallToolsOptions,
+) (bool, error) {
+	if opts.AutoYes {
+		return true, nil
+	}
+
+	if i.prompter == nil {
+		return false, apperr.New(
+			apperr.CodeInvalidInput,
+			"no Prompter was injected to confirm the install; pass --yes to install without "+
+				"asking",
+		)
+	}
+
+	return i.prompter.Confirm(ctx, question)
+}
+
+// installAndVerify installs each selected tool, adds its bin dir to PATH, and
+// re-checks it, returning an error if any tool is still unavailable afterwards.
+func (i *Installer) installAndVerify(
+	ctx context.Context,
+	root string,
+	det *Detector,
+	required []types.ToolDef,
+	idxs []int,
+) error {
+	var failures []string
+
+	for _, idx := range idxs {
+		tool := &required[idx]
+
+		err := i.Install(ctx, root, tool)
+		if err != nil {
+			return toolError(
+				tool,
+				apperr.Wrap(err, apperr.CodeInternal, "install failed"),
+			)
+		}
+
+		i.addInstallDirToPath(tool)
+
+		if verify := det.Check(ctx, root, tool); verify.Status == types.StatusToolOK {
+			i.log.Info(verify.Message + " (installed)")
+		} else {
+			failures = append(failures, tool.Name)
+			i.log.Error(tool.Name + ": still not available after install")
+		}
+	}
+
+	if len(failures) > 0 {
+		return apperr.Internal(fmt.Sprintf(
+			"%d tool(s) failed to install: %s",
+			len(failures),
+			strings.Join(failures, textCommaSpace),
+		))
+	}
+
 	return nil
 }
 
@@ -444,20 +534,24 @@ func selectTargets(tools []types.ToolDef, names []string) ([]types.ToolDef, erro
 	if len(names) == 0 {
 		return tools, nil
 	}
-	byName := make(map[string]types.ToolDef, 2*len(tools))
+
+	byName := make(map[string]types.ToolDef, lookupNamesPerTool*len(tools))
 	for i := range tools {
 		byName[tools[i].Binary] = tools[i]
 		byName[tools[i].Name] = tools[i]
 	}
+
 	targets := make([]types.ToolDef, 0, len(names))
 	for _, name := range names {
-		t, ok := byName[name]
+		toolDef, ok := byName[name]
 		if !ok {
 			return nil, apperr.New(apperr.CodeInvalidInput, "unknown tool "+name+
-				"; installable: "+strings.Join(toolNames(tools), ", "))
+				"; installable: "+strings.Join(toolNames(tools), textCommaSpace))
 		}
-		targets = append(targets, t)
+
+		targets = append(targets, toolDef)
 	}
+
 	return targets, nil
 }
 
@@ -467,6 +561,7 @@ func toolNames(tools []types.ToolDef) []string {
 	for i := range tools {
 		names[i] = tools[i].Name
 	}
+
 	return names
 }
 
@@ -486,18 +581,14 @@ type invocation struct {
 // preferring a cross-platform go-install over a native Windows installer (which
 // is more fragile), and falling back to the "all" method.
 func (i *Installer) resolveMethod(tool *types.ToolDef) (types.InstallMethod, bool) {
-	if m, ok := tool.InstallMethods[i.platform]; ok {
-		if i.platform == osWindows {
-			if all, has := tool.InstallMethods["all"]; has && isGoInstall(all) {
-				return all, true
-			}
-		}
-		return m, true
+	installMethod, found := tool.InstallMethods[i.platform]
+	all, hasAll := tool.InstallMethods["all"]
+
+	if hasAll && (!found || (i.platform == osWindows && isGoInstall(all))) {
+		return all, true
 	}
-	if m, ok := tool.InstallMethods["all"]; ok {
-		return m, true
-	}
-	return types.InstallMethod{}, false
+
+	return installMethod, found
 }
 
 // isGoInstall reports whether a method is a `go install` invocation.
@@ -509,12 +600,16 @@ func isGoInstall(m types.InstallMethod) bool {
 // gains non-interactive flags, and go-install pins the local toolchain (with a
 // Windows-ARM64 amd64 cross-compile rewrite). Pure — no execution or host I/O.
 func (i *Installer) buildInvocation(method types.InstallMethod) invocation {
-	inv := invocation{command: method.Command, args: append([]string{}, method.Args...)}
+	inv := invocation{
+		command: method.Command,
+		args:    append([]string{}, method.Args...),
+		env:     nil,
+	}
 	switch {
-	case method.Command == "winget":
+	case method.Command == textWinget:
 		inv.args = append(
 			inv.args,
-			"--source", "winget",
+			"--source", textWinget,
 			"--accept-source-agreements", "--accept-package-agreements",
 		)
 	case isGoInstall(method):
@@ -526,7 +621,10 @@ func (i *Installer) buildInvocation(method types.InstallMethod) invocation {
 			)
 			inv.args = append([]string{inv.args[0], "-p", "1"}, inv.args[1:]...)
 		}
+	default:
+		// No other value changes the outcome.
 	}
+
 	return inv
 }
 
@@ -537,20 +635,25 @@ func (i *Installer) runWinget(
 	root, toolName string,
 	args []string,
 ) error {
-	err := i.runner.Run(ctx, root, "winget", args...)
+	err := i.runner.Run(ctx, root, textWinget, args...)
 	if err == nil {
-		i.log.Info("installed via winget", "tool", toolName)
+		i.log.Info("installed via winget", textTool, toolName)
+
 		return nil
 	}
 
 	var exitErr *exec.ExitError
+
 	if apperr.As(err, &exitErr) {
 		if desc, ok := ClassifyWingetExit(exitErr.ExitCode()); ok {
 			i.log.Info(toolName + ": " + desc)
+
 			return nil
 		}
 	}
+
 	i.log.Error(fmt.Sprintf("winget install %s failed: %v", toolName, err))
+
 	return apperr.Wrap(err, apperr.CodeInternal, "winget install "+toolName)
 }
 
@@ -558,13 +661,13 @@ func (i *Installer) runWinget(
 // already present to its human-readable description; ok is false for any other code.
 func wingetAlreadyInstalledCodes(code uint32) (string, bool) {
 	switch code {
-	case 0x8A15002B:
+	case wingetNoUpdateAvailable:
 		return "already installed, no update available", true
-	case 0x8A150061:
+	case wingetPackageInstalled:
 		return "package already installed", true
-	case 0x8A15010D:
+	case wingetOtherVersionInstalled:
 		return "another version already installed", true
-	case 0x8A15004F:
+	case wingetVersionNotNewer:
 		return "upgrade version not newer than installed", true
 	default:
 		return "", false
@@ -574,6 +677,7 @@ func wingetAlreadyInstalledCodes(code uint32) (string, bool) {
 // ClassifyWingetExit reports whether an exit code is a success-like "already
 // installed" condition, with its description.
 func ClassifyWingetExit(exitCode int) (string, bool) {
-	//nolint:gosec // intentional uint32 cast; HRESULT values are unsigned 32-bit
-	return wingetAlreadyInstalledCodes(uint32(exitCode))
+	// An HRESULT is an unsigned 32-bit value that a signed exit code carries as its low
+	// 32 bits, so the mask reinterprets it without a lossy narrowing.
+	return wingetAlreadyInstalledCodes(uint32(int64(exitCode) & math.MaxUint32))
 }

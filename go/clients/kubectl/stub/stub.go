@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -26,6 +26,7 @@ func (Client) Apply(_ context.Context, _ string, files ...string) error {
 	if len(files) == 0 {
 		return apperr.New(apperr.CodeInvalidInput, "kubectl apply: no files")
 	}
+
 	return nil
 }
 

@@ -4,12 +4,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// groupDirMode is the mode of a directory its group may read.
+const groupDirMode = 0o750
+
+// privateFileMode is the mode of a file only its owner reads.
+const privateFileMode = 0o600
 
 // runIDLayout formats a run id: a UTC timestamp to the nanosecond, so ids sort
 // in the order the runs started.
@@ -30,6 +37,7 @@ func NewRunDir(root string, now func() time.Time) RunDir {
 	if now == nil {
 		now = time.Now
 	}
+
 	return RunDir{root: root, now: now}
 }
 
@@ -50,33 +58,58 @@ func (d RunDir) WriteSteps(
 ) ([]string, error) {
 	logs := make([]string, len(steps))
 	dir := filepath.Join(d.root, runID)
+
+	hasDetail := func(s types.StepResult) bool { return len(s.Detail) > 0 }
+	if !slices.ContainsFunc(steps, hasDetail) {
+		return logs, nil
+	}
+
+	err := os.MkdirAll(dir, groupDirMode)
+	if err != nil {
+		return logs, apperr.Wrap(err, apperr.CodeInternal, "mcp: create run dir")
+	}
+
 	used := map[string]bool{}
-	made := false
-	for i, s := range steps {
-		if len(s.Detail) == 0 {
+
+	for i := range steps {
+		if len(steps[i].Detail) == 0 {
 			continue
 		}
-		if !made {
-			if err := os.MkdirAll(dir, 0o750); err != nil {
-				return logs, apperr.Wrap(err, apperr.CodeInternal, "mcp: create run dir")
-			}
-			made = true
+
+		logs[i], err = writeStepLog(dir, &steps[i], used)
+		if err != nil {
+			return logs, err
 		}
-		base := safeName(s.Name)
-		name := base
-		for n := 2; used[name]; n++ {
-			name = fmt.Sprintf("%s-%d", base, n)
-		}
-		used[name] = true
-		path := filepath.Join(dir, name+".log")
-		if err := os.WriteFile(path, s.Detail, 0o600); err != nil {
-			return logs, apperr.Wrap(err, apperr.CodeInternal, fmt.Sprintf(
-				"mcp: write step log %q", s.Name,
-			))
-		}
-		logs[i] = path
 	}
+
 	return logs, nil
+}
+
+// writeStepLog stores one step's detail under a name unique within the run.
+func writeStepLog(
+	dir string,
+	stepResult *types.StepResult,
+	used map[string]bool,
+) (string, error) {
+	base := safeName(stepResult.Name)
+	name := base
+
+	for n := firstNameSuffix; used[name]; n++ {
+		name = fmt.Sprintf("%s-%d", base, n)
+	}
+
+	used[name] = true
+
+	path := filepath.Join(dir, name+".log")
+
+	err := os.WriteFile(path, stepResult.Detail, privateFileMode)
+	if err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, fmt.Sprintf(
+			"mcp: write step log %q", stepResult.Name,
+		))
+	}
+
+	return path, nil
 }
 
 // Prune removes all but the keep newest run directories. Only entries named
@@ -87,23 +120,37 @@ func (d RunDir) Prune(keep int) error {
 	if os.IsNotExist(err) {
 		return nil
 	}
+
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "mcp: read run dir")
 	}
-	var runs []string
-	for _, e := range entries {
-		if _, perr := time.Parse(runIDLayout, e.Name()); e.IsDir() && perr == nil {
-			runs = append(runs, e.Name())
-		}
-	}
+
+	runs := runDirNames(entries)
+
 	for _, name := range runs[:max(len(runs)-keep, 0)] {
-		if err := os.RemoveAll(filepath.Join(d.root, name)); err != nil {
+		err := os.RemoveAll(filepath.Join(d.root, name))
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInternal, fmt.Sprintf(
 				"mcp: prune run %q", name,
 			))
 		}
 	}
+
 	return nil
+}
+
+// runDirNames keeps the directories named like a run id, in directory order.
+func runDirNames(entries []os.DirEntry) []string {
+	var runs []string
+
+	for _, e := range entries {
+		_, perr := time.Parse(runIDLayout, e.Name())
+		if e.IsDir() && perr == nil {
+			runs = append(runs, e.Name())
+		}
+	}
+
+	return runs
 }
 
 // safeName maps every character outside [A-Za-z0-9_.-] in name to "_".
@@ -114,6 +161,7 @@ func safeName(name string) string {
 			r == '_', r == '.', r == '-':
 			return r
 		}
+
 		return '_'
 	}, name)
 }

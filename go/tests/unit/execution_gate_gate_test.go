@@ -12,6 +12,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/gate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -21,6 +22,7 @@ import (
 // jobs whose Execute ignores the runner, so it is never actually invoked.
 func gateNopRunner(t *testing.T) interfaces.CommandRunner {
 	t.Helper()
+
 	return mocks.NewMockCommandRunner(gomock.NewController(t))
 }
 
@@ -34,27 +36,46 @@ func recordingJob(
 	onRun func(),
 ) interfaces.AnyJob {
 	t.Helper()
-	j := mocks.NewMockAnyJob(gomock.NewController(t))
-	j.EXPECT().Meta().Return(types.JobMeta{Name: name}).AnyTimes()
-	j.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+
+	anyJob := mocks.NewMockAnyJob(gomock.NewController(t))
+	anyJob.EXPECT().
+		Meta().
+		Return(fixtures.Build(func(row *types.JobMeta) {
+			row.Name = name
+		})).
+		AnyTimes()
+	anyJob.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, interfaces.CommandRunner, string) (types.StepResults, error) {
 			if onRun != nil {
 				onRun()
 			}
+
 			return results, nil
 		},
 	).
 		AnyTimes()
-	return j
+
+	return anyJob
 }
 
 // passResults / failResults / warnResults build a single-step result set.
 func passResults(name string) types.StepResults {
-	return types.StepResults{{Name: name, Status: types.StatusPass}}
+	return types.StepResults{
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = name
+			row.Status = types.StatusPass
+		}),
+	}
 }
 
 func failResults(name, msg string) types.StepResults {
-	return types.StepResults{{Name: name, Status: types.StatusFail, Error: msg}}
+	return types.StepResults{
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = name
+			row.Status = types.StatusFail
+			row.Error = msg
+		}),
+	}
 }
 
 // --- tests ---
@@ -71,25 +92,31 @@ func failResults(name, msg string) types.StepResults {
 //   - With two serial phases added in sequence, the job in phase1 runs strictly
 //     before the job in phase2 (observed via recorded execution order).
 func TestGate_PhaseOrdering(t *testing.T) {
-	var mu sync.Mutex
-	var order []string
+	t.Parallel()
+
+	var (
+		lock  sync.Mutex
+		order []string
+	)
+
 	record := func(name string) func() {
 		return func() {
-			mu.Lock()
+			lock.Lock()
+
 			order = append(order, name)
-			mu.Unlock()
+			lock.Unlock()
 		}
 	}
 
-	jobA := recordingJob(t, "job-a", passResults("a"), record("a"))
-	jobB := recordingJob(t, "job-b", passResults("b"), record("b"))
+	jobA := recordingJob(t, "job-a", passResults(textA), record(textA))
+	jobB := recordingJob(t, "job-b", passResults(textB), record(textB))
 
 	g := gate.New("ordering-gate").
 		Serial("phase1", jobA).
 		Serial("phase2", jobB)
 
-	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
-	assert.Equal(t, []string{"a", "b"}, order, "expected order [a, b]")
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), textSlash))
+	assert.Equal(t, []string{textA, textB}, order, "expected order [a, b]")
 }
 
 // TestGate_StopOnFailureSkipsLaterPhases tests that a StopOnFailure gate halts
@@ -105,19 +132,26 @@ func TestGate_PhaseOrdering(t *testing.T) {
 //   - When phase1 fails and StopOnFailure is set, Run returns an error and
 //     phase2's job is never executed.
 func TestGate_StopOnFailureSkipsLaterPhases(t *testing.T) {
+	t.Parallel()
+
 	var phase2Ran bool
 
-	failing := recordingJob(t, "lint", failResults("lint", "bad code"), nil)
-	skipped := recordingJob(t, "test", passResults("test"), func() { phase2Ran = true })
+	failing := recordingJob(t, textLint, failResults(textLint, "bad code"), nil)
+	skipped := recordingJob(
+		t,
+		textTest,
+		passResults(textTest),
+		func() { phase2Ran = true },
+	)
 
-	g := gate.New("preflight").
+	currentGate := gate.New(textPreflight).
 		Serial("phase1", failing).
 		Serial("phase2", skipped).
 		StopOnFailure()
 
 	require.Error(
 		t,
-		g.Run(context.Background(), gateNopRunner(t), "/"),
+		currentGate.Run(context.Background(), gateNopRunner(t), textSlash),
 		"expected error from failed phase",
 	)
 	assert.False(t, phase2Ran, "phase2 should have been skipped after phase1 failure")
@@ -137,14 +171,17 @@ func TestGate_StopOnFailureSkipsLaterPhases(t *testing.T) {
 //   - With two failing jobs in one parallel phase, Run returns a non-nil
 //     error whose message contains both jobs' error strings.
 func TestGate_AggregatesFailureErrors(t *testing.T) {
-	jobA := recordingJob(t, "a", failResults("a", "err-alpha"), nil)
-	jobB := recordingJob(t, "b", failResults("b", "err-beta"), nil)
+	t.Parallel()
+
+	jobA := recordingJob(t, textA, failResults(textA, "err-alpha"), nil)
+	jobB := recordingJob(t, textB, failResults(textB, "err-beta"), nil)
 
 	g := gate.New("quality-gate").
-		Parallel("quality", jobA, jobB)
+		Parallel(textQuality, jobA, jobB)
 
-	err := g.Run(context.Background(), gateNopRunner(t), "/")
+	err := g.Run(context.Background(), gateNopRunner(t), textSlash)
 	require.Error(t, err, "expected error for two failed jobs")
+
 	msg := err.Error()
 	assert.Contains(
 		t,
@@ -173,14 +210,16 @@ func TestGate_AggregatesFailureErrors(t *testing.T) {
 // What it tests:
 //   - With two passing jobs in a parallel phase, Run returns nil.
 func TestGate_NoErrorWhenAllPass(t *testing.T) {
-	jobA := recordingJob(t, "a", passResults("a"), nil)
-	jobB := recordingJob(t, "b", passResults("b"), nil)
+	t.Parallel()
 
-	g := gate.New("quality-gate").Parallel("quality", jobA, jobB)
+	jobA := recordingJob(t, textA, passResults(textA), nil)
+	jobB := recordingJob(t, textB, passResults(textB), nil)
+
+	g := gate.New("quality-gate").Parallel(textQuality, jobA, jobB)
 
 	assert.NoError(
 		t,
-		g.Run(context.Background(), gateNopRunner(t), "/"),
+		g.Run(context.Background(), gateNopRunner(t), textSlash),
 		"expected no error when all steps pass",
 	)
 }
@@ -197,17 +236,25 @@ func TestGate_NoErrorWhenAllPass(t *testing.T) {
 // What it tests:
 //   - A phase whose only result is StatusWarn produces a nil error from Run.
 func TestGate_WarnDoesNotTriggerError(t *testing.T) {
-	j := recordingJob(
-		t, "security",
-		types.StepResults{{Name: "security", Status: types.StatusWarn}},
+	t.Parallel()
+
+	anyJob := recordingJob(
+		t,
+		textSecurity,
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = textSecurity
+				row.Status = types.StatusWarn
+			}),
+		},
 		nil,
 	)
 
-	g := gate.New("security-gate").Serial("warnings", j)
+	g := gate.New("security-gate").Serial("warnings", anyJob)
 
 	assert.NoError(
 		t,
-		g.Run(context.Background(), gateNopRunner(t), "/"),
+		g.Run(context.Background(), gateNopRunner(t), textSlash),
 		"Warn results should not produce an error",
 	)
 }
@@ -224,15 +271,17 @@ func TestGate_WarnDoesNotTriggerError(t *testing.T) {
 //   - After adding a parallel "alpha" phase then a serial "beta" phase, Phases
 //     returns exactly two phases named "alpha" then "beta" in that order.
 func TestGate_Phases_ReturnsOrderedPhases(t *testing.T) {
-	jobA := recordingJob(t, "a", passResults("a"), nil)
-	jobB := recordingJob(t, "b", passResults("b"), nil)
+	t.Parallel()
+
+	jobA := recordingJob(t, textA, passResults(textA), nil)
+	jobB := recordingJob(t, textB, passResults(textB), nil)
 
 	g := gate.New("inspection-gate").
 		Parallel("alpha", jobA).
 		Serial("beta", jobB)
 
 	phases := g.Phases()
-	require.Len(t, phases, 2)
+	require.Len(t, phases, wantPhasesLen)
 	assert.Equal(t, "alpha", phases[0].Name)
 	assert.Equal(t, "beta", phases[1].Name)
 }
@@ -249,6 +298,8 @@ func TestGate_Phases_ReturnsOrderedPhases(t *testing.T) {
 //   - After Run, the observer received at least one phase-complete callback
 //     and exactly one gate-complete callback carrying the gate's name.
 func TestGate_WithObserver_ReceivesCallbacks(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	obs := mocks.NewMockExecutionObserver(ctrl)
 	// The MinTimes/Times expectations ARE the assertions (verified at ctrl finish):
@@ -260,12 +311,12 @@ func TestGate_WithObserver_ReceivesCallbacks(t *testing.T) {
 	obs.EXPECT().OnPhaseComplete(gomock.Any(), gomock.Any(), gomock.Any()).MinTimes(1)
 	obs.EXPECT().OnGateComplete("observed-gate", gomock.Any(), gomock.Any()).Times(1)
 
-	j := recordingJob(t, "lint", passResults("lint"), nil)
+	j := recordingJob(t, textLint, passResults(textLint), nil)
 	g := gate.New("observed-gate").
-		Serial("check", j).
+		Serial(textCheck, j).
 		Observe(obs)
 
-	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), textSlash))
 }
 
 // TestGate_FiresStartEvents tests that the gate emits the full lifecycle of
@@ -286,6 +337,8 @@ func TestGate_WithObserver_ReceivesCallbacks(t *testing.T) {
 //   - The full event sequence is exactly gate-start, phase-start/complete per
 //     phase, gate-complete, in that order (enforced by gomock.InOrder).
 func TestGate_FiresStartEvents(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	obs := mocks.NewMockExecutionObserver(ctrl)
 	// Step start/complete callbacks fire (interleaved, parallel) but are not part
@@ -294,24 +347,24 @@ func TestGate_FiresStartEvents(t *testing.T) {
 	obs.EXPECT().OnStepComplete(gomock.Any()).AnyTimes()
 	// The ordered gate/phase lifecycle, with the exact phase and job names.
 	gomock.InOrder(
-		obs.EXPECT().OnGateStart("ci", []string{"check", "compile"}),
-		obs.EXPECT().OnPhaseStart("check", []string{"lint", "vet"}),
-		obs.EXPECT().OnPhaseComplete("check", gomock.Any(), gomock.Any()),
-		obs.EXPECT().OnPhaseStart("compile", []string{"build"}),
+		obs.EXPECT().OnGateStart("ci", []string{textCheck, "compile"}),
+		obs.EXPECT().OnPhaseStart(textCheck, []string{textLint, textVet}),
+		obs.EXPECT().OnPhaseComplete(textCheck, gomock.Any(), gomock.Any()),
+		obs.EXPECT().OnPhaseStart("compile", []string{textBuild}),
 		obs.EXPECT().OnPhaseComplete("compile", gomock.Any(), gomock.Any()),
 		obs.EXPECT().OnGateComplete("ci", gomock.Any(), gomock.Any()),
 	)
 
-	lint := recordingJob(t, "lint", passResults("lint"), nil)
-	vet := recordingJob(t, "vet", passResults("vet"), nil)
-	build := recordingJob(t, "build", passResults("build"), nil)
+	lint := recordingJob(t, textLint, passResults(textLint), nil)
+	vet := recordingJob(t, textVet, passResults(textVet), nil)
+	build := recordingJob(t, textBuild, passResults(textBuild), nil)
 
 	g := gate.New("ci").
-		Parallel("check", lint, vet).
+		Parallel(textCheck, lint, vet).
 		Serial("compile", build).
 		Observe(obs)
 
-	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), textSlash))
 }
 
 // TestGate_EmptyPhase_FiresStartCleanly tests that a phase with no jobs still
@@ -327,16 +380,18 @@ func TestGate_FiresStartEvents(t *testing.T) {
 //   - A serial phase with zero jobs yields exactly one gate-start and one
 //     phase-start whose job-name list is empty, with no error or panic.
 func TestGate_EmptyPhase_FiresStartCleanly(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	obs := mocks.NewMockExecutionObserver(ctrl)
-	obs.EXPECT().OnGateStart("empty", []string{"nothing"}).Times(1)
+	obs.EXPECT().OnGateStart(textEmpty, []string{"nothing"}).Times(1)
 	obs.EXPECT().OnPhaseStart("nothing", gomock.Len(0)).Times(1)
 	obs.EXPECT().OnPhaseComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	obs.EXPECT().OnGateComplete(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-	g := gate.New("empty").
+	g := gate.New(textEmpty).
 		Serial("nothing").
 		Observe(obs)
 
-	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), "/"))
+	require.NoError(t, g.Run(context.Background(), gateNopRunner(t), textSlash))
 }

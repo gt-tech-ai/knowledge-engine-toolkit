@@ -27,16 +27,21 @@ func DefaultConfig() Config {
 	return Config{
 		Kind: KindViper,
 		Viper: ViperConfig{
-			BaseDir: ".",
-			Env:     viperloader.ResolveEnv(),
+			BaseDir:  ".",
+			Env:      viperloader.ResolveEnv(),
+			Schema:   nil,
+			ExtraEnv: nil,
+			Prefix:   "",
 		},
 	}
 }
 
 // ToOptions converts this Config to a slice of Option functions.
-func (c Config) ToOptions() []options.Option[Config] {
+func (c *Config) ToOptions() []options.Option[Config] {
+	snapshot := *c
+
 	return []options.Option[Config]{
-		func(target *Config) { *target = c },
+		func(target *Config) { *target = snapshot },
 	}
 }
 
@@ -77,12 +82,14 @@ func WithSchema(root any) options.Option[Config] {
 // viper.Config.ExtraEnv). Repeated calls merge: each adds its keys, and a later
 // entry for the same key replaces the earlier one. The caller's map is copied.
 func WithExtraEnv(bindings map[string][]string) options.Option[Config] {
-	return func(c *Config) {
-		merged := make(map[string][]string, len(c.Viper.ExtraEnv)+len(bindings))
-		maps.Copy(merged, c.Viper.ExtraEnv)
+	return func(config *Config) {
+		merged := make(map[string][]string, len(config.Viper.ExtraEnv)+len(bindings))
+		maps.Copy(merged, config.Viper.ExtraEnv)
+
 		for key, names := range bindings {
 			merged[key] = slices.Clone(names)
 		}
-		c.Viper.ExtraEnv = merged
+
+		config.Viper.ExtraEnv = merged
 	}
 }

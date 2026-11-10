@@ -35,15 +35,19 @@ func tracing(tracer interfaces.Tracer) around {
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			ctx = otel.GetTextMapPropagator().Extract(ctx, wire.MetadataCarrier{MD: md})
 		}
+
 		service, method := parseGRPCMethod(fullMethod)
 		ctx, span := tracer.Start(
 			ctx, fullMethod,
 			interfaces.WithSpanKind(interfaces.SpanKindServer),
 		)
+
 		defer span.End()
+
 		span.SetAttribute("rpc.system", "grpc")
 		span.SetAttribute("rpc.service", service)
 		span.SetAttribute("rpc.method", method)
+
 		err := next(ctx)
 		if err != nil {
 			span.RecordError(err)
@@ -51,6 +55,7 @@ func tracing(tracer interfaces.Tracer) around {
 		} else {
 			span.SetStatus(interfaces.SpanStatusOK, "")
 		}
+
 		return err
 	}
 }

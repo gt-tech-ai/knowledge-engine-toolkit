@@ -8,22 +8,25 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // chartCubeMap is the allow-list of the genai_calls test cube: three dimensions, a
 // time field and two measures with their permitted aggregates.
 func chartCubeMap() *listquery.Map {
 	return listquery.NewMap().Add(
-		listquery.String("team"),
-		listquery.String("workspace"),
-		listquery.String("model"),
-		listquery.Time("ts").AsTime(),
-		listquery.Float("tokens_in").AsMeasure(types.AggSum, types.AggAvg, types.AggMax),
-		listquery.Float("duration_s").AsMeasure(types.AggAvg, types.AggP95),
+		listquery.String(textTeam),
+		listquery.String(textWorkspace),
+		listquery.String(textModel),
+		new(listquery.Time("ts")).AsTime(),
+		new(
+			listquery.Float(textTokensIn),
+		).AsMeasure(types.AggSum, types.AggAvg, types.AggMax),
+		new(listquery.Float("duration_s")).AsMeasure(types.AggAvg, types.AggP95),
 	)
 }
 
@@ -58,27 +61,42 @@ func TestChartSpecParse_AcceptsValidSpec(t *testing.T) {
 	spec, err := chartspec.Parse([]byte(validSpecJSON), chartCubeMap())
 	require.NoError(t, err)
 
-	assert.Equal(t, "genai_calls", spec.Cube)
+	assert.Equal(t, textGenaiCalls, spec.Cube)
 	assert.Equal(t, types.AlgebraCross, spec.Rows.Op)
-	assert.Equal(t, &types.FieldRef{Name: "team"}, spec.Rows.Args[0].Field)
+	assert.Equal(t, &types.FieldRef{Name: textTeam, Agg: ""}, spec.Rows.Args[0].Field)
 	assert.Equal(
 		t,
-		&types.FieldRef{Name: "tokens_in", Agg: types.AggSum},
+		&types.FieldRef{Name: textTokensIn, Agg: types.AggSum},
 		spec.Columns.Field,
 	)
-	assert.Equal(t, []types.FieldRef{{Name: "workspace"}}, spec.Detail)
-	assert.Equal(t, &types.FieldRef{Name: "model"}, spec.Encodings.Color)
-	assert.Equal(t, []types.OrderField{{Field: "sum(tokens_in)", Desc: true}}, spec.Sort)
+	assert.Equal(t, []types.FieldRef{{Name: textWorkspace, Agg: ""}}, spec.Detail)
+	assert.Equal(t, &types.FieldRef{Name: textModel, Agg: ""}, spec.Encodings.Color)
+	assert.Equal(
+		t,
+		[]types.OrderField{
+			fixtures.Build(func(row *types.OrderField) {
+				row.Field = textSumInputCount
+				row.Desc = true
+			}),
+		},
+		spec.Sort,
+	)
 	assert.Equal(t, types.GrainDay, spec.Grain)
 	assert.Equal(t, types.MarkBar, spec.Mark)
 	assert.Equal(
 		t,
-		types.FilterClause{Field: "team", Operator: types.OpEq, Value: "t-1"},
+		types.FilterClause{
+			Field:    textTeam,
+			Operator: types.OpEq,
+			Value:    textT1,
+			Join:     nil,
+		},
 		spec.Filter,
 	)
 
-	again, err := json.Marshal(spec)
+	again, err := spec.Wire()
 	require.NoError(t, err)
+
 	reparsed, err := chartspec.Parse(again, chartCubeMap())
 	require.NoError(t, err)
 	assert.Equal(t, spec, reparsed)
@@ -114,15 +132,17 @@ func TestChartSpecParse_RejectsWithCodedInvalidInput(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		"unknown field": `{"cube":"genai_calls","rows":{"field":"cost"}}`,
+		textUnknownField: `{"cube":"genai_calls","rows":{"field":"cost"}}`,
 		"disallowed aggregate": `{"cube":"genai_calls","rows":{"field":"tokens_in","agg":"` +
 			`p99"}}`,
 		"aggregate on dimension": `{"cube":"genai_calls","rows":{"field":"team","agg":"sum"}}`,
 		"measure without agg":    `{"cube":"genai_calls","rows":{"field":"tokens_in"}}`,
-		"over-deep nesting":      `{"cube":"genai_calls","rows":` + nested(9) + `}`,
-		"undeclared group-by":    `{"cube":"genai_calls","detail":[{"field":"region"}]}`,
-		"group-by on a measure":  `{"cube":"genai_calls","detail":[{"field":"tokens_in"}]}`,
-		"unknown operator": `{"cube":"genai_calls","rows":{"op":"join","args":[{"field` +
+		"over-deep nesting": `{"cube":"genai_calls","rows":` + nested(
+			nestedInput,
+		) + `}`,
+		"undeclared group-by":   `{"cube":"genai_calls","detail":[{"field":"region"}]}`,
+		"group-by on a measure": `{"cube":"genai_calls","detail":[{"field":"tokens_in"}]}`,
+		textUnknownOperator: `{"cube":"genai_calls","rows":{"op":"join","args":[{"field` +
 			`":"team"}]}}`,
 		"operator without args": `{"cube":"genai_calls","rows":{"op":"cross","args":[]}}`,
 		"unknown grain":         `{"cube":"genai_calls","grain":"fortnight"}`,
@@ -172,19 +192,35 @@ func TestChartSpecParse_RejectsWithCodedInvalidInput(t *testing.T) {
 func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
 	t.Parallel()
 
-	tree := &types.FilterNode{And: []types.FilterNode{
-		{Clause: &types.FilterNodeClause{Field: "team", Op: types.OpEq, Value: "t-1"}},
-		{Clause: &types.FilterNodeClause{
-			Field: "model", Op: types.OpIn, Value: []any{"m-1", "m-2"},
-		}},
-	}}
-	built := types.ChartSpec{
-		Cube:       "genai_calls",
-		Rows:       leaf("team", types.AggNone),
-		Columns:    leaf("tokens_in", types.AggSum),
-		FilterTree: tree,
+	tree := &types.FilterNode{
+		And: []types.FilterNode{
+			{
+				Clause: &types.FilterNodeClause{
+					Field: textTeam,
+					Op:    types.OpEq,
+					Value: textT1,
+				},
+				And: nil,
+				Or:  nil,
+			},
+			{
+				Clause: &types.FilterNodeClause{
+					Field: textModel, Op: types.OpIn, Value: []any{"m-1", "m-2"},
+				},
+				And: nil,
+				Or:  nil,
+			},
+		},
+		Clause: nil,
+		Or:     nil,
 	}
-	builtJSON, err := json.Marshal(built)
+	built := fixtures.Build(func(row *types.ChartSpec) {
+		row.Cube = textGenaiCalls
+		row.Rows = leaf(textTeam, types.AggNone)
+		row.Columns = leaf(textTokensIn, types.AggSum)
+		row.FilterTree = tree
+	})
+	builtJSON, err := built.Wire()
 	require.NoError(t, err)
 
 	const grammarJSON = `{"cube":"genai_calls","rows":{"field":"team"},
@@ -193,13 +229,15 @@ func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
 
 	fromTree, err := chartspec.Parse(builtJSON, chartCubeMap())
 	require.NoError(t, err)
+
 	fromGrammar, err := chartspec.Parse([]byte(grammarJSON), chartCubeMap())
 	require.NoError(t, err)
 	assert.Equal(t, tree, fromTree.FilterTree)
 
-	treePlan, err := chartspec.Compile(fromTree, chartCube())
+	treePlan, err := chartspec.Compile(&fromTree, chartCube())
 	require.NoError(t, err)
-	grammarPlan, err := chartspec.Compile(fromGrammar, chartCube())
+
+	grammarPlan, err := chartspec.Compile(&fromGrammar, chartCube())
 	require.NoError(t, err)
 	assert.Equal(t, grammarPlan, treePlan)
 	assert.NotNil(t, treePlan.Query.Filter)
@@ -217,19 +255,29 @@ func TestParse_StructuredFilterEqualsGrammarFilter(t *testing.T) {
 //     is CodeInvalidInput.
 func TestChartSpecValidate_MatchesParse(t *testing.T) {
 	t.Parallel()
+
 	parsed, err := chartspec.Parse([]byte(validSpecJSON), chartCubeMap())
 	require.NoError(t, err)
+
 	var decoded types.ChartSpec
+
 	require.NoError(t, json.Unmarshal([]byte(validSpecJSON), &decoded))
 
-	validated, err := chartspec.Validate(decoded, chartCubeMap())
+	validated, err := chartspec.Validate(&decoded, chartCubeMap())
 	require.NoError(t, err)
 	assert.Equal(t, parsed, validated)
 
 	decoded.Rows = &types.AlgebraExpr{
 		Op:    types.AlgebraCross,
-		Field: &types.FieldRef{Name: "team"},
+		Field: &types.FieldRef{Name: textTeam, Agg: ""},
+		Args:  nil,
 	}
-	_, err = chartspec.Validate(decoded, chartCubeMap())
+	_, err = chartspec.Validate(&decoded, chartCubeMap())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// nestedInput is the depth passed to nested in
+	// TestChartSpecParse_RejectsWithCodedInvalidInput.
+	nestedInput = 9
+)

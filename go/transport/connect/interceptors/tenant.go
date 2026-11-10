@@ -14,7 +14,7 @@ import (
 // resolved (a public or unauthenticated request). The nil UUID also counts as no
 // tenant.
 //
-// Read the tenant from the resolved principal (core/principal.PrincipalFrom) and register
+// Read the tenant from the resolved principal (core/principal.From) and register
 // the tenant-scope interceptor after the principal interceptor: the principal interceptor
 // clears the raw AuthClaims, so an extractor reading GetAuthClaims after it never sees a
 // tenant.
@@ -39,6 +39,7 @@ func SessionVarStamper(name string) TenantStamper {
 	if name == "" {
 		panic("interceptors: SessionVarStamper requires a session variable name")
 	}
+
 	return func(ctx context.Context, tenant uuid.UUID) context.Context {
 		return entsql.WithVar(ctx, name, tenant.String())
 	}
@@ -70,14 +71,17 @@ func NewTenantScopeInterceptor(
 	if extract == nil {
 		panic("interceptors: NewTenantScopeInterceptor requires a non-nil extractor")
 	}
+
 	if len(stampers) == 0 {
 		panic("interceptors: NewTenantScopeInterceptor requires at least one stamper")
 	}
+
 	for _, s := range stampers {
 		if s == nil {
 			panic("interceptors: NewTenantScopeInterceptor requires non-nil stampers")
 		}
 	}
+
 	return tenantScopeInterceptor{extract: extract, stamper: composeStampers(stampers)}
 }
 
@@ -88,10 +92,12 @@ func composeStampers(stampers []TenantStamper) TenantStamper {
 	chain := stampers[0]
 	for _, next := range stampers[1:] {
 		prev := chain
+
 		chain = func(ctx context.Context, tenant uuid.UUID) context.Context {
 			return next(prev(ctx, tenant), tenant)
 		}
 	}
+
 	return chain
 }
 
@@ -103,7 +109,7 @@ func (i tenantScopeInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 }
 
 // WrapStreamingClient is a no-op — this is a server-side propagation interceptor.
-func (i tenantScopeInterceptor) WrapStreamingClient(
+func (tenantScopeInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -126,5 +132,6 @@ func (i tenantScopeInterceptor) stamp(ctx context.Context) context.Context {
 	if !ok || tenant == uuid.Nil {
 		return ctx
 	}
+
 	return i.stamper(ctx, tenant)
 }

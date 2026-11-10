@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // TestCodeOr_KeepsCodeElseFallsBack tests the code-with-fallback extractor.
@@ -20,6 +20,7 @@ import (
 //   - An uncoded error and a nil error yield the fallback
 func TestCodeOr_KeepsCodeElseFallsBack(t *testing.T) {
 	t.Parallel()
+
 	conflict := apperr.New(apperr.CodeConflict, "dup")
 
 	assert.Equal(

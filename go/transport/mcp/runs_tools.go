@@ -6,7 +6,7 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/runs"
@@ -80,22 +80,25 @@ type errorResult struct {
 // startHandler starts op as a background run for one tools/call and returns its run id
 // at once; undecodable arguments or a refused start (a busy working tree) come back as
 // the same ToolResult a bounded tool's failure does.
-func (s *Server) startHandler(op interfaces.Operation) sdkmcp.ToolHandler {
-	name := op.Descriptor().Name
+func (s *Server) startHandler(operation interfaces.Operation) sdkmcp.ToolHandler {
+	name := operation.Descriptor().Name
+
 	return func(
 		ctx context.Context,
 		req *sdkmcp.CallToolRequest,
 	) (*sdkmcp.CallToolResult, error) {
 		// ops.Decode refuses an argument the input does not declare, a secret flag
 		// included: a credential never travels as a tool argument.
-		input, err := ops.Decode(op, req.Params.Arguments)
+		input, err := ops.Decode(operation, req.Params.Arguments)
 		if err != nil {
 			return s.result(nil, nil, err)
 		}
+
 		id, err := s.table.Start(ctx, name, input)
 		if err != nil {
 			return s.result(nil, nil, err)
 		}
+
 		return reply(RunStarted{RunID: id, State: runs.StateRunning}, false)
 	}
 }
@@ -103,78 +106,110 @@ func (s *Server) startHandler(op interfaces.Operation) sdkmcp.ToolHandler {
 // addRunsTools adds the runs.* tools that observe and stop the background runs.
 func (s *Server) addRunsTools() {
 	s.addRunTool("runs.status", "Report a background run's state and finished steps",
-		func(id string) (*sdkmcp.CallToolResult, error) {
-			snap, err := s.table.Status(id)
-			if err != nil {
-				return replyErr(err)
-			}
-			return reply(RunStatus{
-				RunID: snap.ID, Op: snap.Op, State: snap.State,
-				Steps: summarize(flatten(snap.Steps), snap.LogPaths),
-			}, false)
-		})
+		s.runStatus)
 	s.addRunTool("runs.result",
 		"Return a finished background run's result: step summaries, failed-step tails "+
 			"and log paths",
-		func(id string) (*sdkmcp.CallToolResult, error) {
-			snap, err := s.table.Result(id)
-			if err != nil {
-				return replyErr(err)
-			}
-			res := buildResult(
-				flatten(snap.Steps), s.settings.TailLines, snap.LogPaths, snap.Err,
-			)
-			return reply(res, snap.Err != nil)
-		})
+		s.runResult)
 	s.addRunTool("runs.cancel", "Cancel a background run (a no-op once it has ended)",
-		func(id string) (*sdkmcp.CallToolResult, error) {
-			if err := s.table.Cancel(id); err != nil {
-				return replyErr(err)
-			}
-			snap, err := s.table.Status(id)
-			if err != nil {
-				return replyErr(err)
-			}
-			return reply(entry(&snap), false)
-		})
-	s.srv.AddTool(&sdkmcp.Tool{
-		Name:        "runs.list",
-		Description: "List the background runs this server started, oldest first",
-		InputSchema: json.RawMessage(emptySchema),
-	}, func(context.Context, *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
-		list := RunList{Runs: []RunEntry{}}
-		snaps := s.table.List()
-		for i := range snaps {
-			list.Runs = append(list.Runs, entry(&snaps[i]))
-		}
-		return reply(list, false)
-	})
+		s.runCancel)
+
+	var tool sdkmcp.Tool
+
+	tool.Name = "runs.list"
+	tool.Description = "List the background runs this server started, oldest first"
+	tool.InputSchema = json.RawMessage(emptySchema)
+
+	s.srv.AddTool(&tool, s.runList)
+}
+
+// runStatus answers runs.status.
+func (s *Server) runStatus(id string) (*sdkmcp.CallToolResult, error) {
+	snap, err := s.table.Status(id)
+	if err != nil {
+		return replyErr(err)
+	}
+
+	return reply(RunStatus{
+		RunID: snap.ID, Op: snap.Op, State: snap.State,
+		Steps: summarize(flatten(snap.Steps), snap.LogPaths),
+	}, false)
+}
+
+// runResult answers runs.result.
+func (s *Server) runResult(id string) (*sdkmcp.CallToolResult, error) {
+	snap, err := s.table.Result(id)
+	if err != nil {
+		return replyErr(err)
+	}
+
+	res := buildResult(flatten(snap.Steps), s.settings.TailLines, snap.LogPaths, snap.Err)
+
+	return reply(res, snap.Err != nil)
+}
+
+// runCancel answers runs.cancel with the run's state after the cancel.
+func (s *Server) runCancel(identifier string) (*sdkmcp.CallToolResult, error) {
+	err := s.table.Cancel(identifier)
+	if err != nil {
+		return replyErr(err)
+	}
+
+	snap, err := s.table.Status(identifier)
+	if err != nil {
+		return replyErr(err)
+	}
+
+	return reply(entry(&snap), false)
+}
+
+// runList answers runs.list.
+func (s *Server) runList(
+	context.Context, *sdkmcp.CallToolRequest,
+) (*sdkmcp.CallToolResult, error) {
+	list := RunList{Runs: []RunEntry{}}
+	snaps := s.table.List()
+
+	for i := range snaps {
+		list.Runs = append(list.Runs, entry(&snaps[i]))
+	}
+
+	return reply(list, false)
 }
 
 // addRunTool adds a runs.* tool taking {run_id}; a missing or undecodable run_id is an
 // INVALID_INPUT error result, and fn answers for a present one.
 func (s *Server) addRunTool(
 	name, description string,
-	fn func(id string) (*sdkmcp.CallToolResult, error),
+	callback func(id string) (*sdkmcp.CallToolResult, error),
 ) {
-	s.srv.AddTool(&sdkmcp.Tool{
-		Name:        name,
-		Description: description,
-		InputSchema: json.RawMessage(runIDSchema),
-	}, func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
-		var in runIDInput
-		if err := decodeArgs(req.Params.Arguments, &in); err != nil {
-			return replyErr(
-				apperr.Wrap(err, apperr.CodeInvalidInput, name+": decode arguments"),
-			)
-		}
-		if in.RunID == "" {
-			return replyErr(
-				apperr.New(apperr.CodeInvalidInput, name+": run_id is required"),
-			)
-		}
-		return fn(in.RunID)
-	})
+	var tool sdkmcp.Tool
+
+	tool.Name = name
+	tool.Description = description
+	tool.InputSchema = json.RawMessage(runIDSchema)
+
+	s.srv.AddTool(
+		&tool,
+		func(_ context.Context, req *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
+			var currentRunIDInput runIDInput
+
+			err := decodeArgs(req.Params.Arguments, &currentRunIDInput)
+			if err != nil {
+				return replyErr(
+					apperr.Wrap(err, apperr.CodeInvalidInput, name+": decode arguments"),
+				)
+			}
+
+			if currentRunIDInput.RunID == "" {
+				return replyErr(
+					apperr.New(apperr.CodeInvalidInput, name+": run_id is required"),
+				)
+			}
+
+			return callback(currentRunIDInput.RunID)
+		},
+	)
 }
 
 // entry is snap as runs.list reports it.
@@ -183,15 +218,21 @@ func entry(snap *runs.Snapshot) RunEntry {
 }
 
 // reply returns v as JSON text and as structured content, with IsError set to failed.
-func reply(v any, failed bool) (*sdkmcp.CallToolResult, error) {
-	text, err := json.Marshal(v)
+func reply(value any, failed bool) (*sdkmcp.CallToolResult, error) {
+	text, err := json.Marshal(value)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "mcp: encode tool result")
 	}
+
 	return &sdkmcp.CallToolResult{
-		Content:           []sdkmcp.Content{&sdkmcp.TextContent{Text: string(text)}},
-		StructuredContent: v,
+		Content: []sdkmcp.Content{
+			&sdkmcp.TextContent{Text: string(text), Meta: nil, Annotations: nil},
+		},
+		StructuredContent: value,
 		IsError:           failed,
+		Meta:              nil,
+		InputRequests:     nil,
+		RequestState:      "",
 	}, nil
 }
 

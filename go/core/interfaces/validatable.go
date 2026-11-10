@@ -1,7 +1,7 @@
 package interfaces
 
 // Validatable is a DTO that can validate itself — the below-transport-edge seam the
-// service chokepoint enforces. Its Validate() returns a core/errors.AppError carrying
+// service chokepoint enforces. Its Validate() returns a core/apperr.AppError carrying
 // CodeInvalidInput (ARCHITECTURE.md#error-codes) on violation, or nil when the DTO
 // satisfies its rules. The generated per-DTO Validate() (protoc-gen-dtovalidate)
 // satisfies this interface, composing the field checks with an optional hand-written

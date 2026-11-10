@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/database/postgres"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics"
 )
 
@@ -34,20 +34,20 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 
 	// sql.Open does not connect, so Stats() reports the configured caps without a
 	// live database — enough to assert the gauges are published.
-	db, err := sql.Open("pgx", "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
+	value, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	db.SetMaxOpenConns(17)
+	t.Cleanup(func() { _ = value.Close() })
+	value.SetMaxOpenConns(setMaxOpenConnsInput)
 
-	m, err := metrics.New(metrics.KindPrometheus)
+	currentMetrics, err := metrics.New(metrics.KindPrometheus)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	postgres.StartStatsCollector(
 		ctx,
-		db,
-		m,
+		value,
+		currentMetrics,
 		time.Hour,
 	) // publishes once synchronously
 
@@ -58,9 +58,11 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 		"/metrics",
 		http.NoBody,
 	)
-	m.Handler().ServeHTTP(rec, req)
+	currentMetrics.Handler().ServeHTTP(rec, req)
+
 	body, err := io.ReadAll(rec.Result().Body)
 	require.NoError(t, err)
+
 	out := string(body)
 
 	assert.Contains(t, out, "db_pool_max_connections 17")
@@ -83,13 +85,13 @@ func TestStartPoolStatsCollector_PublishesGauges(t *testing.T) {
 func TestCheck_ClosedPoolErrors(t *testing.T) {
 	t.Parallel()
 
-	db, err := sql.Open("pgx", "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
+	value, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:5432/db?sslmode=disable")
 	require.NoError(t, err)
 
-	check := postgres.Check(db)
+	check := postgres.Check(value)
 	require.NoError(
 		t,
-		db.Close(),
+		value.Close(),
 	) // now every ping fails immediately ("database is closed")
 
 	assert.Error(t, check(), "a closed pool must make the readiness check fail")
@@ -113,7 +115,7 @@ func TestPingDB_BadDSNFailsFast(t *testing.T) {
 	t.Parallel()
 
 	// Port 1 refuses instantly, so the probe fails well within pingTimeout.
-	db, err := sql.Open("pgx", "postgres://u:p@127.0.0.1:1/db?sslmode=disable")
+	db, err := sql.Open(textPgx, "postgres://u:p@127.0.0.1:1/db?sslmode=disable")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 
@@ -127,3 +129,9 @@ func TestPingDB_BadDSNFailsFast(t *testing.T) {
 		"an unreachable DB is transient",
 	)
 }
+
+const (
+	// setMaxOpenConnsInput is the n passed to SetMaxOpenConns in
+	// TestStartPoolStatsCollector_PublishesGauges.
+	setMaxOpenConnsInput = 17
+)

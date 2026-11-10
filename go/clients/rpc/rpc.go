@@ -1,5 +1,5 @@
-// Package rpc builds the RPC client from config: gRPC (grpc/) today, behind RPCClient,
-// so switching RPC frameworks is a config change. RPCClient lives here rather than in
+// Package rpc builds the RPC client from config: gRPC (grpc/) today, behind Client,
+// so switching RPC frameworks is a config change. Client lives here rather than in
 // core because it exposes grpc.ClientConnInterface, an SDK seam
 // (ARCHITECTURE.md#interface-composition) that keeps gRPC out of core. It ships no stub:
 // a caller builds generated stubs on Conn, which nothing zero-I/O can stand in for, so
@@ -18,11 +18,11 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
-// RPCClient is the RPC client contract: a lifecycle-managed, health-checkable client
+// Client is the RPC client contract: a lifecycle-managed, health-checkable client
 // (interfaces.Client) that exposes the connection generated stubs are built on.
 //
 // SDK seam — Conn returns grpc.ClientConnInterface, so the contract stays out of core.
-type RPCClient interface {
+type Client interface {
 	// Client contributes the lifecycle-managed, health-checkable client surface.
 	interfaces.Client
 
@@ -59,36 +59,43 @@ type Deps struct {
 }
 
 // kinds is the RPC backend table.
-func kinds() client.Kinds[Config, Deps, RPCClient] {
-	return client.Kinds[Config, Deps, RPCClient]{
+func kinds() client.Kinds[Config, Deps, Client] {
+	return client.Kinds[Config, Deps, Client]{
 		Family:  "rpc",
 		Default: KindGRPC,
-		Backends: map[client.Kind]client.Backend[Config, Deps, RPCClient]{
-			KindGRPC: newGRPC,
+		Backends: map[client.Kind]client.Backend[Config, Deps, Client]{
+			KindGRPC: client.RefConfig(newGRPC),
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
 // NewFromConfig builds the RPC client cfg.Kind selects, without I/O (it dials on
 // Start), every call decorated by the clients tier under cfg.Name. An unknown kind, or a
 // decoration that fails to build, is CodeInvalidInput.
-func NewFromConfig(ctx context.Context, cfg Config, deps Deps) (RPCClient, error) {
-	return kinds().New(ctx, cfg.Kind, cfg, deps)
+// cfg must not be nil.
+func NewFromConfig(ctx context.Context, cfg *Config, deps Deps) (Client, error) {
+	return kinds().New(ctx, cfg.Kind, *cfg, deps)
 }
 
 // newGRPC builds the gRPC client, its calls run through the client tier (see
 // interceptors.ClientOptions).
-func newGRPC(_ context.Context, cfg Config, deps Deps) (RPCClient, error) {
+func newGRPC(_ context.Context, cfg *Config, deps Deps) (Client, error) {
 	name := cfg.Name
 	if name == "" {
 		name = "rpc"
 	}
+
 	base, err := client.NewWireBase(deps.Decorations, name)
 	if err != nil {
 		return nil, err
 	}
-	opts := interceptors.ClientOptions(base, cfg.ServiceToken)
+
+	opts := interceptors.ClientOptions(&base, cfg.ServiceToken)
+
 	return grpcbackend.NewLifecycleClient(cfg.GRPC, opts...), nil
 }
 
-var _ RPCClient = (*grpcbackend.Client)(nil)
+var _ Client = (*grpcbackend.Client)(nil)

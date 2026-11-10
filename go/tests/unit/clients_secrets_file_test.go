@@ -11,7 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets/file"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -27,6 +27,8 @@ import (
 //   - After git check-ignore confirms the path is ignored (runner returns nil), Put
 //     persists the value and Get reveals it.
 func TestFileSource_PutThenGetRoundTripsOnIgnoredPath(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	// `git check-ignore -q <path>` exits 0 when the path IS ignored → Run returns nil.
@@ -34,10 +36,10 @@ func TestFileSource_PutThenGetRoundTripsOnIgnoredPath(t *testing.T) {
 		Run(gomock.Any(), gomock.Any(), "git", "check-ignore", "-q", gomock.Any()).
 		Return(nil)
 
-	path := filepath.Join(t.TempDir(), ".secrets.env")
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	path := filepath.Join(t.TempDir(), textSecretsEnv)
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := file.New(
-		map[types.Ref]file.Location{ref: {Path: path, Key: "CLIENT_SECRET"}},
+		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecretUpper}},
 		runner,
 	)
 
@@ -60,6 +62,8 @@ func TestFileSource_PutThenGetRoundTripsOnIgnoredPath(t *testing.T) {
 //   - When git check-ignore reports not-ignored (runner returns an error), Put returns
 //     CodeInvalidInput and no file is created.
 func TestFileSource_PutRefusesNonIgnoredPath(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl)
 	// Not ignored → check-ignore exits 1 → the CommandRunner returns a non-nil error.
@@ -68,9 +72,9 @@ func TestFileSource_PutRefusesNonIgnoredPath(t *testing.T) {
 		Return(apperr.Sentinel("exit status 1"))
 
 	path := filepath.Join(t.TempDir(), "tracked.env")
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := file.New(
-		map[types.Ref]file.Location{ref: {Path: path, Key: "CLIENT_SECRET"}},
+		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecretUpper}},
 		runner,
 	)
 
@@ -96,14 +100,16 @@ func TestFileSource_PutRefusesNonIgnoredPath(t *testing.T) {
 //   - Get for a Ref whose key is not present in the file returns CodeNotFound (and Get
 //     never invokes the runner).
 func TestFileSource_GetMissingKeyIsNotFound(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".secrets.env")
-	require.NoError(t, os.WriteFile(path, []byte("OTHER=x\n"), 0o600))
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), textSecretsEnv)
+	require.NoError(t, os.WriteFile(path, []byte("OTHER=x\n"), writeFileInput))
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl) // Get must not call the runner.
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := file.New(
-		map[types.Ref]file.Location{ref: {Path: path, Key: "CLIENT_SECRET"}},
+		map[types.Ref]file.Location{ref: {Path: path, Key: textClientSecretUpper}},
 		runner,
 	)
 
@@ -126,20 +132,22 @@ func TestFileSource_GetMissingKeyIsNotFound(t *testing.T) {
 //     bare value; a plain `KEY=value` line still works; and a Put preserves the `export `
 //     prefix.
 func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".secrets.env")
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), textSecretsEnv)
 	require.NoError(t, os.WriteFile(path, []byte(
 		"export CLIENT_SECRET=\"the-secret\"\n"+
 			"export DOMAIN='dev.example.com'\n"+
 			"PLAIN=bare-value\n",
-	), 0o600))
+	), writeFileInput))
 
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl) // Get must not call the runner.
-	sec := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
-	dom := types.Ref{Env: "dev", Class: "bootstrap", Field: "domain"}
-	plain := types.Ref{Env: "dev", Class: "bootstrap", Field: "plain"}
+	sec := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
+	dom := types.Ref{Env: textDev, Class: textBootstrap, Field: "domain"}
+	plain := types.Ref{Env: textDev, Class: textBootstrap, Field: textPlain}
 	src := file.New(map[types.Ref]file.Location{
-		sec:   {Path: path, Key: "CLIENT_SECRET"},
+		sec:   {Path: path, Key: textClientSecretUpper},
 		dom:   {Path: path, Key: "DOMAIN"},
 		plain: {Path: path, Key: "PLAIN"},
 	}, runner)
@@ -161,8 +169,17 @@ func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
 		Run(gomock.Any(), gomock.Any(), "git", "check-ignore", "-q", gomock.Any()).
 		Return(nil)
 	require.NoError(t, src.Put(context.Background(), sec, types.NewSecret("rotated")))
-	data, err := os.ReadFile(path)
+
+	data, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "export CLIENT_SECRET=rotated",
 		"a rotated export-format key keeps its export prefix")
 }
+
+const (
+	// textClientSecretUpper is the literal "CLIENT_SECRET".
+	textClientSecretUpper = "CLIENT_SECRET"
+
+	// textSecretsEnv is the literal ".secrets.env".
+	textSecretsEnv = ".secrets.env"
+)

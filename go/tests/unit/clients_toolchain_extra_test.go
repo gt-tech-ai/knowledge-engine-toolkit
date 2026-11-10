@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // ---------------------------------------------------------------------------
@@ -28,23 +29,28 @@ import (
 //   - An empty manifest produces an empty Def slice
 func TestClientsToolchainDefsFromTools_ProjectsTools(t *testing.T) {
 	t.Parallel()
-	defs := toolchain.DefsFromTools([]types.ToolEntry{
-		{
-			Name:        "golangci-lint",
-			Binary:      "golangci-lint",
-			InstallHint: "brew install golangci-lint",
-		},
-		{Name: "ruff", Binary: "ruff", Cmd: []string{"uv", "run"}},
-	})
-	require.Len(t, defs, 2, "DefsFromTools should return 2 defs")
 
-	assert.Equal(t, "golangci-lint", defs[0].Name)
-	assert.Equal(t, "golangci-lint", defs[0].Binary)
+	defs := toolchain.DefsFromTools([]types.ToolEntry{
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textGolangciLint
+			row.Binary = textGolangciLint
+			row.InstallHint = "brew install golangci-lint"
+		}),
+		fixtures.Build(func(row *types.ToolEntry) {
+			row.Name = textRuff
+			row.Binary = textRuff
+			row.Cmd = []string{textUv, textRun}
+		}),
+	})
+	require.Len(t, defs, wantDefsLen, "DefsFromTools should return 2 defs")
+
+	assert.Equal(t, textGolangciLint, defs[0].Name)
+	assert.Equal(t, textGolangciLint, defs[0].Binary)
 	assert.Equal(t, "brew install golangci-lint", defs[0].InstallHint)
 
-	assert.Equal(t, "ruff", defs[1].Name)
-	require.Len(t, defs[1].Prefix, 2, "expected 2-element prefix for ruff")
-	assert.Equal(t, "uv", defs[1].Prefix[0])
+	assert.Equal(t, textRuff, defs[1].Name)
+	require.Len(t, defs[1].Prefix, wantPrefixLen, "expected 2-element prefix for ruff")
+	assert.Equal(t, textUv, defs[1].Prefix[0])
 }
 
 // TestClientsToolchainDefsFromTools_EmptyTools tests that an empty tools section
@@ -57,6 +63,7 @@ func TestClientsToolchainDefsFromTools_ProjectsTools(t *testing.T) {
 //   - Empty Tools slice yields empty Def slice (not nil panic)
 func TestClientsToolchainDefsFromTools_EmptyTools(t *testing.T) {
 	t.Parallel()
+
 	defs := toolchain.DefsFromTools(nil)
 	assert.Empty(t, defs, "expected 0 defs from empty manifest")
 }
@@ -79,12 +86,20 @@ func TestClientsToolchainRegistry_LenAfterMultipleRegistrations(t *testing.T) {
 	t.Parallel()
 
 	reg := toolchain.NewRegistryFromDefs([]toolchain.Def{
-		{Name: "buf", Binary: "buf"},
-		{Name: "ruff", Binary: "ruff"},
+		{Name: textBuf, Binary: textBuf, InstallHint: "", Prefix: nil},
+		{Name: textRuff, Binary: textRuff, InstallHint: "", Prefix: nil},
 	})
-	assert.Equal(t, 2, reg.Len(), "Len() after 2 distinct registrations")
+	assert.Equal(t, wantLen, reg.Len(), "Len() after 2 distinct registrations")
 
 	// Re-register "buf" - should overwrite, not add.
-	reg.Register(toolchain.NewTool("buf-v2", "buf", "", nil))
-	assert.Equal(t, 2, reg.Len(), "Len() after overwrite should remain 2")
+	reg.Register(toolchain.NewTool("buf-v2", textBuf, "", nil))
+	assert.Equal(t, wantLen, reg.Len(), "Len() after overwrite should remain 2")
 }
+
+const (
+	// wantDefsLen is the expected defs len.
+	wantDefsLen = 2
+
+	// wantPrefixLen is the expected prefix len.
+	wantPrefixLen = 2
+)

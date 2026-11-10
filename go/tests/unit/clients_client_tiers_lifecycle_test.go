@@ -16,6 +16,7 @@ import (
 	storages3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	connectpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect"
@@ -23,8 +24,7 @@ import (
 )
 
 // TestDatabaseTier_NewFromConfig tests that the database tier selects the Postgres
-// backend by Kind, and that the pool guards operations
-// until it is started.
+// backend by Kind, and that the pool guards operations until it is started.
 //
 // Why this test is important:
 //   - The tier factory is the app-wiring entrypoint; a mis-selected or nil pool, or
@@ -36,8 +36,9 @@ import (
 func TestDatabaseTier_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
-	pool, err := database.NewFromConfig(t.Context(), database.Config{
-		Kind: database.KindPostgres,
+	pool, err := database.NewFromConfig(t.Context(), &database.Config{
+		Kind:     database.KindPostgres,
+		Database: stdx.Zero[infra.DatabaseConfig](),
 	}, database.Deps{})
 	require.NoError(t, err)
 	require.NotNil(t, pool)
@@ -59,17 +60,21 @@ func TestDatabaseTier_NewFromConfig(t *testing.T) {
 //     Ready before Start, or never exposes a Conn, cannot build working stubs.
 //
 // What it tests:
-//   - KindGRPC returns a non-nil RPCClient.
+//   - KindGRPC returns a non-nil rpc.Client.
 //   - Before Start: Conn is nil and Liveness/Readiness report not-started.
 //   - After Start: Conn is non-nil, Readiness passes (idle is not a failure state),
 //     and Stop closes cleanly.
 func TestRPCTier_NewFromConfig(t *testing.T) {
 	t.Parallel()
 
-	client, err := rpc.NewFromConfig(t.Context(), rpc.Config{
+	client, err := rpc.NewFromConfig(t.Context(), &rpc.Config{
 		Kind: rpc.KindGRPC,
-		GRPC: grpcbackend.ClientConfig{Target: "localhost:1"},
-	}, rpc.Deps{})
+		GRPC: fixtures.Build(func(row *grpcbackend.ClientConfig) {
+			row.Target = "localhost:1"
+		}),
+		Name:         "",
+		ServiceToken: "",
+	}, stdx.Zero[rpc.Deps]())
 	require.NoError(t, err)
 	require.NotNil(t, client)
 
@@ -85,8 +90,7 @@ func TestRPCTier_NewFromConfig(t *testing.T) {
 }
 
 // TestTransportTier_NewFromConfig tests that the transport tier selects the Connect
-// backend by Kind, and that the server reports not-ready
-// until it is started.
+// backend by Kind, and that the server reports not-ready until it is started.
 //
 // Why this test is important:
 //   - The transport is the server's front door; a nil transport or one that reports
@@ -126,12 +130,15 @@ func TestTransportTier_NewFromConfig(t *testing.T) {
 //   - Each client's Start and Stop return nil.
 func TestStatelessClients_LifecycleNoOps(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
 
 	pub, err := messagingsqs.NewPublisher(
 		t.Context(),
-		messagingsqs.Config{API: mocks.NewMockAPI(ctrl)},
+		fixtures.BuildRef(func(row *messagingsqs.Config) {
+			row.API = mocks.NewMockAPI(ctrl)
+		}),
 	)
 	require.NoError(t, err)
 
@@ -155,8 +162,10 @@ func TestStatelessClients_LifecycleNoOps(t *testing.T) {
 // contract, so the test surfaces the lifecycle seam through a type assertion.
 func mustLifecycle(t *testing.T, v any) interfaces.Lifecycle {
 	t.Helper()
+
 	lc, ok := v.(interfaces.Lifecycle)
 	require.True(t, ok, "%T does not implement interfaces.Lifecycle", v)
+
 	return lc
 }
 
@@ -173,7 +182,7 @@ func mustLifecycle(t *testing.T, v any) interfaces.Lifecycle {
 func TestPostgresBackend_NotStartedGuards(t *testing.T) {
 	t.Parallel()
 
-	c := dbpostgres.New(&infra.DatabaseConfig{})
+	c := dbpostgres.New(new(infra.DatabaseConfig))
 	assert.Nil(t, c.DB())
 	require.Error(t, c.Liveness(context.Background()))
 	require.Error(t, c.Readiness(context.Background()))
@@ -193,13 +202,13 @@ func TestPostgresBackend_NotStartedGuards(t *testing.T) {
 func TestPostgresBackend_StartUnreachable(t *testing.T) {
 	t.Parallel()
 
-	c := dbpostgres.New(&infra.DatabaseConfig{
-		Host:     "invalid-host.example.invalid",
-		Port:     5432,
-		User:     "u",
-		Password: "p",
-		Database: "d",
-		SSLMode:  "disable",
-	})
-	assert.Error(t, c.Start(context.Background()))
+	client := dbpostgres.New(fixtures.BuildRef(func(row *infra.DatabaseConfig) {
+		row.Host = "invalid-host.example.invalid"
+		row.Port = 5432
+		row.User = textU
+		row.Password = textP
+		row.Database = textDLower
+		row.SSLMode = textDisable
+	}))
+	assert.Error(t, client.Start(context.Background()))
 }

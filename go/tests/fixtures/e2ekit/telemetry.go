@@ -14,12 +14,19 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// traceWaitTimeout bounds the wait for a trace to reach the backend.
+const traceWaitTimeout = 20 * time.Second
+
+// tracePollInterval is the wait between trace lookups.
+const tracePollInterval = 500 * time.Millisecond
 
 // HTTPDoer is the minimal HTTP boundary the telemetry assertions need. *http.Client
 // satisfies it; a unit test injects a mock so query construction + response parsing are
@@ -78,19 +85,12 @@ func (c *TelemetryClient) Ping(ctx context.Context) error {
 		c.promURL + "/-/healthy",
 		c.lokiURL + "/ready",
 	} {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
+		err := c.pingOne(ctx, u)
 		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "build ping request")
-		}
-		resp, err := c.http.Do(req)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeUnavailable, "ping "+u)
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return apperr.New(apperr.CodeUnavailable, "obs backend not ready: "+u)
+			return err
 		}
 	}
+
 	return nil
 }
 
@@ -99,15 +99,25 @@ func (c *TelemetryClient) Ping(ctx context.Context) error {
 // absent or malformed.
 func TraceIDFromHeader(traceresponse string) string {
 	parts := strings.Split(traceresponse, "-")
-	if len(parts) < 2 || len(parts[1]) != 32 {
+
+	if len(parts) < wantPartsLen || len(parts[1]) != wantPartsLenHeader {
 		return ""
 	}
+
 	for _, r := range parts[1] {
-		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+		if !isLowerHexRune(r) {
 			return ""
 		}
 	}
+
 	return parts[1]
+}
+
+// isLowerHexRune reports a digit or a lowercase hex letter.
+func isLowerHexRune(
+	r rune,
+) bool {
+	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')
 }
 
 // ForceSampledTraceparent builds a W3C `traceparent` header value (`00-<32hex
@@ -117,15 +127,23 @@ func TraceIDFromHeader(traceresponse string) string {
 // guarantees the request's trace reaches Tempo without raising the sample ratio for
 // normal traffic. The ids are crypto-random so concurrent runs never collide.
 func ForceSampledTraceparent() (header, traceID string, err error) {
-	var tid [16]byte
-	var sid [8]byte
-	if _, err := rand.Read(tid[:]); err != nil {
+	var (
+		tid [16]byte
+		sid [8]byte
+	)
+
+	_, err = rand.Read(tid[:])
+	if err != nil {
 		return "", "", apperr.Wrap(err, apperr.CodeInternal, "e2ekit: random trace id")
 	}
-	if _, err := rand.Read(sid[:]); err != nil {
+
+	_, err = rand.Read(sid[:])
+	if err != nil {
 		return "", "", apperr.Wrap(err, apperr.CodeInternal, "e2ekit: random span id")
 	}
+
 	traceID = hex.EncodeToString(tid[:])
+
 	return "00-" + traceID + "-" + hex.EncodeToString(sid[:]) + "-01", traceID, nil
 }
 
@@ -136,13 +154,16 @@ func (c *TelemetryClient) TraceInTempo(ctx context.Context, traceID string) (int
 	var body struct {
 		Batches []json.RawMessage `json:"batches"`
 	}
-	if err := c.getJSON(
+
+	err := c.getJSON(
 		ctx,
 		c.tempoURL+"/api/traces/"+url.PathEscape(traceID),
 		&body,
-	); err != nil {
+	)
+	if err != nil {
 		return 0, err
 	}
+
 	return len(body.Batches), nil
 }
 
@@ -155,33 +176,67 @@ func (c *TelemetryClient) TraceSpansService(
 	ctx context.Context,
 	traceID, service string,
 ) (bool, error) {
-	var body struct {
-		Batches []struct {
-			Resource struct {
-				Attributes []struct {
-					Key   string `json:"key"`
-					Value struct {
-						StringValue string `json:"stringValue"`
-					} `json:"value"`
-				} `json:"attributes"`
-			} `json:"resource"`
-		} `json:"batches"`
-	}
-	if err := c.getJSON(
+	var body tempoTrace
+
+	err := c.getJSON(
 		ctx,
 		c.tempoURL+"/api/traces/"+url.PathEscape(traceID),
 		&body,
-	); err != nil {
+	)
+	if err != nil {
 		return false, err
 	}
-	for _, batch := range body.Batches {
-		for _, attr := range batch.Resource.Attributes {
-			if attr.Key == "service.name" && attr.Value.StringValue == service {
-				return true, nil
-			}
+
+	return body.namesService(service), nil
+}
+
+// tempoAttributeValue is the Value element of tempoAttribute.
+type tempoAttributeValue struct {
+	StringValue string `json:"stringValue"`
+}
+
+// tempoAttribute is one resource attribute of a Tempo batch.
+type tempoAttribute struct {
+	Key   string              `json:"key"`
+	Value tempoAttributeValue `json:"value"`
+}
+
+// tempoBatchResource is the Resource element of tempoBatch.
+type tempoBatchResource struct {
+	Attributes []tempoAttribute `json:"attributes"`
+}
+
+// tempoBatch is one resource batch of a Tempo trace.
+type tempoBatch struct {
+	Resource tempoBatchResource `json:"resource"`
+}
+
+// tempoTrace is the part of Tempo's trace response that names the services.
+type tempoTrace struct {
+	Batches []tempoBatch `json:"batches"`
+}
+
+// namesService reports whether a batch's service.name equals service.
+func (t *tempoTrace) namesService(service string) bool {
+	for _, batch := range t.Batches {
+		if slices.ContainsFunc(batch.Resource.Attributes, func(a tempoAttribute) bool {
+			return a.Key == "service.name" && a.Value.StringValue == service
+		}) {
+			return true
 		}
 	}
-	return false, nil
+
+	return false
+}
+
+// instantVectorSample is the Result element of this document.
+type instantVectorSample struct {
+	Value [2]json.RawMessage `json:"value"`
+}
+
+// instantVectorData is the Data element of this document.
+type instantVectorData struct {
+	Result []instantVectorSample `json:"result"`
 }
 
 // MetricValue returns the first instant-vector sample value for promQL, or 0 (nil error)
@@ -191,30 +246,45 @@ func (c *TelemetryClient) MetricValue(
 	promQL string,
 ) (float64, error) {
 	endpoint := c.promURL + "/api/v1/query?query=" + url.QueryEscape(promQL)
+
 	var body struct {
-		Data struct {
-			Result []struct {
-				Value [2]json.RawMessage `json:"value"`
-			} `json:"result"`
-		} `json:"data"`
+		Data instantVectorData `json:"data"`
 	}
-	if err := c.getJSON(ctx, endpoint, &body); err != nil {
+
+	err := c.getJSON(ctx, endpoint, &body)
+	if err != nil {
 		return 0, err
 	}
+
 	if len(body.Data.Result) == 0 {
 		return 0, nil
 	}
+
 	// A Prometheus sample is [<unix-ts>, "<number>"]: the value is the string second
 	// element.
 	var sample string
-	if err := json.Unmarshal(body.Data.Result[0].Value[1], &sample); err != nil {
+
+	err = json.Unmarshal(body.Data.Result[0].Value[1], &sample)
+	if err != nil {
 		return 0, apperr.Wrap(err, apperr.CodeInternal, "parse prometheus sample")
 	}
-	value, err := strconv.ParseFloat(sample, 64)
+
+	value, err := strconv.ParseFloat(sample, parseFloatInput)
 	if err != nil {
 		return 0, apperr.Wrap(err, apperr.CodeInternal, "parse prometheus value")
 	}
+
 	return value, nil
+}
+
+// shapeResult is the Result element of this document.
+type shapeResult struct {
+	Values [][]json.RawMessage `json:"values"`
+}
+
+// shapeData is the Data element of this document.
+type shapeData struct {
+	Result []shapeResult `json:"result"`
 }
 
 // LogHasTrace returns the number of Loki log lines matching selector that carry traceID,
@@ -225,34 +295,60 @@ func (c *TelemetryClient) LogHasTrace(
 ) (int, error) {
 	query := selector + " |= `" + traceID + "`"
 	endpoint := c.lokiURL + "/loki/api/v1/query_range?query=" + url.QueryEscape(query)
+
 	var body struct {
-		Data struct {
-			Result []struct {
-				Values [][]json.RawMessage `json:"values"`
-			} `json:"result"`
-		} `json:"data"`
+		Data shapeData `json:"data"`
 	}
-	if err := c.getJSON(ctx, endpoint, &body); err != nil {
+
+	err := c.getJSON(ctx, endpoint, &body)
+	if err != nil {
 		return 0, err
 	}
+
 	lines := 0
 	for _, stream := range body.Data.Result {
 		lines += len(stream.Values)
 	}
+
 	return lines, nil
+}
+
+// pingOne requires one backend's health endpoint to answer 2xx.
+func (c *TelemetryClient) pingOne(ctx context.Context, text string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, text, http.NoBody)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "build ping request")
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "ping "+text)
+	}
+
+	_ = resp.Body.Close()
+	if resp.StatusCode < wantStatusCode || resp.StatusCode >= wantStatusCodeOne {
+		return apperr.New(apperr.CodeUnavailable, "obs backend not ready: "+text)
+	}
+
+	return nil
 }
 
 // PollTraceInTempo polls ta until traceID has at least one span batch in Tempo, or ~20s
 // elapse (spans reach Tempo a few seconds after the RPC). Returns nil on success, else a
 // CodeUnavailable error carrying the last error/miss.
-func PollTraceInTempo(ctx context.Context, ta TraceAsserter, traceID string) error {
+func PollTraceInTempo(
+	ctx context.Context,
+	traceAsserter TraceAsserter,
+	traceID string,
+) error {
 	return pollEvery(
 		ctx,
-		20*time.Second,
-		500*time.Millisecond,
+		traceWaitTimeout,
+		tracePollInterval,
 		"trace "+traceID+" in Tempo",
 		func(ctx context.Context) (bool, error) {
-			n, err := ta.TraceInTempo(ctx, traceID)
+			n, err := traceAsserter.TraceInTempo(ctx, traceID)
+
 			return err == nil && n > 0, err
 		},
 	)
@@ -266,20 +362,46 @@ func (c *TelemetryClient) getJSON(ctx context.Context, endpoint string, out any)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "build telemetry request")
 	}
+
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "telemetry request")
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+
+	if resp.StatusCode < wantStatusCode || resp.StatusCode >= wantStatusCodeJSON {
 		return apperr.New(apperr.CodeInternal, "telemetry query failed: "+resp.Status)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+
+	err = json.NewDecoder(resp.Body).Decode(out)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "decode telemetry response")
 	}
+
 	return nil
 }
+
+const (
+	// parseFloatInput is the bitSize passed to ParseFloat in MetricValue.
+	parseFloatInput = 64
+
+	// wantPartsLen is the expected parts len.
+	wantPartsLen = 2
+
+	// wantPartsLenHeader is the expected parts len header.
+	wantPartsLenHeader = 32
+
+	// wantStatusCode is the expected status code.
+	wantStatusCode = 200
+
+	// wantStatusCodeJSON is the expected status code json.
+	wantStatusCodeJSON = 300
+
+	// wantStatusCodeOne is the expected status code one.
+	wantStatusCodeOne = 300
+)

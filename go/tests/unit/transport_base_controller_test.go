@@ -1,4 +1,5 @@
 // Package transport_test provides tests for BaseController HTTP response methods.
+
 package unit_test
 
 import (
@@ -12,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/rest"
 )
 
@@ -40,8 +41,8 @@ func TestMapErrorToHTTPStatus_AppError(t *testing.T) {
 		expected int
 	}{
 		{
-			err:      apperr.NotFound("not found"),
-			name:     "not found",
+			err:      apperr.NotFound(textNotFound),
+			name:     textNotFound,
 			expected: http.StatusNotFound,
 		},
 		{
@@ -65,13 +66,13 @@ func TestMapErrorToHTTPStatus_AppError(t *testing.T) {
 			expected: http.StatusConflict,
 		},
 		{
-			err:      apperr.Timeout("timeout"),
-			name:     "timeout",
+			err:      apperr.Timeout(textTimeout),
+			name:     textTimeout,
 			expected: http.StatusGatewayTimeout,
 		},
 		{
-			err:      apperr.Internal("internal"),
-			name:     "internal",
+			err:      apperr.Internal(textInternal),
+			name:     textInternal,
 			expected: http.StatusInternalServerError,
 		},
 		{
@@ -84,6 +85,7 @@ func TestMapErrorToHTTPStatus_AppError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			status := rest.MapErrorToHTTPStatus(tt.err)
 			assert.Equal(t, tt.expected, status)
 		})
@@ -128,16 +130,18 @@ func TestWriteJSON_Success(t *testing.T) {
 	c := &rest.BaseController{}
 	rec := httptest.NewRecorder()
 
-	data := map[string]string{"key": "value"}
+	data := map[string]string{textKey: textValue}
 	c.WriteJSON(rec, http.StatusOK, data)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, textMediaApplication, rec.Header().Get(textContentType))
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var result map[string]string
+
 	require.NoError(t, json.Unmarshal(body, &result))
-	assert.Equal(t, "value", result["key"])
+	assert.Equal(t, textValue, result[textKey])
 }
 
 // TestWriteJSON_MarshalError tests that WriteJSON degrades to a safe 500 when the payload
@@ -161,10 +165,10 @@ func TestWriteJSON_MarshalError(t *testing.T) {
 	c.WriteJSON(rec, http.StatusOK, math.Inf(1))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, textMediaApplication, rec.Header().Get(textContentType))
 
 	body, _ := io.ReadAll(rec.Body)
-	assert.Contains(t, string(body), "internal server error")
+	assert.Contains(t, string(body), textInternalServerError)
 }
 
 // ---------------------------------------------------------------------------
@@ -188,17 +192,19 @@ func TestWriteError_AppError(t *testing.T) {
 	c := &rest.BaseController{}
 	rec := httptest.NewRecorder()
 
-	appErr := apperr.NotFound("user not found")
+	appErr := apperr.NotFound(textUserNotFound)
 	c.WriteError(rec, appErr)
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, textMediaApplication, rec.Header().Get(textContentType))
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, string(apperr.CodeNotFound), resp.Code)
-	assert.Equal(t, "user not found", resp.Error)
+	assert.Equal(t, textUserNotFound, resp.Error)
 }
 
 // TestWriteError_InternalAppError tests that internal AppErrors are redacted before
@@ -218,18 +224,20 @@ func TestWriteError_InternalAppError(t *testing.T) {
 	c := &rest.BaseController{}
 	rec := httptest.NewRecorder()
 
-	appErr := apperr.Internal("database connection failed")
+	appErr := apperr.Internal(textDatabaseConnectionFailed)
 	c.WriteError(rec, appErr)
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, string(apperr.CodeInternal), resp.Code)
 	assert.Equal(
 		t,
-		"internal server error",
+		textInternalServerError,
 		resp.Error,
 		"should not leak internal error details",
 	)
@@ -257,9 +265,11 @@ func TestWriteError_PlainError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
-	assert.Equal(t, "internal server error", resp.Error)
+	assert.Equal(t, textInternalServerError, resp.Error)
 }
 
 // ---------------------------------------------------------------------------
@@ -283,10 +293,10 @@ func TestWriteSuccess(t *testing.T) {
 	c := &rest.BaseController{}
 	rec := httptest.NewRecorder()
 
-	c.WriteSuccess(rec, map[string]string{"status": "ok"})
+	c.WriteSuccess(rec, map[string]string{textStatus: textOk})
 
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, textMediaApplication, rec.Header().Get(textContentType))
 
 	body, _ := io.ReadAll(rec.Body)
 	assert.Contains(t, string(body), `"status":"ok"`)
@@ -309,10 +319,10 @@ func TestWriteCreated(t *testing.T) {
 	c := &rest.BaseController{}
 	rec := httptest.NewRecorder()
 
-	c.WriteCreated(rec, map[string]string{"id": "123"})
+	c.WriteCreated(rec, map[string]string{textID: "123"})
 
 	assert.Equal(t, http.StatusCreated, rec.Code)
-	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	assert.Equal(t, textMediaApplication, rec.Header().Get(textContentType))
 
 	body, _ := io.ReadAll(rec.Body)
 	assert.Contains(t, string(body), `"id":"123"`)
@@ -365,7 +375,9 @@ func TestWriteError_UnauthorizedAppError(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, "invalid token", resp.Error)
 }
@@ -393,7 +405,14 @@ func TestWriteError_ConflictAppError(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, rec.Code)
 
 	body, _ := io.ReadAll(rec.Body)
+
 	var resp rest.ErrorResponse
+
 	require.NoError(t, json.Unmarshal(body, &resp))
 	assert.Equal(t, "duplicate key", resp.Error)
 }
+
+const (
+	// textInternalServerError is the literal "internal server error".
+	textInternalServerError = "internal server error"
+)

@@ -7,24 +7,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/dataset"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // rulesData is a two-file dataset: a ci section with a job list and a limit, and a
 // procedures list whose second row has no steps.
 func rulesData(t *testing.T) *dataset.Dataset {
 	t.Helper()
-	d, err := dataset.Load(fstest.MapFS{
-		"data/ci.yaml": {Data: []byte(
-			"ci:\n  must_succeed: [build, test, build]\n  max_chars: 70000\n",
-		)},
-		"data/procs.yaml": {Data: []byte(
-			"procedures:\n  - {name: up, steps: [a]}\n  - {name: down, steps: []}\n",
-		)},
-	}, "data")
+
+	currentDataset, err := dataset.Load(fstest.MapFS{
+		"data/ci.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte(
+				"ci:\n  must_succeed: [build, test, build]\n  max_chars: 70000\n",
+			)
+		}),
+		"data/procs.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte(
+				"procedures:\n  - {name: up, steps: [a]}\n  - {name: down, steps: []}\n",
+			)
+		}),
+	}, textData)
 	require.NoError(t, err)
-	return d
+
+	return currentDataset
 }
 
 // TestFoundationDataset_Check tests the CEL rules a front-end runs over its merged data.
@@ -45,16 +52,21 @@ func rulesData(t *testing.T) *dataset.Dataset {
 //   - No rules, or all passing, is nil.
 func TestFoundationDataset_Check(t *testing.T) {
 	t.Parallel()
-	d := rulesData(t)
 
-	require.NoError(t, d.Check(nil))
-	require.NoError(t, d.Check([]dataset.Rule{
+	currentDataset := rulesData(t)
+
+	require.NoError(t, currentDataset.Check(nil))
+	require.NoError(t, currentDataset.Check([]dataset.Rule{
 		{Name: "listed", Expr: "size(ci.must_succeed) > 0", Message: "list the jobs"},
 		{Name: "whole", Expr: "data.ci.max_chars > 0", Message: "positive"},
-		{Name: "none", Expr: "procedures.filter(p, p.name == 'x').map(p, p.name)"},
+		{
+			Name:    textNone,
+			Expr:    "procedures.filter(p, p.name == 'x').map(p, p.name)",
+			Message: "",
+		},
 	}))
 
-	err := d.Check([]dataset.Rule{
+	err := currentDataset.Check([]dataset.Rule{
 		{
 			Name:    "distinct",
 			Expr:    "ci.must_succeed.distinct().size() == ci.must_succeed.size()",
@@ -69,15 +81,16 @@ func TestFoundationDataset_Check(t *testing.T) {
 			Name: "steps",
 			Expr: "procedures.filter(p, size(p.steps) == 0)" +
 				".map(p, 'procedure ' + p.name + ' has no steps')",
+			Message: "",
 		},
-		{Name: "ok", Expr: "true", Message: "never"},
+		{Name: textOk, Expr: textTrue, Message: textNever},
 	})
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "distinct: ci.must_succeed has a duplicate job id")
 	assert.Contains(t, err.Error(), "bounded: ci.max_chars is over 65536")
 	assert.Contains(t, err.Error(), "steps: procedure down has no steps")
-	assert.NotContains(t, err.Error(), "never")
+	assert.NotContains(t, err.Error(), textNever)
 
 	for name, expr := range map[string]string{
 		"bad syntax":   "ci.must_succeed.(",
@@ -85,7 +98,7 @@ func TestFoundationDataset_Check(t *testing.T) {
 		"wrong type":   "'a string'",
 		"mixed list":   "[1, 'a']",
 	} {
-		err := d.Check([]dataset.Rule{{Name: name, Expr: expr}})
+		err := currentDataset.Check([]dataset.Rule{{Name: name, Expr: expr, Message: ""}})
 		require.Errorf(t, err, "%s must fail", name)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 		assert.Contains(t, err.Error(), name)
@@ -105,20 +118,21 @@ func TestFoundationDataset_Check(t *testing.T) {
 //   - A schema that does not compile is INVALID_INPUT.
 func TestFoundationDataset_Validate(t *testing.T) {
 	t.Parallel()
-	d := rulesData(t)
+
+	currentDataset := rulesData(t)
 
 	ok := []byte(`{"type": "object", "properties": {"ci": {"type": "object",
 		"properties": {"max_chars": {"type": "integer", "minimum": 1}}}}}`)
-	require.NoError(t, d.Validate(ok))
+	require.NoError(t, currentDataset.Validate(ok))
 
 	bad := []byte(`{"type": "object", "properties": {"ci": {"type": "object",
 		"properties": {"max_chars": {"type": "integer", "maximum": 65536}}}}}`)
-	err := d.Validate(bad)
+	err := currentDataset.Validate(bad)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "/ci/max_chars")
 
-	err = d.Validate([]byte(`{"type": 12}`))
+	err = currentDataset.Validate([]byte(`{"type": 12}`))
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
@@ -136,24 +150,33 @@ func TestFoundationDataset_Validate(t *testing.T) {
 //   - A value that does not encode to a mapping is INVALID_INPUT naming it.
 func TestFoundationDataset_FromValue(t *testing.T) {
 	t.Parallel()
+
 	type ci struct {
 		MustSucceed []string `yaml:"must_succeed"`
 	}
-	d, err := dataset.FromValue("inline", struct {
+
+	currentDataset, err := dataset.FromValue("inline", struct {
 		CI ci `yaml:"ci"`
-	}{CI: ci{MustSucceed: []string{"a", "a"}}})
+	}{CI: ci{MustSucceed: []string{textA, textA}}})
 	require.NoError(t, err)
-	jobs, err := d.Section[map[string][]string]("ci")
+
+	jobs, err := currentDataset.Section[map[string][]string]("ci")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"a", "a"}, jobs["must_succeed"])
-	err = d.Check([]dataset.Rule{{
+	assert.Equal(t, []string{textA, textA}, jobs["must_succeed"])
+
+	err = currentDataset.Check([]dataset.Rule{{
 		Name: "distinct", Expr: "ci.must_succeed.distinct() == ci.must_succeed",
 		Message: "duplicate job",
 	}})
 	require.ErrorContains(t, err, "distinct: duplicate job")
 
-	_, err = dataset.FromValue("scalar", 3)
+	_, err = dataset.FromValue(textScalar, fromValueInput)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	assert.Contains(t, err.Error(), "scalar")
+	assert.Contains(t, err.Error(), textScalar)
 }
+
+const (
+	// fromValueInput is the value passed to FromValue in TestFoundationDataset_FromValue.
+	fromValueInput = 3
+)

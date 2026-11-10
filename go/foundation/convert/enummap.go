@@ -6,7 +6,7 @@ package convert
 import (
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // EnumMapper bidirectionally maps a proto enum P to a domain enum D from a single
@@ -59,16 +59,18 @@ func NewEnumMapper[P, D comparable](
 	toDomain map[P]D,
 ) EnumMapper[P, D] {
 	toProto := make(map[D]P, len(toDomain))
-	for p, d := range toDomain {
-		if existing, dup := toProto[d]; dup {
+	for value, item := range toDomain {
+		if existing, dup := toProto[item]; dup {
 			panic(fmt.Sprintf(
 				"NewEnumMapper(%s): domain value %v maps from both %v and %v; "+
 					"the reverse table requires unique domain values",
-				label, d, existing, p,
+				label, item, existing, value,
 			))
 		}
-		toProto[d] = p
+
+		toProto[item] = value
 	}
+
 	return EnumMapper[P, D]{
 		label:      label,
 		protoZero:  protoZero,
@@ -83,6 +85,7 @@ func NewEnumMapper[P, D comparable](
 // value with their own message rather than the mapper's generic one.
 func (m EnumMapper[P, D]) ToDomainOK(p P) (D, bool) {
 	d, ok := m.toDomain[p]
+
 	return d, ok
 }
 
@@ -92,6 +95,7 @@ func (m EnumMapper[P, D]) ToDomainOrError(p P) (D, error) {
 	if d, ok := m.ToDomainOK(p); ok {
 		return d, nil
 	}
+
 	return m.domainZero, apperr.InvalidInput(fmt.Sprintf("unknown %s: %v", m.label, p))
 }
 
@@ -101,18 +105,21 @@ func (m EnumMapper[P, D]) ToProtoValue(d D) P {
 	if p, ok := m.toProto[d]; ok {
 		return p
 	}
+
 	return m.protoZero
 }
 
 // ToDomainFilter maps a proto value into a domain value for filtering: the
 // unspecified (protoZero) value means "no filter" and returns ok=false, as does any
 // value absent from the table. The zero domain value is returned when ok is false.
-func (m EnumMapper[P, D]) ToDomainFilter(p P) (D, bool) {
-	if p == m.protoZero {
+func (m EnumMapper[P, D]) ToDomainFilter(value P) (D, bool) {
+	if value == m.protoZero {
 		var zero D
+
 		return zero, false
 	}
-	return m.ToDomainOK(p)
+
+	return m.ToDomainOK(value)
 }
 
 // ToDomainEntries returns the forward (proto→domain) table for derived projections

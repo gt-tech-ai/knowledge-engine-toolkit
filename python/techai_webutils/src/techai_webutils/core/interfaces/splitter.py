@@ -1,9 +1,9 @@
 """DocumentSplitter stage contract: split a large parse into contiguous index units.
 
-The ``split`` stage seam: a large parsed document becomes N contiguous ``ChunkPayload`` index units
-(each its own KB unit); the small path is a pass-through (one unit). Config-selected backends in
-``techai_webutils.clients.splitting`` satisfy it; imported by full submodule path (not re-exported
-from ``core.interfaces``).
+The ``split`` stage seam: a large parsed document becomes N contiguous ``ChunkPayload``
+index units (each its own KB unit); the small path is a pass-through (one unit).
+Config-selected backends in ``techai_webutils.clients.splitting`` satisfy it; imported by
+full submodule path (not re-exported from ``core.interfaces``).
 """
 
 from __future__ import annotations
@@ -16,8 +16,21 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class DocumentSplitter(Protocol):
-    """Split a parsed document into contiguous index units (always >= 1; one unit on the small path)."""
+    """Split a parsed document into contiguous index units.
+
+    Always at least one; one unit on the small path.
+    """
 
     def split(self, parsed: ParsedDocument) -> list[ChunkPayload]:
-        """Return the parse's index units — contiguous, non-overlapping, each within the size budget."""
+        """Return the parse's index units.
+
+        Contiguous, non-overlapping, each within the size budget.
+
+        Args:
+            parsed: The parsed document.
+
+        Returns:
+            The document's index units, contiguous and non-overlapping, in order.
+
+        """
         ...

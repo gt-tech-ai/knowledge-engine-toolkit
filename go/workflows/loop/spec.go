@@ -41,16 +41,20 @@ func NewGroupFromSpecs(
 	logger interfaces.Logger,
 ) (*Group, error) {
 	group := NewGroup(logger)
-	for _, s := range specs {
-		pass := Pass(s.Run)
+
+	for _, spec := range specs {
+		pass := Pass(spec.Run)
 		if decorate != nil {
-			pass = decorate(s.Op, pass)
+			pass = decorate(spec.Op, pass)
 		}
-		ticker, err := NewTicker(s.Name, pass, s.Schedule, logger)
+
+		ticker, err := NewTicker(spec.Name, pass, spec.Schedule, logger)
 		if err != nil {
 			return nil, err
 		}
-		group.Add(s.Name, ticker)
+
+		group.Add(spec.Name, ticker)
 	}
+
 	return group, nil
 }

@@ -6,9 +6,15 @@ import (
 
 	"golang.org/x/time/rate"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
+
+// defaultConfigRate is the default Rate of Config.
+const defaultConfigRate = 100
+
+// defaultConfigBurst is the default Burst of Config.
+const defaultConfigBurst = 10
 
 // Compile-time interface assertion.
 var _ interfaces.RateLimiter = (*Limiter)(nil)
@@ -25,8 +31,8 @@ type Config struct {
 // DefaultConfig returns sensible defaults for token bucket rate limiting.
 func DefaultConfig() Config {
 	return Config{
-		Rate:  100,
-		Burst: 10,
+		Rate:  defaultConfigRate,
+		Burst: defaultConfigBurst,
 	}
 }
 
@@ -50,12 +56,14 @@ func (l *Limiter) Allow() bool {
 
 // Wait blocks until the limiter permits an event or ctx is cancelled.
 func (l *Limiter) Wait(ctx context.Context) error {
-	if err := l.inner.Wait(ctx); err != nil {
+	err := l.inner.Wait(ctx)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.ContextCode(err, apperr.CodeTimeout),
 			"rate limiter wait",
 		)
 	}
+
 	return nil
 }

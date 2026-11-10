@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -53,41 +53,35 @@ type documentsReads interface {
 //   - A bound client of another type is ignored.
 func TestStoreBase_UsesTheTransactionsClientWhenOneIsBound(t *testing.T) {
 	t.Parallel()
-	raw, tx := &storeClient{name: "raw"}, &storeClient{name: "tx"}
+
+	raw, currentStoreClient := &storeClient{name: textRaw}, &storeClient{name: "tx"}
 	base := fixtures.Must(
-		store.NewBase[documentsStore](fixtures.Decorations(), "documents", raw),
+		store.NewBase[documentsStore](fixtures.Decorations(), textDocuments, raw),
 	)
 
 	assert.Same(t, raw, base.Client(t.Context()))
 
-	inTx := store.WithClient(t.Context(), tx)
-	assert.Same(t, tx, base.Client(inTx))
+	inTx := store.WithClient(t.Context(), currentStoreClient)
+	assert.Same(t, currentStoreClient, base.Client(inTx))
 
 	other := store.WithClient(context.Background(), "not a storeClient")
 	assert.Same(t, raw, base.Client(other))
+
 	got, ok := store.ClientFrom[*storeClient](inTx)
 	assert.True(t, ok)
-	assert.Same(t, tx, got)
+	assert.Same(t, currentStoreClient, got)
 }
 
 // storeOpCounter returns store_operations_total for the operation op in reg.
-func storeOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
+func storeOpCounter(t *testing.T, reg *promclient.Registry, operation string) float64 {
 	t.Helper()
+
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
-	for _, mf := range mfs {
-		if mf.GetName() != "store_operations_total" {
-			continue
-		}
-		for _, m := range mf.GetMetric() {
-			for _, l := range m.GetLabel() {
-				if l.GetName() == "operation" && l.GetValue() == op {
-					return m.GetCounter().GetValue()
-				}
-			}
-		}
-	}
-	return 0
+
+	v, _ := counterByLabel(mfs, "store_operations_total", "operation", operation)
+
+	return v
 }
 
 // TestStoreBaseWrite_RunsOnlyInsideATransaction tests the store base's write guard.
@@ -102,22 +96,24 @@ func storeOpCounter(t *testing.T, reg *promclient.Registry, op string) float64 {
 //   - Exec (a read) runs on either.
 func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
 	t.Parallel()
+
 	base := fixtures.Must(store.NewBase[documentsStore](
-		fixtures.Decorations(), "documents", &storeClient{name: "raw"},
+		fixtures.Decorations(), textDocuments, &storeClient{name: textRaw},
 	))
 	write := func(context.Context) (int, error) { return 1, nil }
 
-	got, err := base.Write(interfaces.WithInTx(t.Context()), "create", write)
+	got, err := base.Write(interfaces.WithInTx(t.Context()), textCreate, write)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got)
 
-	_, err = base.Write(t.Context(), "create", func(context.Context) (int, error) {
+	_, err = base.Write(t.Context(), textCreate, func(context.Context) (int, error) {
 		t.Error("a write outside a transaction must not run")
+
 		return 0, nil
 	})
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
-	got, err = base.Exec(t.Context(), "get", write)
+	got, err = base.Exec(t.Context(), textGet, write)
 	require.NoError(t, err)
 	assert.Equal(t, 1, got)
 }
@@ -136,44 +132,52 @@ func TestStoreBaseWrite_RunsOnlyInsideATransaction(t *testing.T) {
 //     on, a Base's CRUD role and its Exec each count their operation once.
 func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: "store", Order: []decorate.Layer{
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerLogging,
-		decorate.LayerTimeout,
-	}}, store.Tier())
+	assert.Equal(t, decorate.Tier{
+		Name: textStore, Order: []decorate.Layer{
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerLogging,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}, store.Tier())
 
 	reg := promclient.NewRegistry()
-	collab := decorate.Collaborators{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
-	}
+	collab := fixtures.Build(func(row *decorate.Collaborators) {
+		row.Metrics = prom.NewFromRegistry(reg)
+	})
 	defaults := decoration.DefaultConfig()
 	unobserved, err := decorate.NewDecorations(&defaults, collab).
-		Deps(store.Tier(), "documents")
+		Deps(store.Tier(), textDocuments)
 	require.NoError(t, err)
 	assert.Nil(t, unobserved.Metrics)
 
 	on := true
 	cfg := decoration.DefaultConfig()
+
 	cfg.Stores.Defaults.Metrics = &on
+
 	decs := decorate.NewDecorations(&cfg, collab)
 	docs, err := store.NewEntity[documentsReads](
 		decs,
-		"documents",
-		&storeClient{name: "raw"},
-		store.Funcs[*storeClient, reposEnt, reposEntParams, string]{
-			Get: func(_ context.Context, _ *storeClient, id string) (*reposEnt, error) {
-				return &reposEnt{ID: id}, nil
+		textDocuments,
+		&storeClient{name: textRaw},
+		fixtures.Build(
+			func(row *store.Funcs[*storeClient, reposEnt, reposEntParams, string]) {
+				row.Get = func(_ context.Context, _ *storeClient, id string) (*reposEnt, error) {
+					return &reposEnt{ID: id}, nil
+				}
 			},
-		},
+		),
 	)
 	require.NoError(t, err)
 
-	got, err := docs.Get(t.Context(), "a")
+	got, err := docs.Get(t.Context(), textA)
 	require.NoError(t, err)
-	assert.Equal(t, "a", got.ID)
+	assert.Equal(t, textA, got.ID)
 
-	n, err := docs.Exec(
+	count, err := docs.Exec(
 		t.Context(),
 		"count_by_workspace",
 		func(context.Context) (int, error) {
@@ -181,8 +185,13 @@ func TestStoreTier_DecoratesFromTheStoresTier(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, 3, n)
+	assert.Equal(t, wantCountTier, count)
 
-	assert.InDelta(t, 1, storeOpCounter(t, reg, "get"), 0)
+	assert.InDelta(t, 1, storeOpCounter(t, reg, textGet), 0)
 	assert.InDelta(t, 1, storeOpCounter(t, reg, "count_by_workspace"), 0)
 }
+
+const (
+	// wantCountTier is the expected count tier.
+	wantCountTier = 3
+)

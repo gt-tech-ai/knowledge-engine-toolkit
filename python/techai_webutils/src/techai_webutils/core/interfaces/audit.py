@@ -1,9 +1,12 @@
-"""``AuditSink`` — the contract for recording one immutable AI-audit record per answered request.
+"""``AuditSink``: the contract for recording AI-audit records.
 
-An ``AuditRecord`` captures who asked (tenant, workspace, user, clearance), what was asked and
-answered, every source the answer drew on (``AuditedSource``, with its trust level and
-classification), the model and token counts, the safety and PII findings, the decision, and whether
-the answer came from a cache. Records are frozen values; a sink appends them and never edits one.
+One immutable record per answered request.
+
+An ``AuditRecord`` captures who asked (tenant, workspace, user, clearance), what was asked
+and answered, every source the answer drew on (``AuditedSource``, with its trust level and
+classification), the model and token counts, the safety and PII findings, the decision,
+and whether the answer came from a cache. Records are frozen values; a sink appends them
+and never edits one.
 """
 
 from __future__ import annotations
@@ -26,7 +29,8 @@ class AuditedSource:
     trust_level: str
     """The source's trust level (``high`` | ``medium`` | ``low``)."""
     classification: str
-    """The source's classification (``public`` | ``internal`` | ``confidential`` | ``restricted``)."""
+    """The source's classification (``public`` | ``internal`` | ``confidential`` |
+    ``restricted``)."""
     score: float
     """The retrieval relevance score of the passage."""
     page_number: int | None
@@ -69,7 +73,8 @@ class AuditRecord:
     """Safety-check findings on the prompt and answer."""
     decision: str
     """What happened to the answer: ``allowed`` | ``blocked`` | ``redacted`` |
-    ``flagged_after_stream`` (an output block found once the streamed tokens were sent)."""
+    ``flagged_after_stream`` (an output block found once the streamed tokens were
+    sent)."""
     cache_hit: bool
     """True when the answer was served from a cache (a cache hit is audited too)."""
     created_at: datetime
@@ -80,8 +85,8 @@ class AuditRecord:
 class AuditContext:
     """The request facts an audit record needs that the model call doesn't carry.
 
-    The composition root supplies it per call (an injected callable reading its request context),
-    so the engine holds no request global.
+    The composition root supplies it per call (an injected callable reading its request
+    context), so the engine holds no request global.
     """
 
     tenant_id: str
@@ -103,5 +108,12 @@ class AuditSink(Protocol):
     """Appends ``AuditRecord`` values to an audit store."""
 
     async def record(self, record: AuditRecord) -> None:
-        """Append ``record``; in shadow enforcement a backend logs a failure instead of raising."""
+        """Append ``record``.
+
+        In shadow enforcement a backend logs a failure instead of raising.
+
+        Args:
+            record: The audited model call: prompt, answer, sources and safety verdicts.
+
+        """
         ...

@@ -1,4 +1,4 @@
-// Package core_test provides tests for the core/types and core/errors packages
+// Package core_test provides tests for the core/types and core/apperr packages
 // to bring coverage above 90%.
 //
 // This file covers:
@@ -7,6 +7,7 @@
 //   - types.Page: HasMore()
 //   - types.Timestamps: SoftDelete(), IsDeleted()
 //   - errors/zap.go: zapFields.MarshalLogObject (the second MarshalLogObject at line 107)
+
 package unit_test
 
 import (
@@ -18,7 +19,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -107,9 +108,9 @@ func TestID_IsEmpty_False(t *testing.T) {
 func TestOption_Some(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some(42)
+	opt := types.Some(someInputSome)
 	assert.True(t, opt.Valid, "Some should set Valid=true")
-	assert.Equal(t, 42, opt.Value)
+	assert.Equal(t, wantValue, opt.Value)
 }
 
 // TestOption_Some_String tests that Some works correctly with string type
@@ -157,10 +158,10 @@ func TestOption_None(t *testing.T) {
 func TestOption_Get_Valid(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some("test")
+	opt := types.Some(textTest)
 	val, ok := opt.Get()
 	assert.True(t, ok, "Get should return ok=true for Some")
-	assert.Equal(t, "test", val)
+	assert.Equal(t, textTest, val)
 }
 
 // TestOption_Get_None tests that Get returns the zero value and ok=false for
@@ -193,11 +194,11 @@ func TestOption_Get_None(t *testing.T) {
 func TestOption_UnwrapOr_Valid(t *testing.T) {
 	t.Parallel()
 
-	opt := types.Some(10)
+	opt := types.Some(someInputValid)
 	assert.Equal(
 		t,
-		10,
-		opt.UnwrapOr(99),
+		wantUnwrapOrValid,
+		opt.UnwrapOr(unwrapOrInput),
 		"UnwrapOr should return actual value, not fallback",
 	)
 }
@@ -215,7 +216,12 @@ func TestOption_UnwrapOr_None(t *testing.T) {
 	t.Parallel()
 
 	opt := types.None[int]()
-	assert.Equal(t, 99, opt.UnwrapOr(99), "UnwrapOr should return fallback for None")
+	assert.Equal(
+		t,
+		wantUnwrapOrNone,
+		opt.UnwrapOr(unwrapOrInput),
+		"UnwrapOr should return fallback for None",
+	)
 }
 
 // ---------------------------------------------------------------------------
@@ -235,10 +241,12 @@ func TestPage_HasMore_True(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{"a", "b"},
-		Total:      10,
-		PageSize:   2,
-		PageNumber: 1,
+		Items:           []string{textA, textB},
+		Total:           totalTrue,
+		PageSize:        pageSizeTrue,
+		PageNumber:      1,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.True(t, page.HasMore(), "HasMore should return true when more pages exist")
 }
@@ -256,10 +264,12 @@ func TestPage_HasMore_False(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{"a", "b"},
-		Total:      4,
-		PageSize:   2,
-		PageNumber: 2,
+		Items:           []string{textA, textB},
+		Total:           totalFalse,
+		PageSize:        pageSizeFalse,
+		PageNumber:      pageNumber,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.False(t, page.HasMore(), "HasMore should return false when on the last page")
 }
@@ -277,10 +287,12 @@ func TestPage_HasMore_ExactlyFull(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[string]{
-		Items:      []string{"a"},
-		Total:      2,
-		PageSize:   2,
-		PageNumber: 1,
+		Items:           []string{textA},
+		Total:           total,
+		PageSize:        pageSizeFull,
+		PageNumber:      1,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.False(
 		t,
@@ -302,10 +314,12 @@ func TestPage_HasMore_SinglePage(t *testing.T) {
 	t.Parallel()
 
 	page := types.Page[int]{
-		Items:      []int{1, 2, 3},
-		Total:      3,
-		PageSize:   10,
-		PageNumber: 1,
+		Items:           []int{1, items, itemsPage},
+		Total:           totalPage,
+		PageSize:        pageSize,
+		PageNumber:      1,
+		NextCursor:      "",
+		TotalIsEstimate: false,
 	}
 	assert.False(
 		t,
@@ -331,26 +345,29 @@ func TestPage_HasMore_SinglePage(t *testing.T) {
 func TestTimestamps_SoftDelete(t *testing.T) {
 	t.Parallel()
 
-	ts := types.Timestamps{
+	timestamps := types.Timestamps{
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		DeletedAt: nil,
 	}
 
-	require.Nil(t, ts.DeletedAt, "DeletedAt should be nil before SoftDelete")
+	require.Nil(t, timestamps.DeletedAt, "DeletedAt should be nil before SoftDelete")
 
 	before := time.Now()
-	ts.SoftDelete()
+
+	timestamps.SoftDelete()
+
 	after := time.Now()
 
-	require.NotNil(t, ts.DeletedAt, "DeletedAt should be set after SoftDelete")
+	require.NotNil(t, timestamps.DeletedAt, "DeletedAt should be set after SoftDelete")
 	assert.False(
 		t,
-		ts.DeletedAt.Before(before),
+		timestamps.DeletedAt.Before(before),
 		"DeletedAt should not be before the call",
 	)
 	assert.False(
 		t,
-		ts.DeletedAt.After(after),
+		timestamps.DeletedAt.After(after),
 		"DeletedAt should not be after the call returned",
 	)
 }
@@ -370,6 +387,7 @@ func TestTimestamps_IsDeleted_False(t *testing.T) {
 	ts := types.Timestamps{
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		DeletedAt: nil,
 	}
 	assert.False(t, ts.IsDeleted(), "IsDeleted should return false when DeletedAt is nil")
 }
@@ -386,12 +404,17 @@ func TestTimestamps_IsDeleted_False(t *testing.T) {
 func TestTimestamps_IsDeleted_True(t *testing.T) {
 	t.Parallel()
 
-	ts := types.Timestamps{
+	timestamps := types.Timestamps{
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		DeletedAt: nil,
 	}
-	ts.SoftDelete()
-	assert.True(t, ts.IsDeleted(), "IsDeleted should return true after SoftDelete")
+	timestamps.SoftDelete()
+	assert.True(
+		t,
+		timestamps.IsDeleted(),
+		"IsDeleted should return true after SoftDelete",
+	)
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +439,7 @@ func TestZapFieldsMarshalLogObject(t *testing.T) {
 	// object field, which internally uses zapFields.MarshalLogObject.
 	err := apperr.WithDetails(
 		apperr.Internal("db failure"),
-		map[string]string{"table": "users", "op": "insert"},
+		map[string]string{"table": textUsers, textOp: "insert"},
 	)
 
 	fields := apperr.ZapFields(err)
@@ -427,10 +450,48 @@ func TestZapFieldsMarshalLogObject(t *testing.T) {
 	logger.Error("test error", fields...)
 
 	entries := observed.All()
-	require.Len(t, entries, 1, "expected exactly one log entry")
+	require.Len(t, entries, 1, textExpectedExactlyOneLog)
 
 	// Verify error_details context map was marshaled.
 	ctx := entries[0].ContextMap()
 	assert.Contains(t, ctx, "error_code", "expected error_code in logged context")
 	assert.Contains(t, ctx, "error_message", "expected error_message in logged context")
 }
+
+const (
+	// itemsPage is an element of a []int in TestPage_HasMore_SinglePage.
+	itemsPage = 3
+
+	// pageNumber is the PageNumber field in TestPage_HasMore_False.
+	pageNumber = 2
+
+	// pageSizeFalse is the PageSize field in TestPage_HasMore_False.
+	pageSizeFalse = 2
+
+	// pageSizeFull is the PageSize field in TestPage_HasMore_ExactlyFull.
+	pageSizeFull = 2
+
+	// pageSizeTrue is the PageSize field in TestPage_HasMore_True.
+	pageSizeTrue = 2
+
+	// someInputSome is the v passed to Some in TestOption_Some.
+	someInputSome = 42
+
+	// someInputValid is the v passed to Some in TestOption_UnwrapOr_Valid.
+	someInputValid = 10
+
+	// totalFalse is the Total field in TestPage_HasMore_False.
+	totalFalse = 4
+
+	// totalPage is the Total field in TestPage_HasMore_SinglePage.
+	totalPage = 3
+
+	// totalTrue is the Total field in TestPage_HasMore_True.
+	totalTrue = 10
+
+	// wantUnwrapOrNone is the expected unwrap or none.
+	wantUnwrapOrNone = 99
+
+	// wantUnwrapOrValid is the expected unwrap or valid.
+	wantUnwrapOrValid = 10
+)

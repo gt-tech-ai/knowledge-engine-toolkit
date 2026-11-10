@@ -1,14 +1,15 @@
 """The ``overlord`` route planner: ask a remote planner, fail open to ``local``.
 
-Each plan sends a ``PlanRequest`` (the verified tenant and workspace, the team and user the call is
-charged to, step, query, the filtered candidates, the requirements and the policy) through the injected ``RouteTransport`` with the
-caller's service token, under ``timeout_ms``, one retry on ``UNAVAILABLE`` and a circuit breaker.
-The returned ``RoutingPlan``'s model and fallbacks are mapped onto the offered endpoints in order.
+Each plan sends a ``PlanRequest`` (the verified tenant and workspace, the team and user
+the call is charged to, step, query, the filtered candidates, the requirements and the
+policy) through the injected ``RouteTransport`` with the caller's service token, under
+``timeout_ms``, one retry on ``UNAVAILABLE`` and a circuit breaker. The returned
+``RoutingPlan``'s model and fallbacks are mapped onto the offered endpoints in order.
 
-The remote planner is never a dependency of the answer: a timeout, a transport error, an open
-breaker, or a plan naming a model the request didn't offer (``routing_plan_invalid``, defense in
-depth for the filter's data policy) makes the injected ``local`` planner answer instead, with
-``decider=local`` and ``reason=planner_fail_open``, counted as
+The remote planner is never a dependency of the answer: a timeout, a transport error, an
+open breaker, or a plan naming a model the request didn't offer (``routing_plan_invalid``,
+defense in depth for the filter's data policy) makes the injected ``local`` planner answer
+instead, with ``decider=local`` and ``reason=planner_fail_open``, counted as
 ``routed_planner_fail_open_total{cause}``.
 """
 
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast, final
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.types.routing import Plan, PlanRequest
@@ -40,7 +41,8 @@ if TYPE_CHECKING:
     )
 
 _RETRY_DELAY_S = 0.02
-"""Backoff before the single retry on ``UNAVAILABLE`` (the planner's budget is milliseconds)."""
+"""Backoff before the single retry on ``UNAVAILABLE`` (the planner's budget is
+milliseconds)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,8 +61,14 @@ class OverlordPlannerConfig:
     """Seconds the open breaker waits before a trial call."""
 
     @classmethod
-    def from_mapping(cls, raw: Mapping[str, Any]) -> OverlordPlannerConfig:
+    def from_mapping(cls, raw: Mapping[str, object]) -> OverlordPlannerConfig:
         """Return the config in ``raw`` (the planner's ``overlord`` block).
+
+        Args:
+            raw: The planner's config block.
+
+        Returns:
+            The config in ``raw`` (the planner's ``overlord`` block).
 
         Raises:
             AppError: ``INVALID_INPUT`` without a ``target``.
@@ -71,10 +79,10 @@ class OverlordPlannerConfig:
             raise AppError(ErrorCode.INVALID_INPUT, "overlord planner requires a target")
         return cls(
             target=target,
-            timeout_ms=int(raw.get("timeout_ms", 300)),
+            timeout_ms=int(cast("int", raw.get("timeout_ms", 300))),
             service_token=str(raw.get("service_token", "")),
-            breaker_failures=int(raw.get("breaker_failures", 5)),
-            breaker_recovery_s=float(raw.get("breaker_recovery_s", 30.0)),
+            breaker_failures=int(cast("int", raw.get("breaker_failures", 5))),
+            breaker_recovery_s=float(cast("float", raw.get("breaker_recovery_s", 30.0))),
         )
 
 
@@ -82,8 +90,12 @@ class _InvalidPlanError(Exception):
     """A remote plan named a model the request didn't offer (never leaves this module)."""
 
 
+@final
 class OverlordPlanner:
-    """Plans remotely through ``transport``; the ``fallback`` planner answers when it can't."""
+    """Plans remotely through ``transport``.
+
+    The ``fallback`` planner answers when it cannot.
+    """
 
     def __init__(
         self,
@@ -93,7 +105,15 @@ class OverlordPlanner:
         *,
         metrics: MetricsProvider | None = None,
     ) -> None:
-        """Bind the transport, the local fallback, the config and the metrics."""
+        """Bind the transport, the local fallback, the config and the metrics.
+
+        Args:
+            transport: Calls the remote planner.
+            fallback: The local planner used when the remote one fails.
+            config: The deadline and failure policy.
+            metrics: Where the failure counter is created.
+
+        """
         self._transport = transport
         self._fallback = fallback
         self._config = config
@@ -119,7 +139,15 @@ class OverlordPlanner:
             )
 
     async def _call(self, request: PlanRequest) -> RoutingPlan:
-        """Call the transport once under the deadline (``TimeoutError`` past it)."""
+        """Call the transport once under the deadline (``TimeoutError`` past it).
+
+        Args:
+            request: The plan request.
+
+        Returns:
+            The plan from the transport.
+
+        """
         return await asyncio.wait_for(
             self._transport.route(
                 request, timeout_s=self._timeout_s, metadata=self._metadata
@@ -128,17 +156,30 @@ class OverlordPlanner:
         )
 
     async def _remote(self, request: PlanRequest) -> RoutingPlan:
-        """Return the remote plan behind the breaker, retrying ``UNAVAILABLE`` once."""
+        """Return the remote plan behind the breaker, retrying ``UNAVAILABLE`` once.
+
+        Args:
+            request: The plan request.
+
+        Returns:
+            The remote plan behind the breaker, retrying ``UNAVAILABLE`` once.
+
+        """
         async with self._breaker:
             return await self._call_retried(request)
-        # The breaker never suppresses an exception, so this is unreachable.
-        raise AppError(ErrorCode.INTERNAL, "circuit breaker suppressed a call's outcome")
 
     @staticmethod
     def _ordered(
         plan: RoutingPlan, candidates: tuple[CatalogEndpointRef, ...]
     ) -> tuple[CatalogEndpointRef, ...]:
         """Map the plan's model and fallbacks onto the offered endpoints, in order.
+
+        Args:
+            plan: The remote plan.
+            candidates: The endpoints offered to the planner.
+
+        Returns:
+            The endpoints in plan order.
 
         Raises:
             _InvalidPlanError: the plan names no model, or one the request didn't offer.
@@ -152,7 +193,16 @@ class OverlordPlanner:
         return tuple(ref for model in seen for ref in candidates if ref.model_id == model)
 
     async def plan(self, ctx: RouteContext, route_input: PlanInput) -> Plan:
-        """Return the remote plan, or the local one when the remote planner can't answer."""
+        """Return the remote plan, or the local one when the remote planner can't answer.
+
+        Args:
+            ctx: The request's routing context.
+            route_input: The request's size and requirements.
+
+        Returns:
+            The remote plan.
+
+        """
         request = PlanRequest(
             org_id=ctx.tenant_id,
             workspace_id=ctx.workspace_id,
@@ -174,6 +224,7 @@ class OverlordPlanner:
         except TimeoutError:
             return await self._failed_open(ctx, route_input, "timeout")
         except Exception as exc:
+            self._logger.exception("plan failed")
             cause = (
                 str(exc.code).lower() if isinstance(exc, AppError) else "transport_error"
             )
@@ -189,7 +240,19 @@ class OverlordPlanner:
     async def _failed_open(
         self, ctx: RouteContext, route_input: PlanInput, cause: str
     ) -> Plan:
-        """Log and count the failure, then return the local plan marked ``planner_fail_open``."""
+        """Log and count the failure, then return the local plan.
+
+        The plan is marked ``planner_fail_open``.
+
+        Args:
+            ctx: The call's route context.
+            route_input: The plan's input: the query, its requirements and the step.
+            cause: Why the remote plan failed.
+
+        Returns:
+            The local plan, marked as failed open.
+
+        """
         self._logger.warning("overlord planner failed open", cause=cause, step=ctx.step)
         if self._fail_open is not None:
             self._fail_open.inc(1.0, cause=cause)

@@ -1,10 +1,13 @@
-"""Tests for bases built from a contract (mirrors Go ``foundation_decorate_contract_test.go``)."""
+"""Tests for bases built from a contract.
+
+They mirror Go ``foundation_decorate_contract_test.go``.
+"""
 
 from __future__ import annotations
 
 import contextlib
 import dataclasses
-from typing import Protocol
+from typing import Protocol, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -21,23 +24,49 @@ from techai_webutils.foundation.decorate import (
 from techai_webutils.repos.repository import RepositoryBase
 from techai_webutils.services.service import ServiceBase
 
+_EXPECTED_EXEC = 4
+
 
 class _Docs(Protocol):
     """A repository contract with two operations."""
 
     async def count(self, org: str) -> int:
-        """Count org's documents."""
+        """Count org's documents.
+
+        Args:
+            org: The tenant.
+
+        Returns:
+            How many documents the tenant has.
+
+        """
         ...
 
     async def find(self, doc_id: str) -> str:
-        """Find one document."""
+        """Find one document.
+
+        Args:
+            doc_id: The document.
+
+        Returns:
+            The document.
+
+        """
         ...
 
 
 def _with_repositories(
     overrides: dict[str, decoration.Layers],
 ) -> decoration.DecorationConfig:
-    """Return the default config with the repository tier's overrides replaced."""
+    """Return the default config with the repository tier's overrides replaced.
+
+    Args:
+        overrides: The repository tier's overrides.
+
+    Returns:
+        The default config with the repository tier's overrides replaced.
+
+    """
     config = decoration.default_config()
     return dataclasses.replace(
         config,
@@ -54,12 +83,13 @@ async def test_each_contract_method_takes_its_own_decoration() -> None:
         decoration would make one query impossible to trace or time out on its own.
 
     What it tests:
-      - With logging on for ``api.docs.count`` only, ``count`` is logged and ``find`` is not.
+      - With logging on for ``api.docs.count`` only, ``count`` is logged and ``find`` is
+        not.
       - Both are listed by ``components`` and count as used for ``verify``.
     """
     logger = MagicMock()
     logged: list[str] = []
-    logger.debug.side_effect = lambda _msg, **fields: logged.append(  # pyright: ignore[reportUnknownLambdaType]
+    cast("MagicMock", logger.debug).side_effect = lambda _msg, **fields: logged.append(
         str(fields.get("operation"))
     )
     decorations = Decorations(
@@ -68,7 +98,7 @@ async def test_each_contract_method_takes_its_own_decoration() -> None:
     )
     base = RepositoryBase(_Docs, decorations, "api.docs")
 
-    assert await base.exec("count", AsyncMock(return_value=4)) == 4
+    assert await base.exec("count", AsyncMock(return_value=4)) == _EXPECTED_EXEC
     assert await base.exec("find", AsyncMock(return_value="d")) == "d"
 
     assert logged == ["count"]
@@ -82,10 +112,12 @@ async def test_an_operation_the_contract_lacks_raises() -> None:
     """Running an undeclared operation raises before its body runs.
 
     Why this test is important:
-      - An operation name the contract does not have has no config key an operator could tune.
+      - An operation name the contract does not have has no config key an operator could
+        tune.
 
     What it tests:
-      - ``exec("rename")`` raises ``AppRuntimeError`` naming the component and the operation.
+      - ``exec("rename")`` raises ``AppRuntimeError`` naming the component and the
+        operation.
     """
     base = RepositoryBase(_Docs, Decorations(), "api.docs")
     body = AsyncMock(return_value=0)
@@ -99,7 +131,8 @@ def test_a_contract_must_have_methods() -> None:
     """A contract with no public method is refused at construction.
 
     Why this test is important:
-      - Every call on such a base would fail at run time; the composition root must refuse it.
+      - Every call on such a base would fail at run time; the composition root must refuse
+        it.
 
     What it tests:
       - ``ops_of`` and ``ServiceBase`` raise ``AppRuntimeError`` for an empty class; a
@@ -118,9 +151,9 @@ def test_a_contract_must_have_methods() -> None:
             """Help privately; not an operation."""
 
     with pytest.raises(AppRuntimeError):
-        ops_of(_Empty)
+        _ = ops_of(_Empty)
     with pytest.raises(AppRuntimeError):
-        ServiceBase(_Empty, Decorations(), "api.docs")
+        _ = ServiceBase(_Empty, Decorations(), "api.docs")
     assert ops_of(_Docs) == ["count", "find"]
 
 
@@ -137,14 +170,14 @@ def test_verify_fails_an_override_no_contract_declares() -> None:
     stale = Decorations(
         _with_repositories({"api.docs.rename": decoration.Layers(logging=False)})
     )
-    RepositoryBase(_Docs, stale, "api.docs")
+    _ = RepositoryBase(_Docs, stale, "api.docs")
     with pytest.raises(AppValueError, match=r"api\.docs\.rename"):
         stale.verify("api")
 
     clean = Decorations(
         _with_repositories({"api.docs.find": decoration.Layers(logging=False)})
     )
-    RepositoryBase(_Docs, clean, "api.docs")
+    _ = RepositoryBase(_Docs, clean, "api.docs")
     clean.verify("api")
 
 
@@ -153,18 +186,27 @@ async def test_operations_share_their_components_breaker() -> None:
     """A tripped component breaker sheds every operation unless one configures its own.
 
     Why this test is important:
-      - A breaker protects one dependency; a breaker per operation would let every operation
-        fail on its own before shedding.
+      - A breaker protects one dependency; a breaker per operation would let every
+        operation fail on its own before shedding.
 
     What it tests:
-      - After ``count`` trips the component breaker, ``find``'s body does not run; with its own
-        breaker override, ``find`` keeps running.
+      - After ``count`` trips the component breaker, ``find``'s body does not run; with
+        its own breaker override, ``find`` keeps running.
     """
     breaker = decoration.CircuitBreaker(
         enabled=True, consecutive_failures=1, timeout=3600
     )
 
     async def find_ran(overrides: dict[str, decoration.Layers]) -> bool:
+        """Trip the breaker through ``count``, then report whether ``find`` still runs.
+
+        Args:
+            overrides: The repository tier's overrides.
+
+        Returns:
+            Whether ``find`` ran.
+
+        """
         base = RepositoryBase(
             _Docs, Decorations(_with_repositories(overrides)), "api.docs"
         )
@@ -189,7 +231,8 @@ def test_inventory_lists_each_operation_with_its_sources() -> None:
     """The inventory names the config keys behind each operation's layers.
 
     Why this test is important:
-      - An operator must be able to trace a surprising timeout to the override that set it.
+      - An operator must be able to trace a surprising timeout to the override that set
+        it.
 
     What it tests:
       - The component and each operation are listed; an operation's sources run from the
@@ -201,7 +244,7 @@ def test_inventory_lists_each_operation_with_its_sources() -> None:
             "api.docs.count": decoration.Layers(timeout=2.0),
         })
     )
-    RepositoryBase(_Docs, decorations, "api.docs")
+    _ = RepositoryBase(_Docs, decorations, "api.docs")
 
     by_name = {r.name: r for r in decorations.inventory()}
     assert {"api.docs", "api.docs.count", "api.docs.find"} <= set(by_name)

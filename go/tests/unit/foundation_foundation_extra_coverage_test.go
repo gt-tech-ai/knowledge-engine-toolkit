@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 )
@@ -30,7 +30,7 @@ func TestExponentialRetry_CustomIsRetryable(t *testing.T) {
 	t.Parallel()
 
 	terminal := apperr.Sentinel("terminal")
-	r := exponential.New(exponential.Config{
+	retrier := exponential.New(exponential.Config{
 		MaxRetries:      5,
 		InitialInterval: time.Millisecond,
 		MaxInterval:     5 * time.Millisecond,
@@ -40,18 +40,25 @@ func TestExponentialRetry_CustomIsRetryable(t *testing.T) {
 	})
 
 	calls := 0
-	err := r.Retry(context.Background(), func() error {
+	err := retrier.Retry(context.Background(), func() error {
 		calls++
+
 		return terminal
 	})
 	require.Error(t, err, "Retry must return the terminal error")
 	assert.Equal(t, 1, calls, "a non-retryable error must not be retried")
 
 	resultCalls := 0
-	_, err = exponential.RetryWithResult(context.Background(), r, func() (int, error) {
-		resultCalls++
-		return 0, terminal
-	})
+
+	_, err = exponential.RetryWithResult(
+		context.Background(),
+		retrier,
+		func() (int, error) {
+			resultCalls++
+
+			return 0, terminal
+		},
+	)
 	require.Error(t, err, "RetryWithResult must return the terminal error")
 	assert.Equal(t, 1, resultCalls, "a non-retryable error must not be retried")
 }
@@ -73,5 +80,5 @@ func TestBulkheadKind_String(t *testing.T) {
 
 	assert.Equal(t, "channel", bulkhead.KindChannel.String())
 	assert.Equal(t, "adaptive", bulkhead.KindAdaptive.String())
-	assert.Equal(t, "Kind(99)", bulkhead.Kind(99).String())
+	assert.Equal(t, textKind99, bulkhead.Kind(99).String())
 }

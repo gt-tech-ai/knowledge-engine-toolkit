@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from techai_webutils.clients.storage.config import S3Config
 
+_FAKE_CRED_1 = "minioadmin"
+
 
 class TestS3ConfigClientKwargs:
     """S3Config.client_kwargs normalizes empty endpoint/creds to None.
@@ -11,18 +13,22 @@ class TestS3ConfigClientKwargs:
     Why this test is important:
       - A service downloads objects through the S3 client. A local config defaults the
         endpoint to ``http://localhost:9000`` + ``minioadmin`` creds (dev MinIO); cloud
-        environments blank them so the client uses the regional AWS endpoint + IRSA. Passing
-        empty creds straight through would try to authenticate with ``""`` against real AWS.
-        The empty -> None collapse is what routes a blanked config to the default (IRSA)
-        credential chain. Mirrors SQSConfig.client_kwargs.
+        environments blank them so the client uses the regional AWS endpoint + IRSA.
+        Passing empty creds straight through would try to authenticate with ``""`` against
+        real AWS. The empty -> None collapse is what routes a blanked config to the
+        default (IRSA) credential chain. Mirrors SQSConfig.client_kwargs.
 
     What it tests:
       - Empty endpoint/creds map to None (regional endpoint + default credential chain).
-      - Non-empty values (local MinIO) pass through unchanged; region always passes through.
+      - Non-empty values (local MinIO) pass through unchanged; region always passes
+        through.
     """
 
-    def test_empty_endpoint_and_creds_collapse_to_none(self) -> None:
-        """Blank endpoint and credentials become ``None`` so the regional endpoint is used.
+    @staticmethod
+    def test_empty_endpoint_and_creds_collapse_to_none() -> None:
+        """Blank endpoint and credentials become ``None``.
+
+        The regional endpoint is then used.
 
         Why this test is important:
           - aiobotocore rejects an empty-string ``endpoint_url``; a blanked cloud config
@@ -40,7 +46,8 @@ class TestS3ConfigClientKwargs:
         assert kwargs["aws_secret_access_key"] is None
         assert kwargs["region_name"] == "us-east-1"
 
-    def test_non_empty_values_pass_through(self) -> None:
+    @staticmethod
+    def test_non_empty_values_pass_through() -> None:
         """A set endpoint and credentials (local MinIO) pass through unchanged.
 
         Why this test is important:
@@ -55,9 +62,9 @@ class TestS3ConfigClientKwargs:
             bucket="b",
             region="us-east-1",
             access_key="minioadmin",
-            secret_key="minioadmin",
+            secret_key=_FAKE_CRED_1,
         )
         kwargs = config.client_kwargs()
         assert kwargs["endpoint_url"] == "http://localhost:9000"
         assert kwargs["aws_access_key_id"] == "minioadmin"
-        assert kwargs["aws_secret_access_key"] == "minioadmin"
+        assert kwargs["aws_secret_access_key"] == _FAKE_CRED_1

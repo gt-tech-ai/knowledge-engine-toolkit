@@ -21,7 +21,8 @@ Run with: pytest tests/python/test_foundation/test_cache_local.py -v
 from __future__ import annotations
 
 import time
-from unittest.mock import patch
+from typing import cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -31,8 +32,9 @@ from techai_webutils.clients.cache.local import LocalCache
 class TestLocalCache:
     """Test suite for in-memory LocalCache with TTL expiration."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_returns_stored_value(self) -> None:
+    async def test_get_returns_stored_value() -> None:
         """Test that get returns a previously stored value.
 
         **Why this test is important:**
@@ -48,8 +50,9 @@ class TestLocalCache:
         result = await cache.get("key1")
         assert result == b"value1"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_returns_none_on_miss(self) -> None:
+    async def test_get_returns_none_on_miss() -> None:
         """Test that get returns None for a key that was never stored.
 
         **Why this test is important:**
@@ -64,8 +67,9 @@ class TestLocalCache:
         result = await cache.get("missing")
         assert result is None
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_get_returns_none_after_ttl_expires(self) -> None:
+    async def test_get_returns_none_after_ttl_expires() -> None:
         """Test that get returns None after the TTL has expired.
 
         **Why this test is important:**
@@ -80,13 +84,14 @@ class TestLocalCache:
 
         # Mock time to simulate TTL expiry
         with patch("techai_webutils.clients.cache.local.cache.time") as mock_time:
-            mock_time.monotonic.return_value = time.monotonic() + 2
+            cast("MagicMock", mock_time.monotonic).return_value = time.monotonic() + 2
             result = await cache.get("key1")
 
         assert result is None
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_set_overwrites_existing_value(self) -> None:
+    async def test_set_overwrites_existing_value() -> None:
         """Test that set replaces a previously stored value.
 
         **Why this test is important:**
@@ -103,8 +108,9 @@ class TestLocalCache:
         result = await cache.get("key1")
         assert result == b"new"
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_delete_removes_key(self) -> None:
+    async def test_delete_removes_key() -> None:
         """Test that delete removes a stored key.
 
         **Why this test is important:**
@@ -121,8 +127,9 @@ class TestLocalCache:
         result = await cache.get("key1")
         assert result is None
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_delete_missing_key_is_noop(self) -> None:
+    async def test_delete_missing_key_is_noop() -> None:
         """Test that deleting a non-existent key does not raise.
 
         **Why this test is important:**
@@ -136,8 +143,9 @@ class TestLocalCache:
         # Should not raise
         await cache.delete("missing")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_default_ttl_is_applied(self) -> None:
+    async def test_default_ttl_is_applied() -> None:
         """Test that the default TTL is used when ttl_seconds=0 is passed.
 
         **Why this test is important:**
@@ -157,6 +165,6 @@ class TestLocalCache:
 
         # Should expire after default TTL
         with patch("techai_webutils.clients.cache.local.cache.time") as mock_time:
-            mock_time.monotonic.return_value = time.monotonic() + 11
+            cast("MagicMock", mock_time.monotonic).return_value = time.monotonic() + 11
             result = await cache.get("key1")
         assert result is None

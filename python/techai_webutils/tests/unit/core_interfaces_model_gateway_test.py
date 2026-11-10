@@ -1,4 +1,7 @@
-"""Unit tests for the ``ModelGateway`` contract, ``RouteContext`` and the route-decision slot."""
+"""Unit tests for the ``ModelGateway`` contract and ``RouteContext``.
+
+They also cover the route-decision slot.
+"""
 
 from __future__ import annotations
 
@@ -23,11 +26,12 @@ def test_model_gateway_satisfies_llm_provider() -> None:
     """Test that a gateway is a drop-in ``LLMProvider``.
 
     **Why this test is important:**
-      - The composition root swaps a provider for a gateway with no pipeline change; that only
-        holds if every gateway is an ``LLMProvider``.
+      - The composition root swaps a provider for a gateway with no pipeline change; that
+        only holds if every gateway is an ``LLMProvider``.
 
     **What it tests:**
-      - ``ModelGateway`` subclasses ``LLMProvider``; a passthrough gateway is an instance of both
+      - ``ModelGateway`` subclasses ``LLMProvider``; a passthrough gateway is an instance
+        of both
     """
     gateway = PassthroughGateway(StubLlmProvider())
 
@@ -41,11 +45,13 @@ def test_route_context_and_decision_defaults() -> None:
 
     **Why this test is important:**
       - Later routing stages fill more fields; every field defaulted means they extend the
-        decision without reshaping it, and immutability means the audit reads what routing set.
+        decision without reshaping it, and immutability means the audit reads what routing
+        set.
 
     **What it tests:**
       - ``RouteContext()`` leaves ``slo`` unset (empty) with no ``model_preference``
-      - ``RouteDecision()`` defaults to ``mode="user"``, ``decider="local"``, no attempts, no costs
+      - ``RouteDecision()`` defaults to ``mode="user"``, ``decider="local"``, no attempts,
+        no costs
       - assigning a ``RouteDecision`` field raises ``FrozenInstanceError``
     """
     ctx, decision = RouteContext(), RouteDecision()
@@ -58,7 +64,7 @@ def test_route_context_and_decision_defaults() -> None:
         False,
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
-        decision.reason = "x"  # pyright: ignore[reportAttributeAccessIssue]
+        decision.reason = "x"
 
 
 @pytest.mark.asyncio
@@ -75,6 +81,12 @@ async def test_route_decision_slot_is_request_scoped() -> None:
     """
 
     async def child() -> RouteDecision | None:
+        """Set a route decision inside a child task.
+
+        Returns:
+            The child's decision.
+
+        """
         await asyncio.sleep(0)
         set_route_decision(RouteDecision(reason="child"))
         return current_route_decision()

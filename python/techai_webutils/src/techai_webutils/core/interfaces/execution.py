@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import Protocol, override, runtime_checkable
 
 __all__ = [
     "AnyJob",
@@ -29,10 +29,14 @@ __all__ = [
 ]
 
 
+_PASSED_VALUE = "PASS"
+"""The wire value of ``StepStatus.PASS``."""
+
+
 class StepStatus(StrEnum):
     """Outcome of a single fanned-out work item (mirrors Go ``StepStatus``)."""
 
-    PASS = "PASS"  # noqa: S105 # nosec B105 - status enum value, not a secret
+    PASS = _PASSED_VALUE
     """The work item completed successfully."""
     FAIL = "FAIL"
     """The work item failed; ``error``/``detail`` carry the failure diagnostics."""
@@ -85,8 +89,8 @@ class BatchResult:
     """Aggregate outcome of a fan-out over many items (mirrors Go ``StepResults``)."""
 
     results: Sequence[StepResult] = ()
-    """The per-item outcomes, in item order; the count properties below (total/succeeded/failed/...)
-    derive from this sequence."""
+    """The per-item outcomes, in item order; the count properties below
+    (total/succeeded/failed/...) derive from this sequence."""
 
     @property
     def total(self) -> int:
@@ -124,13 +128,21 @@ class BatchResult:
         return all(r.status is StepStatus.PASS for r in self.results)
 
     def failed_names(self) -> list[str]:
-        """Return the names of the failed items (mirrors Go ``StepResults.FailedNames``)."""
+        """Return the names of the failed items (mirrors Go ``StepResults.FailedNames``).
+
+        Returns:
+            The names of the failed items.
+
+        """
         return [r.name for r in self.results if r.status is StepStatus.FAIL]
 
 
 @dataclass(frozen=True, slots=True)
 class JobMeta:
-    """A job's identity for display, grouping, and observer labelling (mirrors Go ``types.JobMeta``)."""
+    """A job's identity for display, grouping and observer labels.
+
+    It mirrors Go's ``types.JobMeta``.
+    """
 
     name: str
     """The human-readable job name shown in gate/phase output, metrics, and logs."""
@@ -140,61 +152,127 @@ class JobMeta:
 
 
 StepFn = Callable[[object], Awaitable[StepResult]]
-"""Async mapper: transforms one work item into a StepResult (isolates item failure, never raises it)."""
+"""Async mapper: transforms one work item into a StepResult (isolates item failure, never
+raises it)."""
 
 
 @runtime_checkable
 class ExecutionObserver(Protocol):
-    """Receives the full gate -> phase -> step execution lifecycle plus the fan-out batch boundary.
+    """Receives the gate, phase and step execution lifecycle.
 
-    The engine calls these serially (never concurrently): ``fan_out``/``run_job_group`` funnel
-    concurrent results through one task before delivery, so implementations need no locking;
-    they must not block. This is the unified Python port of Go's ``ExecutionObserver``
-    (the amendment un-trimming the earlier batch-only shape): the gate emits the
-    gate/phase events, the fan-out primitive emits the batch/step events, and both share
-    ``on_step_complete`` as the per-item event.
+    Plus the fan-out batch boundary.
 
-    Lifecycle per gate run: ``on_gate_start`` -> (per phase: ``on_phase_start`` -> per job's
-    fan-out: ``on_batch_start`` -> per item ``on_step_start``? -> ``on_step_complete`` ->
-    ``on_batch_complete``) -> ``on_phase_complete`` -> ... -> ``on_gate_complete``. A bare
-    fan-out (no gate) emits only the batch/step events. ``on_step_start`` is best-effort and
-    may be omitted by producers (e.g. ``fan_out``) that don't know an item's name up front.
+    The engine calls these serially (never concurrently): ``fan_out``/``run_job_group``
+    funnel concurrent results through one task before delivery, so implementations need no
+    locking; they must not block. This is the unified Python port of Go's
+    ``ExecutionObserver`` (the amendment un-trimming the earlier batch-only shape): the
+    gate emits the gate/phase events, the fan-out primitive emits the batch/step events,
+    and both share ``on_step_complete`` as the per-item event.
+
+    Lifecycle per gate run: ``on_gate_start`` -> (per phase: ``on_phase_start`` -> per
+    job's fan-out: ``on_batch_start`` -> per item ``on_step_start``? ->
+    ``on_step_complete`` -> ``on_batch_complete``) -> ``on_phase_complete`` -> ... ->
+    ``on_gate_complete``. A bare fan-out (no gate) emits only the batch/step events.
+    ``on_step_start`` is best-effort and may be omitted by producers (e.g. ``fan_out``)
+    that don't know an item's name up front.
     """
 
     def on_gate_start(self, name: str, phases: Sequence[str]) -> None:
-        """Handle the gate-start event, called once before any phase runs, with the phase names."""
+        """Handle the gate-start event, with the phase names.
+
+        Called once before any phase runs.
+
+        Args:
+            name: The gate's name.
+            phases: The gate's phase names, in run order.
+
+        """
         ...
 
     def on_phase_start(self, name: str, jobs: Sequence[str]) -> None:
-        """Handle a phase-start event, called once before the phase's jobs run, with the job names."""
+        """Handle a phase-start event, with the job names.
+
+        Called once before the phase's jobs run.
+
+        Args:
+            name: The phase's name.
+            jobs: The phase's job names.
+
+        """
         ...
 
     def on_batch_start(self, name: str, total: int) -> None:
-        """Handle a fan-out batch start, called once before any item in the batch runs."""
+        """Handle a fan-out batch start, called once before any item in the batch runs.
+
+        Args:
+            name: The batch's name.
+            total: How many items the batch holds.
+
+        """
         ...
 
     def on_step_start(self, name: str, group: str) -> None:
-        """Handle an item-start event (best-effort; producers may omit it if the name is unknown)."""
+        """Handle an item-start event.
+
+        Best-effort: a producer may omit it if the name is unknown.
+
+        Args:
+            name: The item's name.
+            group: The batch or job the item belongs to.
+
+        """
         ...
 
     def on_step_complete(self, result: StepResult) -> None:
-        """Handle one item's completion, called exactly once per item for any outcome."""
+        """Handle one item's completion, called exactly once per item for any outcome.
+
+        Args:
+            result: The item's outcome.
+
+        """
         ...
 
     def on_batch_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Handle a fan-out batch completion, called once after all items finish (elapsed seconds)."""
+        """Handle a fan-out batch completion, with the elapsed seconds.
+
+        Called once after all items finish.
+
+        Args:
+            name: The batch's name.
+            result: Every item's outcome.
+            elapsed: The batch's wall-clock time, in seconds.
+
+        """
         ...
 
     def on_phase_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Handle a phase completion, called once after all the phase's jobs finish (elapsed seconds)."""
+        """Handle a phase completion, with the elapsed seconds.
+
+        Called once after all the phase's jobs finish.
+
+        Args:
+            name: The phase's name.
+            result: Every job's outcome.
+            elapsed: The phase's wall-clock time, in seconds.
+
+        """
         ...
 
     def on_gate_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Handle the gate completion, called once after all phases finish (elapsed seconds)."""
+        """Handle the gate completion, with the elapsed seconds.
+
+        Called once after all phases finish.
+
+        Args:
+            name: The gate's name.
+            result: Every phase's outcome.
+            elapsed: The gate's wall-clock time, in seconds.
+
+        """
         ...
 
 
-class NopObserver:
+class NopObserver(ExecutionObserver):
     """No-op ``ExecutionObserver`` and the concrete base for partial observers.
 
     It is both the safe default when no observation is wired and the base that concrete
@@ -203,51 +281,133 @@ class NopObserver:
     missing method (AttributeError) on a partial observer.
     """
 
+    @override
     def on_gate_start(self, name: str, phases: Sequence[str]) -> None:
-        """Discard the gate-start event."""
+        """Discard the gate-start event.
 
+        Args:
+            name: The gate's name (unused).
+            phases: The gate's phase names (unused).
+
+        """
+        del name, phases
+
+    @override
     def on_phase_start(self, name: str, jobs: Sequence[str]) -> None:
-        """Discard the phase-start event."""
+        """Discard the phase-start event.
 
+        Args:
+            name: The phase's name (unused).
+            jobs: The phase's job names (unused).
+
+        """
+        del name, jobs
+
+    @override
     def on_batch_start(self, name: str, total: int) -> None:
-        """Discard the batch-start event."""
+        """Discard the batch-start event.
 
+        Args:
+            name: The batch's name (unused).
+            total: How many items the batch holds (unused).
+
+        """
+        del name, total
+
+    @override
     def on_step_start(self, name: str, group: str) -> None:
-        """Discard the step-start event."""
+        """Discard the step-start event.
 
+        Args:
+            name: The item's name (unused).
+            group: The item's batch or job (unused).
+
+        """
+        del name, group
+
+    @override
     def on_step_complete(self, result: StepResult) -> None:
-        """Discard the step-complete event."""
+        """Discard the step-complete event.
 
+        Args:
+            result: The item's outcome (unused).
+
+        """
+        del result
+
+    @override
     def on_batch_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Discard the batch-complete event."""
+        """Discard the batch-complete event.
 
+        Args:
+            name: The batch's name (unused).
+            result: Every item's outcome (unused).
+            elapsed: The batch's wall-clock time (unused).
+
+        """
+        del name, result, elapsed
+
+    @override
     def on_phase_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Discard the phase-complete event."""
+        """Discard the phase-complete event.
 
+        Args:
+            name: The phase's name (unused).
+            result: Every job's outcome (unused).
+            elapsed: The phase's wall-clock time (unused).
+
+        """
+        del name, result, elapsed
+
+    @override
     def on_gate_complete(self, name: str, result: BatchResult, elapsed: float) -> None:
-        """Discard the gate-complete event."""
+        """Discard the gate-complete event.
+
+        Args:
+            name: The gate's name (unused).
+            result: Every phase's outcome (unused).
+            elapsed: The gate's wall-clock time (unused).
+
+        """
+        del name, result, elapsed
 
 
 @runtime_checkable
 class Named(Protocol):
-    """The identity half of an execution unit: its ``JobMeta`` (mirrors Go ``interfaces.Named``)."""
+    """The identity half of an execution unit: its ``JobMeta``.
+
+    It mirrors Go's ``interfaces.Named``.
+    """
 
     def meta(self) -> JobMeta:
-        """Return the unit's identity for display and observer labelling."""
+        """Return the unit's identity for display and observer labelling.
+
+        Returns:
+            The unit's name and kind, for display and observer labels.
+
+        """
         ...
 
 
 @runtime_checkable
 class AnyJob(Named, Protocol):
-    """A composable execution unit: identity plus an async run returning a ``BatchResult``.
+    """A composable execution unit.
 
-    The gate's job type — the Python analog of Go ``interfaces.AnyJob``. Go's runner-carrying
-    ``AnyJob`` vs runner-less ``Runnable`` split (and ``job.Adapt``) collapses to this single
-    form: the async engine has no ``CommandRunner`` to bridge, so there is one job shape.
+    An identity plus an async run returning a ``BatchResult``.
+
+    The gate's job type — the Python analog of Go ``interfaces.AnyJob``. Go's
+    runner-carrying ``AnyJob`` vs runner-less ``Runnable`` split (and ``job.Adapt``)
+    collapses to this single form: the async engine has no ``CommandRunner`` to bridge, so
+    there is one job shape.
     """
 
     async def execute(self) -> BatchResult:
-        """Run the unit and return its aggregate per-item outcomes."""
+        """Run the unit and return its aggregate per-item outcomes.
+
+        Returns:
+            Every item's outcome, aggregated.
+
+        """
         ...
 
 
@@ -255,20 +415,33 @@ class AnyJob(Named, Protocol):
 class JobFactory(Protocol):
     """A typed producer of an ``AnyJob`` (mirrors Go ``interfaces.JobFactory``).
 
-    Lets a worker model a job as a value (parameters as fields) rather than a bare closure;
-    callers invoke ``job()`` to obtain the runnable unit.
+    Lets a worker model a job as a value (parameters as fields) rather than a bare
+    closure; callers invoke ``job()`` to obtain the runnable unit.
     """
 
     def job(self) -> AnyJob:
-        """Build and return the configured job."""
+        """Build and return the configured job.
+
+        Returns:
+            The job this factory's config describes.
+
+        """
         ...
 
 
 class Discoverer[T](Protocol):
-    """Yields the work items a Job will fan out (mirrors Go ``interfaces.Discoverer[T]``)."""
+    """Yields the work items a Job will fan out.
+
+    Mirrors Go ``interfaces.Discoverer[T]``.
+    """
 
     async def discover(self) -> Sequence[T]:
-        """Return the work items to process."""
+        """Return the work items to process.
+
+        Returns:
+            The work items to process, in order.
+
+        """
         ...
 
 
@@ -287,5 +460,15 @@ class Executor(Protocol):
         *,
         concurrency: int,
     ) -> BatchResult:
-        """Apply ``fn`` to each item with the given max concurrency."""
+        """Apply ``fn`` to each item with the given max concurrency.
+
+        Args:
+            fn: The step applied to each item.
+            items: The work items.
+            concurrency: The most items run at once.
+
+        Returns:
+            Every item's outcome, aggregated.
+
+        """
         ...

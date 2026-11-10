@@ -7,7 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Decode decodes every section of d into the matching field of the struct out points
@@ -17,24 +17,29 @@ import (
 // type does not declare included), is CodeInvalidInput naming the section's file. A
 // field with no section keeps its zero value.
 func (d *Dataset) Decode(out any) error {
-	v := reflect.ValueOf(out)
-	if v.Kind() != reflect.Pointer || v.IsNil() || v.Elem().Kind() != reflect.Struct {
+	value := reflect.ValueOf(out)
+	if value.Kind() != reflect.Pointer || value.IsNil() ||
+		value.Elem().Kind() != reflect.Struct {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"dataset decode needs a non-nil pointer to a struct",
 		)
 	}
-	fields := fieldsByKey(v.Elem().Type())
+
+	fields := fieldsByKey(value.Elem().Type())
 	for _, key := range d.keys() {
 		idx, ok := fields[key]
 		if !ok {
 			return apperr.New(apperr.CodeInvalidInput,
 				"data key "+`"`+key+`"`+" in "+d.sourceOf(key)+" has no field")
 		}
-		if err := d.decodeInto(key, v.Elem().Field(idx).Addr().Interface()); err != nil {
+
+		err := d.decodeInto(key, value.Elem().Field(idx).Addr().Interface())
+		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -44,16 +49,21 @@ func (d *Dataset) decodeInto(key string, dst any) error {
 	if err != nil {
 		return err
 	}
+
 	raw, err := yaml.Marshal(node)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "re-encode section "+key)
 	}
+
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
-	if err := dec.Decode(dst); err != nil {
+
+	err = dec.Decode(dst)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput,
 			"decode section "+key+" from "+d.sourceOf(key))
 	}
+
 	return nil
 }
 
@@ -61,19 +71,25 @@ func (d *Dataset) decodeInto(key string, dst any) error {
 // the lower-cased field name when untagged. A field tagged "-" is skipped.
 func fieldsByKey(t reflect.Type) map[string]int {
 	out := map[string]int{}
-	for i := range t.NumField() {
-		f := t.Field(i)
-		if !f.IsExported() {
+
+	for index := range t.NumField() {
+		structField := t.Field(index)
+		if !structField.IsExported() {
 			continue
 		}
-		name, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
+
+		name, _, _ := strings.Cut(structField.Tag.Get("yaml"), ",")
 		switch name {
 		case "-":
 			continue
 		case "":
-			name = strings.ToLower(f.Name)
+			name = strings.ToLower(structField.Name)
+		default:
+			// No other value changes the outcome.
 		}
-		out[name] = i
+
+		out[name] = index
 	}
+
 	return out
 }

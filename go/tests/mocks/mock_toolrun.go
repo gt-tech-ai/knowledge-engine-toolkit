@@ -96,7 +96,7 @@ func (m *MockToolRunner) EXPECT() *MockToolRunnerMockRecorder {
 }
 
 // Run mocks base method.
-func (m *MockToolRunner) Run(ctx context.Context, cb interfaces.Codebase, run types.ToolRun, opts types.RunOptions) (types.StepResults, error) {
+func (m *MockToolRunner) Run(ctx context.Context, cb interfaces.Codebase, run *types.ToolRun, opts types.RunOptions) (types.StepResults, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run", ctx, cb, run, opts)
 	ret0, _ := ret[0].(types.StepResults)
@@ -135,7 +135,7 @@ func (m *MockTargetSelector) EXPECT() *MockTargetSelectorMockRecorder {
 }
 
 // Select mocks base method.
-func (m *MockTargetSelector) Select(ctx context.Context, cb interfaces.Codebase, spec types.TargetSpec) ([]string, error) {
+func (m *MockTargetSelector) Select(ctx context.Context, cb interfaces.Codebase, spec *types.TargetSpec) ([]string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Select", ctx, cb, spec)
 	ret0, _ := ret[0].([]string)
@@ -174,7 +174,7 @@ func (m *MockParser) EXPECT() *MockParserMockRecorder {
 }
 
 // Parse mocks base method.
-func (m *MockParser) Parse(res interfaces.CmdResult) types.Verdict {
+func (m *MockParser) Parse(res *interfaces.CmdResult) types.Verdict {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Parse", res)
 	ret0, _ := ret[0].(types.Verdict)

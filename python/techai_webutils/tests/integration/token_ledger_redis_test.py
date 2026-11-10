@@ -1,7 +1,8 @@
 """Integration tests for ``RedisTokenLedger`` against a real Redis 7 (testcontainers).
 
-The unit suite mocks the client; this suite proves what only a real server can: the Lua script's
-atomic counters and expiry, the stream entry the durable ledger drains, and ``MAXLEN ~`` trimming.
+The unit suite mocks the client; this suite proves what only a real server can: the Lua
+script's atomic counters and expiry, the stream entry the durable ledger drains, and
+``MAXLEN ~`` trimming.
 """
 
 from __future__ import annotations
@@ -28,12 +29,24 @@ from techai_webutils.core.interfaces.token_ledger import (
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_EXPECTED_MONTH = 12
+_EXPECTED_LENGTH = 100
+_EXPECTED_LENGTH_200 = 200
+
 
 @pytest_asyncio.fixture
 async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
-    """Yield a ``decode_responses`` async client bound to the session's Redis container."""
-    host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
-    port = int(redis_container.get_exposed_port(redis_container.port))  # type: ignore[attr-defined]
+    """Yield a ``decode_responses`` async client bound to the session's Redis container.
+
+    Args:
+        redis_container: A real Redis server for the session.
+
+    Yields:
+        A ``decode_responses`` async client bound.
+
+    """
+    host = redis_container.get_container_host_ip()
+    port = int(redis_container.get_exposed_port(redis_container.port))
     client = Redis(host=host, port=port, decode_responses=True)
     try:
         yield client
@@ -44,7 +57,17 @@ async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
 def _record(
     ts: datetime, *, input_tokens: int = 100, output_tokens: int = 20
 ) -> UsageRecord:
-    """One generation for org-1 / w-1 at ``ts``."""
+    """One generation for org-1 / w-1 at ``ts``.
+
+    Args:
+        ts: When the call happened.
+        input_tokens: The prompt's tokens.
+        output_tokens: The answer's tokens.
+
+    Returns:
+        The usage record.
+
+    """
     return UsageRecord(
         scope=UsageScope(
             org_id="org-1", team_id="t-1", workspace_id="w-1", user_id="u-1"
@@ -65,15 +88,23 @@ def _record(
 async def test_counter_increments_and_expires_at_window(
     redis_client: Redis, request: pytest.FixtureRequest
 ) -> None:
-    """Test that recorded usage accumulates in the window hash, which expires at the month's end.
+    """Test that recorded usage accumulates in the window hash.
+
+    The hash expires at the month's end.
 
     **Why this test is important:**
-      - Budgets are checked against these counters; they must sum exactly and roll over at the
-        window boundary, or an org is blocked forever or never.
+      - Budgets are checked against these counters; they must sum exactly and roll over at
+        the window boundary, or an org is blocked forever or never.
 
     **What it tests:**
-      - two records sum to exactly ``{input 300, output 40, embed 0, cost 21600 micro-dollars}``
+      - two records sum to exactly ``{input 300, output 40, embed 0, cost 21600
+        micro-dollars}``
       - the hash's absolute expiry (``EXPIRETIME``) is the first instant of next UTC month
+
+    Args:
+        redis_client: A ``decode_responses`` async client on the session's Redis.
+        request: The test's pytest request.
+
     """
     prefix = f"tl-{request.node.name}"
     ledger = token_ledger_from_config(
@@ -88,7 +119,9 @@ async def test_counter_increments_and_expires_at_window(
     await ledger.record(_record(now, input_tokens=200, output_tokens=20))
 
     key = f"{prefix}:org-1:w-1:{now.strftime('%Y-%m')}"
-    next_month = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1, tzinfo=UTC)
+    next_month = datetime(
+        now.year + (now.month == _EXPECTED_MONTH), now.month % 12 + 1, 1, tzinfo=UTC
+    )
     assert await redis_client.hgetall(key) == {
         "input_tokens": "300",
         "output_tokens": "40",
@@ -103,13 +136,21 @@ async def test_counter_increments_and_expires_at_window(
 async def test_xadd_entry_reads_back_with_contract_fields(
     redis_client: Redis, request: pytest.FixtureRequest
 ) -> None:
-    """Test that each record appends one stream entry carrying exactly the contract fields.
+    """Each record appends one stream entry carrying exactly the contract.
+
+    Fields.
 
     **Why this test is important:**
-      - The durable ledger's drainer parses these entries; a missing or renamed field loses usage.
+      - The durable ledger's drainer parses these entries; a missing or renamed field
+        loses usage.
 
     **What it tests:**
       - one ``XADD`` per record, whose fields equal the contract mapping value-for-value
+
+    Args:
+        redis_client: A ``decode_responses`` async client on the session's Redis.
+        request: The test's pytest request.
+
     """
     prefix = f"tl-{request.node.name}"
     stream = f"{prefix}:usage"
@@ -149,11 +190,18 @@ async def test_stream_is_trimmed_to_maxlen(
     """Test that the usage stream stays bounded by the approximate ``MAXLEN``.
 
     **Why this test is important:**
-      - If the drainer stalls, an unbounded stream would grow until Redis runs out of memory.
+      - If the drainer stalls, an unbounded stream would grow until Redis runs out of
+        memory.
 
     **What it tests:**
-      - after 1000 records with ``stream_maxlen=100`` the stream holds at most 100 entries plus
-        one radix-tree node (Redis trims ``~`` at node granularity; default 100 entries per node)
+      - after 1000 records with ``stream_maxlen=100`` the stream holds at most 100 entries
+        plus one radix-tree node (Redis trims ``~`` at node granularity; default 100
+        entries per node)
+
+    Args:
+        redis_client: A ``decode_responses`` async client on the session's Redis.
+        request: The test's pytest request.
+
     """
     prefix = f"tl-{request.node.name}"
     stream = f"{prefix}:usage"
@@ -172,7 +220,7 @@ async def test_stream_is_trimmed_to_maxlen(
         await ledger.record(_record(now))
 
     length = await redis_client.xlen(stream)
-    assert 100 <= length <= 200
+    assert _EXPECTED_LENGTH <= length <= _EXPECTED_LENGTH_200
 
 
 @pytest.mark.integration
@@ -183,13 +231,18 @@ async def test_check_budget_reads_the_stored_enforcement(
     """Test that a limits hash written by the budget owner reports its enforcement.
 
     **Why this test is important:**
-      - The owner writes ``enforcement`` beside ``tokens`` with a real ``HSET``; the hot path
-        must decode it from a real Redis reply (strings, not bytes, with
+      - The owner writes ``enforcement`` beside ``tokens`` with a real ``HSET``; the hot
+        path must decode it from a real Redis reply (strings, not bytes, with
         ``decode_responses``), or ``per_budget`` enforcement never sees an admin's level.
 
     **What it tests:**
       - after ``HSET limits tokens 100 enforcement hard`` and 120 recorded tokens,
         ``check_budget`` is exhausted with ``Enforcement.HARD``
+
+    Args:
+        redis_client: A ``decode_responses`` async client on the session's Redis.
+        request: The test's pytest request.
+
     """
     prefix = f"tl-{request.node.name}"
     ledger = token_ledger_from_config(
@@ -199,7 +252,7 @@ async def test_check_budget_reads_the_stored_enforcement(
         redis=redis_client,
     )
     scope = _record(datetime.now(UTC)).scope
-    await redis_client.hset(
+    _ = await redis_client.hset(
         f"{prefix}:limits:org-1:w-1", mapping={"tokens": "100", "enforcement": "hard"}
     )
     await ledger.record(_record(datetime.now(UTC)))

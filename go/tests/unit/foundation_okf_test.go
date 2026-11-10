@@ -8,8 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/okf"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // okfConcept is a concept with every named key, an extension key and a two-line body.
@@ -44,38 +46,39 @@ See [the contract](../contract.md#rules).
 //     the closing fence and BodyStartLine is that line.
 func TestOKFParse_FrontmatterAndBody(t *testing.T) {
 	t.Parallel()
+
 	doc, err := okf.Parse("docs/guides/endpoint.md", []byte(okfConcept))
 	require.NoError(t, err)
 
-	fm := doc.Frontmatter
+	frontmatter := doc.Frontmatter
 	assert.True(t, doc.HasFrontmatter)
-	assert.Equal(t, "Guide", fm.Type)
-	assert.Equal(t, "Add an endpoint", fm.Title)
-	assert.Equal(t, "How to add one RPC end to end.", fm.Description)
-	assert.Equal(t, "apps/go/server/api", fm.Resource)
-	assert.Equal(t, []string{"api", "howto"}, fm.Tags)
-	assert.Equal(t, "stable", fm.Status)
-	assert.Equal(t, "2027-01-01T00:00:00Z", fm.StaleAfter)
-	require.NotNil(t, fm.Generated)
+	assert.Equal(t, textGuide, frontmatter.Type)
+	assert.Equal(t, "Add an endpoint", frontmatter.Title)
+	assert.Equal(t, "How to add one RPC end to end.", frontmatter.Description)
+	assert.Equal(t, "apps/go/server/api", frontmatter.Resource)
+	assert.Equal(t, []string{textAPI, "howto"}, frontmatter.Tags)
+	assert.Equal(t, "stable", frontmatter.Status)
+	assert.Equal(t, "2027-01-01T00:00:00Z", frontmatter.StaleAfter)
+	require.NotNil(t, frontmatter.Generated)
 	assert.Equal(
 		t,
-		okf.Attribution{By: "human:ada", At: "2026-10-01T09:00:00Z"},
-		*fm.Generated,
+		okf.Attribution{By: textHumanAda, At: "2026-10-01T09:00:00Z"},
+		*frontmatter.Generated,
 	)
 	assert.Equal(
 		t,
 		[]okf.Attribution{
 			{By: "claude-code/claude-opus-4-8", At: "2026-10-31T10:00:00Z"},
 		},
-		fm.Verified,
+		frontmatter.Verified,
 	)
-	assert.Equal(t, map[string]any{"linear": "ENG-1"}, fm.Extra)
+	assert.Equal(t, map[string]any{textLinear: "ENG-1"}, frontmatter.Extra)
 	assert.Equal(
 		t,
 		"\n# Add an endpoint\n\nSee [the contract](../contract.md#rules).\n",
 		doc.Body,
 	)
-	assert.Equal(t, 13, doc.BodyStartLine)
+	assert.Equal(t, wantBodyStartLine, doc.BodyStartLine)
 	assert.True(t, strings.HasSuffix(okfConcept, doc.Body))
 }
 
@@ -89,13 +92,14 @@ func TestOKFParse_FrontmatterAndBody(t *testing.T) {
 //   - A two-entry list parses to two attributions in order.
 func TestOKFParse_VerifiedList(t *testing.T) {
 	t.Parallel()
+
 	src := "---\ntype: Guide\nverified:\n" +
 		"  - {by: human:ada, at: 2026-10-01T00:00:00Z}\n  - {by: process:nightly}\n---\n"
-	doc, err := okf.Parse("a.md", []byte(src))
+	doc, err := okf.Parse(textAMd, []byte(src))
 	require.NoError(t, err)
 	assert.Equal(t, []okf.Attribution{
-		{By: "human:ada", At: "2026-10-01T00:00:00Z"},
-		{By: "process:nightly"},
+		{By: textHumanAda, At: "2026-10-01T00:00:00Z"},
+		{By: "process:nightly", At: ""},
 	}, doc.Frontmatter.Verified)
 }
 
@@ -110,11 +114,12 @@ func TestOKFParse_VerifiedList(t *testing.T) {
 //     `---` that is not the first line is body text, not a fence.
 func TestOKFParse_NoFrontmatter(t *testing.T) {
 	t.Parallel()
+
 	src := "# Title\n\n---\ntype: Guide\n---\n"
-	doc, err := okf.Parse("a.md", []byte(src))
+	doc, err := okf.Parse(textAMd, []byte(src))
 	require.NoError(t, err)
 	assert.False(t, doc.HasFrontmatter)
-	assert.Equal(t, okf.Frontmatter{}, doc.Frontmatter)
+	assert.Equal(t, stdx.Zero[okf.Frontmatter](), doc.Frontmatter)
 	assert.Equal(t, src, doc.Body)
 	assert.Equal(t, 1, doc.BodyStartLine)
 }
@@ -130,6 +135,7 @@ func TestOKFParse_NoFrontmatter(t *testing.T) {
 //     CodeInvalidInput whose message names the file.
 func TestOKFParse_InvalidFrontmatter(t *testing.T) {
 	t.Parallel()
+
 	for name, src := range map[string]string{
 		"invalid yaml":  "---\ntype: [unclosed\n---\nbody\n",
 		"unterminated":  "---\ntype: Guide\nbody\n",
@@ -152,12 +158,13 @@ func TestOKFParse_InvalidFrontmatter(t *testing.T) {
 //   - A BOM-prefixed CRLF file parses its type and its body.
 func TestOKFParse_CRLFAndBOM(t *testing.T) {
 	t.Parallel()
+
 	src := "\ufeff---\r\ntype: Guide\r\n---\r\n# T\r\n"
-	doc, err := okf.Parse("a.md", []byte(src))
+	doc, err := okf.Parse(textAMd, []byte(src))
 	require.NoError(t, err)
-	assert.Equal(t, "Guide", doc.Frontmatter.Type)
+	assert.Equal(t, textGuide, doc.Frontmatter.Type)
 	assert.Equal(t, "# T\r\n", doc.Body)
-	assert.Equal(t, 4, doc.BodyStartLine)
+	assert.Equal(t, wantBodyStartLineBOM, doc.BodyStartLine)
 }
 
 // TestOKFParse_LinksClassified tests link extraction and classification.
@@ -171,10 +178,11 @@ func TestOKFParse_CRLFAndBOM(t *testing.T) {
 //     fragment and kind; links inside a fenced block or an inline code span are not.
 func TestOKFParse_LinksClassified(t *testing.T) {
 	t.Parallel()
+
 	src := strings.Join([]string{
-		"---",
+		textDashDashDash,
 		"type: Guide",
-		"---",
+		textDashDashDash,
 		"[rel](../a/b.md#sec) and ![img](./x.png)",
 		"[abs](/docs/c.md) [anchor](#top) [ext](https://example.com/x) [mail](mailto:a@b.c)",
 		"`[code](skip.md)` and [proto](//cdn.example.com/y)",
@@ -183,19 +191,19 @@ func TestOKFParse_LinksClassified(t *testing.T) {
 		"```",
 		"[ref]: <../d.md>",
 		"[t](e.md \"title\")",
-	}, "\n")
-	doc, err := okf.Parse("a.md", []byte(src))
+	}, textNewline)
+	doc, err := okf.Parse(textAMd, []byte(src))
 	require.NoError(t, err)
 	assert.Equal(t, []okf.Link{
 		{Target: "../a/b.md", Fragment: "sec", Line: 4, Kind: okf.LinkRelative},
-		{Target: "./x.png", Line: 4, Kind: okf.LinkRelative},
-		{Target: "/docs/c.md", Line: 5, Kind: okf.LinkAbsolute},
-		{Fragment: "top", Line: 5, Kind: okf.LinkAnchor},
-		{Target: "https://example.com/x", Line: 5, Kind: okf.LinkExternal},
-		{Target: "mailto:a@b.c", Line: 5, Kind: okf.LinkExternal},
-		{Target: "//cdn.example.com/y", Line: 6, Kind: okf.LinkExternal},
-		{Target: "../d.md", Line: 10, Kind: okf.LinkRelative},
-		{Target: "e.md", Line: 11, Kind: okf.LinkRelative},
+		{Target: "./x.png", Line: 4, Kind: okf.LinkRelative, Fragment: ""},
+		{Target: "/docs/c.md", Line: 5, Kind: okf.LinkAbsolute, Fragment: ""},
+		{Fragment: "top", Line: 5, Kind: okf.LinkAnchor, Target: ""},
+		{Target: "https://example.com/x", Line: 5, Kind: okf.LinkExternal, Fragment: ""},
+		{Target: "mailto:a@b.c", Line: 5, Kind: okf.LinkExternal, Fragment: ""},
+		{Target: "//cdn.example.com/y", Line: 6, Kind: okf.LinkExternal, Fragment: ""},
+		{Target: "../d.md", Line: 10, Kind: okf.LinkRelative, Fragment: ""},
+		{Target: "e.md", Line: 11, Kind: okf.LinkRelative, Fragment: ""},
 	}, doc.Links)
 }
 
@@ -211,17 +219,18 @@ func TestOKFParse_LinksClassified(t *testing.T) {
 //     empty fields are omitted.
 func TestOKFRenderFrontmatter_RoundTrip(t *testing.T) {
 	t.Parallel()
-	fm := okf.Frontmatter{
-		Type:        "Story",
-		Title:       "Story 1.2 — Add: a thing",
-		Description: "Adds the thing.",
-		Tags:        []string{"epic-1"},
-		Status:      "deprecated",
-		Generated:   &okf.Attribution{By: "human:ada", At: "2026-01-02T03:04:05Z"},
-		Verified:    []okf.Attribution{{By: "human:bob", At: "2026-02-02T00:00:00Z"}},
-		Extra:       map[string]any{"zeta": "z", "linear": "ENG-9"},
-	}
-	out := okf.RenderFrontmatter(fm)
+
+	frontmatter := fixtures.Build(func(row *okf.Frontmatter) {
+		row.Type = "Story"
+		row.Title = "Story 1.2 — Add: a thing"
+		row.Description = "Adds the thing."
+		row.Tags = []string{"epic-1"}
+		row.Status = "deprecated"
+		row.Generated = &okf.Attribution{By: textHumanAda, At: "2026-01-02T03:04:05Z"}
+		row.Verified = []okf.Attribution{{By: "human:bob", At: "2026-02-02T00:00:00Z"}}
+		row.Extra = map[string]any{"zeta": "z", textLinear: "ENG-9"}
+	})
+	out := okf.RenderFrontmatter(&frontmatter)
 	assert.Equal(t, `---
 type: Story
 title: 'Story 1.2 — Add: a thing'
@@ -235,9 +244,9 @@ zeta: z
 ---
 `, string(out))
 
-	doc, err := okf.Parse("a.md", out)
+	doc, err := okf.Parse(textAMd, out)
 	require.NoError(t, err)
-	assert.Equal(t, fm, doc.Frontmatter)
+	assert.Equal(t, frontmatter, doc.Frontmatter)
 	assert.Empty(t, doc.Body)
 }
 
@@ -252,22 +261,29 @@ zeta: z
 //     unparseable value is CodeInvalidInput.
 func TestOKFFrontmatter_Stale(t *testing.T) {
 	t.Parallel()
-	at := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	fm := okf.Frontmatter{StaleAfter: "2026-06-01T00:00:00Z"}
 
-	stale, err := fm.Stale(at)
+	instant := time.Date(dateInput, dateInputStale, 1, 0, 0, 0, 0, time.UTC)
+	frontmatter := fixtures.Build(func(row *okf.Frontmatter) {
+		row.StaleAfter = "2026-06-01T00:00:00Z"
+	})
+
+	stale, err := frontmatter.Stale(instant)
 	require.NoError(t, err)
 	assert.True(t, stale)
 
-	stale, err = fm.Stale(at.Add(-time.Second))
+	stale, err = frontmatter.Stale(instant.Add(-time.Second))
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	stale, err = okf.Frontmatter{}.Stale(at)
+	stale, err = new(okf.Frontmatter).Stale(instant)
 	require.NoError(t, err)
 	assert.False(t, stale)
 
-	_, err = okf.Frontmatter{StaleAfter: "soon"}.Stale(at)
+	_, err = fixtures.BuildRef(func(row *okf.Frontmatter) {
+		row.StaleAfter = "soon"
+	}).Stale(
+		instant,
+	)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
 
@@ -283,11 +299,12 @@ func TestOKFFrontmatter_Stale(t *testing.T) {
 //     identical bytes.
 func TestOKFRenderIndex_GroupsAndSorts(t *testing.T) {
 	t.Parallel()
+
 	entries := []okf.IndexEntry{
-		{Title: "zeta", Link: "zeta.md", Description: "Last.", Section: "Guides"},
-		{Title: "Alpha", Link: "alpha.md", Description: "First.", Section: "Guides"},
-		{Title: "Runbooks", Link: "runbooks/", Section: "Areas"},
-		{Title: "Overview", Link: "overview.md", Description: "Start here."},
+		{Title: "zeta", Link: "zeta.md", Description: "Last.", Section: textGuides},
+		{Title: "Alpha", Link: "alpha.md", Description: "First.", Section: textGuides},
+		{Title: "Runbooks", Link: "runbooks/", Section: "Areas", Description: ""},
+		{Title: "Overview", Link: "overview.md", Description: "Start here.", Section: ""},
 	}
 	want := `* [Overview](overview.md) - Start here.
 
@@ -302,7 +319,12 @@ func TestOKFRenderIndex_GroupsAndSorts(t *testing.T) {
 `
 	assert.Equal(t, want, string(okf.RenderIndex(entries)))
 
-	shuffled := []okf.IndexEntry{entries[3], entries[1], entries[2], entries[0]}
+	shuffled := []okf.IndexEntry{
+		entries[indexSorts],
+		entries[1],
+		entries[indexAndSorts],
+		entries[0],
+	}
 	assert.Equal(t, want, string(okf.RenderIndex(shuffled)))
 }
 
@@ -315,9 +337,12 @@ func TestOKFRenderIndex_GroupsAndSorts(t *testing.T) {
 //   - The output opens with an okf_version-only block, then the RenderIndex body.
 func TestOKFRenderRootIndex_OKFVersion(t *testing.T) {
 	t.Parallel()
+
 	got := okf.RenderRootIndex(
 		"0.2",
-		[]okf.IndexEntry{{Title: "Guides", Link: "guides/"}},
+		[]okf.IndexEntry{
+			{Title: textGuides, Link: "guides/", Description: "", Section: ""},
+		},
 	)
 	assert.Equal(
 		t,
@@ -325,7 +350,7 @@ func TestOKFRenderRootIndex_OKFVersion(t *testing.T) {
 		string(got),
 	)
 
-	doc, err := okf.Parse("docs/index.md", got)
+	doc, err := okf.Parse(textDocsIndexMd, got)
 	require.NoError(t, err)
 	assert.Equal(t, "0.2", doc.Frontmatter.OKFVersion)
 }
@@ -334,25 +359,30 @@ func TestOKFRenderRootIndex_OKFVersion(t *testing.T) {
 func okfRules() okf.Rules {
 	return okf.Rules{
 		RequiredKeys: map[string][]string{
-			"Guide":   {"type", "title", "description"},
-			"Runbook": {"type", "title", "tags"},
+			textGuide: {textType, textTitle, textDescription},
+			"Runbook": {textType, textTitle, textTags},
 		},
-		RootIndex: "docs/index.md",
+		RootIndex: textDocsIndexMd,
 	}
 }
 
 // conformRules parses src at path and returns the rule names Conform reports.
 func conformRules(t *testing.T, path, src string, rules okf.Rules) []string {
 	t.Helper()
+
 	doc, err := okf.Parse(path, []byte(src))
 	require.NoError(t, err)
-	findings := okf.Conform(doc, rules)
+
+	findings := okf.Conform(&doc, rules)
 	got := make([]string, 0, len(findings))
+
 	for _, f := range findings {
 		assert.Equal(t, path, f.Path)
 		assert.NotEmpty(t, f.Message)
+
 		got = append(got, f.Rule)
 	}
+
 	return got
 }
 
@@ -368,22 +398,23 @@ func conformRules(t *testing.T, path, src string, rules okf.Rules) []string {
 //     passes.
 func TestOKFConform_Concepts(t *testing.T) {
 	t.Parallel()
+
 	ok := "---\ntype: Guide\ntitle: T\ndescription: D\n---\n"
-	assert.Empty(t, conformRules(t, "docs/g.md", ok, okfRules()))
+	assert.Empty(t, conformRules(t, textDocsGMd, ok, okfRules()))
 	assert.Equal(
 		t,
 		[]string{okf.RuleNoFrontmatter},
-		conformRules(t, "docs/g.md", "# T\n", okfRules()),
+		conformRules(t, textDocsGMd, "# T\n", okfRules()),
 	)
 	assert.Equal(
 		t,
 		[]string{okf.RuleMissingKey},
-		conformRules(t, "docs/g.md", "---\ntitle: T\n---\n", okfRules()),
+		conformRules(t, textDocsGMd, "---\ntitle: T\n---\n", okfRules()),
 	)
 	assert.Equal(
 		t,
 		[]string{okf.RuleUnknownType},
-		conformRules(t, "docs/g.md", "---\ntype: Memo\n---\n", okfRules()),
+		conformRules(t, textDocsGMd, "---\ntype: Memo\n---\n", okfRules()),
 	)
 	assert.Equal(
 		t,
@@ -395,7 +426,10 @@ func TestOKFConform_Concepts(t *testing.T) {
 			okfRules(),
 		),
 	)
-	assert.Empty(t, conformRules(t, "docs/g.md", "---\ntype: Memo\n---\n", okf.Rules{}))
+	assert.Empty(
+		t,
+		conformRules(t, textDocsGMd, "---\ntype: Memo\n---\n", stdx.Zero[okf.Rules]()),
+	)
 }
 
 // TestOKFConform_ReservedNames tests index.md and log.md handling.
@@ -410,18 +444,18 @@ func TestOKFConform_Concepts(t *testing.T) {
 //     index.md or a log.md with frontmatter is reserved-name.
 func TestOKFConform_ReservedNames(t *testing.T) {
 	t.Parallel()
-	assert.Empty(t, conformRules(t, "docs/a/index.md", "* [x](x.md)\n", okfRules()))
+	assert.Empty(t, conformRules(t, textDocsAIndexMd, "* [x](x.md)\n", okfRules()))
 	assert.Empty(t, conformRules(t, "docs/a/log.md", "## 2026-01-01\n", okfRules()))
 	assert.Empty(
 		t,
-		conformRules(t, "docs/index.md", "---\nokf_version: \"0.2\"\n---\n", okfRules()),
+		conformRules(t, textDocsIndexMd, "---\nokf_version: \"0.2\"\n---\n", okfRules()),
 	)
 	assert.Equal(
 		t,
 		[]string{okf.RuleIndexFrontmatter},
 		conformRules(
 			t,
-			"docs/a/index.md",
+			textDocsAIndexMd,
 			"---\nokf_version: \"0.2\"\n---\n",
 			okfRules(),
 		),
@@ -431,13 +465,13 @@ func TestOKFConform_ReservedNames(t *testing.T) {
 		[]string{okf.RuleIndexFrontmatter},
 		conformRules(
 			t,
-			"docs/index.md",
+			textDocsIndexMd,
 			"---\nokf_version: \"0.2\"\ntitle: x\n---\n",
 			okfRules(),
 		),
 	)
 	assert.Equal(t, []string{okf.RuleReservedName},
-		conformRules(t, "docs/a/index.md", "---\ntype: Guide\n---\n", okfRules()))
+		conformRules(t, textDocsAIndexMd, "---\ntype: Guide\n---\n", okfRules()))
 	assert.Equal(t, []string{okf.RuleReservedName},
 		conformRules(t, "docs/a/log.md", "---\ntype: Guide\n---\n", okfRules()))
 }
@@ -446,9 +480,11 @@ func TestOKFConform_ReservedNames(t *testing.T) {
 func logRules(src string) []string {
 	findings := okf.ConformLog("docs/e/log.md", []byte(src))
 	got := make([]string, 0, len(findings))
+
 	for _, f := range findings {
 		got = append(got, f.Rule)
 	}
+
 	return got
 }
 
@@ -485,7 +521,7 @@ func TestOKFConformLog(t *testing.T) {
 
 	f := okf.ConformLog("l.md", []byte("## 2026-10-01\n\n## 2026-10-03\n"))
 	require.Len(t, f, 1)
-	assert.Equal(t, 3, f[0].Line)
+	assert.Equal(t, wantLineLog, f[0].Line)
 }
 
 // FuzzOKFParse tests that Parse never panics and keeps the body a suffix.
@@ -499,27 +535,38 @@ func TestOKFConformLog(t *testing.T) {
 //     suffix of the input (BOM aside) and every link line is within the file.
 func FuzzOKFParse(f *testing.F) {
 	for _, seed := range []string{
-		"", "---", "---\n", "---\n---\n", "---\ntype: x\n", okfConcept,
-		"\ufeff---\r\ntype: G\r\n---\r\n[a](b)\r\n", "```\n[a](b)\n", strings.Repeat("x", 4096),
+		"", textDashDashDash, "---\n", "---\n---\n", "---\ntype: x\n", okfConcept,
+		"\ufeff---\r\ntype: G\r\n---\r\n[a](b)\r\n", "```\n[a](b)\n",
+		strings.Repeat(textX, repeatInputOKFParse),
 		"[a](<b c>) [d]: e\n`x` [f](g",
 	} {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(t *testing.T, src string) {
-		doc, err := okf.Parse("f.md", []byte(src))
-		if err != nil {
-			return
-		}
-		if !strings.HasSuffix(src, doc.Body) {
-			t.Fatalf("body %q is not a suffix of %q", doc.Body, src)
-		}
-		lines := strings.Count(src, "\n") + 1
-		for _, l := range doc.Links {
-			if l.Line < 1 || l.Line > lines {
-				t.Fatalf("link line %d outside 1..%d", l.Line, lines)
-			}
-		}
+		fuzzOKFParseCase(t, src)
 	})
+}
+
+// fuzzOKFParseCase is the body of a closure in FuzzOKFParse.
+func fuzzOKFParseCase(t *testing.T, src string) {
+	t.Helper()
+
+	doc, err := okf.Parse("f.md", []byte(src))
+	if err != nil {
+		return
+	}
+
+	if !strings.HasSuffix(src, doc.Body) {
+		t.Fatalf("body %q is not a suffix of %q", doc.Body, src)
+	}
+
+	lines := strings.Count(src, textNewline) + 1
+	for _, l := range doc.Links {
+		if l.Line < 1 || l.Line > lines {
+			t.Fatalf("link line %d outside 1..%d", l.Line, lines)
+		}
+	}
 }
 
 // TestOKFHasKey tests key presence over named and extension keys.
@@ -533,20 +580,77 @@ func FuzzOKFParse(f *testing.F) {
 //     key counts when Extra holds a non-empty value.
 func TestOKFHasKey(t *testing.T) {
 	t.Parallel()
-	fm := okf.Frontmatter{
-		Title:     "T",
-		Generated: &okf.Attribution{By: "human:ada"},
-		Verified:  []okf.Attribution{{By: "human:bob"}},
-		Extra:     map[string]any{"linear": "ENG-1", "empty": "", "null": nil},
-	}
+
+	frontmatter := fixtures.Build(func(row *okf.Frontmatter) {
+		row.Title = "T"
+		row.Generated = &okf.Attribution{By: textHumanAda, At: ""}
+		row.Verified = []okf.Attribution{{By: "human:bob", At: ""}}
+		row.Extra = map[string]any{textLinear: "ENG-1", textEmpty: "", textNull: nil}
+	})
 	for key, want := range map[string]bool{
-		"title": true, "description": false, "tags": false, "generated": true,
-		"verified": true, "linear": true, "empty": false, "null": false, "absent": false,
+		textTitle: true, textDescription: false, textTags: false, "generated": true,
+		"verified": true, textLinear: true, textEmpty: false, textNull: false,
+		textAbsent: false,
 	} {
-		assert.Equal(t, want, okf.HasKey(fm, key), key)
+		assert.Equal(t, want, okf.HasKey(&frontmatter, key), key)
 	}
+
 	assert.False(
 		t,
-		okf.HasKey(okf.Frontmatter{Generated: &okf.Attribution{}}, "generated"),
+		okf.HasKey(
+			fixtures.BuildRef(func(row *okf.Frontmatter) {
+				row.Generated = new(okf.Attribution)
+			}),
+			"generated",
+		),
 	)
 }
+
+const (
+	// dateInputStale is the month passed to Date in TestOKFFrontmatter_Stale.
+	dateInputStale = 6
+
+	// indexAndSorts is an index into entries in TestOKFRenderIndex_GroupsAndSorts.
+	indexAndSorts = 2
+
+	// indexSorts is an index into entries in TestOKFRenderIndex_GroupsAndSorts.
+	indexSorts = 3
+
+	// repeatInputOKFParse is the count passed to Repeat in FuzzOKFParse.
+	repeatInputOKFParse = 4096
+
+	// wantBodyStartLine is the expected body start line.
+	wantBodyStartLine = 13
+
+	// wantBodyStartLineBOM is the expected body start line bom.
+	wantBodyStartLineBOM = 4
+
+	// wantLineLog is the expected line log.
+	wantLineLog = 3
+)
+
+const (
+	// textDashDashDash is the literal "---".
+	textDashDashDash = "---"
+
+	// textDocsAIndexMd is the literal "docs/a/index.md".
+	textDocsAIndexMd = "docs/a/index.md"
+
+	// textDocsGMd is the literal "docs/g.md".
+	textDocsGMd = "docs/g.md"
+
+	// textDocsIndexMd is the literal "docs/index.md".
+	textDocsIndexMd = "docs/index.md"
+
+	// textGuides is the literal "Guides".
+	textGuides = "Guides"
+
+	// textHumanAda is the literal "human:ada".
+	textHumanAda = "human:ada"
+
+	// textLinear is the literal "linear".
+	textLinear = "linear"
+
+	// textGuide is the literal "Guide".
+	textGuide = "Guide"
+)

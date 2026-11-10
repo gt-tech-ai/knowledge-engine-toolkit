@@ -23,5 +23,6 @@ func ResolveEnvFrom(selectors ...string) string {
 			return v
 		}
 	}
+
 	return ""
 }

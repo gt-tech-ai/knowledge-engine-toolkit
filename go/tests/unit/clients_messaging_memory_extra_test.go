@@ -30,16 +30,20 @@ func TestMessagingMemory_RespectsContextCancellation(t *testing.T) {
 
 	pub := memory.NewPublisher(memory.NewBroker())
 	// Fill the topic buffer (no subscriber drains it) so the next send would block.
-	for range 1024 {
-		require.NoError(t, pub.Publish(context.Background(), "full", []byte("x")))
+	for range iterationsCancellation {
+		require.NoError(t, pub.Publish(context.Background(), textFull, []byte(textX)))
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	require.Error(t, pub.Publish(ctx, "full", []byte("y")),
+	require.Error(t, pub.Publish(ctx, textFull, []byte("y")),
 		"a full buffer + cancelled context must not block")
-	require.Error(t, pub.PublishBatch(ctx, "full", [][]byte{[]byte("a"), []byte("b")}),
-		"batch publish must surface the first send's context error")
+	require.Error(
+		t,
+		pub.PublishBatch(ctx, textFull, [][]byte{[]byte(textA), []byte(textB)}),
+		"batch publish must surface the first send's context error",
+	)
 }
 
 // TestMessagingMemory_PublishBatchDelivers tests that PublishBatch delivers every
@@ -56,20 +60,22 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 
 	broker := memory.NewBroker()
 	pub := memory.NewPublisher(broker)
-	sub := memory.NewSubscriber(broker, client.Base{})
-	got := make(chan []byte, 3)
+	sub := memory.NewSubscriber(broker, new(client.Base))
+	got := make(chan []byte, makeInputDelivers)
+
 	go func() {
 		_ = sub.Subscribe(context.Background(), "batch",
 			func(_ context.Context, m *interfaces.Message) error {
 				got <- m.Payload
+
 				return nil
 			})
 	}()
 
 	require.NoError(t, pub.PublishBatch(context.Background(), "batch",
-		[][]byte{[]byte("a"), []byte("b"), []byte("c")}))
+		[][]byte{[]byte(textA), []byte(textB), []byte(textC)}))
 
-	for _, want := range []string{"a", "b", "c"} {
+	for _, want := range []string{textA, textB, textC} {
 		select {
 		case p := <-got:
 			assert.Equal(t, want, string(p))
@@ -77,6 +83,7 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 			t.Fatalf("timed out waiting for payload %q", want)
 		}
 	}
+
 	require.NoError(t, sub.Close())
 }
 
@@ -92,15 +99,17 @@ func TestMessagingMemory_PublishBatchDelivers(t *testing.T) {
 func TestMessagingMemory_SubscribeStopsOnContextCancel(t *testing.T) {
 	t.Parallel()
 
-	sub := memory.NewSubscriber(memory.NewBroker(), client.Base{})
+	sub := memory.NewSubscriber(memory.NewBroker(), new(client.Base))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
+
 	go func() {
 		done <- sub.Subscribe(ctx, "topic",
 			func(context.Context, *interfaces.Message) error { return nil })
 	}()
 
 	cancel()
+
 	select {
 	case err := <-done:
 		require.Error(t, err, "a cancelled context must end the subscribe loop")
@@ -108,3 +117,13 @@ func TestMessagingMemory_SubscribeStopsOnContextCancel(t *testing.T) {
 		t.Fatal("Subscribe did not return after context cancellation")
 	}
 }
+
+const (
+	// iterationsCancellation is the iteration count in
+	// TestMessagingMemory_RespectsContextCancellation.
+	iterationsCancellation = 1024
+
+	// makeInputDelivers is argument 2 of make in
+	// TestMessagingMemory_PublishBatchDelivers.
+	makeInputDelivers = 3
+)

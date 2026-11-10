@@ -2,9 +2,9 @@ package secrets
 
 import (
 	"context"
-	"sort"
+	"slices"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -24,16 +24,23 @@ func ProjectEnv(
 	block := make([]string, 0, len(fields))
 	for field, envVar := range fields {
 		r := ref
+
 		r.Field = field
+
 		secret, err := src.Get(ctx, r)
+
 		if apperr.Is(err, apperr.CodeNotFound) {
 			continue
 		}
+
 		if err != nil {
 			return nil, err
 		}
+
 		block = append(block, envVar+"="+secret.Reveal())
 	}
-	sort.Strings(block)
+
+	slices.Sort(block)
+
 	return block, nil
 }

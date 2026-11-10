@@ -8,9 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	riverpkg "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/jobs/river"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestRiverRuntime_UninitializedHealth tests that both health probes fail on a
@@ -25,17 +28,18 @@ import (
 //   - On a zero-value Runtime (nil pool), Liveness and Readiness both return an error.
 func TestRiverRuntime_UninitializedHealth(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
-	rt := &riverpkg.Runtime{} // no pool constructed
+	runtime := &riverpkg.Runtime{} // no pool constructed
 
 	require.Error(
 		t,
-		rt.Liveness(ctx),
+		runtime.Liveness(ctx),
 		"liveness must fail when the pool is not constructed",
 	)
 	require.Error(
 		t,
-		rt.Readiness(ctx),
+		runtime.Readiness(ctx),
 		"readiness must fail when the pool is not constructed",
 	)
 }
@@ -52,20 +56,30 @@ func TestRiverRuntime_UninitializedHealth(t *testing.T) {
 //     under a valid decoration is INTERNAL. Neither opens a connection.
 func TestNewInsertClient_FailsLoudlyBeforeOpeningAPool(t *testing.T) {
 	t.Parallel()
+
 	on := true
 	bad := decoration.DefaultConfig()
-	semaphore := decoration.Bulkhead{Enabled: &on}
-	semaphore.Kind = "semaphore"
-	bad.Clients.Overrides = map[string]decoration.Layers{
-		riverpkg.InsertClientName: {Bulkhead: semaphore},
+	semaphore := decoration.Bulkhead{
+		Enabled: &on,
+		BulkheadConfig: fixtures.Build(func(row *resilience.BulkheadConfig) {
+			row.Kind = "semaphore"
+		}),
+		Shed: nil,
 	}
 
-	_, err := riverpkg.NewInsertClient(t.Context(), "postgres://unused", 1,
-		decorate.NewDecorations(&bad, decorate.Collaborators{}))
+	bad.Clients.Overrides = map[string]decoration.Layers{
+		riverpkg.InsertClientName: fixtures.Build(func(row *decoration.Layers) {
+			row.Bulkhead = semaphore
+		}),
+	}
+
+	_, err := riverpkg.NewInsertClient(t.Context(), textPostgresUnused, 1,
+		decorate.NewDecorations(&bad, stdx.Zero[decorate.Collaborators]()))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	defaults := decoration.DefaultConfig()
+
 	_, err = riverpkg.NewInsertClient(t.Context(), "::not a dsn::", 1,
-		decorate.NewDecorations(&defaults, decorate.Collaborators{}))
+		decorate.NewDecorations(&defaults, stdx.Zero[decorate.Collaborators]()))
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }

@@ -52,6 +52,7 @@ func ParseTraceparent(s string) (trace.SpanContext, bool) {
 		propagation.MapCarrier{"traceparent": s},
 	)
 	sc := trace.SpanContextFromContext(ctx)
+
 	return sc, sc.IsValid()
 }
 
@@ -59,33 +60,49 @@ func ParseTraceparent(s string) (trace.SpanContext, bool) {
 // (the previous turn's traceparent only when Prev is valid). A conversation whose
 // ID fails the id pattern, or a negative TurnIndex, leaves ctx unchanged, so a
 // malformed id never propagates.
-func InjectConversation(ctx context.Context, c Conversation) context.Context {
-	if !conversationIDPattern.MatchString(c.ID) || c.TurnIndex < 0 {
+// c must not be nil.
+func InjectConversation(ctx context.Context, conversation *Conversation) context.Context {
+	if !conversationIDPattern.MatchString(conversation.ID) || conversation.TurnIndex < 0 {
 		return ctx
 	}
+
 	values := map[string]string{
-		BaggageConversationID: c.ID,
-		BaggageTurnIndex:      strconv.Itoa(c.TurnIndex),
+		BaggageConversationID: conversation.ID,
+		BaggageTurnIndex:      strconv.Itoa(conversation.TurnIndex),
 	}
-	if c.Prev.IsValid() {
+	if conversation.Prev.IsValid() {
 		carrier := propagation.MapCarrier{}
 		propagation.TraceContext{}.Inject(
-			trace.ContextWithRemoteSpanContext(context.Background(), c.Prev),
+			trace.ContextWithRemoteSpanContext(context.Background(), conversation.Prev),
 			carrier,
 		)
+
 		values[BaggagePrevTraceparent] = carrier.Get("traceparent")
 	}
-	bag := baggage.FromContext(ctx)
+
+	bag, ok := withMembers(baggage.FromContext(ctx), values)
+	if !ok {
+		return ctx
+	}
+
+	return baggage.ContextWithBaggage(ctx, bag)
+}
+
+// withMembers adds the values to bag; false means one was rejected.
+func withMembers(bag baggage.Baggage, values map[string]string) (baggage.Baggage, bool) {
 	for key, value := range values {
 		member, err := baggage.NewMemberRaw(key, value)
 		if err != nil {
-			return ctx
+			return bag, false
 		}
-		if bag, err = bag.SetMember(member); err != nil {
-			return ctx
+
+		bag, err = bag.SetMember(member)
+		if err != nil {
+			return bag, false
 		}
 	}
-	return baggage.ContextWithBaggage(ctx, bag)
+
+	return bag, true
 }
 
 // ConversationStartOptions returns the span start options for a turn's root
@@ -93,16 +110,22 @@ func InjectConversation(ctx context.Context, c Conversation) context.Context {
 // previous turn's root span when Prev is valid. A conversation InjectConversation
 // would refuse (an ID failing the id pattern, or a negative TurnIndex) yields no
 // options, so a malformed id never lands on a span.
-func ConversationStartOptions(c Conversation) []trace.SpanStartOption {
-	if !conversationIDPattern.MatchString(c.ID) || c.TurnIndex < 0 {
+// c must not be nil.
+func ConversationStartOptions(conversation *Conversation) []trace.SpanStartOption {
+	if !conversationIDPattern.MatchString(conversation.ID) || conversation.TurnIndex < 0 {
 		return nil
 	}
+
 	opts := []trace.SpanStartOption{trace.WithAttributes(
-		attribute.String(AttrConversationID, c.ID),
-		attribute.Int(AttrTurnIndex, c.TurnIndex),
+		attribute.String(AttrConversationID, conversation.ID),
+		attribute.Int(AttrTurnIndex, conversation.TurnIndex),
 	)}
-	if c.Prev.IsValid() {
-		opts = append(opts, trace.WithLinks(trace.Link{SpanContext: c.Prev}))
+	if conversation.Prev.IsValid() {
+		opts = append(
+			opts,
+			trace.WithLinks(trace.Link{SpanContext: conversation.Prev, Attributes: nil}),
+		)
 	}
+
 	return opts
 }

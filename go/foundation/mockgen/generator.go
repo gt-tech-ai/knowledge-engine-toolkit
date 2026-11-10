@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -138,7 +138,7 @@ func directivesIn(
 ) ([]directive, error) {
 	files, err := cb.Files(
 		ctx,
-		types.FileSelector{Roots: []string{dir}, Exts: []string{".go"}},
+		&types.FileSelector{Roots: []string{dir}, Exts: []string{".go"}},
 	)
 	if err != nil {
 		return nil, err

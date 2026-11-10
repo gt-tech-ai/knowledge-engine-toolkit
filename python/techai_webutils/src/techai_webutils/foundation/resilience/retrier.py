@@ -1,14 +1,14 @@
 """The exponential-backoff ``Retrier`` (mirrors Go ``retry/exponential``).
 
 The decoration's retry layer runs an operation through it: a transient failure
-(``classify.is_transient``) is retried with exponential backoff and jitter, honoring a server's
-pushback; a permanent one is raised at once.
+(``classify.is_transient``) is retried with exponential backoff and jitter, honoring a
+server's pushback; a permanent one is raised at once.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from tenacity import (
     AsyncRetrying,
@@ -47,6 +47,7 @@ class ExponentialRetrierConfig:
     """The total time budget across attempts, in seconds; zero means unbounded."""
 
 
+@final
 class ExponentialRetrier(Retrier):
     """Retries transient failures with exponential backoff and jitter."""
 
@@ -56,13 +57,27 @@ class ExponentialRetrier(Retrier):
         *,
         sleep: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
-        """Bind the tuning; ``sleep`` (optional) replaces the wait between attempts."""
+        """Bind the tuning; ``sleep`` (optional) replaces the wait between attempts.
+
+        Args:
+            config: The attempts and backoff.
+            sleep: Waits between attempts; ``None`` uses ``asyncio.sleep``.
+
+        """
         self._config = config
         self._sleep = sleep
 
     @override
     async def retry(self, op: Callable[[], Awaitable[object]]) -> object:
-        """Run ``op``, retrying a transient failure; the last failure is raised."""
+        """Run ``op``, retrying a transient failure; the last failure is raised.
+
+        Args:
+            op: The call to run; it is retried only on a transient coded error.
+
+        Returns:
+            What ``op`` returns.
+
+        """
         cfg = self._config
         stop = stop_after_attempt(cfg.max_retries + 1)
         if cfg.max_elapsed_time > 0:
@@ -74,7 +89,17 @@ class ExponentialRetrier(Retrier):
         )
 
         def wait(state: RetryCallState) -> float:
-            """Wait the backoff, or the server's pushback when longer (capped at max_interval)."""
+            """Wait the backoff, or the server's pushback when longer.
+
+            Capped at max_interval.
+
+            Args:
+                state: The retry's state.
+
+            Returns:
+                The seconds to wait.
+
+            """
             delay = backoff(state)
             err = state.outcome.exception() if state.outcome is not None else None
             pushback = retry_after_s(err) if err is not None else None
@@ -82,14 +107,16 @@ class ExponentialRetrier(Retrier):
                 delay if pushback is None else max(delay, min(pushback, cfg.max_interval))
             )
 
-        kwargs: dict[str, object] = {}
-        if self._sleep is not None:
-            kwargs["sleep"] = self._sleep
-        retrying = AsyncRetrying(
-            retry=retry_if_exception(is_transient),
-            stop=stop,
-            wait=wait,
-            reraise=True,
-            **kwargs,  # pyright: ignore[reportArgumentType]
+        retry_on = retry_if_exception(is_transient)
+        retrying = (
+            AsyncRetrying(retry=retry_on, stop=stop, wait=wait, reraise=True)
+            if self._sleep is None
+            else AsyncRetrying(
+                retry=retry_on,
+                stop=stop,
+                wait=wait,
+                reraise=True,
+                sleep=cast("Callable[[float], None]", self._sleep),
+            )
         )
         return await retrying(op)

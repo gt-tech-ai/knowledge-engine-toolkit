@@ -4,9 +4,12 @@ package channel
 import (
 	"context"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
+
+// defaultConfigMaxConcurrent is the default MaxConcurrent of Config.
+const defaultConfigMaxConcurrent = 10
 
 // ErrBulkheadFull is returned when the bulkhead semaphore is full.
 var ErrBulkheadFull = apperr.New(
@@ -26,7 +29,7 @@ type Config struct {
 // DefaultConfig returns sensible defaults for channel bulkhead.
 func DefaultConfig() Config {
 	return Config{
-		MaxConcurrent: 10,
+		MaxConcurrent: defaultConfigMaxConcurrent,
 	}
 }
 
@@ -47,6 +50,7 @@ func (b *Bulkhead) Execute(ctx context.Context, fn func() error) error {
 	select {
 	case b.sem <- struct{}{}:
 		defer func() { <-b.sem }()
+
 		return fn()
 	case <-ctx.Done():
 		return apperr.Wrap(
@@ -63,6 +67,7 @@ func (b *Bulkhead) TryExecute(fn func() error) error {
 	select {
 	case b.sem <- struct{}{}:
 		defer func() { <-b.sem }()
+
 		return fn()
 	default:
 		return ErrBulkheadFull

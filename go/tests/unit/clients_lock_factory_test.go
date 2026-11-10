@@ -10,6 +10,8 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -25,25 +27,26 @@ import (
 //   - NewFromConfig(kind=local) returns a non-nil lock whose Acquire grants a key.
 func TestLockFactory_LocalBackend(t *testing.T) {
 	t.Parallel()
-	l, err := lock.NewFromConfig(t.Context(), lock.Config{
+
+	locker, err := lock.NewFromConfig(t.Context(), lock.Config{
 		Kind:          lock.KindLocal,
 		TTL:           30 * time.Second,
 		RenewInterval: 10 * time.Second,
-	}, lock.Deps{})
+		Name:          "",
+	}, stdx.Zero[lock.Deps]())
 	require.NoError(t, err)
-	require.NotNil(t, l)
+	require.NotNil(t, locker)
 
 	// Acquire (promoted from the embedded DistributedLock) grants a free key.
-	tok, ok, err := l.Acquire(context.Background(), "k")
+	tok, ok, err := locker.Acquire(context.Background(), textK)
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.NotEmpty(t, tok)
 
 	// Hold (the Locker method) acquires + manages a distinct key — proving the
 	// factory returns a fully wired Locker, not just a primitive backend.
-	heldCtx, release, held, err := l.Hold(context.Background(), "k2")
-	require.NoError(t, err)
-	assert.True(t, held, "Hold on a free key should acquire")
+	heldCtx, release, err := locker.Hold(context.Background(), "k2")
+	require.NoError(t, err, "Hold on a free key should acquire")
 	require.NoError(t, heldCtx.Err(), "held context is live while held")
 	release()
 }
@@ -64,18 +67,21 @@ func TestLockFactory_Validation(t *testing.T) {
 	t.Parallel()
 
 	_, err := lock.NewFromConfig(t.Context(), lock.Config{
-		Kind: "bogus", TTL: time.Second, RenewInterval: 100 * time.Millisecond,
-	}, lock.Deps{})
+		Kind: textBogus, TTL: time.Second, RenewInterval: 100 * time.Millisecond,
+		Name: "",
+	}, stdx.Zero[lock.Deps]())
 	require.Error(t, err, "unknown kind must error")
 
 	_, err = lock.NewFromConfig(t.Context(), lock.Config{
 		Kind: lock.KindLocal, TTL: 30 * time.Second, RenewInterval: 20 * time.Second,
-	}, lock.Deps{})
+		Name: "",
+	}, stdx.Zero[lock.Deps]())
 	require.Error(t, err, "renew_interval > ttl/3 must error")
 
 	_, err = lock.NewFromConfig(t.Context(), lock.Config{
 		Kind: lock.KindRedis, TTL: 30 * time.Second, RenewInterval: 10 * time.Second,
-	}, lock.Deps{})
+		Name: "",
+	}, stdx.Zero[lock.Deps]())
 	require.Error(t, err, "kind=redis with a nil client must error")
 }
 
@@ -92,15 +98,15 @@ func TestLockFactory_Validation(t *testing.T) {
 //     release, held is cancelled and the lock's Release was called with the token.
 func TestHold_AcquiresThenReleaseCancels(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockDistributedLock(ctrl)
-	m.EXPECT().Acquire(gomock.Any(), "k").Return("tok", true, nil)
-	m.EXPECT().Release(gomock.Any(), "k", "tok").Return(nil).Times(1)
+	m.EXPECT().Acquire(gomock.Any(), textK).Return(textTok, true, nil)
+	m.EXPECT().Release(gomock.Any(), textK, textTok).Return(nil).Times(1)
 
 	// A long renew interval keeps the watchdog quiet for the test's duration.
-	held, release, ok, err := lock.NewLocker(m, time.Hour).Hold(context.Background(), "k")
+	held, release, err := lock.NewLocker(m, time.Hour).Hold(context.Background(), textK)
 	require.NoError(t, err)
-	require.True(t, ok)
 	require.NotNil(t, held)
 	require.NoError(t, held.Err(), "held context should be live while the lock is held")
 
@@ -108,7 +114,7 @@ func TestHold_AcquiresThenReleaseCancels(t *testing.T) {
 	assert.Error(t, held.Err(), "release must cancel the held context")
 }
 
-// TestHold_NotAcquired tests that a losing Hold reports acquired=false and does
+// TestHold_NotAcquired tests that a losing Hold reports CONFLICT and does
 // not release a lock it never took.
 //
 // Why this test is important:
@@ -117,17 +123,22 @@ func TestHold_AcquiresThenReleaseCancels(t *testing.T) {
 //     another pod.
 //
 // What it tests:
-//   - When Acquire returns acquired=false, Hold returns acquired=false, nil, and
+//   - When Acquire returns acquired=false, Hold returns a CONFLICT error, and
 //     the returned release is a safe no-op (no Release call on the mock).
 func TestHold_NotAcquired(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockDistributedLock(ctrl)
-	m.EXPECT().Acquire(gomock.Any(), "k").Return("", false, nil)
+	m.EXPECT().Acquire(gomock.Any(), textK).Return("", false, nil)
 
-	_, release, ok, err := lock.NewLocker(m, time.Hour).Hold(context.Background(), "k")
-	require.NoError(t, err)
-	assert.False(t, ok, "a contended key must report acquired=false")
+	_, release, err := lock.NewLocker(m, time.Hour).Hold(context.Background(), textK)
+	require.Equal(
+		t,
+		apperr.CodeConflict,
+		apperr.Code(err),
+		"a contended key must report CONFLICT",
+	)
 
 	release() // must not call Release (no EXPECT registered)
 }
@@ -146,16 +157,16 @@ func TestHold_NotAcquired(t *testing.T) {
 //     stays live; after release the context is cancelled and the lock is freed.
 func TestHold_RenewsPeriodicallyWhileHeld(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	m := mocks.NewMockDistributedLock(ctrl)
-	m.EXPECT().Acquire(gomock.Any(), "k").Return("tok", true, nil)
-	m.EXPECT().Renew(gomock.Any(), "k", "tok").Return(true, nil).MinTimes(1)
-	m.EXPECT().Release(gomock.Any(), "k", "tok").Return(nil).Times(1)
+	m.EXPECT().Acquire(gomock.Any(), textK).Return(textTok, true, nil)
+	m.EXPECT().Renew(gomock.Any(), textK, textTok).Return(true, nil).MinTimes(1)
+	m.EXPECT().Release(gomock.Any(), textK, textTok).Return(nil).Times(1)
 
-	held, release, ok, err := lock.NewLocker(m, 15*time.Millisecond).
-		Hold(context.Background(), "k")
+	held, release, err := lock.NewLocker(m, 15*time.Millisecond).
+		Hold(context.Background(), textK)
 	require.NoError(t, err)
-	require.True(t, ok)
 
 	// Allow the watchdog to tick and renew a few times (timing behaviour under test).
 	time.Sleep(70 * time.Millisecond)
@@ -179,17 +190,18 @@ func TestHold_RenewsPeriodicallyWhileHeld(t *testing.T) {
 //     held context becomes cancelled without release being called.
 func TestHold_LeaseLostCancelsHeld(t *testing.T) {
 	t.Parallel()
-	ctrl := gomock.NewController(t)
-	m := mocks.NewMockDistributedLock(ctrl)
-	m.EXPECT().Acquire(gomock.Any(), "k").Return("tok", true, nil)
-	m.EXPECT().Renew(gomock.Any(), "k", "tok").Return(false, nil)
-	// release() is still invoked by the deferred cleanup; Release is a no-op here.
-	m.EXPECT().Release(gomock.Any(), "k", "tok").Return(nil).AnyTimes()
 
-	held, release, ok, err := lock.NewLocker(m, 10*time.Millisecond).
-		Hold(context.Background(), "k")
+	ctrl := gomock.NewController(t)
+	distributedLock := mocks.NewMockDistributedLock(ctrl)
+	distributedLock.EXPECT().Acquire(gomock.Any(), textK).Return(textTok, true, nil)
+	distributedLock.EXPECT().Renew(gomock.Any(), textK, textTok).Return(false, nil)
+	// release() is still invoked by the deferred cleanup; Release is a no-op here.
+	distributedLock.EXPECT().Release(gomock.Any(), textK, textTok).Return(nil).AnyTimes()
+
+	held, release, err := lock.NewLocker(distributedLock, 10*time.Millisecond).
+		Hold(context.Background(), textK)
 	require.NoError(t, err)
-	require.True(t, ok)
+
 	defer release()
 
 	select {

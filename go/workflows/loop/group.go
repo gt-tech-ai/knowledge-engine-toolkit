@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -55,20 +55,24 @@ func NewGroup(logger interfaces.Logger) *Group {
 	if logger == nil {
 		panic("loop: logger must not be nil")
 	}
-	return &Group{logger: logger}
+
+	return &Group{logger: logger, cancel: nil, done: nil, runners: nil, mu: sync.Mutex{}}
 }
 
 // Add registers r under name. Add after Start panics, as a wiring bug.
-func (g *Group) Add(name string, r Runner) {
-	if r == nil {
+func (g *Group) Add(name string, currentRunner Runner) {
+	if currentRunner == nil {
 		panic("loop: runner must not be nil")
 	}
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	if g.done != nil {
 		panic("loop: Add after Start")
 	}
-	g.runners = append(g.runners, namedRunner{runner: r, name: name})
+
+	g.runners = append(g.runners, namedRunner{runner: currentRunner, name: name})
 }
 
 // Start runs every runner on its own goroutine under a context derived from ctx and
@@ -80,28 +84,46 @@ func (g *Group) Add(name string, r Runner) {
 func (g *Group) Start(ctx context.Context) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
 	if g.done != nil {
 		return apperr.New(apperr.CodeConflict, "loop: group already started")
 	}
+
 	runCtx, cancel := context.WithCancel(ctx)
+
 	g.cancel, g.done = cancel, make(chan struct{})
-	var wg sync.WaitGroup
-	for _, nr := range g.runners {
-		wg.Go(func() {
-			err := nr.runner.Run(runCtx)
+
+	var group sync.WaitGroup
+
+	for _, secondNamedRunner := range g.runners {
+		group.Go(func() {
+			err := secondNamedRunner.runner.Run(runCtx)
 			switch {
 			case err == nil:
 			case runCtx.Err() == nil:
-				g.logger.Error("loop stopped", "loop", nr.name, "error", err)
+				g.logger.Error(
+					"loop stopped",
+					"loop",
+					secondNamedRunner.name,
+					"error",
+					err,
+				)
 			default:
-				logShutdownError(g.logger, "loop stopped during shutdown", nr.name, err)
+				logShutdownError(
+					g.logger,
+					"loop stopped during shutdown",
+					secondNamedRunner.name,
+					err,
+				)
 			}
 		})
 	}
+
 	go func() {
-		wg.Wait()
+		group.Wait()
 		close(g.done)
 	}()
+
 	return nil
 }
 
@@ -109,8 +131,10 @@ func (g *Group) Start(ctx context.Context) error {
 // never started.
 func (g *Group) Wait() {
 	g.mu.Lock()
+
 	done := g.done
 	g.mu.Unlock()
+
 	if done != nil {
 		<-done
 	}
@@ -121,12 +145,16 @@ func (g *Group) Wait() {
 // started returns nil.
 func (g *Group) Stop(ctx context.Context) error {
 	g.mu.Lock()
+
 	cancel, done := g.cancel, g.done
 	g.mu.Unlock()
+
 	if done == nil {
 		return nil
 	}
+
 	cancel()
+
 	select {
 	case <-done:
 		return nil

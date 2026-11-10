@@ -19,18 +19,18 @@ const requestIDHeader = "X-Request-ID"
 // If the incoming request doesn't have one, a new UUID is generated.
 func RequestID() Middleware {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			id := r.Header.Get(requestIDHeader)
-			if id == "" {
-				id = uuid.NewString()
+		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			identifier := request.Header.Get(requestIDHeader)
+			if identifier == "" {
+				identifier = uuid.NewString()
 			}
 
 			// Set on response
-			w.Header().Set(requestIDHeader, id)
+			writer.Header().Set(requestIDHeader, identifier)
 
 			// Store in context
-			ctx := context.WithValue(r.Context(), requestIDKey{}, id)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			ctx := context.WithValue(request.Context(), requestIDKey{}, identifier)
+			next.ServeHTTP(writer, request.WithContext(ctx))
 		})
 	}
 }
@@ -40,5 +40,6 @@ func GetRequestID(ctx context.Context) string {
 	if id, ok := ctx.Value(requestIDKey{}).(string); ok {
 		return id
 	}
+
 	return ""
 }

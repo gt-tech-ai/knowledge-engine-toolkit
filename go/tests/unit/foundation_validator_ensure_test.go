@@ -5,8 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/validator"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // stubValidatable is a test DTO whose Validate() returns a preset error — the input to
@@ -38,18 +39,23 @@ func (s *stubPtrValidatable) Validate() error { return s.err }
 //     DTO is valid; the returned error carries CodeInvalidInput so it classifies to 400 /
 //     InvalidArgument.
 func TestEnsure_ShortCircuitsOnFirstViolation(t *testing.T) {
-	require.NoError(t, validator.Ensure())                  // no DTOs → nil
-	require.NoError(t, validator.Ensure(stubValidatable{})) // one valid DTO
+	t.Parallel()
+
+	require.NoError(t, validator.Ensure())                             // no DTOs → nil
+	require.NoError(t, validator.Ensure(stdx.Zero[stubValidatable]())) // one valid DTO
 	require.NoError(
 		t,
-		validator.Ensure(nil, stubValidatable{}),
+		validator.Ensure(nil, stdx.Zero[stubValidatable]()),
 	) // untyped nil interface entry skipped
 	require.NotPanics(
 		t,
 		func() { // typed nil pointer skipped, not deref'd
 			require.NoError(
 				t,
-				validator.Ensure((*stubPtrValidatable)(nil), stubValidatable{}),
+				validator.Ensure(
+					(*stubPtrValidatable)(nil),
+					stdx.Zero[stubValidatable](),
+				),
 			)
 		},
 	)
@@ -58,7 +64,7 @@ func TestEnsure_ShortCircuitsOnFirstViolation(t *testing.T) {
 	second := apperr.InvalidInput("second bad dto")
 	got := validator.Ensure(
 		nil,
-		stubValidatable{},
+		stdx.Zero[stubValidatable](),
 		stubValidatable{err: first},
 		stubValidatable{err: second},
 	)

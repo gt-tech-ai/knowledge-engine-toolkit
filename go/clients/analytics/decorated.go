@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -24,6 +24,7 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
+
 	return &decorated{AnalyticsStore: base, Base: b}, nil
 }
 
@@ -48,15 +49,18 @@ var (
 )
 
 // Aggregate runs the query as the operation "aggregate".
+// q must not be nil.
 func (d *decorated) Aggregate(
 	ctx context.Context,
-	q types.AggregateQuery,
+	qRef *types.AggregateQuery,
 ) (interfaces.RowStream, error) {
+	aggregateQuery := *qRef
+
 	return d.Exec(
 		ctx,
 		"aggregate",
 		func(ctx context.Context) (interfaces.RowStream, error) {
-			return d.AnalyticsStore.Aggregate(ctx, q)
+			return d.AnalyticsStore.Aggregate(ctx, &aggregateQuery)
 		},
 	)
 }
@@ -78,13 +82,14 @@ func (d *decorated) Compact(
 	bucket time.Time,
 ) error {
 	return d.Do(ctx, "compact", func(ctx context.Context) error {
-		c, ok := d.AnalyticsStore.(interfaces.AnalyticsCompactor)
+		analyticsCompactor, ok := d.AnalyticsStore.(interfaces.AnalyticsCompactor)
 		if !ok {
 			return apperr.New(
 				apperr.CodeInvalidInput,
 				"analytics: store does not compact",
 			)
 		}
-		return c.Compact(ctx, cube, grain, org, bucket)
+
+		return analyticsCompactor.Compact(ctx, cube, grain, org, bucket)
 	})
 }

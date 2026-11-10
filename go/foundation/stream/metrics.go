@@ -37,7 +37,7 @@ type metricsBuffer[T any] struct {
 // metrics are registered here, at construction; apply it at the composition root.
 func NewMetrics[T any](
 	inner Buffer[T],
-	m interfaces.Metrics,
+	metrics interfaces.Metrics,
 	name string,
 	size func(T) int,
 ) Buffer[T] {
@@ -45,15 +45,18 @@ func NewMetrics[T any](
 		inner: inner,
 		name:  name,
 		size:  size,
-		items: m.Gauge("stream_buffer_items",
-			"Items read from the source but not yet delivered", "buffer"),
-		bytes: m.Gauge("stream_buffer_bytes",
-			"Bytes read from the source but not yet delivered", "buffer"),
+		items: metrics.Gauge("stream_buffer_items",
+			"Items read from the source but not yet delivered", textBuffer),
+		bytes: metrics.Gauge("stream_buffer_bytes",
+			"Bytes read from the source but not yet delivered", textBuffer),
 		// The 1 ms floor is deliberate: an unblocked producer hands off in well under the
 		// 5 ms the shared execution buckets start at, and that is the case to tell apart.
-		wait: m.Histogram("stream_buffer_producer_wait_seconds",
+		wait: metrics.Histogram("stream_buffer_producer_wait_seconds",
 			"Producer wait between handing an item on and pulling the next, in seconds",
-			[]float64{.001, .005, .01, .05, .1, .5, 1, 5, 10}, "buffer"),
+			[]float64{.001, .005, .01, .05, .1, .5, 1, 5, 10}, textBuffer),
+		mu:        sync.Mutex{},
+		heldItems: 0,
+		heldBytes: 0,
 	}
 }
 
@@ -62,8 +65,10 @@ func (b *metricsBuffer[T]) Wrap(
 	ctx context.Context,
 	src interfaces.Stream[T],
 ) interfaces.Stream[T] {
-	s := &meteredStream[T]{buf: b}
-	s.out = b.inner.Wrap(ctx, &meteredSource[T]{Stream: src, s: s})
+	s := &meteredStream[T]{buf: b, out: nil, items: atomic.Int64{}, bytes: atomic.Int64{}}
+
+	s.out = b.inner.Wrap(ctx, &meteredSource[T]{Stream: src, s: s, handed: time.Time{}})
+
 	return s
 }
 
@@ -74,6 +79,7 @@ func (b *metricsBuffer[T]) Wrap(
 func (b *metricsBuffer[T]) add(items, bytes int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	b.heldItems += items
 	b.heldBytes += bytes
 	b.items.Set(float64(b.heldItems), b.name)
@@ -100,6 +106,7 @@ func (s *meteredStream[T]) Next(ctx context.Context) (item T, ok bool, err error
 		s.bytes.Add(-n)
 		s.buf.add(-1, -n)
 	}
+
 	return item, ok, err
 }
 
@@ -108,6 +115,7 @@ func (s *meteredStream[T]) Next(ctx context.Context) (item T, ok bool, err error
 func (s *meteredStream[T]) Close() error {
 	err := s.out.Close()
 	s.buf.add(-s.items.Swap(0), -s.bytes.Swap(0))
+
 	return err
 }
 
@@ -115,6 +123,7 @@ func (s *meteredStream[T]) Close() error {
 // timing the producer's wait between items.
 type meteredSource[T any] struct {
 	interfaces.Stream[T]
+
 	// s is the stream whose read-ahead the items count toward.
 	s *meteredStream[T]
 	// handed is when the producer last received an item; zero before the first. Only
@@ -127,13 +136,16 @@ func (m *meteredSource[T]) Next(ctx context.Context) (item T, ok bool, err error
 	if !m.handed.IsZero() {
 		m.s.buf.wait.Observe(time.Since(m.handed).Seconds(), m.s.buf.name)
 	}
+
 	item, ok, err = m.Stream.Next(ctx)
 	if ok {
 		n := int64(m.s.buf.size(item))
 		m.s.items.Add(1)
 		m.s.bytes.Add(n)
 		m.s.buf.add(1, n)
+
 		m.handed = time.Now()
 	}
+
 	return item, ok, err
 }

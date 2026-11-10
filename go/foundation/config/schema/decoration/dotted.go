@@ -3,34 +3,45 @@ package decoration
 import (
 	"reflect"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // dottedOverrides re-reads the overrides of each tier in over by name, finding them in
-// section (the raw decoration section). Components are
-// named with dots ("outbox.sqs"), which the loader's decode splits into nested maps, so
-// the plain decode sees an override of the first segment ("outbox") holding no layers.
-// Each override is read again under its full name instead — whether written as one
-// dotted key or nested by segment — and a segment that only nests others is no
-// override.
+// section (the raw decoration section). Components are named with dots ("outbox.sqs"),
+// which the loader's decode splits into nested maps, so the plain decode sees an override
+// of the first segment ("outbox") holding no layers. Each override is read again under
+// its full name instead — whether written as one dotted key or nested by segment — and a
+// segment that only nests others is no override.
 func dottedOverrides(loader interfaces.ConfigLoader, section any, over *Config) error {
-	tiers, _ := section.(map[string]any)
+	tiers := stdx.As[map[string]any](section)
 	cfg := reflect.ValueOf(over).Elem()
-	for i := range cfg.NumField() {
-		name := cfg.Type().Field(i).Tag.Get("mapstructure")
-		tier, _ := tiers[name].(map[string]any)
-		raw, ok := tier["overrides"].(map[string]any)
-		if !ok {
+
+	for index := range cfg.NumField() {
+		name := cfg.Type().Field(index).Tag.Get("mapstructure")
+		tier := stdx.As[map[string]any](tiers[name])
+		raw, found := tier["overrides"].(map[string]any)
+
+		if !found {
 			continue
 		}
+
 		key := SectionKey + "." + name + ".overrides"
-		t := cfg.Field(i).Addr().Interface().(*Tier)
-		t.Overrides = make(map[string]Layers, len(raw))
-		if err := t.readOverrides(loader, key, "", raw); err != nil {
+		currentTier, found := reflect.TypeAssert[*Tier](cfg.Field(index).Addr())
+
+		if !found {
+			return apperr.New(apperr.CodeInternal, "decoration: "+name+" is not a tier")
+		}
+
+		currentTier.Overrides = make(map[string]Layers, len(raw))
+
+		err := currentTier.readOverrides(loader, key, "", raw)
+		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -41,31 +52,50 @@ func (t *Tier) readOverrides(
 	key, prefix string,
 	m map[string]any,
 ) error {
-	for k, v := range m {
+	for text, v := range m {
 		inner, ok := v.(map[string]any)
-		if !ok || (prefix != "" && isLayerKey(k)) {
+		if !ok || (prefix != "" && isLayerKey(text)) {
 			continue
 		}
-		name := k
-		if prefix != "" {
-			name = prefix + "." + k
-		}
-		if hasLayer(inner) {
-			var l Layers
-			if err := loader.UnmarshalKey(key+"."+name, &l); err != nil {
-				return apperr.Wrap(
-					err,
-					apperr.CodeInvalidInput,
-					"load decoration override "+name,
-				)
-			}
-			t.Overrides[name] = l
-		}
-		if err := t.readOverrides(loader, key, name, inner); err != nil {
+
+		err := t.readOverride(loader, key, joinDotted(prefix, text), inner)
+		if err != nil {
 			return err
 		}
 	}
+
 	return nil
+}
+
+// joinDotted appends k to a dotted prefix, which may be empty.
+func joinDotted(prefix, k string) string {
+	if prefix == "" {
+		return k
+	}
+
+	return prefix + "." + k
+}
+
+// readOverride loads name's layers when it has any, then walks what is nested under it.
+func (t *Tier) readOverride(
+	loader interfaces.ConfigLoader, key, name string, inner map[string]any,
+) error {
+	if hasLayer(inner) {
+		var layers Layers
+
+		err := loader.UnmarshalKey(key+"."+name, &layers)
+		if err != nil {
+			return apperr.Wrap(
+				err,
+				apperr.CodeInvalidInput,
+				"load decoration override "+name,
+			)
+		}
+
+		t.Overrides[name] = layers
+	}
+
+	return t.readOverrides(loader, key, name, inner)
 }
 
 // hasLayer reports whether m sets any layer, so it is an override rather than only a
@@ -76,16 +106,18 @@ func hasLayer(m map[string]any) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 // isLayerKey reports whether k is the config key of one of Layers' fields.
 func isLayerKey(k string) bool {
 	t := reflect.TypeFor[Layers]()
-	for i := range t.NumField() {
-		if t.Field(i).Tag.Get("mapstructure") == k {
+	for field := range t.Fields() {
+		if field.Tag.Get("mapstructure") == k {
 			return true
 		}
 	}
+
 	return false
 }

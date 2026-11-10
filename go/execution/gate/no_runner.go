@@ -3,7 +3,7 @@ package gate
 import (
 	"context"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -42,7 +42,13 @@ func (noRunner) RunBuffered(
 	string,
 	...string,
 ) interfaces.CmdResult {
-	return interfaces.CmdResult{Err: errNoRunner, ExitCode: -1}
+	return interfaces.CmdResult{
+		Err:      errNoRunner,
+		ExitCode: -1,
+		Stdout:   nil,
+		Stderr:   nil,
+		Duration: 0,
+	}
 }
 
 // RunBufferedWithEnv always fails, returning a CmdResult carrying errNoRunner and exit
@@ -54,7 +60,13 @@ func (noRunner) RunBufferedWithEnv(
 	string,
 	...string,
 ) interfaces.CmdResult {
-	return interfaces.CmdResult{Err: errNoRunner, ExitCode: -1}
+	return interfaces.CmdResult{
+		Err:      errNoRunner,
+		ExitCode: -1,
+		Stdout:   nil,
+		Stderr:   nil,
+		Duration: 0,
+	}
 }
 
 // RunBufferedWithInput always fails, returning a CmdResult carrying errNoRunner and exit
@@ -67,7 +79,13 @@ func (noRunner) RunBufferedWithInput(
 	string,
 	...string,
 ) interfaces.CmdResult {
-	return interfaces.CmdResult{Err: errNoRunner, ExitCode: -1}
+	return interfaces.CmdResult{
+		Err:      errNoRunner,
+		ExitCode: -1,
+		Stdout:   nil,
+		Stderr:   nil,
+		Duration: 0,
+	}
 }
 
 // Exists always reports false: no tools are resolvable on a runner-less gate.

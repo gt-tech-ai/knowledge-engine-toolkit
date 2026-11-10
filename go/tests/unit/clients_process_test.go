@@ -16,34 +16,47 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/process"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
 // readyAfter returns a readiness probe that passes on its nth run, counting runs.
 func readyAfter(
 	t *testing.T,
-	n int32,
+	count int32,
 ) (*mocks.MockProbe[interfaces.ProcessHandle], *atomic.Int32) {
 	t.Helper()
+
 	var runs atomic.Int32
-	p := mocks.NewMockProbe[interfaces.ProcessHandle](gomock.NewController(t))
-	p.EXPECT().Name().Return("ready").AnyTimes()
-	p.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(
+
+	probe := mocks.NewMockProbe[interfaces.ProcessHandle](gomock.NewController(t))
+	probe.EXPECT().Name().Return("ready").AnyTimes()
+	probe.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, interfaces.ProcessHandle) types.Verdict {
-			if runs.Add(1) >= n {
-				return types.Verdict{Status: types.StatusPass}
+			if runs.Add(1) >= count {
+				return fixtures.Build(func(row *types.Verdict) {
+					row.Status = types.StatusPass
+				})
 			}
-			return types.Verdict{Status: types.StatusFail}
+
+			return fixtures.Build(func(row *types.Verdict) {
+				row.Status = types.StatusFail
+			})
 		}).AnyTimes()
-	return p, &runs
+
+	return probe, &runs
 }
 
 // sleeper is a process that runs until stopped.
 func sleeper() types.ProcessSpec {
-	return types.ProcessSpec{Name: "sleeper", Args: []string{"/bin/sh", "-c", "sleep 30"}}
+	return fixtures.Build(func(row *types.ProcessSpec) {
+		row.Name = "sleeper"
+		row.Args = []string{textBinSh, "-c", "sleep 30"}
+	})
 }
 
 // TestClientsProcess_StartReadyStop tests the exec supervisor's lifecycle.
@@ -60,40 +73,52 @@ func sleeper() types.ProcessSpec {
 //     left; an empty command is INVALID_INPUT.
 func TestClientsProcess_StartReadyStop(t *testing.T) {
 	t.Parallel()
+
 	sup, err := process.NewFromConfig(process.Config{Kind: process.KindExec})
 	require.NoError(t, err)
-	ready, runs := readyAfter(t, 3)
 
-	h, err := sup.Start(t.Context(), sleeper(), ready)
+	ready, runs := readyAfter(t, readyAfterInput)
+
+	processHandle, err := sup.Start(t.Context(), new(sleeper()), ready)
 	require.NoError(t, err)
-	assert.Equal(t, int32(3), runs.Load())
-	stopped := time.Now()
-	require.NoError(t, h.Stop(t.Context()))
-	assert.Less(t, time.Since(stopped), 5*time.Second)
-	require.Error(t, h.Wait())
+	assert.Equal(t, int32(wantRuns), runs.Load())
 
-	never, _ := readyAfter(t, 1000)
+	stopped := time.Now()
+
+	require.NoError(t, processHandle.Stop(t.Context()))
+	assert.Less(t, time.Since(stopped), 5*time.Second)
+	require.Error(t, processHandle.Wait())
+
+	never, _ := readyAfter(t, readyAfterInputStop)
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+
 	defer cancel()
-	_, err = sup.Start(ctx, sleeper(), never)
+
+	_, err = sup.Start(ctx, new(sleeper()), never)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 
 	_, err = sup.Start(
 		t.Context(),
-		types.ProcessSpec{
-			Name: "quitter",
-			Args: []string{"/bin/sh", "-c", "exit 3"},
-		},
+		fixtures.BuildRef(func(row *types.ProcessSpec) {
+			row.Name = "quitter"
+			row.Args = []string{textBinSh, "-c", "exit 3"}
+		}),
 		never,
 	)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 
-	left, err := sup.Start(t.Context(), sleeper(), nil)
+	left, err := sup.Start(t.Context(), new(sleeper()), nil)
 	require.NoError(t, err)
 	require.NoError(t, sup.StopAll(t.Context()))
 	require.Error(t, left.Wait())
 
-	_, err = sup.Start(t.Context(), types.ProcessSpec{Name: "empty"}, nil)
+	_, err = sup.Start(
+		t.Context(),
+		fixtures.BuildRef(func(row *types.ProcessSpec) {
+			row.Name = textEmpty
+		}),
+		nil,
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
 
@@ -108,18 +133,23 @@ func TestClientsProcess_StartReadyStop(t *testing.T) {
 //     handles return at once; an unknown kind is INVALID_INPUT.
 func TestClientsProcess_DetachAndStub(t *testing.T) {
 	t.Parallel()
+
 	sup, err := process.NewFromConfig(process.Config{Kind: process.KindExec})
 	require.NoError(t, err)
 	require.NoError(
 		t,
 		sup.Detach(
-			types.ProcessSpec{Name: "d", Args: []string{"/bin/sh", "-c", "exit 0"}},
+			fixtures.BuildRef(func(row *types.ProcessSpec) {
+				row.Name = textDLower
+				row.Args = []string{textBinSh, "-c", "exit 0"}
+			}),
 		),
 	)
 
-	stub, err := process.NewFromConfig(process.Config{})
+	stub, err := process.NewFromConfig(stdx.Zero[process.Config]())
 	require.NoError(t, err)
-	h, err := stub.Start(t.Context(), sleeper(), nil)
+
+	h, err := stub.Start(t.Context(), new(sleeper()), nil)
 	require.NoError(t, err)
 	require.NoError(t, h.Wait())
 
@@ -139,31 +169,54 @@ func TestClientsProcess_DetachAndStub(t *testing.T) {
 //     creating it 0600; a LogFile in a missing directory is CodeUnavailable.
 func TestClientsProcess_LogFile(t *testing.T) {
 	t.Parallel()
+
 	sup, err := process.NewFromConfig(process.Config{Kind: process.KindExec})
 	require.NoError(t, err)
+
 	log := filepath.Join(t.TempDir(), "serve.log")
 	run := func(word string) {
-		h, err := sup.Start(t.Context(), types.ProcessSpec{
-			Name: "log", LogFile: log,
-			Args: []string{"/bin/sh", "-c", "echo " + word + "; echo " + word + " >&2"},
-		}, nil)
-		require.NoError(t, err)
-		require.NoError(t, h.Wait())
+		processHandle, opErr := sup.Start(
+			t.Context(),
+			fixtures.BuildRef(func(row *types.ProcessSpec) {
+				row.Name = "log"
+				row.LogFile = log
+				row.Args = []string{
+					textBinSh,
+					"-c",
+					"echo " + word + "; echo " + word + " >&2",
+				}
+			}),
+			nil,
+		)
+		require.NoError(t, opErr)
+		require.NoError(t, processHandle.Wait())
 	}
 
-	run("one")
-	run("two")
+	run(textOne)
+	run(textTwo)
 
-	data, err := os.ReadFile(log)
+	data, err := os.ReadFile(filepath.Clean(log))
 	require.NoError(t, err)
 	assert.Equal(t, strings.Repeat("one\n", 2)+strings.Repeat("two\n", 2), string(data))
+
 	info, err := os.Stat(log)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeInput), info.Mode().Perm())
 
-	err = sup.Detach(types.ProcessSpec{
-		Name: "log", LogFile: filepath.Join(t.TempDir(), "missing", "x.log"),
-		Args: []string{"/bin/sh", "-c", "exit 0"},
-	})
+	err = sup.Detach(fixtures.BuildRef(func(row *types.ProcessSpec) {
+		row.Name = "log"
+		row.LogFile = filepath.Join(t.TempDir(), textMissing, "x.log")
+		row.Args = []string{textBinSh, "-c", "exit 0"}
+	}))
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
+
+const (
+	// readyAfterInput is the count passed to readyAfter in
+	// TestClientsProcess_StartReadyStop.
+	readyAfterInput = 3
+
+	// readyAfterInputStop is the count passed to readyAfter in
+	// TestClientsProcess_StartReadyStop.
+	readyAfterInputStop = 1000
+)

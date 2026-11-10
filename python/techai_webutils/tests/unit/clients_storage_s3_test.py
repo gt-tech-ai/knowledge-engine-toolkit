@@ -2,30 +2,54 @@
 
 from __future__ import annotations
 
+import os
+import threading
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from techai_webutils.clients.storage.s3 import s3_client as s3_module
 from techai_webutils.clients.storage.s3.s3_client import S3StorageClient
 from techai_webutils.core.errors import AppRuntimeError
 
 if TYPE_CHECKING:
+    from collections.abc import Buffer
+    from pathlib import Path
+
     from techai_webutils.clients.storage.config import S3Config
+
+_EXPECTED_OBJECTS_COUNT = 2
+_EXPECTED_SIZE = 200
+_EXPECTED_SIZE_4096 = 4096
+_EXPECTED_AWAIT_COUNT = 2
 
 
 async def _open(config: S3Config) -> S3StorageClient:
-    """Open a client on the ``aws_client`` session; it stays open, as the session is a mock."""
+    """Open a client on the ``aws_client`` session.
+
+    It stays open, as the session is a mock.
+
+    Args:
+        config: The S3 settings.
+
+    Returns:
+        A client on the ``aws_client`` session; it stays open.
+
+    """
     return await AsyncExitStack().enter_async_context(S3StorageClient(config))
 
 
 class TestS3StorageClient:
     """Test suite for S3StorageClient storage operations."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_upload(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
-        """Test that upload calls put_object with the correct bucket, key, body, and content type.
+    async def test_upload(s3_config: S3Config, aws_client: AsyncMock) -> None:
+        """Test that upload calls put_object with the correct arguments.
+
+        They are the bucket, key, body and content type.
 
         **Why this test is important:**
           - Document upload is the entry point for the entire ingestion pipeline
@@ -34,35 +58,51 @@ class TestS3StorageClient:
 
         **What it tests:**
           - put_object is called once with Bucket, Key, Body, and ContentType
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         client = await _open(s3_config)
 
         await client.upload("bucket", "key.txt", b"content", "text/plain")
-        mock_client.put_object.assert_called_once_with(
-            Bucket="bucket", Key="key.txt", Body=b"content", ContentType="text/plain"
-        )
+        cast(
+            "MagicMock", cast("MagicMock", mock_client.put_object).assert_called_once_with
+        )(Bucket="bucket", Key="key.txt", Body=b"content", ContentType="text/plain")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_delete(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
+    async def test_delete(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that delete calls delete_object with the correct bucket and key.
 
         **Why this test is important:**
-          - Document deletion must remove the correct object to comply with data retention policies
+          - Document deletion must remove the correct object to comply with data retention
+            policies
           - Incorrect key would leave orphaned objects or delete wrong documents
           - GDPR data deletion requests depend on accurate S3 object removal
 
         **What it tests:**
           - delete_object is called once with Bucket and Key
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         client = await _open(s3_config)
 
         await client.delete("bucket", "key.txt")
-        mock_client.delete_object.assert_called_once_with(Bucket="bucket", Key="key.txt")
+        cast(
+            "MagicMock",
+            cast("MagicMock", mock_client.delete_object).assert_called_once_with,
+        )(Bucket="bucket", Key="key.txt")
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_exists_true(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
+    async def test_exists_true(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that exists returns True when the object is found in S3.
 
         **Why this test is important:**
@@ -72,6 +112,11 @@ class TestS3StorageClient:
 
         **What it tests:**
           - exists() returns True when head_object succeeds
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.head_object = AsyncMock(return_value={})
@@ -79,8 +124,9 @@ class TestS3StorageClient:
 
         assert await client.exists("bucket", "key") is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_exists_false(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
+    async def test_exists_false(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that exists returns False when the object is not found in S3.
 
         **Why this test is important:**
@@ -90,6 +136,11 @@ class TestS3StorageClient:
 
         **What it tests:**
           - exists() returns False when head_object raises an exception
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.head_object = AsyncMock(side_effect=Exception("not found"))
@@ -97,19 +148,26 @@ class TestS3StorageClient:
 
         assert await client.exists("bucket", "key") is False
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_list_objects(self, s3_config: S3Config, aws_client: AsyncMock) -> None:
+    async def test_list_objects(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that list_objects parses S3 response Contents into structured objects.
 
         **Why this test is important:**
           - Listing a prefix's documents depends on correct S3 object enumeration
-          - The response must be parsed into structured objects with key, size, and metadata
+          - The response must be parsed into structured objects with key, size, and
+            metadata
           - Incorrect parsing would show wrong file names or sizes in the UI
 
         **What it tests:**
           - Returned list contains exactly 2 objects
           - First object key equals "a.txt"
           - Second object size equals 200
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.list_objects_v2 = AsyncMock(
@@ -133,12 +191,13 @@ class TestS3StorageClient:
         client = await _open(s3_config)
 
         objects = await client.list_objects("bucket", "prefix/")
-        assert len(objects) == 2
+        assert len(objects) == _EXPECTED_OBJECTS_COUNT
         assert objects[0].key == "a.txt"
-        assert objects[1].size == 200
+        assert objects[1].size == _EXPECTED_SIZE
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_raises_when_not_initialized(self, s3_config: S3Config) -> None:
+    async def test_raises_when_not_initialized(s3_config: S3Config) -> None:
         """Test that operations raise RuntimeError before the client is initialized.
 
         **Why this test is important:**
@@ -148,24 +207,37 @@ class TestS3StorageClient:
 
         **What it tests:**
           - RuntimeError with "not initialized" message is raised on upload
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+
         """
         client = S3StorageClient(s3_config)
-        with pytest.raises(RuntimeError, match="not initialized"):
+        with pytest.raises(AppRuntimeError, match="not initialized"):
             await client.upload("b", "k", b"d", "t")
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_stat_returns_object_metadata(
-        self, s3_config: S3Config, aws_client: AsyncMock
+        s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that stat() HEADs the object and maps ContentLength to size without downloading.
+        """Test that stat() HEADs the object without downloading.
+
+        It maps ContentLength to size.
 
         **Why this test is important:**
-          - The ingestion size gate must learn an object's real size WITHOUT downloading it
-            (a ``size_bytes==0`` event otherwise materializes the whole object
-            in memory before rejection).
+          - The ingestion size gate must learn an object's real size WITHOUT downloading
+            it (a ``size_bytes==0`` event otherwise materializes the whole object in
+            memory before rejection).
 
         **What it tests:**
-          - stat() calls head_object once and returns a StorageObject whose size is ContentLength.
+          - stat() calls head_object once and returns a StorageObject whose size is
+            ContentLength.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.head_object = AsyncMock(
@@ -179,25 +251,36 @@ class TestS3StorageClient:
         client = await _open(s3_config)
 
         obj = await client.stat("bucket", "big.pdf")
-        mock_client.head_object.assert_called_once_with(Bucket="bucket", Key="big.pdf")
-        assert obj.size == 4096
+        cast(
+            "MagicMock",
+            cast("MagicMock", mock_client.head_object).assert_called_once_with,
+        )(Bucket="bucket", Key="big.pdf")
+        assert obj.size == _EXPECTED_SIZE_4096
         assert obj.content_type == "application/pdf"
         assert obj.key == "big.pdf"
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_copy_uses_multipart_for_a_large_object(
-        self, s3_config: S3Config, aws_client: AsyncMock
+        s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that copy() uses multipart UploadPartCopy for an object over the threshold.
+        """Test that copy() uses multipart UploadPartCopy over the threshold.
+
+        Only an object that large uses it.
 
         **Why this test is important:**
-          - A single CopyObject of a multi-GB object is slow + timeout-prone (AWS requires multipart
-            above 5 GiB); the large-lane relocation must use multipart so a near-cap raw parent copies
-            reliably rather than flapping on a copy timeout.
+          - A single CopyObject of a multi-GB object is slow + timeout-prone (AWS requires
+            multipart above 5 GiB); the large-lane relocation must use multipart so a
+            near-cap raw parent copies reliably rather than flapping on a copy timeout.
 
         **What it tests:**
-          - With a source larger than the multipart threshold, copy() drives create → per-part
-            upload_part_copy → complete and never calls the single copy_object.
+          - With a source larger than the multipart threshold, copy() drives create →
+            per-part upload_part_copy → complete and never calls the single copy_object.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         size = 6 * 1024**3  # above S3's 5 GiB single-copy limit, so multipart is required
@@ -211,15 +294,23 @@ class TestS3StorageClient:
 
         await client.copy("bucket", "src", "dst")
 
-        mock_client.copy_object.assert_not_called()
-        assert mock_client.upload_part_copy.await_count >= 2
-        mock_client.complete_multipart_upload.assert_awaited_once()
+        cast("MagicMock", cast("MagicMock", mock_client.copy_object).assert_not_called)()
+        assert (
+            cast("AsyncMock", mock_client.upload_part_copy).await_count
+        ) >= _EXPECTED_AWAIT_COUNT
+        cast(
+            "MagicMock",
+            cast("AsyncMock", mock_client.complete_multipart_upload).assert_awaited_once,
+        )()
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_multipart_copy_aborts_when_a_part_has_no_etag(
-        self, s3_config: S3Config, aws_client: AsyncMock
+        s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that a copied part with no ETag aborts the multipart copy with a coded error.
+        """Test that a copied part with no ETag aborts the multipart copy.
+
+        The error is coded.
 
         **Why this test is important:**
           - CompleteMultipartUpload needs every part's ETag; sending an empty one fails
@@ -228,6 +319,11 @@ class TestS3StorageClient:
         **What it tests:**
           - copy() raises AppRuntimeError naming the missing ETag.
           - The upload is aborted and never completed.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         mock_client = aws_client
         mock_client.head_object = AsyncMock(return_value={"ContentLength": 6 * 1024**3})
@@ -240,16 +336,25 @@ class TestS3StorageClient:
         with pytest.raises(AppRuntimeError, match="ETag"):
             await client.copy("bucket", "src", "dst")
 
-        mock_client.complete_multipart_upload.assert_not_awaited()
-        mock_client.abort_multipart_upload.assert_awaited_once_with(
-            Bucket="bucket", Key="dst", UploadId="u1"
-        )
+        cast(
+            "MagicMock",
+            cast("AsyncMock", mock_client.complete_multipart_upload).assert_not_awaited,
+        )()
+        cast(
+            "MagicMock",
+            cast(
+                "AsyncMock", mock_client.abort_multipart_upload
+            ).assert_awaited_once_with,
+        )(Bucket="bucket", Key="dst", UploadId="u1")
 
+    @staticmethod
     @pytest.mark.asyncio
     async def test_list_objects_rejects_an_entry_without_a_key(
-        self, s3_config: S3Config, aws_client: AsyncMock
+        s3_config: S3Config, aws_client: AsyncMock
     ) -> None:
-        """Test that a listed entry with no Key raises a coded error instead of an empty key.
+        """Test that a listed entry with no Key raises a coded error.
+
+        It never yields an empty key.
 
         **Why this test is important:**
           - An object returned with key "" would be read, copied or deleted at the wrong
@@ -257,6 +362,11 @@ class TestS3StorageClient:
 
         **What it tests:**
           - list_objects raises AppRuntimeError naming the missing Key.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
         """
         aws_client.list_objects_v2 = AsyncMock(
             return_value={"Contents": [{"Size": 1, "ETag": "e1"}]}
@@ -264,4 +374,59 @@ class TestS3StorageClient:
         client = await _open(s3_config)
 
         with pytest.raises(AppRuntimeError, match="Key"):
-            await client.list_objects("bucket", "prefix/")
+            _ = await client.list_objects("bucket", "prefix/")
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_download_to_path_writes_through_one_buffered_writer(
+        s3_config: S3Config,
+        aws_client: AsyncMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A streamed download lands intact.
+
+        One thread writes it, in writes of at least 8 MiB.
+
+        **Why this test is important:**
+          - The large-document lane downloads multi-GB objects; hopping every 1 MiB write
+            onto a different pool thread turns one sequential write into thousands of
+            small writes that contend with the parse executor.
+
+        **What it tests:**
+          - Every chunk the body yields is in the file, in order; every write runs on the
+            same single thread; and every write but the last carries at least
+            ``WRITE_BUFFER_BYTES``.
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+            tmp_path: A fresh directory for the test.
+            monkeypatch: Patches the environment for the test.
+
+        """
+        mib = 1024 * 1024
+        chunks = [bytes([n]) * (3 * mib) for n in range(4)]
+        body = MagicMock()
+        body.read = AsyncMock(side_effect=[*chunks, b""])
+        body.__aenter__ = AsyncMock(return_value=body)
+        body.__aexit__ = AsyncMock(return_value=None)
+        aws_client.get_object = AsyncMock(return_value={"Body": body})
+        writes: list[tuple[int, int]] = []
+        real_write = os.write
+
+        def _recording_write(fd: int, data: Buffer) -> int:
+            written = real_write(fd, data)
+            writes.append((threading.get_ident(), written))
+            return written
+
+        monkeypatch.setattr(os, "write", _recording_write)
+        target = tmp_path / "object.bin"
+        client = await _open(s3_config)
+
+        await client.download_to_path("bucket", "key", str(target))
+
+        assert target.read_bytes() == b"".join(chunks)
+        assert len({thread for thread, _ in writes}) == 1
+        assert all(size >= s3_module.WRITE_BUFFER_BYTES for _, size in writes[:-1])
+        assert 8 * mib <= s3_module.WRITE_BUFFER_BYTES

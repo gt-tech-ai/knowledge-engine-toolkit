@@ -15,18 +15,34 @@ class MemoryDeduplicator:
     """A process-local ``Deduplicator`` backed by a TTL map.
 
     A key first ``seen`` is recorded and reported not-a-duplicate; every repeat within the
-    TTL is a duplicate. ``ttl_seconds`` of 0 (the default) remembers forever (never evicts).
-    Not shared across replicas -- use a Redis/Postgres backend for cross-pod dedup.
+    TTL is a duplicate. ``ttl_seconds`` of 0 (the default) remembers forever (never
+    evicts). Not shared across replicas -- use a Redis/Postgres backend for cross-pod
+    dedup.
     """
 
     def __init__(self, ttl_seconds: float = 0.0) -> None:
-        """Create the store; ``ttl_seconds`` <= 0 remembers keys forever."""
+        """Create the store; ``ttl_seconds`` <= 0 remembers keys forever.
+
+        Args:
+            ttl_seconds: How long a key is remembered; 0 or less is forever.
+
+        """
         self._ttl: float = ttl_seconds
         self._seen: dict[str, float] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
 
     async def seen(self, key: str) -> bool:
-        """Return True if ``key`` is a live (un-expired) repeat; else record it and return False."""
+        """Return True if ``key`` is a live (un-expired) repeat.
+
+        Otherwise record it and return False.
+
+        Args:
+            key: The work item's identity (for example a message id).
+
+        Returns:
+            True if ``key`` is a live (un-expired) repeat.
+
+        """
         now = time.monotonic()
         async with self._lock:
             first = self._seen.get(key)

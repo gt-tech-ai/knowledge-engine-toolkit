@@ -11,7 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/auth0/management"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/auth0/stub"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -70,8 +70,10 @@ func kinds() client.Kinds[Config, Deps, interfaces.Auth0Management] {
 			KindStub: func(context.Context, Config, Deps) (interfaces.Auth0Management, error) {
 				return stub.Client{}, nil
 			},
-			KindManagement: newManagement,
+			KindManagement: client.RefDeps(newManagement),
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -79,30 +81,39 @@ func kinds() client.Kinds[Config, Deps, interfaces.Auth0Management] {
 func newManagement(
 	_ context.Context,
 	cfg Config,
-	deps Deps,
+	deps *Deps,
 ) (interfaces.Auth0Management, error) {
 	if cfg.Domain == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"auth0: domain is required for the management kind")
 	}
+
 	doer := deps.Doer
 	if doer == nil {
 		timeout := cfg.Timeout
 		if timeout <= 0 {
 			timeout = DefaultTimeout
 		}
-		doer = &http.Client{Timeout: timeout}
+
+		doer = &http.Client{
+			Timeout:       timeout,
+			Transport:     nil,
+			CheckRedirect: nil,
+			Jar:           nil,
+		}
 	}
+
 	return management.New(doer, cfg.Domain, deps.ClientID, deps.ClientSecret), nil
 }
 
 // NewFromConfig builds the client cfg.Kind selects and runs it through the client tier,
 // without I/O. An unknown kind, or KindManagement without a domain, is
 // CodeInvalidInput.
+// deps must not be nil.
 func NewFromConfig(
 	ctx context.Context,
 	cfg Config,
-	deps Deps,
+	deps *Deps,
 ) (interfaces.Auth0Management, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, cfg, *deps, deps.Decorations, cfg.Name)
 }

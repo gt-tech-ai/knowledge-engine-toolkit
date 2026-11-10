@@ -11,9 +11,11 @@ import (
 type PlanStore interface {
 	// Save keeps every plan under set.Dir and writes set.Manifest there, the hand-off
 	// the applying job loads from.
-	Save(ctx context.Context, set types.PlanSet) error
+	// set must not be nil.
+	Save(ctx context.Context, set *types.PlanSet) error
 
 	// Load restores the plans set.Manifest lists into set.Dir, refusing any it cannot
 	// verify, so the applying job applies exactly those.
-	Load(ctx context.Context, set types.PlanSet) error
+	// set must not be nil.
+	Load(ctx context.Context, set *types.PlanSet) error
 }

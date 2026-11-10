@@ -10,10 +10,13 @@ import (
 	"slices"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// groupDirMode is the mode of a directory its group may read.
+const groupDirMode = 0o750
 
 // Client runs helm in the codebase root.
 type Client struct {
@@ -33,14 +36,17 @@ func New(runner interfaces.CommandRunner, root string) *Client {
 }
 
 // Template runs `helm template <release> <chart> [--namespace] [-f …] [--set …]`.
-func (c *Client) Template(ctx context.Context, spec types.RenderSpec) ([]byte, error) {
+// spec must not be nil.
+func (c *Client) Template(ctx context.Context, spec *types.RenderSpec) ([]byte, error) {
 	release := spec.Release
 	if release == "" {
 		release = path.Base(spec.ChartDir)
 	}
+
 	args := append([]string{"template", release, spec.ChartDir}, values(spec)...)
+
 	return client.Output(
-		c.runner.RunBuffered(ctx, c.root, "helm", args...),
+		new(c.runner.RunBuffered(ctx, c.root, textHelm, args...)),
 		"helm template",
 	)
 }
@@ -55,40 +61,52 @@ func (c *Client) DependencyBuild(ctx context.Context, chartDir string) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create a helm home for "+chartDir)
 	}
+
 	defer func() { _ = os.RemoveAll(home) }()
+
 	cache := filepath.Join(home, "cache")
-	if err := os.MkdirAll(cache, 0o750); err != nil {
+
+	err = os.MkdirAll(cache, groupDirMode)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "create a helm cache for "+chartDir)
 	}
+
 	_, err = client.Output(
-		c.runner.RunBuffered(ctx, c.root, "helm", "dependency", "build", chartDir,
+		new(c.runner.RunBuffered(ctx, c.root, textHelm, "dependency", "build", chartDir,
 			"--repository-cache", cache,
-			"--repository-config", filepath.Join(home, "repositories.yaml")),
+			"--repository-config", filepath.Join(home, "repositories.yaml"))),
 		"helm dependency build")
+
 	return err
 }
 
 // Lint runs `helm lint <chart> [--namespace] [-f …] [--set …]`.
-func (c *Client) Lint(ctx context.Context, spec types.RenderSpec) error {
+// spec must not be nil.
+func (c *Client) Lint(ctx context.Context, spec *types.RenderSpec) error {
 	args := append([]string{"lint", spec.ChartDir}, values(spec)...)
 	_, err := client.Output(
-		c.runner.RunBuffered(ctx, c.root, "helm", args...),
+		new(c.runner.RunBuffered(ctx, c.root, textHelm, args...)),
 		"helm lint",
 	)
+
 	return err
 }
 
 // values are spec's namespace, values files and sorted --set flags.
-func values(spec types.RenderSpec) []string {
+func values(spec *types.RenderSpec) []string {
 	var args []string
+
 	if spec.Namespace != "" {
 		args = append(args, "--namespace", spec.Namespace)
 	}
+
 	for _, f := range spec.ValuesFiles {
 		args = append(args, "-f", f)
 	}
+
 	for _, k := range slices.Sorted(maps.Keys(spec.Set)) {
 		args = append(args, "--set", k+"="+spec.Set[k])
 	}
+
 	return args
 }

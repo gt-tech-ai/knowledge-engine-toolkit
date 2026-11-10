@@ -2,10 +2,12 @@ package system
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // LogFunc is a callback for logging command execution details.
@@ -37,13 +39,14 @@ type Builder struct {
 
 // NewBuilder creates a new Builder wrapping the given base CommandRunner.
 func NewBuilder(base CommandRunner) *Builder {
-	return &Builder{base: base}
+	return &Builder{base: base, hook: nil, logf: nil, env: nil, timeout: 0, dryRun: false}
 }
 
 // WithLogging adds a logging decorator that logs command name, args,
 // directory, duration, and error after each call.
 func (b *Builder) WithLogging(logf LogFunc) *Builder {
 	b.logf = logf
+
 	return b
 }
 
@@ -51,6 +54,7 @@ func (b *Builder) WithLogging(logf LogFunc) *Builder {
 // given deadline.
 func (b *Builder) WithTimeout(d time.Duration) *Builder {
 	b.timeout = d
+
 	return b
 }
 
@@ -59,6 +63,7 @@ func (b *Builder) WithTimeout(d time.Duration) *Builder {
 // become their WithEnv forms.
 func (b *Builder) WithEnv(env ...string) *Builder {
 	b.env = append(b.env, env...)
+
 	return b
 }
 
@@ -66,6 +71,7 @@ func (b *Builder) WithEnv(env ...string) *Builder {
 // (OnStart, OnSuccess, OnFailure) around every command execution.
 func (b *Builder) WithHook(hook interfaces.CmdHook) *Builder {
 	b.hook = hook
+
 	return b
 }
 
@@ -73,31 +79,36 @@ func (b *Builder) WithHook(hook interfaces.CmdHook) *Builder {
 // without actually running commands.
 func (b *Builder) WithDryRun(enabled bool) *Builder {
 	b.dryRun = enabled
+
 	return b
 }
 
 // Build constructs the decorated CommandRunner. Decorators are applied
 // inside-out: base -> env -> hook -> timeout -> logging -> dry-run.
 func (b *Builder) Build() CommandRunner {
-	r := b.base
+	commandRunner := b.base
 
 	if len(b.env) > 0 {
-		r = &envRunner{inner: r, env: b.env}
-	}
-	if b.hook != nil {
-		r = &hookRunner{inner: r, hook: b.hook}
-	}
-	if b.timeout > 0 {
-		r = &timeoutRunner{inner: r, timeout: b.timeout}
-	}
-	if b.logf != nil {
-		r = &loggingRunner{inner: r, logf: b.logf}
-	}
-	if b.dryRun {
-		r = &dryRunRunner{inner: r, logf: b.logf}
+		commandRunner = &envRunner{inner: commandRunner, env: b.env}
 	}
 
-	return r
+	if b.hook != nil {
+		commandRunner = &hookRunner{inner: commandRunner, hook: b.hook}
+	}
+
+	if b.timeout > 0 {
+		commandRunner = &timeoutRunner{inner: commandRunner, timeout: b.timeout}
+	}
+
+	if b.logf != nil {
+		commandRunner = &loggingRunner{inner: commandRunner, logf: b.logf}
+	}
+
+	if b.dryRun {
+		commandRunner = &dryRunRunner{inner: commandRunner, logf: b.logf}
+	}
+
+	return commandRunner
 }
 
 // ---------------------------------------------------------------------------
@@ -111,11 +122,6 @@ type envRunner struct {
 
 	// env holds the KEY=VALUE entries added to every command.
 	env []string
-}
-
-// with returns env followed by extra, so a command's own entries win.
-func (d *envRunner) with(extra []string) []string {
-	return append(append([]string{}, d.env...), extra...)
 }
 
 // Run runs the command with env added.
@@ -176,6 +182,11 @@ func (d *envRunner) RequireTool(name, installHint string) error {
 	return d.inner.RequireTool(name, installHint)
 }
 
+// with returns env followed by extra, so a command's own entries win.
+func (d *envRunner) with(extra []string) []string {
+	return slices.Concat(d.env, extra)
+}
+
 // ---------------------------------------------------------------------------
 // loggingRunner
 // ---------------------------------------------------------------------------
@@ -194,8 +205,9 @@ type loggingRunner struct {
 func (d *loggingRunner) Run(ctx context.Context, dir, name string, args ...string) error {
 	start := time.Now()
 	err := d.inner.Run(ctx, dir, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), err)
+
 	return err
 }
 
@@ -210,8 +222,9 @@ func (d *loggingRunner) RunWithEnv(
 ) error {
 	start := time.Now()
 	err := d.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), err)
+
 	return err
 }
 
@@ -224,8 +237,9 @@ func (d *loggingRunner) RunBuffered(
 ) CmdResult {
 	start := time.Now()
 	cr := d.inner.RunBuffered(ctx, dir, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), cr.Err)
+
 	return cr
 }
 
@@ -240,8 +254,9 @@ func (d *loggingRunner) RunBufferedWithEnv(
 ) CmdResult {
 	start := time.Now()
 	cr := d.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), cr.Err)
+
 	return cr
 }
 
@@ -258,8 +273,9 @@ func (d *loggingRunner) RunBufferedWithInput(
 ) CmdResult {
 	start := time.Now()
 	cr := d.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
-	d.logf("[runner] %s %s dir=%s duration=%s err=%v",
-		name, strings.Join(args, " "), dir, time.Since(start), cr.Err)
+	d.logf(textRunnerSSDir,
+		name, strings.Join(args, textSpace), dir, time.Since(start), cr.Err)
+
 	return cr
 }
 
@@ -291,6 +307,7 @@ type timeoutRunner struct {
 func (d *timeoutRunner) Run(ctx context.Context, dir, name string, args ...string) error {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.Run(ctx, dir, name, args...)
 }
 
@@ -305,6 +322,7 @@ func (d *timeoutRunner) RunWithEnv(
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
 }
 
@@ -317,6 +335,7 @@ func (d *timeoutRunner) RunBuffered(
 ) CmdResult {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.RunBuffered(ctx, dir, name, args...)
 }
 
@@ -331,6 +350,7 @@ func (d *timeoutRunner) RunBufferedWithEnv(
 ) CmdResult {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
 }
 
@@ -347,6 +367,7 @@ func (d *timeoutRunner) RunBufferedWithInput(
 ) CmdResult {
 	ctx, cancel := context.WithTimeout(ctx, d.timeout)
 	defer cancel()
+
 	return d.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
 }
 
@@ -374,16 +395,10 @@ type dryRunRunner struct {
 	logf LogFunc
 }
 
-// log emits the "would execute" line for a command when a logger is configured.
-func (d *dryRunRunner) log(name string, args ...string) {
-	if d.logf != nil {
-		d.logf("[dry-run] would execute: %s %s", name, strings.Join(args, " "))
-	}
-}
-
 // Run logs the command instead of executing it and returns nil.
 func (d *dryRunRunner) Run(_ context.Context, _, name string, args ...string) error {
 	d.log(name, args...)
+
 	return nil
 }
 
@@ -396,6 +411,7 @@ func (d *dryRunRunner) RunWithEnv(
 	args ...string,
 ) error {
 	d.log(name, args...)
+
 	return nil
 }
 
@@ -406,7 +422,8 @@ func (d *dryRunRunner) RunBuffered(
 	args ...string,
 ) CmdResult {
 	d.log(name, args...)
-	return CmdResult{}
+
+	return stdx.Zero[CmdResult]()
 }
 
 // RunBufferedWithEnv logs the command instead of executing it and returns a zero
@@ -419,7 +436,8 @@ func (d *dryRunRunner) RunBufferedWithEnv(
 	args ...string,
 ) CmdResult {
 	d.log(name, args...)
-	return CmdResult{}
+
+	return stdx.Zero[CmdResult]()
 }
 
 // RunBufferedWithInput logs the command instead of executing it (the input is never
@@ -433,7 +451,8 @@ func (d *dryRunRunner) RunBufferedWithInput(
 	args ...string,
 ) CmdResult {
 	d.log(name, args...)
-	return CmdResult{}
+
+	return stdx.Zero[CmdResult]()
 }
 
 // Exists delegates to the inner runner (read-only check).
@@ -444,6 +463,13 @@ func (d *dryRunRunner) Exists(name string) bool {
 // RequireTool delegates to the inner runner (read-only check).
 func (d *dryRunRunner) RequireTool(name, installHint string) error {
 	return d.inner.RequireTool(name, installHint)
+}
+
+// log emits the "would execute" line for a command when a logger is configured.
+func (d *dryRunRunner) log(name string, args ...string) {
+	if d.logf != nil {
+		d.logf("[dry-run] would execute: %s %s", name, strings.Join(args, textSpace))
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -459,25 +485,19 @@ type hookRunner struct {
 	hook interfaces.CmdHook
 }
 
-// cmdStr renders a command and its args as a single display string for the hook.
-func (h *hookRunner) cmdStr(name string, args []string) string {
-	if len(args) == 0 {
-		return name
-	}
-	return name + " " + strings.Join(args, " ")
-}
-
 // Run fires OnStart, delegates to the inner runner, then fires OnSuccess or
 // OnFailure depending on the result.
 func (h *hookRunner) Run(ctx context.Context, dir, name string, args ...string) error {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
+
 	err := h.inner.Run(ctx, dir, name, args...)
 	if err != nil {
-		h.hook.OnFailure(cs)
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
+
 	return err
 }
 
@@ -490,14 +510,16 @@ func (h *hookRunner) RunWithEnv(
 	name string,
 	args ...string,
 ) error {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
+
 	err := h.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
 	if err != nil {
-		h.hook.OnFailure(cs)
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
+
 	return err
 }
 
@@ -508,15 +530,17 @@ func (h *hookRunner) RunBuffered(
 	dir, name string,
 	args ...string,
 ) CmdResult {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
-	cr := h.inner.RunBuffered(ctx, dir, name, args...)
-	if cr.Err != nil {
-		h.hook.OnFailure(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
+
+	cmdResult := h.inner.RunBuffered(ctx, dir, name, args...)
+	if cmdResult.Err != nil {
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
-	return cr
+
+	return cmdResult
 }
 
 // RunBufferedWithEnv fires OnStart, delegates the buffered execution to the inner
@@ -529,15 +553,17 @@ func (h *hookRunner) RunBufferedWithEnv(
 	name string,
 	args ...string,
 ) CmdResult {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
-	cr := h.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
-	if cr.Err != nil {
-		h.hook.OnFailure(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
+
+	cmdResult := h.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
+	if cmdResult.Err != nil {
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
-	return cr
+
+	return cmdResult
 }
 
 // RunBufferedWithInput fires OnStart, delegates the buffered execution to the inner
@@ -551,15 +577,17 @@ func (h *hookRunner) RunBufferedWithInput(
 	name string,
 	args ...string,
 ) CmdResult {
-	cs := h.cmdStr(name, args)
-	h.hook.OnStart(cs)
-	cr := h.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
-	if cr.Err != nil {
-		h.hook.OnFailure(cs)
+	text := h.cmdStr(name, args)
+	h.hook.OnStart(text)
+
+	cmdResult := h.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
+	if cmdResult.Err != nil {
+		h.hook.OnFailure(text)
 	} else {
-		h.hook.OnSuccess(cs)
+		h.hook.OnSuccess(text)
 	}
-	return cr
+
+	return cmdResult
 }
 
 // Exists delegates to the inner runner (read-only check, no hook fired).
@@ -570,4 +598,13 @@ func (h *hookRunner) RequireTool(
 	n, hint string,
 ) error {
 	return h.inner.RequireTool(n, hint)
+}
+
+// cmdStr renders a command and its args as a single display string for the hook.
+func (*hookRunner) cmdStr(name string, args []string) string {
+	if len(args) == 0 {
+		return name
+	}
+
+	return name + textSpace + strings.Join(args, textSpace)
 }

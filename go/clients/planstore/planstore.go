@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -59,6 +59,8 @@ func kinds() client.Kinds[Config, Deps, interfaces.PlanStore] {
 			},
 			KindObject: newObject,
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -77,10 +79,12 @@ func NewFromConfig(
 // CodeInvalidInput.
 func FindPlans(dir, file string) ([]string, error) {
 	var found []string
+
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && d.Name() == file {
 			found = append(found, path)
 		}
+
 		return err
 	})
 	if err != nil {
@@ -90,6 +94,7 @@ func FindPlans(dir, file string) ([]string, error) {
 			"read the saved plans under "+dir,
 		)
 	}
+
 	return found, nil
 }
 
@@ -101,7 +106,7 @@ type Local struct{}
 var _ interfaces.PlanStore = Local{}
 
 // Save does nothing.
-func (Local) Save(context.Context, types.PlanSet) error { return nil }
+func (Local) Save(context.Context, *types.PlanSet) error { return nil }
 
 // Load does nothing.
-func (Local) Load(context.Context, types.PlanSet) error { return nil }
+func (Local) Load(context.Context, *types.PlanSet) error { return nil }

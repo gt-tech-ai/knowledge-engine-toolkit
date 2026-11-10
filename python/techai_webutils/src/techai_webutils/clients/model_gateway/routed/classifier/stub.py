@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.types.routing import Classification
@@ -11,21 +11,39 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.model_gateway import RouteContext
 
 
+@final
 class StubRouteClassifier:
-    """Routes a step to the route named for it (confidence 1.0), else to ``default_route``."""
+    """Routes a step to the route named for it (confidence 1.0).
+
+    Otherwise to ``default_route``.
+    """
 
     def __init__(self, route_names: frozenset[str], default_route: str) -> None:
-        """Bind the known route names and the fallback route (empty: none)."""
+        """Bind the known route names and the fallback route (empty: none).
+
+        Args:
+            route_names: The routes a step may name.
+            default_route: The route used when the step names none; empty means none.
+
+        """
         self._route_names = route_names
         self._default_route = default_route
 
-    async def classify(self, ctx: RouteContext, query: str) -> Classification:  # noqa: ARG002 - the stub reads only the step
+    async def classify(self, ctx: RouteContext, query: str) -> Classification:
         """Return the step's route, else the default route.
+
+        Args:
+            ctx: The request's routing context.
+            query: Ignored.
+
+        Returns:
+            The step's route, else the default route.
 
         Raises:
             AppError: ``INVALID_INPUT`` when the step has no route and no default is set.
 
         """
+        del query
         if ctx.step in self._route_names:
             return Classification(route=ctx.step, confidence=1.0)
         if self._default_route:

@@ -12,5 +12,5 @@ type EventPublisher interface {
 	Publish(ctx context.Context, event events.Event) error
 
 	// PublishBatch publishes multiple domain events.
-	PublishBatch(ctx context.Context, events []events.Event) error
+	PublishBatch(ctx context.Context, batch []events.Event) error
 }

@@ -20,16 +20,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorated{base: base, Base: b}, nil
+
+	return &decorated{base: base, Base: &b}, nil
 }
 
 // decorated runs each DistributedLock operation through the client tier.
 type decorated struct {
+	// Base runs the operations.
+	*client.Base
+
 	// base is the wrapped lock.
 	base interfaces.DistributedLock
-
-	// Base runs the operations.
-	client.Base
 }
 
 var _ interfaces.DistributedLock = (*decorated)(nil)
@@ -48,11 +49,13 @@ func (d *decorated) Acquire(
 	ctx context.Context,
 	key string,
 ) (token string, acquired bool, err error) {
-	l, err := d.Exec(ctx, "acquire", func(ctx context.Context) (lease, error) {
-		t, ok, err := d.base.Acquire(ctx, key)
-		return lease{token: t, acquired: ok}, err
+	currentLease, err := d.Exec(ctx, "acquire", func(ctx context.Context) (lease, error) {
+		t, ok, opErr := d.base.Acquire(ctx, key)
+
+		return lease{token: t, acquired: ok}, opErr
 	})
-	return l.token, l.acquired, err
+
+	return currentLease.token, currentLease.acquired, err
 }
 
 // Renew extends the lease on key as the operation "renew".

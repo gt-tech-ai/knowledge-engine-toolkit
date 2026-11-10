@@ -1,6 +1,7 @@
 package unit_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,8 +10,9 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/kubectl"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -31,74 +33,121 @@ import (
 //     unknown kind is INVALID_INPUT.
 func TestClientsKubectl_Exec(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
-	r := mocks.NewMockCommandRunner(gomock.NewController(t))
-	c, err := kubectl.NewFromConfig(
+	commandRunner := mocks.NewMockCommandRunner(gomock.NewController(t))
+	kubectlClient, err := kubectl.NewFromConfig(
 		ctx,
-		kubectl.Config{Kind: kubectl.KindExec, Context: "kind-dev"},
-		kubectl.Deps{Decorations: fixtures.Decorations(), Runner: r},
+		kubectl.Config{Kind: kubectl.KindExec, Context: "kind-dev", Name: ""},
+		kubectl.Deps{Decorations: fixtures.Decorations(), Runner: commandRunner},
 	)
 	require.NoError(t, err)
 
-	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
-		"-n", "app", "get", "deploy", "api", "-o", "json").
-		Return(interfaces.CmdResult{Stdout: []byte(`{"kind":"Deployment"}`)})
-	out, err := c.Get(ctx, "app", "deploy", "api")
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
+			"-n", textApp, textGet, textDeploy, textAPI, "-o", textStructuredFormat).
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte(`{"kind":"Deployment"}`)
+		}))
+
+	out, err := kubectlClient.Get(ctx, textApp, textDeploy, textAPI)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"kind":"Deployment"}`, string(out))
 
-	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
-		"apply", "-f", "a.yaml", "-f", "b.yaml").Return(interfaces.CmdResult{})
-	require.NoError(t, c.Apply(ctx, "", "a.yaml", "b.yaml"))
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(c.Apply(ctx, "app")),
-		"no files runs nothing")
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
+			"apply", "-f", textAYaml, "-f", "b.yaml").
+		Return(stdx.Zero[interfaces.CmdResult]())
+	require.NoError(t, kubectlClient.Apply(ctx, "", textAYaml, "b.yaml"))
+	assert.Equal(
+		t,
+		apperr.CodeInvalidInput,
+		apperr.Code(kubectlClient.Apply(ctx, textApp)),
+		"no files runs nothing",
+	)
 
-	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
-		"-n", "app", "rollout", "status", "deploy/api", "--timeout=2m0s").
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
+			"-n", textApp, "rollout", textStatus, "deploy/api", "--timeout=2m0s").
 		Return(exitWith(1, "timed out waiting for the condition"))
-	err = c.Rollout(ctx, "app", "deploy", "api", 2*time.Minute)
+
+	err = kubectlClient.Rollout(ctx, textApp, textDeploy, textAPI, 2*time.Minute)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 
-	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
-		"config", "current-context").
-		Return(interfaces.CmdResult{Stdout: []byte("kind-dev\n")})
-	cur, err := c.CurrentContext(ctx)
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
+			textConfig, "current-context").
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("kind-dev\n")
+		}))
+
+	cur, err := kubectlClient.CurrentContext(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "kind-dev", cur)
 
-	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
-		"auth", "can-i", "get", "pods").
-		Return(interfaces.CmdResult{Stdout: []byte("yes\n")})
-	allowed, err := c.AuthCanI(ctx, "get", "pods")
+	testClientsKubectlExecAuthCheckAndCommands(ctx, t, commandRunner, kubectlClient)
+}
+
+// testClientsKubectlExecAuthCheckAndCommands continues TestClientsKubectl_Exec: auth
+// check and commands.
+func testClientsKubectlExecAuthCheckAndCommands(
+	ctx context.Context,
+	t *testing.T,
+	commandRunner *mocks.MockCommandRunner,
+	kubectlClient interfaces.KubectlClient,
+) {
+	t.Helper()
+
+	var cur string
+
+	var err error
+
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
+			"auth", "can-i", textGet, textPods).
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte("yes\n")
+		}))
+
+	allowed, err := kubectlClient.AuthCanI(ctx, textGet, textPods)
 	require.NoError(t, err)
 	assert.True(t, allowed)
 
 	denied := exitWith(1, "")
+
 	denied.Stdout = []byte("no\n")
-	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
-		"auth", "can-i", "delete", "nodes").Return(denied)
-	allowed, err = c.AuthCanI(ctx, "delete", "nodes")
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
+			"auth", "can-i", textDelete, "nodes").
+		Return(denied)
+
+	allowed, err = kubectlClient.AuthCanI(ctx, textDelete, "nodes")
 	require.NoError(t, err)
 	assert.False(t, allowed)
 
-	r.EXPECT().RunBuffered(gomock.Any(), "", "kubectl", "--context", "kind-dev",
-		"auth", "can-i", "get", "pods").
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), "", textKubectl, "--context", "kind-dev",
+			"auth", "can-i", textGet, textPods).
 		Return(exitWith(1, "Unable to connect to the server: dial tcp: i/o timeout"))
-	_, err = c.AuthCanI(ctx, "get", "pods")
+
+	_, err = kubectlClient.AuthCanI(ctx, textGet, textPods)
 	assert.Equal(t, apperr.CodeUpstream, apperr.Code(err), "unreachable is not a denial")
 
-	stub, err := kubectl.NewFromConfig(ctx, kubectl.Config{},
-		kubectl.Deps{Decorations: fixtures.Decorations()})
+	stub, err := kubectl.NewFromConfig(ctx, stdx.Zero[kubectl.Config](),
+		kubectl.Deps{Decorations: fixtures.Decorations(), Runner: nil})
 	require.NoError(t, err)
+
 	cur, err = stub.CurrentContext(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "stub", cur)
-	allowed, err = stub.AuthCanI(ctx, "get", "pods")
+	assert.Equal(t, textStub, cur)
+
+	allowed, err = stub.AuthCanI(ctx, textGet, textPods)
 	require.NoError(t, err)
 	assert.False(t, allowed, "the stub has no cluster to grant anything")
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(stub.Apply(ctx, "app")),
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(stub.Apply(ctx, textApp)),
 		"the stub keeps the contract")
-	_, err = kubectl.NewFromConfig(ctx, kubectl.Config{Kind: "oc"},
-		kubectl.Deps{Decorations: fixtures.Decorations()})
+
+	_, err = kubectl.NewFromConfig(ctx, kubectl.Config{Kind: "oc", Name: "", Context: ""},
+		kubectl.Deps{Decorations: fixtures.Decorations(), Runner: nil})
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

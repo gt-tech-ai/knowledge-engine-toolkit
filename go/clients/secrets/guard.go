@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // GuardDomain refuses a resolved credential whose domain (a tenant or issuer host) is
@@ -19,5 +19,6 @@ func GuardDomain(subject, expected, resolved string) error {
 			"refusing %s: resolved domain %q does not match the expected %q",
 			subject, resolved, expected))
 	}
+
 	return nil
 }

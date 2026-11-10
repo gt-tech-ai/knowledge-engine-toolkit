@@ -23,21 +23,29 @@ import (
 //     each other; an empty or nil context reports none.
 func TestPrincipal_CarriesTheConsumerPrincipalPerType(t *testing.T) {
 	t.Parallel()
+
 	type user struct{ Sub string }
+
 	type service struct{ ID string }
 
 	ctx := coreprincipal.WithPrincipal(context.Background(), user{Sub: "u1"})
+
 	ctx = coreprincipal.WithPrincipal(ctx, service{ID: "s1"})
-	u, ok := coreprincipal.PrincipalFrom[user](ctx)
-	assert.True(t, ok)
+
+	u, found := coreprincipal.From[user](ctx)
+	assert.True(t, found)
 	assert.Equal(t, "u1", u.Sub)
-	s, ok := coreprincipal.PrincipalFrom[service](ctx)
-	assert.True(t, ok)
+
+	s, found := coreprincipal.From[service](ctx)
+	assert.True(t, found)
 	assert.Equal(t, "s1", s.ID)
 
-	_, ok = coreprincipal.PrincipalFrom[user](context.Background())
-	assert.False(t, ok, "no principal stored")
-	//nolint:staticcheck // a nil context must read as no principal, not panic
-	_, ok = coreprincipal.PrincipalFrom[user](nil)
-	assert.False(t, ok, "nil context")
+	_, found = coreprincipal.From[user](context.Background())
+	assert.False(t, found, "no principal stored")
+
+	// A nil context must read as no principal, not panic.
+	var nilContext context.Context
+
+	_, found = coreprincipal.From[user](nilContext)
+	assert.False(t, found, "nil context")
 }

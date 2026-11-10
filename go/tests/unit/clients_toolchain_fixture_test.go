@@ -11,6 +11,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -18,11 +19,15 @@ import (
 // of every shape, and checks it is valid.
 func toolEntries(t *testing.T) []types.ToolEntry {
 	t.Helper()
+
 	raw, err := os.ReadFile(filepath.Join("testdata", "toolchain", "tools.yaml"))
 	require.NoError(t, err)
+
 	var tools []types.ToolEntry
+
 	require.NoError(t, yaml.Unmarshal(raw, &tools))
 	require.Empty(t, types.ValidateToolEntries(tools))
+
 	return tools
 }
 
@@ -30,23 +35,35 @@ func toolEntries(t *testing.T) []types.ToolEntry {
 // session does.
 func denyPrompter(t *testing.T) interfaces.Prompter {
 	t.Helper()
+
 	p := mocks.NewMockPrompter(gomock.NewController(t))
 	p.EXPECT().Confirm(gomock.Any(), gomock.Any()).
 		Return(false, interfaces.NonInteractiveError()).AnyTimes()
+
 	return p
 }
 
 // registerToolScanMock makes every probed tool present and every version probe
 // return empty output, so a tool scan succeeds hermetically; a test layers its own
 // Run expectations on top.
-func registerToolScanMock(r *mocks.MockCommandRunner) {
-	r.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
-	for i := range 9 {
+func registerToolScanMock(commandRunner *mocks.MockCommandRunner) {
+	commandRunner.EXPECT().Exists(gomock.Any()).Return(true).AnyTimes()
+
+	for i := range iterationsMock {
 		args := make([]any, 0, 3+i)
-		for range 3 + i {
+		for range iterationsScanMock + i {
 			args = append(args, gomock.Any())
 		}
-		r.EXPECT().RunBuffered(args[0], args[1], args[2], args[3:]...).
-			Return(interfaces.CmdResult{}).AnyTimes()
+
+		commandRunner.EXPECT().RunBuffered(args[0], args[1], args[2], args[3:]...).
+			Return(stdx.Zero[interfaces.CmdResult]()).AnyTimes()
 	}
 }
+
+const (
+	// iterationsMock is the iteration count in registerToolScanMock.
+	iterationsMock = 9
+
+	// iterationsScanMock is the amount added to i in registerToolScanMock.
+	iterationsScanMock = 3
+)

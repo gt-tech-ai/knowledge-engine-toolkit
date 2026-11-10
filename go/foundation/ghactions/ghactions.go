@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // summaryMode is the job summary file's mode: the runner's own file, world-readable.
@@ -21,17 +22,25 @@ func AppendSummary(path, markdown string) error {
 	if path == "" {
 		return nil
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, summaryMode)
+
+	file, err := os.OpenFile(
+		filepath.Clean(path),
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+		summaryMode,
+	)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open the job summary")
 	}
-	_, werr := f.WriteString(markdown + "\n")
-	if cerr := f.Close(); werr == nil {
+
+	_, werr := file.WriteString(markdown + "\n")
+	if cerr := file.Close(); werr == nil {
 		werr = cerr
 	}
+
 	if werr != nil {
 		return apperr.Wrap(werr, apperr.CodeInternal, "write the job summary")
 	}
+
 	return nil
 }
 
@@ -42,19 +51,29 @@ func AppendSummary(path, markdown string) error {
 func MaskEnv(w io.Writer, env []string) error {
 	for _, kv := range env {
 		_, value, _ := strings.Cut(kv, "=")
-		for line := range strings.SplitSeq(value, "\n") {
-			if line = strings.TrimSpace(line); line == "" {
-				continue
-			}
-			if _, err := fmt.Fprintf(
-				w,
-				"::add-mask::%s\n",
-				EscapeData(line),
-			); err != nil {
-				return apperr.Wrap(err, apperr.CodeInternal, "write the mask command")
-			}
+
+		err := maskValue(w, value)
+		if err != nil {
+			return err
 		}
 	}
+
+	return nil
+}
+
+// maskValue writes one add-mask command per non-blank line of value.
+func maskValue(writer io.Writer, value string) error {
+	for line := range strings.SplitSeq(value, "\n") {
+		if line = strings.TrimSpace(line); line == "" {
+			continue
+		}
+
+		_, err := fmt.Fprintf(writer, "::add-mask::%s\n", EscapeData(line))
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInternal, "write the mask command")
+		}
+	}
+
 	return nil
 }
 

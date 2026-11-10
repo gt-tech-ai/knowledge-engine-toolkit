@@ -13,6 +13,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // randShelf is a randomly generated shelf expression for the algebra property tests.
@@ -24,30 +26,38 @@ type randShelf struct {
 // shelfLeaves returns the field references random shelves draw from.
 func shelfLeaves() []types.FieldRef {
 	return []types.FieldRef{
-		{Name: "team"},
-		{Name: "model"},
-		{Name: "workspace"},
-		{Name: "tokens_in", Agg: types.AggSum},
+		{Name: textTeam, Agg: ""},
+		{Name: textModel, Agg: ""},
+		{Name: textWorkspace, Agg: ""},
+		{Name: textTokensIn, Agg: types.AggSum},
 	}
 }
 
 // genShelf builds a random expression at most depth levels deep.
-func genShelf(r *rand.Rand, depth int) *types.AlgebraExpr {
-	if depth <= 1 || r.Intn(3) == 0 {
-		leaf := shelfLeaves()[r.Intn(len(shelfLeaves()))]
-		return &types.AlgebraExpr{Field: &leaf}
+func genShelf(randSource *rand.Rand, depth int) *types.AlgebraExpr {
+	if depth <= 1 || randSource.Intn(upperBound) == 0 {
+		leaf := shelfLeaves()[randSource.Intn(len(shelfLeaves()))]
+
+		return &types.AlgebraExpr{Field: &leaf, Op: "", Args: nil}
 	}
+
 	opsList := []types.AlgebraOp{
 		types.AlgebraCross,
 		types.AlgebraConcat,
 		types.AlgebraNest,
 	}
-	n := 1 + r.Intn(3)
+	n := 1 + randSource.Intn(upperBound)
 	args := make([]*types.AlgebraExpr, n)
+
 	for i := range args {
-		args[i] = genShelf(r, depth-1)
+		args[i] = genShelf(randSource, depth-1)
 	}
-	return &types.AlgebraExpr{Op: opsList[r.Intn(len(opsList))], Args: args}
+
+	return &types.AlgebraExpr{
+		Op:    opsList[randSource.Intn(len(opsList))],
+		Args:  args,
+		Field: nil,
+	}
 }
 
 // Generate implements quick.Generator.
@@ -63,15 +73,18 @@ func tupleKeys(tuples []chartspec.Tuple) []string {
 		for _, f := range t.Fields {
 			names = append(names, f.Key())
 		}
+
 		out = append(out, strings.Join(names, ","))
 	}
+
 	slices.Sort(out)
+
 	return out
 }
 
 // op builds an operator node over args.
 func op(o types.AlgebraOp, args ...*types.AlgebraExpr) *types.AlgebraExpr {
-	return &types.AlgebraExpr{Op: o, Args: args}
+	return &types.AlgebraExpr{Op: o, Args: args, Field: nil}
 }
 
 // TestAlgebra_CrossDistributesOverConcat tests the table-algebra law
@@ -88,40 +101,59 @@ func op(o types.AlgebraOp, args ...*types.AlgebraExpr) *types.AlgebraExpr {
 func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 	t.Parallel()
 
-	law := func(a, b, c randShelf) bool {
+	law := func(thirdRandShelf, currentRandShelf, secondRandShelf randShelf) bool {
 		left := chartspec.Normalize(
-			op(types.AlgebraCross, a.E, op(types.AlgebraConcat, b.E, c.E)),
+			op(
+				types.AlgebraCross,
+				thirdRandShelf.E,
+				op(types.AlgebraConcat, currentRandShelf.E, secondRandShelf.E),
+			),
 		)
 		right := chartspec.Normalize(
 			op(
 				types.AlgebraConcat,
-				op(types.AlgebraCross, a.E, b.E),
-				op(types.AlgebraCross, a.E, c.E),
+				op(types.AlgebraCross, thirdRandShelf.E, currentRandShelf.E),
+				op(types.AlgebraCross, thirdRandShelf.E, secondRandShelf.E),
 			),
 		)
+
 		return slices.Equal(tupleKeys(left), tupleKeys(right))
 	}
-	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
+	require.NoError(
+		t,
+		quick.Check(
+			law,
+			fixtures.BuildRef(func(row *quick.Config) {
+				row.MaxCount = 300
+			}),
+		),
+	)
 
-	team, model, ws := &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "team"},
+	team, model, algebraExpr := &types.AlgebraExpr{
+		Field: &types.FieldRef{Name: textTeam, Agg: ""},
+		Op:    "",
+		Args:  nil,
 	}, &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "model"},
+		Field: &types.FieldRef{Name: textModel, Agg: ""},
+		Op:    "",
+		Args:  nil,
 	}, &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "workspace"},
+		Field: &types.FieldRef{Name: textWorkspace, Agg: ""},
+		Op:    "",
+		Args:  nil,
 	}
 	assert.Equal(
 		t,
 		[]string{"team,model", "team,workspace"},
 		tupleKeys(
 			chartspec.Normalize(
-				op(types.AlgebraCross, team, op(types.AlgebraConcat, model, ws)),
+				op(types.AlgebraCross, team, op(types.AlgebraConcat, model, algebraExpr)),
 			),
 		),
 	)
 	assert.Equal(
 		t,
-		[]chartspec.Tuple{{}},
+		[]chartspec.Tuple{stdx.Zero[chartspec.Tuple]()},
 		chartspec.Normalize(nil),
 		"an empty shelf is the cross identity",
 	)
@@ -140,30 +172,55 @@ func TestAlgebra_CrossDistributesOverConcat(t *testing.T) {
 func TestAlgebra_NestIsSubsetOfCross(t *testing.T) {
 	t.Parallel()
 
-	law := func(a, b randShelf) bool {
-		nest := chartspec.Normalize(op(types.AlgebraNest, a.E, b.E))
-		cross := tupleKeys(chartspec.Normalize(op(types.AlgebraCross, a.E, b.E)))
-		for _, tuple := range nest {
-			if !tuple.Nested {
-				return false
-			}
-			if _, found := slices.BinarySearch(
-				cross,
-				tupleKeys([]chartspec.Tuple{tuple})[0],
-			); !found {
-				return false
-			}
+	testAlgebraNestIsSubsetOfCrossRunsProperty(t)
+}
+
+// nestIsSubsetOfCross is the law that every tuple of a nest of a and b is marked nested
+// and also appears in the cross of a and b.
+func nestIsSubsetOfCross(a, b randShelf) bool {
+	nest := chartspec.Normalize(op(types.AlgebraNest, a.E, b.E))
+	cross := tupleKeys(chartspec.Normalize(op(types.AlgebraCross, a.E, b.E)))
+
+	for _, tuple := range nest {
+		key := tupleKeys([]chartspec.Tuple{tuple})[0]
+		if _, found := slices.BinarySearch(cross, key); !tuple.Nested || !found {
+			return false
 		}
-		return true
 	}
-	require.NoError(t, quick.Check(law, &quick.Config{MaxCount: 300}))
+
+	return true
+}
+
+// testAlgebraNestIsSubsetOfCrossRunsProperty continues testAlgebraNestIsSubsetOfCross:
+// runs property.
+func testAlgebraNestIsSubsetOfCrossRunsProperty(t *testing.T) {
+	t.Helper()
+
+	require.NoError(
+		t,
+		quick.Check(
+			nestIsSubsetOfCross,
+			fixtures.BuildRef(func(row *quick.Config) {
+				row.MaxCount = 300
+			}),
+		),
+	)
 
 	team, model := &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "team"},
+		Field: &types.FieldRef{Name: textTeam, Agg: ""},
+		Op:    "",
+		Args:  nil,
 	}, &types.AlgebraExpr{
-		Field: &types.FieldRef{Name: "model"},
+		Field: &types.FieldRef{Name: textModel, Agg: ""},
+		Op:    "",
+		Args:  nil,
 	}
 	for _, tuple := range chartspec.Normalize(op(types.AlgebraCross, team, model)) {
 		assert.False(t, tuple.Nested)
 	}
 }
+
+const (
+	// upperBound is the n passed to Intn in genShelf.
+	upperBound = 3
+)

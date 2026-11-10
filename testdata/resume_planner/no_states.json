@@ -1,0 +1,14 @@
+{
+  "current": {
+    "chunk": "fp-chunk-v2",
+    "embed": "fp-embed-v2",
+    "enrich": "fp-enrich-v2",
+    "index": "fp-index-v2",
+    "parse": "fp-parse-v2"
+  },
+  "description": "A new document starts at parse.",
+  "expected": "parse",
+  "name": "no_states",
+  "sink": "vector",
+  "states": []
+}

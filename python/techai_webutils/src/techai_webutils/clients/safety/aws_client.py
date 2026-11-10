@@ -1,22 +1,27 @@
 """A lazily opened aiobotocore client shared by the managed safety backends.
 
-The client opens on the first scan (never at construction, so building the graph does no I/O),
-once even under concurrent first scans, and is released by ``aclose``. Every call is bounded by
-the injected ``timeout_s``; an expired call fails ``UNAVAILABLE`` (transient). botocore failures
-cross the boundary as coded ``AppError``s through the shared ``botocore_error_to_app_error``.
+The client opens on the first scan (never at construction, so building the graph does no
+I/O), once even under concurrent first scans, and is released by ``aclose``. Every call is
+bounded by the injected ``timeout_s``; an expired call fails ``UNAVAILABLE`` (transient).
+botocore failures cross the boundary as coded ``AppError``s through the shared
+``botocore_error_to_app_error``.
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast, final
 
 from techai_webutils.core.errors import AppError, ErrorCode
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
     from contextlib import AbstractAsyncContextManager
+
+    from botocore.exceptions import BotoCoreError as _LazyBotoCoreError
+    from botocore.exceptions import ClientError as _LazyClientError
 
 
 class _AwsSession(Protocol):
@@ -25,17 +30,37 @@ class _AwsSession(Protocol):
     def create_client(
         self, service_name: str, *, region_name: str
     ) -> AbstractAsyncContextManager[object]:
-        """Return an async context manager that opens one service client."""
+        """Return an async context manager that opens one service client.
+
+        Args:
+            service_name: The AWS service.
+            region_name: The AWS region.
+
+        Returns:
+            A context manager that yields the client.
+
+        """
         ...
 
 
+@final
 class LazyAwsClient:
     """Opens one AWS service client on first use and keeps it until ``aclose``."""
 
     def __init__(
         self, session: object, service: str, region: str, *, timeout_s: float
     ) -> None:
-        """Bind the aiobotocore session, service, region and per-call deadline; nothing opens yet."""
+        """Bind the aiobotocore session, service, region and per-call deadline.
+
+        Nothing opens yet.
+
+        Args:
+            session: The aiobotocore session.
+            service: The AWS service.
+            region: The AWS region.
+            timeout_s: Each call's deadline.
+
+        """
         self._session = cast("_AwsSession", session)
         self._service = service
         self._region = region
@@ -45,7 +70,12 @@ class LazyAwsClient:
         self._opening = asyncio.Lock()
 
     async def _opened(self) -> object:
-        """Return the client, opening it once (concurrent first calls share one client)."""
+        """Return the client, opening it once (concurrent first calls share one client).
+
+        Returns:
+            The client, opening it once.
+
+        """
         async with self._opening:
             if self._client is None:
                 stack = AsyncExitStack()
@@ -56,23 +86,34 @@ class LazyAwsClient:
                 self._stack = stack
             return self._client
 
-    async def call(self, operation: str, **kwargs: object) -> dict[str, Any]:
+    async def call(self, operation: str, **kwargs: object) -> object:
         """Invoke ``operation`` on the client, opening it on first use.
 
+        Args:
+            operation: The client method.
+            **kwargs: Its request fields.
+
+        Returns:
+            What the operation returns.
+
         Raises:
-            AppError: the call failed (``UNAVAILABLE`` when transient or past the deadline,
+            AppError: The call ran past its deadline (``UNAVAILABLE``).
+            _coded: The coded error for an SDK failure (``UNAVAILABLE`` when transient,
                 else ``INTERNAL``).
 
         """
-        from botocore.exceptions import BotoCoreError, ClientError  # noqa: PLC0415
-
-        from techai_webutils.foundation.resilience.aws_boundary import (  # noqa: PLC0415
-            botocore_error_to_app_error,
+        boto_core_error_cls = cast(
+            "type[_LazyBotoCoreError]",
+            importlib.import_module("botocore.exceptions").BotoCoreError,
+        )
+        client_error_cls = cast(
+            "type[_LazyClientError]",
+            importlib.import_module("botocore.exceptions").ClientError,
         )
 
         client = self._client if self._client is not None else await self._opened()
         method = cast(
-            "Callable[..., Awaitable[dict[str, Any]]]", getattr(client, operation)
+            "Callable[..., Awaitable[dict[str, object]]]", getattr(client, operation)
         )
         try:
             async with asyncio.timeout(self._timeout_s):
@@ -80,10 +121,8 @@ class LazyAwsClient:
         except TimeoutError as exc:
             msg = f"{self._service} {operation} timed out after {self._timeout_s}s"
             raise AppError(ErrorCode.UNAVAILABLE, msg, cause=exc) from exc
-        except (ClientError, BotoCoreError) as exc:
-            raise botocore_error_to_app_error(
-                exc, f"{self._service} {operation}"
-            ) from exc
+        except (client_error_cls, boto_core_error_cls) as exc:
+            raise _coded(exc, f"{self._service} {operation}") from exc
 
     async def aclose(self) -> None:
         """Close the client if one was opened (idempotent)."""
@@ -91,3 +130,23 @@ class LazyAwsClient:
             await self._stack.aclose()
             self._stack = None
             self._client = None
+
+
+def _coded(exc: Exception, operation: str) -> AppError:
+    """Code a botocore failure through the shared boundary, imported only now.
+
+    Args:
+        exc: The SDK's error.
+        operation: The failed call, named in the message.
+
+    Returns:
+        The coded error.
+
+    """
+    to_app_error = cast(
+        "Callable[[Exception, str], AppError]",
+        importlib.import_module(
+            "techai_webutils.foundation.resilience.aws_boundary"
+        ).botocore_error_to_app_error,
+    )
+    return to_app_error(exc, operation)

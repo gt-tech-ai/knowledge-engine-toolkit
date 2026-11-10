@@ -1,4 +1,7 @@
-"""Noop email backend — logs the send without dispatching (the default / dev-stub path)."""
+"""Noop email backend: logs the send without dispatching it.
+
+This is the default / dev-stub path.
+"""
 
 from __future__ import annotations
 
@@ -15,5 +18,12 @@ class NoopEmailSender(EmailSender):
 
     @override
     async def send(self, *, to: str, subject: str, html_body: str) -> None:
-        """Log the suppressed send (the html body is intentionally not logged)."""
+        """Log the suppressed send (the html body is intentionally not logged).
+
+        Args:
+            to: The recipient's address.
+            subject: The subject line.
+            html_body: The message body, as HTML.
+
+        """
         logger.info("email suppressed (noop backend)", to=to, subject=subject)

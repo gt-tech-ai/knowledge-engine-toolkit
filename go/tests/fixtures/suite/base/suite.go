@@ -8,13 +8,17 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// timeTolerance is how far two timestamps may differ and still count as equal.
+const timeTolerance = 10 * time.Millisecond
 
 // TestSuite provides common test infrastructure for all suites.
 type TestSuite struct {
 	// Suite is the embedded testify suite providing assertions and lifecycle hooks.
 	suite.Suite
+
 	// TempDir is a per-suite temporary directory created in SetupSuite.
 	TempDir string
 }
@@ -29,12 +33,16 @@ func (s *TestSuite) SetupSuite() {
 func (s *TestSuite) IsIntegration() bool {
 	if testing.Short() {
 		s.T().Skip("skipping integration test in short mode")
+
 		return false
 	}
+
 	if os.Getenv("INTEGRATION") == "" && os.Getenv("CI") == "" {
 		s.T().Skip("set INTEGRATION=1 or CI=1 to run integration tests")
+
 		return false
 	}
+
 	return true
 }
 
@@ -42,7 +50,9 @@ func (s *TestSuite) IsIntegration() bool {
 
 // TimesEqual asserts that the provided timestamps are approximately equal.
 func (s *TestSuite) TimesEqual(expected, actual time.Time) {
-	s.WithinDuration(expected, actual, 10*time.Millisecond)
+	s.T().Helper()
+
+	s.WithinDuration(expected, actual, timeTolerance)
 }
 
 // TimesNotEqual asserts that the provided times are not equal.

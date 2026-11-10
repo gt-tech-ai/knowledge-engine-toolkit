@@ -1,24 +1,30 @@
-"""``RedisSemanticCache`` — payloads in the injected KV ``Cache``, similarity in a search index.
+"""``RedisSemanticCache``: payloads in the KV ``Cache``, similarity in an index.
 
-The index runs on either search engine: RediSearch (Redis Stack) or Valkey Search (Valkey 9, e.g.
-ElastiCache for Valkey). Where they differ the code uses only what both accept: no ``SORTBY`` on the
-KNN score, no ``FT.DROPINDEX … DD``, and an ``FT.SEARCH`` reply read in either shape (a RESP3 map
-from RediSearch, the RESP2 array from Valkey Search on the same connection).
+The KV cache is injected.
 
-Layout (``<p>`` is ``SemanticCacheConfig.index_prefix``; ``<ws>`` the namespace's workspace;
-``<tag>`` its ``CacheNamespace.tag()``; ``<h>`` the sha256 of the normalized query):
+The index runs on either search engine: RediSearch (Redis Stack) or Valkey Search (Valkey
+9, e.g. ElastiCache for Valkey). Where they differ the code uses only what both accept: no
+``SORTBY`` on the KNN score, no ``FT.DROPINDEX … DD``, and an ``FT.SEARCH`` reply read in
+either shape (a RESP3 map from RediSearch, the RESP2 array from Valkey Search on the same
+connection).
+
+Layout (``<p>`` is ``SemanticCacheConfig.index_prefix``; ``<ws>`` the namespace's
+workspace; ``<tag>`` its ``CacheNamespace.tag()``; ``<h>`` the sha256 of the normalized
+query):
 
 - **Payload** — ``<p>:p:<ws>:<tag>:<h>`` in the KV cache, with the store's TTL.
-- **Index document** — a hash ``<p>:d:<ws>:<tag>:<h>`` with ``ns`` (the tag), ``key`` (the payload
-  key), ``query`` and ``embedding`` (float32 little-endian), expiring with the payload.
-- **Index** — ``<p>:idx`` over the ``<p>:d:`` prefix: ``ns`` TAG + ``embedding`` HNSW COSINE of the
-  embedder's dimension, created lazily (idempotently) on first use.
+- **Index document** — a hash ``<p>:d:<ws>:<tag>:<h>`` with ``ns`` (the tag), ``key`` (the
+  payload key), ``query`` and ``embedding`` (float32 little-endian), expiring with the
+  payload.
+- **Index** — ``<p>:idx`` over the ``<p>:d:`` prefix: ``ns`` TAG + ``embedding`` HNSW
+  COSINE of the embedder's dimension, created lazily (idempotently) on first use.
 
-``exact`` reads the normalized repeat's payload (no embedding); ``nearest`` runs the top-1 KNN
-within the namespace's tag and returns the neighbour with similarity ``1 - distance`` when its
-payload still exists, leaving any threshold to the caller (``lookup`` and the match tiers). Every backend error is logged, counted (``semantic_cache_errors_total{op}``) and turned
-into a miss or a no-op. The workspace leads the key so ``invalidate_prefix(<workspace>)`` evicts
-one tenant.
+``exact`` reads the normalized repeat's payload (no embedding); ``nearest`` runs the top-1
+KNN within the namespace's tag and returns the neighbour with similarity ``1 - distance``
+when its payload still exists, leaving any threshold to the caller (``lookup`` and the
+match tiers). Every backend error is logged, counted (``semantic_cache_errors_total{op}``)
+and turned into a miss or a no-op. The workspace leads the key so
+``invalidate_prefix(<workspace>)`` evicts one tenant.
 """
 
 from __future__ import annotations
@@ -26,7 +32,7 @@ from __future__ import annotations
 import hashlib
 import re
 import struct
-from typing import TYPE_CHECKING, Any, cast, override
+from typing import TYPE_CHECKING, cast, final, override
 
 from redis.commands.search.field import TagField, VectorField
 from redis.commands.search.index_definition import IndexDefinition, IndexType
@@ -36,11 +42,13 @@ from techai_webutils.core.interfaces.semantic_cache import CachedAnswer, Semanti
 from techai_webutils.foundation.logger.logger import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Awaitable, Callable
+    from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 
     from redis.asyncio import Redis
+    from redis.commands.search import Search
+    from redis.typing import EncodableT, FieldT
 
-    from techai_webutils.clients.semantic_cache.builder import SemanticCacheConfig
+    from techai_webutils.clients.semantic_cache.config import SemanticCacheConfig
     from techai_webutils.core.interfaces.cache import Cache
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider
@@ -49,43 +57,83 @@ if TYPE_CHECKING:
 _GLOB = re.compile(r"([*?\[\]\\])")
 """Characters escaped in a ``SCAN MATCH`` pattern built from a caller's prefix."""
 
+_MIN_REPLY_WITH_HIT = 3
+"""``[total, id, fields]`` is the shortest search reply with a hit."""
+
 _TRAILING_PUNCTUATION = ".?!"
-"""Characters ``strip_trailing_punctuation`` removes from the end of a normalized query."""
+"""Characters ``strip_trailing_punctuation`` removes from the end of a normalized
+query."""
 
 
 def _text(value: object) -> str:
-    """Return a Redis reply value as ``str`` (decoded when the client returns bytes)."""
+    """Return a Redis reply value as ``str`` (decoded when the client returns bytes).
+
+    Args:
+        value: A Redis reply value.
+
+    Returns:
+        A Redis reply value as ``str`` (decoded when the client returns bytes).
+
+    """
     return value.decode() if isinstance(value, bytes) else str(value)
 
 
 def _first_document(reply: object) -> dict[str, str] | None:
-    """Return the first ``FT.SEARCH`` document's fields as text, or ``None`` when there is none.
+    """Return the first ``FT.SEARCH`` document's fields as text.
 
-    Reads both reply shapes: the RESP3 map (``{results: [{extra_attributes: {…}}]}``, RediSearch)
-    and the RESP2 array (``[total, id, [field, value, …], …]``, Valkey Search).
+    ``None`` when there is none.
+
+    Reads both reply shapes: the RESP3 map (``{results: [{extra_attributes: {…}}]}``,
+    RediSearch) and the RESP2 array (``[total, id, [field, value, …], …]``, Valkey
+    Search).
+
+    Args:
+        reply: The ``FT.SEARCH`` reply.
+
+    Returns:
+        The first ``FT.SEARCH`` document's fields as text.
+
     """
     if isinstance(reply, dict):
         results = cast(
-            "list[dict[Any, Any]]", _field(cast("dict[Any, Any]", reply), "results") or []
+            "list[dict[object, object]]",
+            _field(cast("dict[object, object]", reply), "results") or [],
         )
         if not results:
             return None
-        attributes = cast("dict[Any, Any]", _field(results[0], "extra_attributes") or {})
+        attributes = cast(
+            "dict[object, object]", _field(results[0], "extra_attributes") or {}
+        )
         return {_text(k): _text(v) for k, v in attributes.items()}
-    items = cast("list[Any]", reply)
-    if len(items) < 3:  # noqa: PLR2004 - [total, id, fields] is the shortest reply with a hit
+    items = cast("list[object]", reply)
+    if len(items) < _MIN_REPLY_WITH_HIT:
         return None
-    fields = cast("list[Any]", items[2])
+    fields = cast("list[object]", items[2])
     return {_text(fields[i]): _text(fields[i + 1]) for i in range(0, len(fields) - 1, 2)}
 
 
-def _field(mapping: dict[Any, Any], name: str) -> object:
-    """Return ``mapping[name]`` whether the client decoded keys to ``str`` or left them ``bytes``."""
+def _field(mapping: dict[object, object], name: str) -> object:
+    """Return ``mapping[name]`` for ``str`` or ``bytes`` keys.
+
+    The client may or may not decode keys.
+
+    Args:
+        mapping: A decoded reply mapping.
+        name: The field.
+
+    Returns:
+        ``mapping[name]`` whether the client decoded keys to ``str``.
+
+    """
     return mapping.get(name, mapping.get(name.encode()))
 
 
+@final
 class RedisSemanticCache(SemanticCache):
-    """A semantic cache on the app's Redis or Valkey: KV payloads plus a search-module KNN index."""
+    """A semantic cache on the app's Redis or Valkey.
+
+    KV payloads plus a search-module KNN index.
+    """
 
     def __init__(
         self,
@@ -96,7 +144,16 @@ class RedisSemanticCache(SemanticCache):
         *,
         metrics: MetricsProvider | None = None,
     ) -> None:
-        """Bind the collaborators; the index is created on first use, never here."""
+        """Bind the collaborators; the index is created on first use, never here.
+
+        Args:
+            cache: Holds the answers' payloads.
+            embedding: Embeds the queries.
+            redis: Holds the vector index.
+            config: The index, thresholds and TTL.
+            metrics: Where the error counter is created.
+
+        """
         self._cache = cache
         self._embedding = embedding
         self._redis = redis
@@ -116,8 +173,15 @@ class RedisSemanticCache(SemanticCache):
     def _normalize(self, query: str) -> str:
         """Return ``query`` normalized for keying.
 
-        Lower-cased and whitespace-collapsed when ``normalize`` is on; trailing punctuation
-        removed when ``strip_trailing_punctuation`` is on.
+        Lower-cased and whitespace-collapsed when ``normalize`` is on; trailing
+        punctuation removed when ``strip_trailing_punctuation`` is on.
+
+        Args:
+            query: The query.
+
+        Returns:
+            ``query`` normalized for keying.
+
         """
         text = " ".join(query.lower().split()) if self._config.normalize else query
         if self._config.strip_trailing_punctuation:
@@ -125,25 +189,46 @@ class RedisSemanticCache(SemanticCache):
         return text
 
     def _suffix(self, query: str, namespace: CacheNamespace) -> str:
-        """Return the ``<ws>:<tag>:<h>`` key suffix shared by a payload and its document."""
+        """Return the ``<ws>:<tag>:<h>`` key suffix shared by a payload and its document.
+
+        Args:
+            query: The normalized query.
+            namespace: The cache namespace (tenant, model and prompt version).
+
+        Returns:
+            The ``<ws>:<tag>:<h>`` key suffix shared by a payload.
+
+        """
         digest = hashlib.sha256(self._normalize(query).encode()).hexdigest()
         return f"{namespace.workspace_id}:{namespace.tag()}:{digest}"
 
-    def _search(self) -> Any:  # noqa: ANN401 - redis-py's search handle is loosely typed
-        """Return the search handle for this cache's index (index create and drop)."""
+    def _search(self) -> Search:
+        """Return the search handle for this cache's index (index create and drop).
+
+        Returns:
+            The search handle for this cache's index (index create and drop).
+
+        """
         return self._redis.ft(self._index)
 
-    def _failed(self, op: str, exc: Exception) -> None:
-        """Log and count a swallowed backend error."""
-        self._logger.warning(
-            "semantic cache backend error (fail-open)",
-            extra={"op": op, "error": str(exc)},
-        )
+    def _failed(self, op: str) -> None:
+        """Log and count a swallowed backend error.
+
+        Args:
+            op: The failed operation.
+
+        """
         if self._errors is not None:
             self._errors.inc(op=op)
 
     async def _ensure_index(self) -> None:
-        """Create the KNN index once; an existing index counts as created."""
+        """Create the KNN index once; an existing index counts as created.
+
+        Raises:
+            ResponseError: Redis rejected the index creation for a reason other than
+                existing.
+
+        """
         if self._index_ready:
             return
         vector = VectorField(
@@ -159,28 +244,47 @@ class RedisSemanticCache(SemanticCache):
             prefix=[f"{self._prefix}:d:"], index_type=IndexType.HASH
         )
         try:
-            await self._search().create_index(
-                [TagField("ns"), vector], definition=definition
+            create_index = cast(
+                "Callable[..., Awaitable[object]]", self._search().create_index
             )
+            _ = await create_index([TagField("ns"), vector], definition=definition)
         except ResponseError as exc:
             if "already exists" not in str(exc).lower():
                 raise
         self._index_ready = True
 
     async def _vector(self, query: str) -> bytes:
-        """Return ``query``'s embedding packed as little-endian float32."""
-        values = (await self._embedding.embed(query)).embedding
+        """Return ``query``'s embedding (as a query) packed as little-endian float32.
+
+        Args:
+            query: The normalized query.
+
+        Returns:
+            ``query``'s embedding (as a query) packed as little-endian float32.
+
+        """
+        values = (await self._embedding.embed(query, input_type="query")).embedding
         return struct.pack(f"<{len(values)}f", *values)
 
     @override
     async def exact(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Return the normalized repeat's payload without embedding; fail-open."""
+        """Return the normalized repeat's payload without embedding; fail-open.
+
+        Args:
+            query: The query, normalized before lookup.
+            namespace: The tenant and model scope the answer must belong to.
+
+        Returns:
+            The normalized repeat's payload without embedding; fail-open.
+
+        """
         try:
             payload = await self._cache.get(
                 f"{self._prefix}:p:{self._suffix(query, namespace)}"
             )
-        except Exception as exc:
-            self._failed("lookup", exc)
+        except Exception:
+            self._logger.exception("exact failed")
+            self._failed("lookup")
             return None
         if payload is None:
             return None
@@ -193,21 +297,43 @@ class RedisSemanticCache(SemanticCache):
 
     @override
     async def nearest(self, query: str, namespace: CacheNamespace) -> CachedAnswer | None:
-        """Return the namespace's closest neighbour with its similarity, unthresholded; fail-open."""
+        """Return the namespace's closest neighbour with its similarity.
+
+        Unthresholded; it fails open.
+
+        Args:
+            query: The query.
+            namespace: The tenant and model scope the answer must belong to.
+
+        Returns:
+            The namespace's closest neighbour with its similarity, unthresholded.
+
+        """
         try:
             return await self._nearest(query, namespace)
-        except Exception as exc:
-            self._failed("lookup", exc)
+        except Exception:
+            self._logger.exception("nearest failed")
+            self._failed("lookup")
             return None
 
     async def _nearest(
         self, query: str, namespace: CacheNamespace
     ) -> CachedAnswer | None:
-        """Run the namespace-scoped top-1 KNN and read the neighbour's payload."""
+        """Run the namespace-scoped top-1 KNN and read the neighbour's payload.
+
+        Args:
+            query: The normalized query.
+            namespace: The cache namespace (tenant, model and prompt version).
+
+        Returns:
+            The nearest answer, or ``None``.
+
+        """
         model = self._embedding.model_name()
         await self._ensure_index()
-        # Raw FT.SEARCH: redis-py's parser expects the RESP3 map, which Valkey Search never sends.
-        # KNN 1 yields at most one neighbour, so there is no SORTBY (Valkey can't sort on the alias).
+        # Raw FT.SEARCH: redis-py's parser expects the RESP3 map, which Valkey Search
+        # never sends. KNN 1 yields at most one neighbour, so there is no SORTBY (Valkey
+        # can't sort on the alias).
         execute = cast("Callable[..., Awaitable[object]]", self._redis.execute_command)
         reply = await execute(
             "FT.SEARCH",
@@ -243,16 +369,35 @@ class RedisSemanticCache(SemanticCache):
     async def store(
         self, query: str, payload: bytes, namespace: CacheNamespace, *, ttl_seconds: int
     ) -> None:
-        """Write the payload with its TTL and index the query's vector; fail-open."""
+        """Write the payload with its TTL and index the query's vector; fail-open.
+
+        Args:
+            query: The query the answer was generated for.
+            payload: The answer, serialized.
+            namespace: The tenant and model scope it belongs to.
+            ttl_seconds: How long the answer lives.
+
+        """
         try:
             await self._store(query, payload, namespace, ttl_seconds)
-        except Exception as exc:
-            self._failed("store", exc)
+        except Exception:
+            self._logger.exception("store failed")
+            self._failed("store")
 
     async def _store(
         self, query: str, payload: bytes, namespace: CacheNamespace, ttl_seconds: int
     ) -> None:
-        """Write the payload, then its index document, both expiring after ``ttl_seconds``."""
+        """Write the payload, then its index document.
+
+        Both expire after ``ttl_seconds``.
+
+        Args:
+            query: The normalized query.
+            payload: The answer's bytes.
+            namespace: The cache namespace (tenant, model and prompt version).
+            ttl_seconds: How long the entry lives.
+
+        """
         await self._ensure_index()
         suffix = self._suffix(query, namespace)
         payload_key, doc_key = f"{self._prefix}:p:{suffix}", f"{self._prefix}:d:{suffix}"
@@ -263,42 +408,61 @@ class RedisSemanticCache(SemanticCache):
             "query": query,
             "embedding": await self._vector(query),
         }
-        await self._redis.hset(doc_key, mapping=mapping)  # pyright: ignore[reportArgumentType]
-        await self._redis.expire(doc_key, ttl_seconds)
+        _ = await self._redis.hset(
+            doc_key, mapping=cast("Mapping[FieldT, EncodableT]", mapping)
+        )
+        _ = await self._redis.expire(doc_key, ttl_seconds)
 
     async def _unlink_matching(self, pattern: str) -> None:
-        """``UNLINK`` every key matching the ``SCAN`` pattern."""
-        keys = cast("AsyncIterator[str | bytes]", self._redis.scan_iter(match=pattern))  # pyright: ignore[reportUnknownMemberType]
+        """``UNLINK`` every key matching the ``SCAN`` pattern.
+
+        Args:
+            pattern: The ``SCAN`` match pattern.
+
+        """
+        keys = cast(
+            "AsyncIterator[str | bytes]",
+            cast("Callable[..., object]", self._redis.scan_iter)(match=pattern),
+        )
         async for key in keys:
-            await self._redis.unlink(key)
+            _ = await self._redis.unlink(key)
 
     @override
     async def invalidate_prefix(self, prefix: str) -> None:
-        """Evict every payload and document under the ``prefix`` key segment (a workspace).
+        """Evict every payload and document under the ``prefix`` key segment.
+
+        The segment is a workspace.
 
         The pattern ends at the segment separator, so ``ws-1`` never matches ``ws-10``.
+
+        Args:
+            prefix: The key prefix whose entries are removed (for example one tenant's
+                namespace).
+
         """
         escaped = _GLOB.sub(r"\\\1", prefix)
         try:
             await self._unlink_matching(f"{self._prefix}:p:{escaped}:*")
             await self._unlink_matching(f"{self._prefix}:d:{escaped}:*")
-        except Exception as exc:
-            self._failed("invalidate", exc)
+        except Exception:
+            self._logger.exception("invalidate_prefix failed")
+            self._failed("invalidate")
 
     @override
     async def invalidate_all(self) -> None:
         """Drop the index, then every index document and payload key.
 
-        The documents are unlinked here rather than with ``FT.DROPINDEX … DD``, which Valkey Search
-        rejects.
+        The documents are unlinked here rather than with ``FT.DROPINDEX … DD``, which
+        Valkey Search rejects.
         """
         try:
             await self._search().dropindex(delete_documents=False)
             self._index_ready = False
             await self._unlink_matching(f"{self._prefix}:d:*")
             await self._unlink_matching(f"{self._prefix}:p:*")
-        except Exception as exc:
-            self._failed("invalidate", exc)
+        except Exception:
+            self._logger.exception("invalidate_all failed")
+            self._failed("invalidate")
 
 
 _INTERFACE_CHECK: type[SemanticCache] = RedisSemanticCache

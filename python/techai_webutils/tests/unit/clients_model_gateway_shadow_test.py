@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,10 +15,15 @@ from techai_webutils.clients.model_gateway import (
     RoutedConfig,
     new_model_gateway_from_config,
 )
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.core.interfaces.llm import LLMMessage
 from techai_webutils.core.interfaces.model_gateway import RouteContext
+from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
+from tests.json_path import dig
+
+if TYPE_CHECKING:
+    from techai_webutils.core.types.llm import LlmConfig
 
 _PRICES = PriceTable(
     prices={
@@ -35,13 +40,13 @@ _PRICES = PriceTable(
 
 @pytest.mark.asyncio
 async def test_shadow_run_makes_no_model_call_and_emits_shadow_fact(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a shadow policy plans alongside the live one without serving anything.
 
     **Why this test is important:**
-      - Shadow routing is how a new policy is compared before cutover; it must never call a
-        model or delay the live answer.
+      - Shadow routing is how a new policy is compared before cutover; it must never call
+        a model or delay the live answer.
 
     **What it tests:**
       - the live call is served by Sonnet (static order) while a ``cost_aware``/``cost``
@@ -49,11 +54,25 @@ async def test_shadow_run_makes_no_model_call_and_emits_shadow_fact(
       - exactly one model call is made (the live one)
       - two facts are published: the live decision and a ``shadow=true`` one naming the
         shadow's choice
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     facts = MagicMock(spec=FactPublisher)
     built: list[StubLlmProvider] = []
 
-    def factory(llm: Any) -> StubLlmProvider:  # noqa: ANN401 - LlmConfig
+    def factory(llm: LlmConfig) -> StubLlmProvider:
+        """Build a stub provider and keep it.
+
+        Args:
+            llm: The endpoint's settings.
+
+        Returns:
+            The provider.
+
+        """
         provider = StubLlmProvider(llm.model)
         built.append(provider)
         return provider
@@ -70,24 +89,32 @@ async def test_shadow_run_makes_no_model_call_and_emits_shadow_fact(
                 policy_store={"policies": {"org-1": {"allow_off_cloud": True}}},
             ),
         ),
-        provider_factory=factory,
-        context_provider=lambda: ctx,
-        prices=_PRICES,
-        facts=facts,
+        options=ModelGatewayDependencies(
+            provider_factory=factory,
+            context_provider=lambda: ctx,
+            prices=_PRICES,
+            facts=facts,
+        ),
     )
 
     async with gateway:
         response = await gateway.complete([LLMMessage(role="user", content="q")])
 
     shadow_flags = [
-        call.args[0][0].dims["shadow"] for call in facts.publish.call_args_list
+        cast("dict[str, object]", call.args[0][0].dims)["shadow"]
+        for call in cast("list[object]", cast("MagicMock", facts.publish).call_args_list)
     ]
-    shadow_fact = next(
-        call.args[0][0]
-        for call in facts.publish.call_args_list
-        if call.args[0][0].dims["shadow"] == "true"
+    shadow_fact = cast(
+        "MagicMock",
+        next(
+            dig(cast("list[object]", call.args), 0, 0)
+            for call in cast(
+                "list[object]", cast("MagicMock", facts.publish).call_args_list
+            )
+            if cast("dict[str, object]", call.args[0][0].dims)["shadow"] == "true"
+        ),
     )
     assert response.model == "sonnet-use1"
     assert [p.model_name() for p in built] == ["sonnet-use1"]
-    assert sorted(shadow_flags) == ["false", "true"]
-    assert shadow_fact.dims["model_id"] == "meta/small"
+    assert sorted(map(str, shadow_flags)) == ["false", "true"]
+    assert cast("dict[str, object]", shadow_fact.dims)["model_id"] == "meta/small"

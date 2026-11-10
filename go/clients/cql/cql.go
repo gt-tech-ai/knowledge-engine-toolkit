@@ -20,6 +20,21 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
+// defaultCassandraPort is the native-protocol port Cassandra listens on by default.
+const defaultCassandraPort = 9042
+
+// defaultConfigTimeout is the default Timeout of Config.
+const defaultConfigTimeout = 5 * time.Second
+
+// defaultConfigConnectTimeout is the default ConnectTimeout of Config.
+const defaultConfigConnectTimeout = 5 * time.Second
+
+// defaultConfigPageSize is the default PageSize of Config.
+const defaultConfigPageSize = 500
+
+// defaultConfigNumConns is the default NumConns of Config.
+const defaultConfigNumConns = 2
+
 const (
 	// KindCassandra connects to a self-managed Apache Cassandra (the default).
 	KindCassandra client.Kind = "cassandra"
@@ -92,12 +107,26 @@ func DefaultConfig() Config {
 	return Config{
 		Kind:           KindCassandra,
 		Consistency:    "LOCAL_QUORUM",
-		Timeout:        5 * time.Second,
-		ConnectTimeout: 5 * time.Second,
-		PageSize:       500,
-		NumConns:       2,
-		Cassandra:      CassandraConfig{Hosts: []string{"localhost"}, Port: 9042},
-		Keyspaces:      KeyspacesConfig{Port: keyspaces.DefaultPort},
+		Timeout:        defaultConfigTimeout,
+		ConnectTimeout: defaultConfigConnectTimeout,
+		PageSize:       defaultConfigPageSize,
+		NumConns:       defaultConfigNumConns,
+		Cassandra: CassandraConfig{
+			Hosts:                []string{"localhost"},
+			Port:                 defaultCassandraPort,
+			LocalDC:              "",
+			Username:             "",
+			Password:             "",
+			TLS:                  false,
+			DisableHostDiscovery: false,
+			ReconnectInterval:    0,
+		},
+		Keyspaces: KeyspacesConfig{
+			Port:       keyspaces.DefaultPort,
+			Region:     "",
+			CACertPath: "",
+		},
+		Keyspace: "",
 	}
 }
 
@@ -110,25 +139,29 @@ func kinds() client.Kinds[Config, Deps, interfaces.CQLSession] {
 		Family:  "cql",
 		Default: KindCassandra,
 		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.CQLSession]{
-			KindCassandra: newCassandra,
-			KindKeyspaces: newKeyspaces,
+			KindCassandra: client.RefConfig(newCassandra),
+			KindKeyspaces: client.RefConfig(newKeyspaces),
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
 // NewFromConfig builds the cluster for cfg.Kind and dials a Session. An unknown
 // kind or an invalid backend config is CodeInvalidInput; a failed dial is
 // CodeUnavailable.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.CQLSession, error) {
-	return kinds().New(ctx, cfg.Kind, cfg, deps)
+	return kinds().New(ctx, cfg.Kind, *cfg, deps)
 }
 
 // newCassandra dials a self-managed Cassandra.
-func newCassandra(_ context.Context, cfg Config, _ Deps) (interfaces.CQLSession, error) {
+func newCassandra(_ context.Context, cfg *Config, _ Deps) (interfaces.CQLSession, error) {
 	return cassandra.New(&cassandra.Config{
 		Hosts:          cfg.Cassandra.Hosts,
 		LocalDC:        cfg.Cassandra.LocalDC,
@@ -149,10 +182,13 @@ func newCassandra(_ context.Context, cfg Config, _ Deps) (interfaces.CQLSession,
 }
 
 // newKeyspaces dials Amazon Keyspaces. The SigV4 credentials callback runs on each
-// refresh, long after construction, and bounds itself, so no construction context
-// reaches it.
-func newKeyspaces(_ context.Context, cfg Config, _ Deps) (interfaces.CQLSession, error) {
-	return keyspaces.New(&keyspaces.Config{ //nolint:contextcheck // see the doc comment
+// refresh, long after construction, so it keeps ctx's values but not its cancellation.
+func newKeyspaces(
+	ctx context.Context,
+	cfg *Config,
+	_ Deps,
+) (interfaces.CQLSession, error) {
+	return keyspaces.New(ctx, &keyspaces.Config{
 		Region:         cfg.Keyspaces.Region,
 		Keyspace:       cfg.Keyspace,
 		Consistency:    cfg.Consistency,
@@ -162,5 +198,6 @@ func newKeyspaces(_ context.Context, cfg Config, _ Deps) (interfaces.CQLSession,
 		Port:           cfg.Keyspaces.Port,
 		PageSize:       cfg.PageSize,
 		NumConns:       cfg.NumConns,
+		Credentials:    nil,
 	})
 }

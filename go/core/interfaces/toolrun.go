@@ -25,10 +25,11 @@ type ToolRunner interface {
 	// tool is missing). The error is set only when the run could not start: an unknown
 	// tool, selector or parser, a bad cwd, a placeholder with no value, or a selector
 	// that failed.
+	// run must not be nil.
 	Run(
 		ctx context.Context,
 		cb Codebase,
-		run types.ToolRun,
+		run *types.ToolRun,
 		opts types.RunOptions,
 	) (types.StepResults, error)
 }
@@ -37,11 +38,13 @@ type ToolRunner interface {
 type TargetSelector interface {
 	// Select returns the targets spec selects in cb, sorted: files or directories,
 	// relative to the codebase root.
-	Select(ctx context.Context, cb Codebase, spec types.TargetSpec) ([]string, error)
+	// spec must not be nil.
+	Select(ctx context.Context, cb Codebase, spec *types.TargetSpec) ([]string, error)
 }
 
 // Parser turns a tool's captured output into a verdict.
 type Parser interface {
 	// Parse reads res and returns the verdict, with any findings the output reports.
-	Parse(res CmdResult) types.Verdict
+	// res must not be nil.
+	Parse(res *CmdResult) types.Verdict
 }

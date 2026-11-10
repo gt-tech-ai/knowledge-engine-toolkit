@@ -61,8 +61,9 @@ func WithInTx(ctx context.Context) context.Context {
 // transaction: once any statement fails the transaction is aborted and every
 // subsequent command fails until it ends, so retrying only masks the real error.
 func InTx(ctx context.Context) bool {
-	v, _ := ctx.Value(inTxKey{}).(bool)
-	return v
+	inTx, ok := ctx.Value(inTxKey{}).(bool)
+
+	return ok && inTx
 }
 
 // afterCommitKey is the unexported context key holding the after-commit hook registry.
@@ -81,7 +82,7 @@ type afterCommitReg struct {
 // RunAfterCommit once the commit succeeds. Code running inside the transaction
 // schedules post-commit side effects via RegisterAfterCommit.
 func WithAfterCommit(ctx context.Context) context.Context {
-	return context.WithValue(ctx, afterCommitKey{}, &afterCommitReg{})
+	return context.WithValue(ctx, afterCommitKey{}, new(afterCommitReg))
 }
 
 // RegisterAfterCommit schedules fn to run AFTER the enclosing transaction commits
@@ -91,14 +92,17 @@ func WithAfterCommit(ctx context.Context) context.Context {
 // cache generation token, so a concurrent reader cannot cache a pre-commit snapshot under
 // the new generation — be scheduled uniformly whether or not the write is wrapped in a
 // transaction.
-func RegisterAfterCommit(ctx context.Context, fn func()) {
+func RegisterAfterCommit(ctx context.Context, callback func()) {
 	reg, ok := ctx.Value(afterCommitKey{}).(*afterCommitReg)
 	if !ok || reg == nil {
-		fn()
+		callback()
+
 		return
 	}
+
 	reg.mu.Lock()
-	reg.hooks = append(reg.hooks, fn)
+
+	reg.hooks = append(reg.hooks, callback)
 	reg.mu.Unlock()
 }
 
@@ -110,10 +114,14 @@ func RunAfterCommit(ctx context.Context) {
 	if !ok || reg == nil {
 		return
 	}
+
 	reg.mu.Lock()
+
 	hooks := reg.hooks
+
 	reg.hooks = nil
 	reg.mu.Unlock()
+
 	for _, fn := range hooks {
 		fn()
 	}

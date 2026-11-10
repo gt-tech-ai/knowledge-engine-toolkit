@@ -16,7 +16,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // ErrRetryBudgetExhausted is returned when the retry budget is exhausted.
@@ -34,8 +34,9 @@ type Budget struct {
 
 // NewBudget creates a new retry budget with the given max retries.
 func NewBudget(maxRetries int32) *Budget {
-	b := &Budget{}
+	b := new(Budget)
 	b.remaining.Store(maxRetries)
+
 	return b
 }
 
@@ -48,16 +49,18 @@ func WithRetryBudget(ctx context.Context, b *Budget) context.Context {
 // If no budget exists in context, retries are always allowed. A retrier calls it
 // before each attempt after the first.
 func ConsumeRetry(ctx context.Context) bool {
-	b, ok := ctx.Value(budgetKey{}).(*Budget)
+	budget, ok := ctx.Value(budgetKey{}).(*Budget)
 	if !ok {
 		return true // no budget = unlimited
 	}
+
 	for {
-		current := b.remaining.Load()
+		current := budget.remaining.Load()
 		if current <= 0 {
 			return false
 		}
-		if b.remaining.CompareAndSwap(current, current-1) {
+
+		if budget.remaining.CompareAndSwap(current, current-1) {
 			return true
 		}
 	}
@@ -70,5 +73,6 @@ func Remaining(ctx context.Context) int32 {
 	if !ok {
 		return -1 // no budget
 	}
+
 	return b.remaining.Load()
 }

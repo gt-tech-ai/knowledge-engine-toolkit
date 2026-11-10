@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// minDiffLineLen is the shortest line that has a diff marker and content.
+const minDiffLineLen = 2
+
 // summaryWidth caps one condensed output line.
 const summaryWidth = 200
 
@@ -15,40 +18,59 @@ const summaryWidth = 200
 // noise (see IsNoiseLine). Each line is trimmed and capped at 200 characters.
 func ActionableLines(output []byte, limit int) []string {
 	lines := nonEmptyLines(output)
-	var priority []string
-	for _, line := range lines {
-		switch {
-		case strings.HasPrefix(line, "--- FAIL:"),
-			strings.HasPrefix(line, "FAIL\t"),
-			strings.HasPrefix(line, "FAIL "),
-			isSourceError(line),
-			strings.HasPrefix(line, "FAILED "),
-			strings.HasPrefix(line, "Vulnerability #"):
-			priority = append(priority, line)
-		case strings.HasPrefix(line, "diff --git "):
-			priority = append(priority, diffFile(line))
-		}
-		if len(priority) >= limit {
-			break
-		}
-	}
-	if len(priority) > 0 {
-		for i := range priority {
-			priority[i] = truncate(priority[i])
-		}
+
+	if priority := priorityLines(lines, limit); len(priority) > 0 {
 		return priority
 	}
+
 	var kept []string
+
 	for _, line := range lines {
 		if IsNoiseLine(line) {
 			continue
 		}
+
 		kept = append(kept, truncate(line))
 		if len(kept) >= limit {
 			break
 		}
 	}
+
 	return kept
+}
+
+// priorityLines picks the lines that name a failure, up to limit, truncated.
+func priorityLines(lines []string, limit int) []string {
+	var priority []string
+
+	for _, line := range lines {
+		if picked, ok := priorityLine(line); ok {
+			priority = append(priority, truncate(picked))
+		}
+
+		if len(priority) >= limit {
+			break
+		}
+	}
+
+	return priority
+}
+
+// priorityLine reports whether a line names a failure, and how to show it.
+func priorityLine(line string) (string, bool) {
+	switch {
+	case strings.HasPrefix(line, "--- FAIL:"),
+		strings.HasPrefix(line, "FAIL\t"),
+		strings.HasPrefix(line, "FAIL "),
+		isSourceError(line),
+		strings.HasPrefix(line, "FAILED "),
+		strings.HasPrefix(line, "Vulnerability #"):
+		return line, true
+	case strings.HasPrefix(line, "diff --git "):
+		return diffFile(line), true
+	default:
+		return "", false
+	}
 }
 
 // IsNoiseLine reports whether a trimmed output line carries nothing actionable: a bare
@@ -58,6 +80,7 @@ func IsNoiseLine(line string) bool {
 	if line == "" || line == "FAIL" || line == "PASS" {
 		return true
 	}
+
 	return isRunnerDecoration(line) ||
 		isTestBoilerplate(line) ||
 		isToolNoise(line) ||
@@ -69,11 +92,13 @@ func IsNoiseLine(line string) bool {
 // nonEmptyLines splits data into trimmed, non-empty lines.
 func nonEmptyLines(data []byte) []string {
 	var lines []string
+
 	for raw := range bytes.SplitSeq(data, []byte("\n")) {
 		if s := strings.TrimSpace(string(raw)); s != "" {
 			lines = append(lines, s)
 		}
 	}
+
 	return lines
 }
 
@@ -82,14 +107,16 @@ func diffFile(line string) string {
 	if _, after, ok := strings.Cut(strings.TrimPrefix(line, "diff --git "), " b/"); ok {
 		return after
 	}
+
 	return line
 }
 
 // truncate caps s at summaryWidth characters, marking a cut with "...".
 func truncate(s string) string {
 	if len(s) > summaryWidth {
-		return s[:summaryWidth-3] + "..."
+		return s[:summaryWidth-ellipsisLen] + "..."
 	}
+
 	return s
 }
 
@@ -118,7 +145,8 @@ func isToolNoise(line string) bool {
 	switch {
 	case strings.HasPrefix(line, "{\""):
 		return true
-	case len(line) > 20 && line[4] == '-' && line[7] == '-' && line[10] == 'T':
+	case len(line) > minTimestampLineLen && line[timestampYearDash] == '-' &&
+		line[timestampMonthDash] == '-' && line[timestampDateSeparator] == 'T':
 		return true
 	case strings.HasPrefix(line, "redis:"),
 		strings.HasPrefix(line, "|"),
@@ -127,6 +155,7 @@ func isToolNoise(line string) bool {
 		strings.HasPrefix(line, "$ "):
 		return true
 	}
+
 	return false
 }
 
@@ -140,20 +169,24 @@ func isDiffLine(line string) bool {
 
 // isDiffContent matches a diff's added or removed line.
 func isDiffContent(line string) bool {
-	if len(line) < 2 {
+	if len(line) < minDiffLineLen {
 		return false
 	}
+
 	if line == "+" || line == "-" {
 		return true
 	}
+
 	return (line[0] == '+' && line[1] != '+') || (line[0] == '-' && line[1] != '-')
 }
 
 // isVulncheckNoise matches govulncheck's trace frames and explanatory lines.
 func isVulncheckNoise(line string) bool {
-	if len(line) > 2 && line[0] == '#' && line[1] >= '0' && line[1] <= '9' {
+	if len(line) > minPrefixedLineLen && line[0] == '#' && line[1] >= '0' &&
+		line[1] <= '9' {
 		return true
 	}
+
 	for _, prefix := range []string{
 		"More info:", "Standard library", "Found in:", "Fixed in:",
 		"Example traces found:", "Your code is affected by", "This scan also found",
@@ -163,6 +196,7 @@ func isVulncheckNoise(line string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -172,12 +206,14 @@ func isSourceError(line string) bool {
 	if isCallTraceOrDiff(strings.TrimSpace(line)) {
 		return false
 	}
+
 	for _, ext := range []string{".go:", ".py:", ".ts:", ".tsx:"} {
 		if _, after, ok := strings.Cut(line, ext); ok && after != "" &&
 			after[0] >= '0' && after[0] <= '9' {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -187,9 +223,12 @@ func isCallTraceOrDiff(line string) bool {
 		strings.HasPrefix(line, "@@") || strings.HasPrefix(line, "diff --git") {
 		return true
 	}
-	if len(line) > 2 && line[0] == '#' && line[1] >= '0' && line[1] <= '9' {
+
+	if len(line) > minPrefixedLineLen && line[0] == '#' && line[1] >= '0' &&
+		line[1] <= '9' {
 		return true
 	}
+
 	return strings.Contains(line, " calls ") ||
 		strings.Contains(line, "which eventually calls")
 }

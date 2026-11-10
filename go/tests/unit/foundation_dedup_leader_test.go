@@ -25,18 +25,18 @@ import (
 func TestDeduplicator_Memory_FirstSeenThenDuplicate(t *testing.T) {
 	t.Parallel()
 
-	d := dedup.NewMemory(0) // remember forever
+	memory := dedup.NewMemory(0) // remember forever
 	ctx := context.Background()
 
-	dup, err := d.Seen(ctx, "k1")
+	dup, err := memory.Seen(ctx, "k1")
 	require.NoError(t, err)
 	require.False(t, dup, "first sighting must not be a duplicate")
 
-	dup, err = d.Seen(ctx, "k1")
+	dup, err = memory.Seen(ctx, "k1")
 	require.NoError(t, err)
 	require.True(t, dup, "a repeat sighting must be a duplicate")
 
-	dup, err = d.Seen(ctx, "k2")
+	dup, err = memory.Seen(ctx, "k2")
 	require.NoError(t, err)
 	require.False(t, dup, "a distinct key is tracked independently")
 }

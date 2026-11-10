@@ -28,15 +28,19 @@ type Map[T cmp.Ordered] struct {
 // cover every path.
 func (m Map[T]) Affected(changed []string) []T {
 	var out []T
+
 	for unit, prefixes := range m.Owned {
 		if slices.Contains(m.DispatchOnly, unit) {
 			continue
 		}
+
 		if anyUnder(changed, m.Shared) || anyUnder(changed, prefixes) {
 			out = append(out, unit)
 		}
 	}
+
 	slices.Sort(out)
+
 	return out
 }
 
@@ -49,11 +53,13 @@ func anyUnder(paths, prefixes []string) bool {
 			}
 		}
 	}
+
 	return false
 }
 
 // under reports whether p is prefix or below it.
 func under(p, prefix string) bool {
 	prefix = strings.TrimSuffix(path.Clean(prefix), "/")
+
 	return prefix == "." || p == prefix || strings.HasPrefix(p, prefix+"/")
 }

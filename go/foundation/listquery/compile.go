@@ -7,6 +7,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// keysetTieBreakColumns sizes the columns a keyset adds to the requested ordering.
+const keysetTieBreakColumns = 2
+
 // ColumnFn resolves an allow-listed DTO field name to its storage column. Build one from
 // a resource's filter allow-list with (*Map).Column; it falls back to the field name when
 // the field is not allow-listed.
@@ -54,29 +57,39 @@ func CompileSeek[Q, S any](b interfaces.QueryBackend[Q, S], seek types.Filter) Q
 // resolver — the runner never needs the allow-list. A joined clause keeps its
 // (unused-for-the-predicate) resolved Field for IsEmpty, and carries the JoinTarget the
 // backend compiles to a correlated EXISTS.
-func ResolveFilter(resolve ColumnFn, joinOf JoinFn, f types.Filter) types.Filter {
-	if f == nil || f.IsEmpty() {
-		return f
+func ResolveFilter(resolve ColumnFn, joinOf JoinFn, filter types.Filter) types.Filter {
+	if filter == nil || filter.IsEmpty() {
+		return filter
 	}
-	switch v := f.(type) {
+
+	switch filterClause := filter.(type) {
 	case types.FilterClause:
 		var join *types.JoinTarget
+
 		if joinOf != nil {
-			join = joinOf(v.Field)
+			join = joinOf(filterClause.Field)
 		}
+
 		return types.FilterClause{
-			Field:    resolve(v.Field),
-			Operator: v.Operator,
-			Value:    v.Value,
+			Field:    resolve(filterClause.Field),
+			Operator: filterClause.Operator,
+			Value:    filterClause.Value,
 			Join:     join,
 		}
 	case types.CompositeFilter:
-		if len(v.And) > 0 {
-			return types.CompositeFilter{And: resolveEach(resolve, joinOf, v.And)}
+		if len(filterClause.And) > 0 {
+			return types.CompositeFilter{
+				And: resolveEach(resolve, joinOf, filterClause.And),
+				Or:  nil,
+			}
 		}
-		return types.CompositeFilter{Or: resolveEach(resolve, joinOf, v.Or)}
+
+		return types.CompositeFilter{
+			Or:  resolveEach(resolve, joinOf, filterClause.Or),
+			And: nil,
+		}
 	default:
-		return f
+		return filter
 	}
 }
 
@@ -86,6 +99,7 @@ func resolveEach(resolve ColumnFn, joinOf JoinFn, subs []types.Filter) []types.F
 	for i, sub := range subs {
 		out[i] = ResolveFilter(resolve, joinOf, sub)
 	}
+
 	return out
 }
 
@@ -116,43 +130,55 @@ const KeysetIDColumn = tiebreakerID
 // type-validated); a backend defensively guards a hand-built malformed value rather than
 // re-validating here.
 func Compile[Q, S any](
-	b interfaces.QueryBackend[Q, S],
+	queryBackend interfaces.QueryBackend[Q, S],
 	resolve ColumnFn,
-	f types.Filter,
+	filter types.Filter,
 ) Q {
-	if f == nil || f.IsEmpty() {
-		return b.Empty()
+	if filter == nil || filter.IsEmpty() {
+		return queryBackend.Empty()
 	}
-	switch v := f.(type) {
+
+	switch currentFilter := filter.(type) {
 	case types.FilterClause:
 		// A clause carrying a JoinTarget (stamped by ResolveFilter) compiles to a
 		// correlated EXISTS on the joined table; a same-table clause compiles to a column
 		// predicate as before.
-		if v.Join != nil {
-			return b.ExistsClause(*v.Join, v.Operator, v.Value)
+		if currentFilter.Join != nil {
+			return queryBackend.ExistsClause(
+				currentFilter.Join,
+				currentFilter.Operator,
+				currentFilter.Value,
+			)
 		}
-		return b.Clause(resolve(v.Field), v.Operator, v.Value)
+
+		return queryBackend.Clause(
+			resolve(currentFilter.Field),
+			currentFilter.Operator,
+			currentFilter.Value,
+		)
 	case types.CompositeFilter:
 		// The parser populates exactly one arm ($and or $or); prefer And when present.
-		if len(v.And) > 0 {
-			return b.And(compileEach(b, resolve, v.And))
+		if len(currentFilter.And) > 0 {
+			return queryBackend.And(compileEach(queryBackend, resolve, currentFilter.And))
 		}
-		return b.Or(compileEach(b, resolve, v.Or))
+
+		return queryBackend.Or(compileEach(queryBackend, resolve, currentFilter.Or))
 	default:
-		return b.Empty()
+		return queryBackend.Empty()
 	}
 }
 
 // compileEach folds each sub-filter to a predicate, preserving member order.
 func compileEach[Q, S any](
-	b interfaces.QueryBackend[Q, S],
+	queryBackend interfaces.QueryBackend[Q, S],
 	resolve ColumnFn,
 	subs []types.Filter,
 ) []Q {
 	out := make([]Q, 0, len(subs))
 	for _, sub := range subs {
-		out = append(out, Compile(b, resolve, sub))
+		out = append(out, Compile(queryBackend, resolve, sub))
 	}
+
 	return out
 }
 
@@ -204,66 +230,166 @@ func KeysetColumns(
 	if tiebreaker == "" {
 		tiebreaker = tiebreakerCreatedAt
 	}
-	out := make([]KeysetColumn, 0, len(ofs)+2)
-	seen := make(map[string]bool, len(ofs)+2)
-	appendCol := func(col string, desc bool) {
-		if seen[col] {
-			return
-		}
-		seen[col] = true
-		out = append(out, KeysetColumn{Column: col, Desc: desc})
+
+	currentKeysetBuilder := keysetBuilder{
+		out:  make([]KeysetColumn, 0, len(ofs)+keysetTieBreakColumns),
+		seen: make(map[string]bool, len(ofs)+keysetTieBreakColumns),
 	}
-	for _, of := range ofs {
-		// A joined sort field carries a JoinTarget instead of a base column; the ORDER BY
-		// is a correlated subquery, so it never participates in the keyset seek (a joined
-		// sort is always a custom sort → the offset pager). Dedup it by a join signature
-		// (never collides with a same-table tiebreaker, which is always a base column).
-		if joinOf != nil {
-			if j := joinOf(of.Field); j != nil {
-				key := "\x00join\x00" + j.Table + "\x00" + strings.Join(j.Columns, ",")
-				if !seen[key] {
-					seen[key] = true
-					out = append(out, KeysetColumn{Join: j, Desc: of.Desc})
-				}
-				continue
-			}
+
+	for _, orderField := range ofs {
+		if currentKeysetBuilder.addJoin(joinOf, orderField) ||
+			currentKeysetBuilder.addDerived(derivedOf, orderField) {
+			continue
 		}
-		// A derived sort field carries a correlated-aggregate / interval spec instead of
-		// a base column (a Documents/Members count, a Next Sync). Like a join it never
-		// participates in the keyset seek (always a custom sort → the offset pager).
-		// Dedup by the resolved field name (a derived sort has no base column to key on;
-		// the field name is unique per resolver).
-		if derivedOf != nil {
-			if d := derivedOf(of.Field); d != nil {
-				key := "\x00derived\x00" + of.Field
-				if !seen[key] {
-					seen[key] = true
-					out = append(out, KeysetColumn{Derived: d, Desc: of.Desc})
-				}
-				continue
-			}
+
+		col := resolve(orderField.Field)
+		if !currentKeysetBuilder.addOrdinal(ordinalOf, orderField, col) {
+			currentKeysetBuilder.add(
+				col,
+				KeysetColumn{
+					Column:  col,
+					Desc:    orderField.Desc,
+					Join:    nil,
+					Derived: nil,
+					Ordinal: nil,
+				},
+			)
 		}
-		// A same-table field with a value ordinal sorts by a CASE over its column; it
-		// dedups on the resolved column like a plain column (an ordinal is just a
-		// different ORDER BY over that column).
-		col := resolve(of.Field)
-		if ordinalOf != nil {
-			if ord := ordinalOf(of.Field); len(ord) > 0 {
-				if !seen[col] {
-					seen[col] = true
-					out = append(
-						out,
-						KeysetColumn{Column: col, Ordinal: ord, Desc: of.Desc},
-					)
-				}
-				continue
-			}
-		}
-		appendCol(col, of.Desc)
 	}
-	appendCol(tiebreaker, true)
-	appendCol(tiebreakerID, true)
-	return out
+
+	currentKeysetBuilder.add(
+		tiebreaker,
+		KeysetColumn{
+			Column:  tiebreaker,
+			Desc:    true,
+			Join:    nil,
+			Derived: nil,
+			Ordinal: nil,
+		},
+	)
+	currentKeysetBuilder.add(
+		tiebreakerID,
+		KeysetColumn{
+			Column:  tiebreakerID,
+			Desc:    true,
+			Join:    nil,
+			Derived: nil,
+			Ordinal: nil,
+		},
+	)
+
+	return currentKeysetBuilder.out
+}
+
+// keysetBuilder accumulates keyset columns, keeping the first of each dedup key.
+type keysetBuilder struct {
+	// seen holds the dedup keys already added.
+	seen map[string]bool
+
+	// out holds the columns in sort order.
+	out []KeysetColumn
+}
+
+// add appends c unless key was already added.
+func (b *keysetBuilder) add(key string, keysetColumn KeysetColumn) {
+	if b.seen[key] {
+		return
+	}
+
+	b.seen[key] = true
+	b.out = append(b.out, keysetColumn)
+}
+
+// addJoin handles a joined sort field. It carries a JoinTarget instead of a base column;
+// the ORDER BY is a correlated subquery, so it never participates in the keyset seek (a
+// joined sort is always a custom sort → the offset pager). It dedups by a join signature,
+// which never collides with a same-table tiebreaker (always a base column).
+func (b *keysetBuilder) addJoin(joinOf JoinFn, orderField types.OrderField) bool {
+	if joinOf == nil {
+		return false
+	}
+
+	joinTarget := joinOf(orderField.Field)
+	if joinTarget == nil {
+		return false
+	}
+
+	key := "\x00join\x00" + joinTarget.Table + "\x00" + strings.Join(
+		joinTarget.Columns,
+		",",
+	)
+	b.add(
+		key,
+		KeysetColumn{
+			Join:    joinTarget,
+			Desc:    orderField.Desc,
+			Column:  "",
+			Derived: nil,
+			Ordinal: nil,
+		},
+	)
+
+	return true
+}
+
+// addDerived handles a derived sort field: a correlated-aggregate / interval spec instead
+// of a base column. Like a join it never participates in the keyset seek. It dedups by
+// the resolved field name, which is unique per resolver.
+func (b *keysetBuilder) addDerived(
+	derivedOf DerivedFn,
+	orderField types.OrderField,
+) bool {
+	if derivedOf == nil {
+		return false
+	}
+
+	derivedSort := derivedOf(orderField.Field)
+	if derivedSort == nil {
+		return false
+	}
+
+	b.add(
+		"\x00derived\x00"+orderField.Field,
+		KeysetColumn{
+			Derived: derivedSort,
+			Desc:    orderField.Desc,
+			Column:  "",
+			Join:    nil,
+			Ordinal: nil,
+		},
+	)
+
+	return true
+}
+
+// addOrdinal handles a same-table field with a value ordinal, which sorts by a CASE over
+// its column; it dedups on the resolved column like a plain column.
+func (b *keysetBuilder) addOrdinal(
+	ordinalOf OrdinalFn,
+	orderField types.OrderField,
+	col string,
+) bool {
+	if ordinalOf == nil {
+		return false
+	}
+
+	ord := ordinalOf(orderField.Field)
+	if len(ord) == 0 {
+		return false
+	}
+
+	b.add(
+		col,
+		KeysetColumn{
+			Column:  col,
+			Ordinal: ord,
+			Desc:    orderField.Desc,
+			Join:    nil,
+			Derived: nil,
+		},
+	)
+
+	return true
 }
 
 // CompileOrder folds the ordered sort directives into backend sort nodes over the shared
@@ -271,7 +397,7 @@ func KeysetColumns(
 // the emitted ORDER BY and the keyset seek predicate are guaranteed to agree. See
 // KeysetColumns for the tiebreaker + dedup semantics.
 func CompileOrder[Q, S any](
-	b interfaces.QueryBackend[Q, S],
+	queryBackend interfaces.QueryBackend[Q, S],
 	resolve ColumnFn,
 	joinOf JoinFn,
 	ordinalOf OrdinalFn,
@@ -281,21 +407,36 @@ func CompileOrder[Q, S any](
 ) []S {
 	cols := KeysetColumns(resolve, joinOf, ordinalOf, derivedOf, ofs, tiebreaker)
 	out := make([]S, 0, len(cols))
-	for _, kc := range cols {
+
+	for _, keysetColumn := range cols {
 		// A joined sort column renders as an ORDER BY over a correlated subquery; a
 		// derived column as an aggregate/interval expression; an ordinal column as a CASE
 		// over its values; a plain same-table column (incl. every tiebreaker) as a plain
 		// ORDER BY.
 		switch {
-		case kc.Join != nil:
-			out = append(out, b.OrderJoin(*kc.Join, kc.Desc))
-		case kc.Derived != nil:
-			out = append(out, b.OrderDerived(*kc.Derived, kc.Desc))
-		case len(kc.Ordinal) > 0:
-			out = append(out, b.OrderOrdinal(kc.Column, kc.Ordinal, kc.Desc))
+		case keysetColumn.Join != nil:
+			out = append(
+				out,
+				queryBackend.OrderJoin(keysetColumn.Join, keysetColumn.Desc),
+			)
+		case keysetColumn.Derived != nil:
+			out = append(
+				out,
+				queryBackend.OrderDerived(*keysetColumn.Derived, keysetColumn.Desc),
+			)
+		case len(keysetColumn.Ordinal) > 0:
+			out = append(
+				out,
+				queryBackend.OrderOrdinal(
+					keysetColumn.Column,
+					keysetColumn.Ordinal,
+					keysetColumn.Desc,
+				),
+			)
 		default:
-			out = append(out, b.Order(kc.Column, kc.Desc))
+			out = append(out, queryBackend.Order(keysetColumn.Column, keysetColumn.Desc))
 		}
 	}
+
 	return out
 }

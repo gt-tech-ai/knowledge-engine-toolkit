@@ -1,7 +1,7 @@
 package unit_test
 
 import (
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -9,10 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -34,18 +36,20 @@ func mockBuilders(
 	ctrl *gomock.Controller,
 	descs []types.OperationDescriptor,
 ) map[string]ops.Builder[opsEnv] {
-	b := make(map[string]ops.Builder[opsEnv], len(descs))
+	statusByName := make(map[string]ops.Builder[opsEnv], len(descs))
 	for _, d := range descs {
-		b[d.Name] = func(
+		statusByName[d.Name] = func(
 			desc types.OperationDescriptor,
 			_ opsEnv,
 		) interfaces.Operation {
 			op := mocks.NewMockOperation(ctrl)
 			op.EXPECT().Descriptor().Return(desc).AnyTimes()
+
 			return op
 		}
 	}
-	return b
+
+	return statusByName
 }
 
 // mixedDescs is one operation per safety class and lifecycle the policy tests filter on.
@@ -55,8 +59,8 @@ func mixedDescs() []types.OperationDescriptor {
 		opDesc("mut", types.SafetyMutating, types.OpLifecycleBounded),
 		opDesc("destroy", types.SafetyDestructive, types.OpLifecycleBounded),
 		opDesc("cred", types.SafetyCredentialed, types.OpLifecycleBounded),
-		opDesc("long", types.SafetyReadOnly, types.OpLifecycleLongRunning),
-		opDesc("ask", types.SafetyReadOnly, types.OpLifecycleInteractive),
+		opDesc(textLong, types.SafetyReadOnly, types.OpLifecycleLongRunning),
+		opDesc(textAsk, types.SafetyReadOnly, types.OpLifecycleInteractive),
 	}
 }
 
@@ -66,21 +70,27 @@ func listedNames(reg *ops.Registry) []string {
 	for _, op := range reg.List() {
 		names = append(names, op.Descriptor().Name)
 	}
-	sort.Strings(names)
+
+	slices.Sort(names)
+
 	return names
 }
 
 // newPolicyRegistry builds a registry over mixedDescs with mock builders under policy.
 func newPolicyRegistry(
 	t *testing.T,
-	policy types.ExposurePolicy,
+	policy *types.ExposurePolicy,
 ) (*ops.Registry, error) {
 	t.Helper()
+
 	descs := mixedDescs()
+
 	return ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy:      policy,
+		Policy:      *policy,
 		Descriptors: descs,
 		Builders:    mockBuilders(gomock.NewController(t), descs),
+		Env:         stdx.Zero[opsEnv](),
+		Log:         nil,
 	})
 }
 
@@ -106,14 +116,17 @@ func allLifecycles() []types.OpLifecycle {
 func TestExecutionOpsPolicy_ExcludesOperationAboveMaxSafety(t *testing.T) {
 	t.Parallel()
 
-	reg, err := newPolicyRegistry(t, types.ExposurePolicy{
-		MaxSafety: types.SafetyMutating, Lifecycles: allLifecycles(),
-	})
+	reg, err := newPolicyRegistry(t, fixtures.BuildRef(func(row *types.ExposurePolicy) {
+		row.MaxSafety = types.SafetyMutating
+		row.Lifecycles = allLifecycles()
+	}))
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"ask", "long", "mut", "ro"}, listedNames(reg))
+	assert.Equal(t, []string{textAsk, textLong, "mut", "ro"}, listedNames(reg))
+
 	_, ok := reg.Lookup("cred")
 	assert.False(t, ok)
+
 	_, ok = reg.Lookup("mut")
 	assert.True(t, ok)
 }
@@ -135,18 +148,20 @@ func TestExecutionOpsPolicy_ExcludesDisallowedLifecycle(t *testing.T) {
 		types.OpLifecycleBounded,
 		types.OpLifecycleLongRunning,
 	}
-	reg, err := newPolicyRegistry(t, types.ExposurePolicy{
-		MaxSafety: types.SafetyCredentialed, Lifecycles: noInteractive,
-	})
+	reg, err := newPolicyRegistry(t, fixtures.BuildRef(func(row *types.ExposurePolicy) {
+		row.MaxSafety = types.SafetyCredentialed
+		row.Lifecycles = noInteractive
+	}))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"cred", "destroy", "long", "mut", "ro"}, listedNames(reg))
+	assert.Equal(t, []string{"cred", "destroy", textLong, "mut", "ro"}, listedNames(reg))
 
-	reg, err = newPolicyRegistry(t, types.ExposurePolicy{
+	reg, err = newPolicyRegistry(t, &types.ExposurePolicy{
 		MaxSafety: types.SafetyCredentialed, Lifecycles: noInteractive,
-		Allow: []string{"ro", "long"}, Deny: []string{"ro"},
+		Allow: []string{"ro", textLong}, Deny: []string{"ro"},
+		Prompter: "",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"long"}, listedNames(reg))
+	assert.Equal(t, []string{textLong}, listedNames(reg))
 }
 
 // TestExecutionOpsFactory_FailsOnUnknownOperationInPolicy tests that a policy naming an
@@ -161,19 +176,23 @@ func TestExecutionOpsPolicy_ExcludesDisallowedLifecycle(t *testing.T) {
 func TestExecutionOpsFactory_FailsOnUnknownOperationInPolicy(t *testing.T) {
 	t.Parallel()
 
-	for _, p := range []types.ExposurePolicy{
+	for _, exposurePolicy := range []types.ExposurePolicy{
 		{
 			MaxSafety:  types.SafetyReadOnly,
 			Lifecycles: allLifecycles(),
-			Allow:      []string{"nope"},
+			Allow:      []string{textNope},
+			Prompter:   "",
+			Deny:       nil,
 		},
 		{
 			MaxSafety:  types.SafetyReadOnly,
 			Lifecycles: allLifecycles(),
-			Deny:       []string{"nope"},
+			Deny:       []string{textNope},
+			Prompter:   "",
+			Allow:      nil,
 		},
 	} {
-		_, err := newPolicyRegistry(t, p)
+		_, err := newPolicyRegistry(t, &exposurePolicy)
 		require.Error(t, err)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 		assert.Contains(t, err.Error(), `"nope"`)
@@ -197,27 +216,32 @@ func TestExecutionOpsFactory_FailsOnDescriptorWithoutImplementation(t *testing.T
 	descs := mixedDescs()
 	builders := mockBuilders(ctrl, descs)
 	delete(builders, "ro")
+
 	_, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyCredentialed,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: descs,
 		Builders:    builders,
+		Env:         stdx.Zero[opsEnv](),
+		Log:         nil,
 	})
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), `"ro"`)
 
-	builders = mockBuilders(ctrl, append(descs, opDesc("extra", types.SafetyReadOnly,
+	builders = mockBuilders(ctrl, append(descs, opDesc(textExtra, types.SafetyReadOnly,
 		types.OpLifecycleBounded)))
 	_, err = ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyCredentialed,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: descs,
 		Builders:    builders,
+		Env:         stdx.Zero[opsEnv](),
+		Log:         nil,
 	})
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -229,3 +253,8 @@ type opsEnv struct {
 	// Tag distinguishes environments.
 	Tag string
 }
+
+const (
+	// textLong is the literal "long".
+	textLong = "long"
+)

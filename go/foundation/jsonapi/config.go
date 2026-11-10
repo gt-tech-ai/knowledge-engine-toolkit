@@ -9,7 +9,11 @@
 // middleware that applies it lives in transport/jsonapi.
 package jsonapi
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+)
 
 // Role is the JSON:API operation role a REST route classifies into. The
 // consumer's route table (typically emitted by its code generator) tags each
@@ -66,7 +70,7 @@ type RouteEntry struct {
 
 // Resource projects a RouteEntry onto the resource-key shape the transform functions
 // consume, keeping them decoupled from the route table.
-func (e RouteEntry) Resource() ResourceConfig {
+func (e *RouteEntry) Resource() ResourceConfig {
 	return ResourceConfig{
 		Type:          e.ResourceType,
 		SingleKey:     e.SingleKey,
@@ -114,31 +118,36 @@ type Config struct {
 // "/connectors/{id}"). Returns false when no route matches.
 func (c Config) MatchRoute(method, path string) (RouteEntry, bool) {
 	if c.BasePath != "" && !strings.HasPrefix(path, c.BasePath) {
-		return RouteEntry{}, false
+		return stdx.Zero[RouteEntry](), false
 	}
 
 	segs := splitPath(path)
 
 	var best RouteEntry
-	var bestLiterals int
-	found := false
+
+	bestLiterals := -1
+
 	// Index-based iteration avoids copying the (large) RouteEntry each loop.
-	for i := range c.Routes {
-		e := c.Routes[i]
-		if !strings.EqualFold(e.Method, method) {
-			continue
-		}
-		literals, ok := matchTemplate(splitPath(e.PathTemplate), segs)
-		if !ok {
-			continue
-		}
+	for index := range c.Routes {
+		literals, ok := matchEntry(&c.Routes[index], method, segs)
+
 		// Prefer the template with the most literal (non-wildcard) segment
 		// matches, so a literal route beats a {param} route at the same position.
-		if !found || literals > bestLiterals {
-			best, bestLiterals, found = e, literals, true
+		if ok && literals > bestLiterals {
+			best, bestLiterals = c.Routes[index], literals
 		}
 	}
-	return best, found
+
+	return best, bestLiterals >= 0
+}
+
+// matchEntry reports whether e serves method and segs, and its literal-segment count.
+func matchEntry(e *RouteEntry, method string, segs []string) (int, bool) {
+	if !strings.EqualFold(e.Method, method) {
+		return 0, false
+	}
+
+	return matchTemplate(splitPath(e.PathTemplate), segs)
 }
 
 // splitPath splits a URL path into its non-empty segments.
@@ -154,19 +163,23 @@ func matchTemplate(tmpl, path []string) (literals int, ok bool) {
 	if len(tmpl) != len(path) {
 		return 0, false
 	}
+
 	for i, t := range tmpl {
 		if isParam(t) {
 			continue
 		}
+
 		if t != path[i] {
 			return 0, false
 		}
+
 		literals++
 	}
+
 	return literals, true
 }
 
 // isParam reports whether a template segment is a "{name}" parameter capture.
 func isParam(seg string) bool {
-	return len(seg) >= 2 && seg[0] == '{' && seg[len(seg)-1] == '}'
+	return len(seg) >= minParamSegmentLen && seg[0] == '{' && seg[len(seg)-1] == '}'
 }

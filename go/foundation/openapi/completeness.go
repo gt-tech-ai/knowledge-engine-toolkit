@@ -1,13 +1,10 @@
 package openapi
 
 import (
-	"fmt"
-	"sort"
+	"cmp"
+	"slices"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
-
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
 )
 
 // Violation is one REST RPC the completeness gate rejects: its fully-qualified name
@@ -51,55 +48,32 @@ func CheckCompleteness(
 		return nil, nil
 	}
 
-	svcExt, _ := types.FindExtensionByName(jsonAPIServiceExtension)
-	resExt, _ := types.FindExtensionByName(jsonAPIResourceExtension)
-	opExt, _ := types.FindExtensionByName(jsonAPIOperationExtension)
-	if svcExt == nil || resExt == nil || opExt == nil {
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf(
-				"descriptor set is missing the %s / %s / %s extension definitions",
-				jsonAPIServiceExtension,
-				jsonAPIResourceExtension,
-				jsonAPIOperationExtension,
-			),
-		)
+	exts, err := resolveJSONAPIExtensions(types)
+	if err != nil {
+		return nil, err
 	}
 
 	var violations []Violation
-	var walkErr error
 
-	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		_, ok, err := readServiceOption(fd, svcExt, types)
-		if err != nil {
-			walkErr = apperr.Wrap(err, apperr.CodeInternal, fd.Path())
-			return false
-		}
-		if !ok {
-			return true // not part of the JSON:API REST surface
-		}
+	err = exts.walkSurface(
+		files,
+		func(_ serviceOpt, md protoreflect.MethodDescriptor) error {
+			found, opErr := methodViolations(md, exts, exempt)
 
-		svcs := fd.Services()
-		for i := range svcs.Len() {
-			methods := svcs.Get(i).Methods()
-			for j := range methods.Len() {
-				vs, err := methodViolations(methods.Get(j), resExt, opExt, types, exempt)
-				if err != nil {
-					walkErr = err
-					return false
-				}
-				violations = append(violations, vs...)
-			}
-		}
-		return true
-	})
-	if walkErr != nil {
-		return nil, walkErr
+			violations = append(violations, found...)
+
+			return opErr
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	sort.Slice(violations, func(i, j int) bool {
-		return violations[i].RPC < violations[j].RPC
-	})
+	slices.SortFunc(
+		violations,
+		func(a, b Violation) int { return cmp.Compare(a.RPC, b.RPC) },
+	)
+
 	return violations, nil
 }
 
@@ -111,54 +85,24 @@ func CheckCompleteness(
 // the gate collects all offenders.
 func methodViolations(
 	md protoreflect.MethodDescriptor,
-	resExt, opExt protoreflect.ExtensionType,
-	types *protoregistry.Types,
+	exts *jsonAPIExtensions,
 	exempt map[string]bool,
 ) ([]Violation, error) {
-	bindings, err := methodHTTPBindings(md)
+	routes, err := exts.methodRoutes(md)
 	if err != nil {
 		return nil, err
 	}
-	if len(bindings) == 0 {
-		return nil, nil // gRPC-only method — not a REST route
-	}
-
-	rpc := string(md.FullName())
-
-	action, err := readOperationOption(md, opExt, types)
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInternal, rpc)
-	}
-
-	rc, hasRes, err := readResourceOption(md.Output(), resExt, types)
-	if err != nil {
-		return nil, apperr.Wrap(err, apperr.CodeInternal, rpc)
-	}
-	if hasRes && rc.resourceType == "" {
-		return nil, apperr.New(
-			apperr.CodeInvalidInput,
-			fmt.Sprintf(
-				"%s: response %q: (jsonapi.v1.resource) is missing required field 'type'",
-				rpc, md.Output().Name(),
-			),
-		)
-	}
 
 	var out []Violation
-	for _, b := range bindings {
-		if _, err := Classify(Binding{
-			RPC:           rpc,
-			HTTPMethod:    b.verb,
-			PathTemplate:  b.path,
-			SingleKey:     rc.singleKey,
-			CollectionKey: rc.collectionKey,
-			Action:        action,
-		}); err != nil {
-			if exempt[rpc] {
-				continue // a genuine action/internal RPC — not a violation
-			}
-			out = append(out, Violation{RPC: rpc, Reason: err.Error()})
+
+	for _, b := range routes.bindings {
+		_, err := Classify(new(routes.binding(b)))
+		if err == nil || exempt[routes.rpc] {
+			continue // classified, or a genuine action/internal RPC
 		}
+
+		out = append(out, Violation{RPC: routes.rpc, Reason: err.Error()})
 	}
+
 	return out, nil
 }

@@ -25,26 +25,39 @@ import (
 //     return the mask and never the value; Reveal returns the raw value.
 func TestSecret_MasksEverywhereAndRevealsExplicitly(t *testing.T) {
 	t.Parallel()
+
 	const raw = "super-secret-token-value"
-	s := types.NewSecret(raw)
 
-	require.Equal(t, raw, s.Reveal(), "Reveal must return the raw value")
-	assert.Equal(t, "***", s.String(), "String must mask")
+	secret := types.NewSecret(raw)
 
-	for _, verb := range []string{"%s", "%v", "%q", "%#v", "%+v"} {
-		out := fmt.Sprintf(verb, s)
+	require.Equal(t, raw, secret.Reveal(), "Reveal must return the raw value")
+	assert.Equal(t, textStarStarStar, secret.String(), "String must mask")
+
+	for _, verb := range []string{textSLower, textVLowerAlt, "%q", "%#v", "%+v"} {
+		out := fmt.Sprintf(verb, secret)
 		assert.NotContainsf(t, out, raw, "verb %s leaked the value", verb)
-		assert.Containsf(t, out, "***", "verb %s did not render the mask", verb)
+		assert.Containsf(
+			t,
+			out,
+			textStarStarStar,
+			"verb %s did not render the mask",
+			verb,
+		)
 	}
 
-	text, err := s.MarshalText()
+	text, err := secret.MarshalText()
 	require.NoError(t, err)
 	assert.NotContains(t, string(text), raw, "MarshalText leaked the value")
 
-	blob, err := json.Marshal(s)
+	blob, err := json.Marshal(secret)
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), raw, "MarshalJSON leaked the value")
-	assert.Contains(t, string(blob), "***", "MarshalJSON did not render the mask")
+	assert.Contains(
+		t,
+		string(blob),
+		textStarStarStar,
+		"MarshalJSON did not render the mask",
+	)
 }
 
 // TestSecret_ZeroValue tests that a zero Secret reports empty and reveals the empty
@@ -75,6 +88,12 @@ func TestSecret_ZeroValue(t *testing.T) {
 //   - Ref{dev, bootstrap, client_secret} renders "dev/bootstrap/client_secret".
 func TestRef_String(t *testing.T) {
 	t.Parallel()
-	r := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+
+	r := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	assert.Equal(t, "dev/bootstrap/client_secret", r.String())
 }
+
+const (
+	// textStarStarStar is the literal "***".
+	textStarStarStar = "***"
+)

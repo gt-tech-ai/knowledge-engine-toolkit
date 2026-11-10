@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 )
 
@@ -32,7 +32,16 @@ func TestCursorCodec_RoundTripAndUTCNormalization(t *testing.T) {
 	require.NotNil(t, codec)
 
 	loc := time.FixedZone("UTC+5", 5*60*60)
-	created := time.Date(2026, 7, 24, 12, 30, 45, 123456789, loc)
+	created := time.Date(
+		dateInput,
+		dateInputUTCNormalization,
+		dateInputAndUTCNormalization,
+		dateInputTripAndUTCNormalization,
+		dateInputRoundTripAndUTCNormalization,
+		dateInputCodecRoundTripAndUTCNormalization,
+		dateInputCursorCodecRoundTripAndUTCNormalization,
+		loc,
+	)
 
 	token := codec.Encode(created, "id-42")
 	require.NotEmpty(t, token)
@@ -61,7 +70,7 @@ func TestCursorCodec_EmptyID(t *testing.T) {
 	t.Parallel()
 
 	codec := repository.NewCursorCodec()
-	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	created := time.Date(dateInput, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	got, err := codec.Decode(codec.Encode(created, ""))
 	require.NoError(t, err)
@@ -106,6 +115,7 @@ func TestCursorCodec_DecodeInvalid(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			_, err := codec.Decode(tc.token)
 			require.Error(t, err)
 			assert.True(
@@ -117,3 +127,29 @@ func TestCursorCodec_DecodeInvalid(t *testing.T) {
 		})
 	}
 }
+
+const (
+	// dateInputAndUTCNormalization is the day passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
+	dateInputAndUTCNormalization = 24
+
+	// dateInputCodecRoundTripAndUTCNormalization is the sec passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
+	dateInputCodecRoundTripAndUTCNormalization = 45
+
+	// dateInputCursorCodecRoundTripAndUTCNormalization is the nsec passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
+	dateInputCursorCodecRoundTripAndUTCNormalization = 123456789
+
+	// dateInputRoundTripAndUTCNormalization is the min passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
+	dateInputRoundTripAndUTCNormalization = 30
+
+	// dateInputTripAndUTCNormalization is the hour passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
+	dateInputTripAndUTCNormalization = 12
+
+	// dateInputUTCNormalization is the month passed to Date in
+	// TestCursorCodec_RoundTripAndUTCNormalization.
+	dateInputUTCNormalization = 7
+)

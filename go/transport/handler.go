@@ -77,17 +77,18 @@ func NewBase[C any](decs decorate.Decorations, name string) (Base, error) {
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }
 
 // Handler returns fn run through the tier as the operation op.
-func (b Base) Handler[Req, Resp any](
-	op string,
-	fn HandlerFunc[Req, Resp],
+func (b *Base) Handler[Req, Resp any](
+	operation string,
+	callback HandlerFunc[Req, Resp],
 ) HandlerFunc[Req, Resp] {
 	return func(ctx context.Context, req Req) (Resp, error) {
-		return b.Exec(ctx, op, func(ctx context.Context) (Resp, error) {
-			return fn(ctx, req)
+		return b.Exec(ctx, operation, func(ctx context.Context) (Resp, error) {
+			return callback(ctx, req)
 		})
 	}
 }

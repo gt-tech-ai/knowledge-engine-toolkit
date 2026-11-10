@@ -10,7 +10,8 @@ import (
 // stacks.
 type DockerClient interface {
 	// Build builds an image as spec describes.
-	Build(ctx context.Context, spec types.BuildSpec) error
+	// spec must not be nil.
+	Build(ctx context.Context, spec *types.BuildSpec) error
 
 	// Push pushes the image ref.
 	Push(ctx context.Context, ref string) error
@@ -20,8 +21,10 @@ type DockerClient interface {
 	Inspect(ctx context.Context, ref string) ([]byte, error)
 
 	// ComposeUp starts spec's stack and waits for it to be healthy.
-	ComposeUp(ctx context.Context, spec types.ComposeSpec) error
+	// spec must not be nil.
+	ComposeUp(ctx context.Context, spec *types.ComposeSpec) error
 
 	// ComposeDown stops spec's stack.
-	ComposeDown(ctx context.Context, spec types.ComposeSpec) error
+	// spec must not be nil.
+	ComposeDown(ctx context.Context, spec *types.ComposeSpec) error
 }

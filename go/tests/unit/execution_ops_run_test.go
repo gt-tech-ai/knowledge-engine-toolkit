@@ -9,10 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -24,43 +25,52 @@ type runFunc func(ctx context.Context, in any, obs interfaces.ExecutionObserver)
 // d) whose Run executes the given body, plus an inadmissible destructive op "rm".
 func funcRegistry(
 	t *testing.T,
-	d time.Duration,
+	duration time.Duration,
 	runs map[string]runFunc,
 ) *ops.Registry {
 	t.Helper()
+
 	ctrl := gomock.NewController(t)
 	descs := make([]types.OperationDescriptor, 0, 1+len(runs))
+
 	descs = append(descs,
-		opDesc("rm", types.SafetyDestructive, types.OpLifecycleBounded),
+		opDesc(textRm, types.SafetyDestructive, types.OpLifecycleBounded),
 	)
-	builders := map[string]ops.Builder[opsEnv]{"rm": mockBuilders(ctrl, descs)["rm"]}
+
+	builders := map[string]ops.Builder[opsEnv]{textRm: mockBuilders(ctrl, descs)[textRm]}
+
 	for name, run := range runs {
 		desc := opDesc(name, types.SafetyReadOnly, types.OpLifecycleBounded)
-		desc.Timeout = d
+
+		desc.Timeout = duration
 		descs = append(descs, desc)
 		builders[name] = func(
 			desc types.OperationDescriptor,
 			_ opsEnv,
 		) interfaces.Operation {
-			op := mocks.NewMockOperation(ctrl)
-			op.EXPECT().Descriptor().Return(desc).AnyTimes()
-			op.EXPECT().
+			operation := mocks.NewMockOperation(ctrl)
+			operation.EXPECT().Descriptor().Return(desc).AnyTimes()
+			operation.EXPECT().
 				Run(gomock.Any(), gomock.Any(), gomock.Any()).
 				DoAndReturn(run).
 				AnyTimes()
-			return op
+
+			return operation
 		}
 	}
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyMutating,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyMutating
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: descs,
 		Builders:    builders,
 		Log:         fixtures.NopLogger(),
+		Env:         stdx.Zero[opsEnv](),
 	})
 	require.NoError(t, err)
+
 	return reg
 }
 
@@ -79,15 +89,16 @@ func TestExecutionOpsRegistryRun_TimeoutIsCodeTimeout(t *testing.T) {
 	t.Parallel()
 
 	reg := funcRegistry(t, 10*time.Millisecond, map[string]runFunc{
-		"slow": func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
+		textSlow: func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
 			<-ctx.Done()
+
 			return ctx.Err()
 		},
 	})
-	err := reg.Run(context.Background(), "slow", nil, nil)
+	err := reg.Run(context.Background(), textSlow, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
-	assert.Contains(t, err.Error(), "slow")
+	assert.Contains(t, err.Error(), textSlow)
 	assert.Contains(t, err.Error(), "10ms")
 }
 
@@ -108,6 +119,7 @@ func TestExecutionOpsRegistryRun_CanceledIsCodeCanceled(t *testing.T) {
 		"stop": func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
 			cancel()
 			<-ctx.Done()
+
 			return ctx.Err()
 		},
 	})
@@ -128,11 +140,11 @@ func TestExecutionOpsRegistryRun_PanicIsCodeInternal(t *testing.T) {
 	t.Parallel()
 
 	reg := funcRegistry(t, time.Minute, map[string]runFunc{
-		"boom": func(context.Context, any, interfaces.ExecutionObserver) error {
-			panic("boom")
+		textBoom: func(context.Context, any, interfaces.ExecutionObserver) error {
+			panic(textBoom)
 		},
 	})
-	err := reg.Run(context.Background(), "boom", nil, nil)
+	err := reg.Run(context.Background(), textBoom, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
@@ -152,11 +164,11 @@ func TestExecutionOpsRegistryRun_UnknownIsNotFound(t *testing.T) {
 
 	reg := funcRegistry(t, time.Minute, nil)
 
-	err := reg.Run(context.Background(), "nope", nil, nil)
+	err := reg.Run(context.Background(), textNope, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 
-	err = reg.Run(context.Background(), "rm", nil, nil)
+	err = reg.Run(context.Background(), textRm, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeForbidden, apperr.Code(err))
 }
@@ -175,15 +187,15 @@ func TestExecutionOpsRegistryRun_PreservesErrorCode(t *testing.T) {
 	t.Parallel()
 
 	reg := funcRegistry(t, time.Minute, map[string]runFunc{
-		"bad": func(context.Context, any, interfaces.ExecutionObserver) error {
+		textBad: func(context.Context, any, interfaces.ExecutionObserver) error {
 			return apperr.New(apperr.CodeInvalidInput, "bad flag")
 		},
-		"ok": func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
+		textOk: func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
-	err := reg.Run(context.Background(), "bad", nil, nil)
+	err := reg.Run(context.Background(), textBad, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "bad flag")
 
-	require.NoError(t, reg.Run(context.Background(), "ok", nil, nil))
+	require.NoError(t, reg.Run(context.Background(), textOk, nil, nil))
 }

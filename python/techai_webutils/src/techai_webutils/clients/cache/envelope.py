@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from typing import cast
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,7 +26,16 @@ class CacheEnvelope[T]:
 
 
 def encode(value: object, version: int) -> bytes:
-    """Serialize value into a versioned envelope as JSON bytes."""
+    """Serialize value into a versioned envelope as JSON bytes.
+
+    Args:
+        value: The JSON-serializable value to wrap.
+        version: The schema version stamped on the envelope.
+
+    Returns:
+        The envelope as JSON bytes.
+
+    """
     envelope = {
         "data": value,
         "cached_at": time.time(),
@@ -44,8 +54,11 @@ def decode(data: bytes, version: int) -> tuple[object | None, bool]:
         data: JSON bytes produced by :func:`encode`.
         version: Expected schema version. Mismatch → ``(None, False)``.
 
+    Returns:
+        The value and ``True``, or ``None`` and ``False`` for an invalid envelope.
+
     """
-    envelope = json.loads(data)
+    envelope = cast("dict[str, object]", json.loads(data))
     if envelope["version"] != version:
         return None, False
     return envelope["data"], True

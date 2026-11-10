@@ -43,25 +43,12 @@ func New(maxSize int, ttl time.Duration) *Buffer {
 		keys:    make(map[string]*keyBuffer),
 		maxSize: maxSize,
 		ttl:     ttl,
+		mu:      sync.Mutex{},
 	}
 }
 
 // compile-time assertion that *Buffer satisfies the seam.
 var _ interfaces.ReplayBuffer = (*Buffer)(nil)
-
-// live returns key's buffer if it exists and has not expired, else nil (lazily deleting
-// an expired one). Callers hold b.mu.
-func (b *Buffer) live(key string) *keyBuffer {
-	kb, ok := b.keys[key]
-	if !ok {
-		return nil
-	}
-	if time.Now().After(kb.expiry) {
-		delete(b.keys, key)
-		return nil
-	}
-	return kb
-}
 
 // Append records payload under key, evicting the oldest past maxSize and refreshing the
 // TTL.
@@ -69,19 +56,25 @@ func (b *Buffer) Append(_ context.Context, key, msgID string, payload []byte) er
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	kb := b.live(key)
-	if kb == nil {
-		kb = &keyBuffer{}
-		b.keys[key] = kb
+	currentKeyBuffer := b.live(key)
+	if currentKeyBuffer == nil {
+		currentKeyBuffer = new(keyBuffer)
+		b.keys[key] = currentKeyBuffer
 	}
-	kb.msgs = append(kb.msgs, interfaces.BufferedMessage{ID: msgID, Payload: payload})
-	if len(kb.msgs) > b.maxSize {
+
+	currentKeyBuffer.msgs = append(
+		currentKeyBuffer.msgs,
+		interfaces.BufferedMessage{ID: msgID, Payload: payload},
+	)
+	if len(currentKeyBuffer.msgs) > b.maxSize {
 		// Evict the oldest to stay bounded. Eviction does NOT advance lowWater (that is the
 		// ack/prune boundary only): a client whose last-received id was evicted is a gap →
 		// full-refresh. This keeps the Redis backend to one pipelined round-trip per Append.
-		kb.msgs = kb.msgs[len(kb.msgs)-b.maxSize:]
+		currentKeyBuffer.msgs = currentKeyBuffer.msgs[len(currentKeyBuffer.msgs)-b.maxSize:]
 	}
-	kb.expiry = time.Now().Add(b.ttl)
+
+	currentKeyBuffer.expiry = time.Now().Add(b.ttl)
+
 	return nil
 }
 
@@ -94,25 +87,29 @@ func (b *Buffer) ReplayAfter(
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	kb := b.live(key)
-	if kb == nil {
+	secondKeyBuffer := b.live(key)
+	if secondKeyBuffer == nil {
 		return nil, false, nil // absent or expired → gap
 	}
+
 	// A client that received nothing (unreachable in practice — it always got the
 	// ConnectionInfo ack) full-refreshes rather than risk a front gap from eviction.
 	if afterMsgID == "" {
 		return nil, false, nil
 	}
+
 	// afterMsgID == the pruned low-water mark: the client acked exactly up to it, so the
 	// whole retained tail is a gapless replay.
-	if afterMsgID == kb.lowWater {
-		return clone(kb.msgs), true, nil
+	if afterMsgID == secondKeyBuffer.lowWater {
+		return clone(secondKeyBuffer.msgs), true, nil
 	}
-	for i, m := range kb.msgs {
+
+	for i, m := range secondKeyBuffer.msgs {
 		if m.ID == afterMsgID {
-			return clone(kb.msgs[i+1:]), true, nil
+			return clone(secondKeyBuffer.msgs[i+1:]), true, nil
 		}
 	}
+
 	return nil, false, nil // not retained → gap
 }
 
@@ -121,17 +118,20 @@ func (b *Buffer) Prune(_ context.Context, key, upToMsgID string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	kb := b.live(key)
-	if kb == nil {
+	secondKeyBuffer := b.live(key)
+	if secondKeyBuffer == nil {
 		return nil
 	}
-	for i, m := range kb.msgs {
+
+	for i, m := range secondKeyBuffer.msgs {
 		if m.ID == upToMsgID {
-			kb.lowWater = upToMsgID
-			kb.msgs = clone(kb.msgs[i+1:])
+			secondKeyBuffer.lowWater = upToMsgID
+			secondKeyBuffer.msgs = clone(secondKeyBuffer.msgs[i+1:])
+
 			return nil
 		}
 	}
+
 	return nil // not present → no-op
 }
 
@@ -139,8 +139,27 @@ func (b *Buffer) Prune(_ context.Context, key, upToMsgID string) error {
 func (b *Buffer) Delete(_ context.Context, key string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	delete(b.keys, key)
+
 	return nil
+}
+
+// live returns key's buffer if it exists and has not expired, else nil (lazily deleting
+// an expired one). Callers hold b.mu.
+func (b *Buffer) live(key string) *keyBuffer {
+	currentKeyBuffer, ok := b.keys[key]
+	if !ok {
+		return nil
+	}
+
+	if time.Now().After(currentKeyBuffer.expiry) {
+		delete(b.keys, key)
+
+		return nil
+	}
+
+	return currentKeyBuffer
 }
 
 // clone copies a message slice so callers never alias the buffer's backing array.
@@ -148,7 +167,9 @@ func clone(msgs []interfaces.BufferedMessage) []interfaces.BufferedMessage {
 	if len(msgs) == 0 {
 		return nil
 	}
+
 	out := make([]interfaces.BufferedMessage, len(msgs))
 	copy(out, msgs)
+
 	return out
 }

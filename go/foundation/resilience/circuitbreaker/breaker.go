@@ -15,11 +15,26 @@ import (
 	"fmt"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 	gb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/circuitbreaker/gobreaker"
 )
+
+// defaultConfigInterval is the default Interval of Config.
+const defaultConfigInterval = 60 * time.Second
+
+// defaultConfigTimeout is the default Timeout of Config.
+const defaultConfigTimeout = 30 * time.Second
+
+// defaultConfigConsecutiveFailures is the default ConsecutiveFailures of Config.
+const defaultConfigConsecutiveFailures = 5
+
+// defaultConfigFailureRatio is the default FailureRatio of Config.
+const defaultConfigFailureRatio = 0.5
+
+// defaultConfigMinRequests is the default MinRequests of Config.
+const defaultConfigMinRequests = 10
 
 // Kind specifies which circuit breaker implementation to use.
 type Kind int
@@ -75,11 +90,11 @@ func DefaultConfig(name string) Config {
 		Kind:                KindGoBreaker,
 		Name:                name,
 		MaxRequests:         1,
-		Interval:            60 * time.Second,
-		Timeout:             30 * time.Second,
-		ConsecutiveFailures: 5,
-		FailureRatio:        0.5,
-		MinRequests:         10,
+		Interval:            defaultConfigInterval,
+		Timeout:             defaultConfigTimeout,
+		ConsecutiveFailures: defaultConfigConsecutiveFailures,
+		FailureRatio:        defaultConfigFailureRatio,
+		MinRequests:         defaultConfigMinRequests,
 	}
 }
 
@@ -136,8 +151,10 @@ func New(
 	opts ...options.Option[Config],
 ) (interfaces.CircuitBreaker, error) {
 	cfg := DefaultConfig(name)
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -155,6 +172,7 @@ func NewFromConfig(cfg Config) (interfaces.CircuitBreaker, error) {
 			FailureRatio:        cfg.FailureRatio,
 			MinRequests:         cfg.MinRequests,
 		}
+
 		return gb.New(gbCfg), nil
 
 	default:

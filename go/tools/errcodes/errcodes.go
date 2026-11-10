@@ -13,7 +13,7 @@ const (
 	SourcePath = "taxonomy/error-codes.yaml"
 
 	// GoPath is the rendered Go file.
-	GoPath = "go/core/errors/codes.go"
+	GoPath = "go/core/apperr/codes.go"
 
 	// PythonPath is the rendered Python module.
 	PythonPath = "python/techai_webutils/src/techai_webutils/core/errors/codes.py"
@@ -33,5 +33,14 @@ func (generator) Name() string { return "errcodes" }
 
 // Inputs selects the taxonomy source.
 func (generator) Inputs() types.FileSelector {
-	return types.FileSelector{Paths: []string{SourcePath}}
+	return types.FileSelector{
+		Paths:            []string{SourcePath},
+		Roots:            nil,
+		Globs:            nil,
+		Exts:             nil,
+		Exclude:          nil,
+		TrackedOnly:      false,
+		IncludeGenerated: false,
+		IncludeIgnored:   false,
+	}
 }

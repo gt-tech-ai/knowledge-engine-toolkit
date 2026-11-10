@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from techai_webutils.clients.model_gateway.routed.catalog import (
@@ -14,18 +12,21 @@ from techai_webutils.clients.model_gateway.routed.classifier import (
     route_classifier_from_config,
 )
 from techai_webutils.clients.model_gateway.routed.planner import route_planner_from_config
+from techai_webutils.clients.model_gateway.routed.planner.builder import (
+    RoutePlannerDependencies,
+)
 from techai_webutils.clients.model_gateway.routed.ranker import (
     candidate_ranker_from_config,
 )
 from techai_webutils.clients.token_ledger.cost import PriceTable
-from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.model_gateway import RouteContext
 from techai_webutils.core.types.routing import Classification, PlanInput
 
 
 @pytest.mark.asyncio
 async def test_stub_classifier_returns_step_default_route(
-    routes_raw: dict[str, Any],
+    routes_raw: dict[str, object],
 ) -> None:
     """Test that the stub classifier routes each step to its own route, else the default.
 
@@ -33,8 +34,13 @@ async def test_stub_classifier_returns_step_default_route(
       - With the stub classifier, routing must reproduce today's per-step model choice.
 
     **What it tests:**
-      - step ``rewrite`` → route ``rewrite`` (confidence 1.0); an unrouted step → the default
+      - step ``rewrite`` → route ``rewrite`` (confidence 1.0); an unrouted step → the
+        default
       - with no default, an unrouted step raises ``INVALID_INPUT``
+
+    Args:
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     names = frozenset(routes_raw)
     classifier = route_classifier_from_config(
@@ -48,22 +54,28 @@ async def test_stub_classifier_returns_step_default_route(
     assert rewrite == Classification(route="rewrite", confidence=1.0)
     assert unrouted == Classification(route="generate", confidence=1.0)
     with pytest.raises(AppError) as caught:
-        await strict.classify(RouteContext(step="summarize"), "q")
+        _ = await strict.classify(RouteContext(step="summarize"), "q")
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
 @pytest.mark.asyncio
 async def test_static_order_follows_route_preference_then_catalog(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the static ranker orders by the route's models, then catalog order.
 
     **Why this test is important:**
-      - The default ranker is what keeps routing identical to today: the step's model first.
+      - The default ranker is what keeps routing identical to today: the step's model
+        first.
 
     **What it tests:**
-      - the ``rewrite`` route puts Haiku first, then Sonnet's endpoints and the small model
-        in catalog order; nothing is rejected
+      - the ``rewrite`` route puts Haiku first, then Sonnet's endpoints and the small
+        model in catalog order; nothing is rejected
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)
@@ -87,7 +99,7 @@ async def test_static_order_follows_route_preference_then_catalog(
 
 @pytest.mark.asyncio
 async def test_static_order_ignores_the_requests_prices(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the static ranker's per-request entry point ranks exactly as ``rank``.
 
@@ -97,6 +109,11 @@ async def test_static_order_ignores_the_requests_prices(
 
     **What it tests:**
       - ``rank_priced`` with a price table returns the same order as ``rank``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)
@@ -119,7 +136,7 @@ async def test_static_order_ignores_the_requests_prices(
 
 @pytest.mark.asyncio
 async def test_local_planner_classifies_then_ranks(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the local planner chains classifier and ranker into a plan.
 
@@ -127,17 +144,25 @@ async def test_local_planner_classifies_then_ranks(
       - ``local`` is the planner every routed request uses until a remote planner exists.
 
     **What it tests:**
-      - a ``generate`` request plans Sonnet first with route ``generate``, decider ``local``
+      - a ``generate`` request plans Sonnet first with route ``generate``, decider
+        ``local``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     routes = parse_routes(routes_raw, catalog)
     planner = route_planner_from_config(
         {"kind": "local"},
-        classifier=route_classifier_from_config(
-            {}, route_names=frozenset(routes), default_route=""
+        options=RoutePlannerDependencies(
+            classifier=route_classifier_from_config(
+                {}, route_names=frozenset(routes), default_route=""
+            ),
+            ranker=candidate_ranker_from_config({}),
+            routes=routes,
         ),
-        ranker=candidate_ranker_from_config({}),
-        routes=routes,
     )
 
     plan = await planner.plan(
@@ -148,7 +173,7 @@ async def test_local_planner_classifies_then_ranks(
     assert plan.ordered[0].key == "anthropic/sonnet@use1"
 
 
-def test_planner_kind_unknown_raises(routes_raw: dict[str, Any]) -> None:
+def test_planner_kind_unknown_raises(routes_raw: dict[str, object]) -> None:
     """Test that every stage factory fails loudly on an unknown kind.
 
     **Why this test is important:**
@@ -157,6 +182,10 @@ def test_planner_kind_unknown_raises(routes_raw: dict[str, Any]) -> None:
     **What it tests:**
       - unknown planner, classifier and ranker kinds each raise a ``ValueError`` coded
         ``INVALID_INPUT``
+
+    Args:
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     classifier = route_classifier_from_config(
         {}, route_names=frozenset(), default_route=""
@@ -164,7 +193,10 @@ def test_planner_kind_unknown_raises(routes_raw: dict[str, Any]) -> None:
     ranker = candidate_ranker_from_config({})
     builds = (
         lambda: route_planner_from_config(
-            {"kind": "psychic"}, classifier=classifier, ranker=ranker, routes={}
+            {"kind": "psychic"},
+            options=RoutePlannerDependencies(
+                classifier=classifier, ranker=ranker, routes={}
+            ),
         ),
         lambda: route_classifier_from_config(
             {"kind": "psychic"}, route_names=frozenset(routes_raw), default_route=""
@@ -172,7 +204,7 @@ def test_planner_kind_unknown_raises(routes_raw: dict[str, Any]) -> None:
         lambda: candidate_ranker_from_config({"kind": "psychic"}),
     )
     for build in builds:
-        with pytest.raises(ValueError, match="kind") as caught:
-            build()
+        with pytest.raises(AppValueError, match="kind") as caught:
+            _ = build()
         assert isinstance(caught.value, AppError)
         assert caught.value.code is ErrorCode.INVALID_INPUT

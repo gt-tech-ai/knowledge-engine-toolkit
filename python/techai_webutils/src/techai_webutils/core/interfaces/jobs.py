@@ -15,12 +15,22 @@ class Job(ABC):
 
     @abstractmethod
     def kind(self) -> str:
-        """Return the job type identifier used for worker dispatch."""
+        """Return the job type identifier used for worker dispatch.
+
+        Returns:
+            The job type a worker is registered under.
+
+        """
         ...
 
     @abstractmethod
     def args(self) -> dict[str, object]:
-        """Return the job's payload as a key-value map."""
+        """Return the job's payload as a key-value map.
+
+        Returns:
+            The job's payload.
+
+        """
         ...
 
 
@@ -29,7 +39,12 @@ class Worker(ABC):
 
     @abstractmethod
     async def work(self, args: dict[str, object]) -> None:
-        """Execute a job with the given arguments."""
+        """Execute a job with the given arguments.
+
+        Args:
+            args: The job's payload.
+
+        """
         ...
 
 
@@ -50,7 +65,12 @@ class JobEnqueuer(ABC):
 
     @abstractmethod
     async def enqueue(self, job: Job) -> None:
-        """Submit a job for asynchronous processing."""
+        """Submit a job for asynchronous processing.
+
+        Args:
+            job: The job to run asynchronously.
+
+        """
         ...
 
     @abstractmethod
@@ -64,7 +84,13 @@ class JobScheduler(ABC):
 
     @abstractmethod
     async def schedule(self, job: PeriodicJob, interval_seconds: float) -> None:
-        """Add a periodic job to the schedule at the given interval."""
+        """Add a periodic job to the schedule at the given interval.
+
+        Args:
+            job: The job to run repeatedly.
+            interval_seconds: Seconds between runs.
+
+        """
         ...
 
 
@@ -73,10 +99,24 @@ class WorkerRegistry(ABC):
 
     @abstractmethod
     def register(self, kind: str, worker: Worker) -> None:
-        """Associate a worker with a job kind."""
+        """Associate a worker with a job kind.
+
+        Args:
+            kind: The job type the worker handles.
+            worker: The worker that runs jobs of ``kind``.
+
+        """
         ...
 
     @abstractmethod
     def get(self, kind: str) -> Worker | None:
-        """Retrieve the worker registered for the given kind."""
+        """Retrieve the worker registered for the given kind.
+
+        Args:
+            kind: A job type.
+
+        Returns:
+            The worker registered for ``kind``, or ``None``.
+
+        """
         ...

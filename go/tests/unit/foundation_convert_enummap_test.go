@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	apprpc "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/convert"
 )
 
@@ -45,30 +45,33 @@ func newTestMapper() apprpc.EnumMapper[enumP, enumD] {
 //   - ToDomainEntries exposes the forward table for derived projections.
 func TestEnumMapper(t *testing.T) {
 	t.Parallel()
-	m := newTestMapper()
 
-	assert.Equal(t, pOne, m.ToProtoValue(dOne))
-	d, ok := m.ToDomainOK(pTwo)
-	assert.True(t, ok)
+	enumMapper := newTestMapper()
+
+	assert.Equal(t, pOne, enumMapper.ToProtoValue(dOne))
+
+	d, found := enumMapper.ToDomainOK(pTwo)
+	assert.True(t, found)
 	assert.Equal(t, dTwo, d)
 
 	assert.Equal(
 		t,
 		pUnspecified,
-		m.ToProtoValue(enumD("absent")),
+		enumMapper.ToProtoValue(enumD(textAbsent)),
 	) // unmapped → protoZero fallback
 
-	_, err := m.ToDomainOrError(enumP(99))
+	_, err := enumMapper.ToDomainOrError(enumP(enumPInput))
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	_, ok = m.ToDomainFilter(pUnspecified) // unspecified → "no filter"
-	assert.False(t, ok)
-	fd, ok := m.ToDomainFilter(pOne)
-	assert.True(t, ok)
+	_, found = enumMapper.ToDomainFilter(pUnspecified) // unspecified → "no filter"
+	assert.False(t, found)
+
+	fd, found := enumMapper.ToDomainFilter(pOne)
+	assert.True(t, found)
 	assert.Equal(t, dOne, fd)
 
-	assert.Len(t, m.ToDomainEntries(), 2)
+	assert.Len(t, enumMapper.ToDomainEntries(), wantToDomainEntriesLen)
 }
 
 // TestNewEnumMapper_ReverseCollisionPanics tests the loud-at-init guard against a
@@ -90,3 +93,11 @@ func TestNewEnumMapper_ReverseCollisionPanics(t *testing.T) {
 			map[enumP]enumD{pOne: dOne, pTwo: dOne}) // both → dOne
 	})
 }
+
+const (
+	// enumPInput is argument 1 of enumP in TestEnumMapper.
+	enumPInput = 99
+
+	// wantToDomainEntriesLen is the expected to domain entries len.
+	wantToDomainEntriesLen = 2
+)

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	apprpc "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/convert"
 )
 
@@ -26,13 +26,18 @@ func TestParseUUID(t *testing.T) {
 	t.Parallel()
 
 	want := uuid.New()
-	got, err := apprpc.ParseUUID(want.String(), "resource_id")
+	got, err := apprpc.ParseUUID(want.String(), textResourceID)
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 
-	bad, err := apprpc.ParseUUID("not-a-uuid", "resource_id")
+	bad, err := apprpc.ParseUUID("not-a-uuid", textResourceID)
 	require.Error(t, err)
 	assert.Equal(t, uuid.Nil, bad)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	assert.Contains(t, err.Error(), "resource_id")
+	assert.Contains(t, err.Error(), textResourceID)
 }
+
+const (
+	// textResourceID is the literal "resource_id".
+	textResourceID = "resource_id"
+)

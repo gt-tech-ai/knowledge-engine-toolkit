@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from io import StringIO
+from typing import cast
 
 from techai_webutils.foundation.logger.stdlib_logger import StdlibLogger
 
@@ -19,7 +20,8 @@ from techai_webutils.foundation.logger.stdlib_logger import StdlibLogger
 class TestStdlibLogger:
     """Test suite for stdlib-based logger implementation."""
 
-    def test_info_logs_at_info_level(self) -> None:
+    @staticmethod
+    def test_info_logs_at_info_level() -> None:
         """Test that info() produces a log entry at INFO level.
 
         **Why this test is important:**
@@ -36,11 +38,12 @@ class TestStdlibLogger:
 
         lines = output.getvalue().strip().split("\n")
         assert len(lines) >= 1
-        data = json.loads(lines[-1])
+        data = cast("dict[str, object]", json.loads(lines[-1]))
         assert data["message"] == "test message"
         assert data["level"] == "INFO"
 
-    def test_debug_logs_at_debug_level(self) -> None:
+    @staticmethod
+    def test_debug_logs_at_debug_level() -> None:
         """Test that debug() produces a log entry at DEBUG level.
 
         **Why this test is important:**
@@ -54,11 +57,14 @@ class TestStdlibLogger:
         logger = StdlibLogger(level="DEBUG", stream=output)
         logger.debug("debug msg")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["message"] == "debug msg"
         assert data["level"] == "DEBUG"
 
-    def test_warning_logs_at_warning_level(self) -> None:
+    @staticmethod
+    def test_warning_logs_at_warning_level() -> None:
         """Test that warning() produces a log entry at WARNING level.
 
         **Why this test is important:**
@@ -72,11 +78,14 @@ class TestStdlibLogger:
         logger = StdlibLogger(level="DEBUG", stream=output)
         logger.warning("warn msg")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["message"] == "warn msg"
         assert data["level"] == "WARNING"
 
-    def test_error_logs_at_error_level(self) -> None:
+    @staticmethod
+    def test_error_logs_at_error_level() -> None:
         """Test that error() produces a log entry at ERROR level.
 
         **Why this test is important:**
@@ -90,11 +99,14 @@ class TestStdlibLogger:
         logger = StdlibLogger(level="DEBUG", stream=output)
         logger.error("error msg")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["message"] == "error msg"
         assert data["level"] == "ERROR"
 
-    def test_bind_returns_new_logger_with_context(self) -> None:
+    @staticmethod
+    def test_bind_returns_new_logger_with_context() -> None:
         """Test that bind() returns a new logger with bound context in output.
 
         **Why this test is important:**
@@ -110,10 +122,13 @@ class TestStdlibLogger:
         bound = logger.bind(request_id="req-456")
         bound.info("with context")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["request_id"] == "req-456"
 
-    def test_kwargs_appear_in_output(self) -> None:
+    @staticmethod
+    def test_kwargs_appear_in_output() -> None:
         """Test that extra kwargs passed to log methods appear in the JSON output.
 
         **Why this test is important:**
@@ -127,11 +142,14 @@ class TestStdlibLogger:
         logger = StdlibLogger(level="DEBUG", stream=output)
         logger.info("operation", doc_id="doc-789", action="ingest")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["doc_id"] == "doc-789"
         assert data["action"] == "ingest"
 
-    def test_level_filtering(self) -> None:
+    @staticmethod
+    def test_level_filtering() -> None:
         """Test that messages below the configured level are suppressed.
 
         **Why this test is important:**
@@ -149,5 +167,5 @@ class TestStdlibLogger:
 
         lines = [line for line in output.getvalue().strip().split("\n") if line]
         assert len(lines) == 1
-        data = json.loads(lines[0])
+        data = cast("dict[str, object]", json.loads(lines[0]))
         assert data["message"] == "should appear"

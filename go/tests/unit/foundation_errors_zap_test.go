@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // TestErrorFieldAppError tests that ZapError() extracts structured fields from an
@@ -28,10 +28,10 @@ import (
 func TestErrorFieldAppError(t *testing.T) {
 	t.Parallel()
 
-	appErr := apperr.NotFound("record not found")
+	appErr := apperr.NotFound(textRecordNotFound)
 	field := apperr.ZapError(appErr)
 
-	assert.Equal(t, "error", field.Key)
+	assert.Equal(t, textError, field.Key)
 	assert.Equal(t, zapcore.ObjectMarshalerType, field.Type)
 }
 
@@ -51,7 +51,7 @@ func TestErrorFieldPlainError(t *testing.T) {
 	plainErr := apperr.Sentinel("something went wrong")
 	field := apperr.ZapError(plainErr)
 
-	assert.Equal(t, "error", field.Key)
+	assert.Equal(t, textError, field.Key)
 	assert.Equal(t, zapcore.ErrorType, field.Type)
 }
 
@@ -71,21 +71,8 @@ func TestErrorFieldPlainError(t *testing.T) {
 func TestFieldsExtraction(t *testing.T) {
 	t.Parallel()
 
-	appErr := apperr.Internal("database connection failed")
-	fields := apperr.ZapFields(appErr)
-
-	fieldMap := make(map[string]zap.Field, len(fields))
-	for _, f := range fields {
-		fieldMap[f.Key] = f
-	}
-
-	codeField, ok := fieldMap["error_code"]
-	require.True(t, ok, "expected error_code field")
-	assert.Equal(t, string(apperr.CodeInternal), codeField.String)
-
-	msgField, ok := fieldMap["error_message"]
-	require.True(t, ok, "expected error_message field")
-	assert.Equal(t, "database connection failed", msgField.String)
+	appErr := apperr.Internal(textDatabaseConnectionFailed)
+	assertInternalZapFields(t, appErr)
 }
 
 // TestFieldsWithDetails tests that ZapFields() includes error_details when present.
@@ -111,12 +98,15 @@ func TestFieldsWithDetails(t *testing.T) {
 	fields := apperr.ZapFields(appErr)
 
 	found := false
+
 	for _, f := range fields {
-		if f.Key == "error_details" {
+		if f.Key == textErrorDetails {
 			found = true
+
 			assert.Equal(t, zapcore.ObjectMarshalerType, f.Type)
 		}
 	}
+
 	assert.True(t, found, "expected error_details field when Details is non-empty")
 }
 
@@ -135,25 +125,25 @@ func TestFieldsWithDetails(t *testing.T) {
 func TestCombineAppendErrors(t *testing.T) {
 	t.Parallel()
 
-	err1 := apperr.Sentinel("error one")
-	err2 := apperr.Sentinel("error two")
-	err3 := apperr.Sentinel("error three")
+	err1 := apperr.Sentinel(textErrorOne)
+	secondErr := apperr.Sentinel("error two")
+	thirdErr := apperr.Sentinel("error three")
 
-	combined := apperr.Combine(nil, err1, nil, err2)
+	combined := apperr.Combine(nil, err1, nil, secondErr)
 	require.Error(t, combined)
 
 	errs := apperr.Errors(combined)
-	require.Len(t, errs, 2)
-	assert.Equal(t, "error one", errs[0].Error())
+	require.Len(t, errs, wantErrsLen)
+	assert.Equal(t, textErrorOne, errs[0].Error())
 	assert.Equal(t, "error two", errs[1].Error())
 
 	result := apperr.Append(nil, err1)
 	require.Error(t, result)
-	assert.Equal(t, "error one", result.Error())
+	assert.Equal(t, textErrorOne, result.Error())
 
-	combined = apperr.Append(combined, err3)
+	combined = apperr.Append(combined, thirdErr)
 	errs = apperr.Errors(combined)
-	require.Len(t, errs, 3)
+	require.Len(t, errs, wantErrsLenErrors)
 
 	assert.NoError(t, apperr.Combine(nil, nil))
 }
@@ -275,7 +265,7 @@ func TestLogErrorsMultiError(t *testing.T) {
 	apperr.LogErrors(logger, "batch operation failed", combined)
 
 	entries := observed.All()
-	require.Len(t, entries, 2)
+	require.Len(t, entries, wantEntriesLenError)
 	assert.Equal(
 		t,
 		zap.WarnLevel,
@@ -325,18 +315,18 @@ func TestFoundationMarshalLogObject_NoDetails(t *testing.T) {
 	core, observed := observer.New(zap.DebugLevel)
 	logger := zap.New(core)
 
-	appErr := apperr.NotFound("record not found")
-	logger.Error("test", zap.Object("error", appErr))
+	appErr := apperr.NotFound(textRecordNotFound)
+	logger.Error(textTest, zap.Object(textError, appErr))
 
 	entries := observed.All()
 	require.Len(t, entries, 1)
 
 	ctx := entries[0].ContextMap()
-	errObj, ok := ctx["error"]
+	errObj, ok := ctx[textError]
 	require.True(t, ok, "expected 'error' field in log entry")
 
 	errMap, ok := errObj.(map[string]any)
-	require.True(t, ok, "expected error field to be map, got %T", errObj)
+	require.True(t, ok, textExpectedErrorFieldTo, errObj)
 	assert.Equal(
 		t,
 		string(apperr.CodeNotFound),
@@ -344,7 +334,7 @@ func TestFoundationMarshalLogObject_NoDetails(t *testing.T) {
 		"expected code=%q",
 		apperr.CodeNotFound,
 	)
-	assert.Equal(t, "record not found", errMap["message"])
+	assert.Equal(t, textRecordNotFound, errMap["message"])
 	assert.NotContains(
 		t,
 		errMap,
@@ -375,16 +365,17 @@ func TestMarshalLogObject_WithDetails(t *testing.T) {
 			"document_id": "doc-abc",
 		},
 	)
-	logger.Error("test", zap.Object("error", appErr))
+	logger.Error(textTest, zap.Object(textError, appErr))
 
 	entries := observed.All()
 	require.Len(t, entries, 1)
 
 	ctx := entries[0].ContextMap()
-	errObj, ok := ctx["error"]
+	errObj, ok := ctx[textError]
 	require.True(t, ok, "expected 'error' field in log entry")
+
 	errMap, ok := errObj.(map[string]any)
-	require.True(t, ok, "expected error field to be map, got %T", errObj)
+	require.True(t, ok, textExpectedErrorFieldTo, errObj)
 	assert.Contains(
 		t,
 		errMap,
@@ -422,21 +413,21 @@ func TestMarshalLogObject_CauseAndStack(t *testing.T) {
 		"failed to query database",
 	)
 
-	logger.Error("test", apperr.ZapError(appErr))
+	logger.Error(textTest, apperr.ZapError(appErr))
 
 	entries := observed.All()
 	require.Len(t, entries, 1)
 
-	errMap, ok := entries[0].ContextMap()["error"].(map[string]any)
+	errMap, found := entries[0].ContextMap()[textError].(map[string]any)
 	require.True(
 		t,
-		ok,
-		"expected error field to be map, got %T",
-		entries[0].ContextMap()["error"],
+		found,
+		textExpectedErrorFieldTo,
+		entries[0].ContextMap()[textError],
 	)
 
-	cause, ok := errMap["cause"].(string)
-	require.True(t, ok, "expected cause to be a string, got %T", errMap["cause"])
+	cause, found := errMap["cause"].(string)
+	require.True(t, found, "expected cause to be a string, got %T", errMap["cause"])
 	assert.Contains(
 		t,
 		cause,
@@ -444,8 +435,8 @@ func TestMarshalLogObject_CauseAndStack(t *testing.T) {
 		"expected cause to contain underlying error text",
 	)
 
-	stack, ok := errMap["stack"].(string)
-	require.True(t, ok, "expected stack to be a string, got %T", errMap["stack"])
+	stack, found := errMap["stack"].(string)
+	require.True(t, found, "expected stack to be a string, got %T", errMap["stack"])
 	assert.Contains(t, stack, "TestMarshalLogObject_CauseAndStack",
 		"expected stack rooted at the calling function")
 }
@@ -454,10 +445,28 @@ func TestMarshalLogObject_CauseAndStack(t *testing.T) {
 // assertions.
 func contextFieldMap(m map[string]any) map[string]string {
 	result := make(map[string]string)
+
 	for k, v := range m {
 		if s, ok := v.(string); ok {
 			result[k] = s
 		}
 	}
+
 	return result
 }
+
+const (
+	// wantEntriesLenError is the expected entries len error.
+	wantEntriesLenError = 2
+
+	// wantErrsLenErrors is the expected errs len errors.
+	wantErrsLenErrors = 3
+)
+
+const (
+	// textErrorOne is the literal "error one".
+	textErrorOne = "error one"
+
+	// textExpectedErrorFieldTo is the literal "expected error field to be map, got %T".
+	textExpectedErrorFieldTo = "expected error field to be map, got %T"
+)

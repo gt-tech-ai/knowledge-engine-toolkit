@@ -6,7 +6,7 @@ contract from core/interfaces.
 
 from __future__ import annotations
 
-from typing import TypeVar, cast
+from typing import TypeVar, cast, final, override
 
 from techai_webutils.core.interfaces.config_loader import ConfigLoader
 from techai_webutils.foundation.config.loader import load_config
@@ -14,14 +14,9 @@ from techai_webutils.foundation.config.loader import load_config
 T = TypeVar("T")
 
 
+@final
 class YamlConfigLoader(ConfigLoader):
-    """ConfigLoader backed by hierarchical YAML files.
-
-    Args:
-        config_dir: Path to directory containing base.yaml.
-        environment: Optional environment name for overlay loading.
-
-    """
+    """ConfigLoader backed by hierarchical YAML files."""
 
     def __init__(self, config_dir: str, environment: str | None = None) -> None:
         """Eagerly load and merge the YAML hierarchy into an in-memory dict.
@@ -34,17 +29,44 @@ class YamlConfigLoader(ConfigLoader):
         """
         self._data = load_config(config_dir, environment)
 
+    @override
     def get(self, key: str) -> object | None:
-        """Return the raw value for a dotted key, or None if not set."""
+        """Return the raw value for a dotted key, or None if not set.
+
+        Args:
+            key: The dotted key.
+
+        Returns:
+            The raw value for a dotted key, or None if not set.
+
+        """
         return self._resolve(key)
 
+    @override
     def get_string(self, key: str) -> str:
-        """Return the string value for a key."""
+        """Return the string value for a key.
+
+        Args:
+            key: A dotted config key.
+
+        Returns:
+            The string value for a key.
+
+        """
         val = self._resolve(key)
         return str(val) if val is not None else ""
 
+    @override
     def get_int(self, key: str) -> int:
-        """Return the int value for a key."""
+        """Return the int value for a key.
+
+        Args:
+            key: A dotted config key.
+
+        Returns:
+            The int value for a key.
+
+        """
         val = self._resolve(key)
         if val is None:
             return 0
@@ -52,8 +74,17 @@ class YamlConfigLoader(ConfigLoader):
             return val
         return int(str(val))
 
+    @override
     def get_bool(self, key: str) -> bool:
-        """Return the bool value for a key."""
+        """Return the bool value for a key.
+
+        Args:
+            key: A dotted config key.
+
+        Returns:
+            The bool value for a key.
+
+        """
         val = self._resolve(key)
         if val is None:
             return False
@@ -63,17 +94,33 @@ class YamlConfigLoader(ConfigLoader):
             return val.lower() in {"true", "1", "yes"}
         return bool(val)
 
+    @override
     def unmarshal(self, target_type: type[T]) -> T:
         """Decode the full configuration into the target type.
 
         Works with Pydantic models and dataclasses that accept ``**kwargs``.
+
+        Args:
+            target_type: The typed config class to decode into.
+
+        Returns:
+            The full configuration into the target type.
+
         """
         return target_type(**self._data)
 
     def _resolve(self, key: str) -> object | None:
-        """Walk dotted key path through nested dicts."""
+        """Walk dotted key path through nested dicts.
+
+        Args:
+            key: The dotted key.
+
+        Returns:
+            The value at the path, or ``None``.
+
+        """
         parts = key.split(".")
-        current: object = self._data
+        current = cast("object", self._data)
         for part in parts:
             if not isinstance(current, dict):
                 return None

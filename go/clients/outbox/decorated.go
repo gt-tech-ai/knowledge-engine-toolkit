@@ -12,50 +12,62 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	outboxs3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/s3"
 	outboxsqs "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // decorateSQS runs every SQS call through the client tier and codes its errors, so
 // only transient failures are retried. Both calls are retryable: a queue
 // lookup is a read, and a re-sent batch only risks a duplicate the outbox's
 // at-least-once contract already allows.
-func decorateSQS(inner outboxsqs.API, c client.Base) outboxsqs.API {
-	return &sqsAPI{inner: inner, Base: c}
+func decorateSQS(inner outboxsqs.API, cRef *client.Base) outboxsqs.Calls {
+	c := *cRef
+
+	api := &sqsAPI{inner: inner, Base: &c}
+
+	return outboxsqs.Calls{
+		GetQueueURL:      api.getQueueURL,
+		SendMessageBatch: api.SendMessageBatch,
+	}
 }
 
 // sqsAPI is the decorated SQS seam.
 type sqsAPI struct {
+	// Base runs the calls through the client tier.
+	*client.Base
+
 	// inner is the wrapped client.
 	inner outboxsqs.API
-	// Base runs the calls through the client tier.
-	client.Base
-}
-
-// GetQueueUrl resolves the queue URL through the client tier.
-func (a *sqsAPI) GetQueueUrl(
-	ctx context.Context, in *awssqs.GetQueueUrlInput, optFns ...func(*awssqs.Options),
-) (*awssqs.GetQueueUrlOutput, error) {
-	return a.Exec(
-		ctx,
-		"get_queue_url",
-		func(cctx context.Context) (*awssqs.GetQueueUrlOutput, error) {
-			out, err := a.inner.GetQueueUrl(cctx, in, optFns...)
-			return out, classify(err)
-		},
-	)
 }
 
 // SendMessageBatch sends one batch through the client tier.
 func (a *sqsAPI) SendMessageBatch(
 	ctx context.Context,
-	in *awssqs.SendMessageBatchInput,
+	sendMessageBatchInput *awssqs.SendMessageBatchInput,
 	optFns ...func(*awssqs.Options),
 ) (*awssqs.SendMessageBatchOutput, error) {
 	return a.Exec(
 		ctx,
 		"send_message_batch",
 		func(cctx context.Context) (*awssqs.SendMessageBatchOutput, error) {
-			out, err := a.inner.SendMessageBatch(cctx, in, optFns...)
+			out, err := a.inner.SendMessageBatch(cctx, sendMessageBatchInput, optFns...)
+
+			return out, classify(err)
+		},
+	)
+}
+
+// getQueueURL resolves the queue URL through the client tier.
+func (a *sqsAPI) getQueueURL(
+	ctx context.Context,
+	queueLookup *awssqs.GetQueueUrlInput,
+	optFns ...func(*awssqs.Options),
+) (*awssqs.GetQueueUrlOutput, error) {
+	return a.Exec(
+		ctx,
+		"get_queue_url",
+		func(cctx context.Context) (*awssqs.GetQueueUrlOutput, error) {
+			out, err := a.inner.GetQueueUrl(cctx, queueLookup, optFns...)
+
 			return out, classify(err)
 		},
 	)
@@ -64,26 +76,32 @@ func (a *sqsAPI) SendMessageBatch(
 // decorateS3 runs every PutObject through the client tier and codes its errors. A put
 // is retried only when its body can be rewound, and it is rewound before every
 // attempt so a retry writes the whole payload.
-func decorateS3(inner outboxs3.API, c client.Base) outboxs3.API {
-	return &s3API{inner: inner, Base: c}
+func decorateS3(inner outboxs3.API, cRef *client.Base) outboxs3.API {
+	c := *cRef
+
+	return &s3API{inner: inner, Base: &c}
 }
 
 // s3API is the decorated S3 seam.
 type s3API struct {
+	// Base runs the calls through the client tier.
+	*client.Base
+
 	// inner is the wrapped client.
 	inner outboxs3.API
-	// Base runs the calls through the client tier.
-	client.Base
 }
 
 // PutObject writes one object through the client tier.
 func (a *s3API) PutObject(
-	ctx context.Context, in *awss3.PutObjectInput, optFns ...func(*awss3.Options),
+	ctx context.Context,
+	putObjectInput *awss3.PutObjectInput,
+	optFns ...func(*awss3.Options),
 ) (*awss3.PutObjectOutput, error) {
-	seeker, rewindable := in.Body.(io.Seeker)
+	seeker, rewindable := putObjectInput.Body.(io.Seeker)
 	put := func(ctx context.Context) (*awss3.PutObjectOutput, error) {
 		if rewindable {
-			if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+			_, err := seeker.Seek(0, io.SeekStart)
+			if err != nil {
 				return nil, apperr.Wrap(
 					err,
 					apperr.CodeInternal,
@@ -91,12 +109,16 @@ func (a *s3API) PutObject(
 				)
 			}
 		}
-		out, err := a.inner.PutObject(ctx, in, optFns...)
+
+		out, err := a.inner.PutObject(ctx, putObjectInput, optFns...)
+
 		return out, classify(err)
 	}
+
 	if rewindable {
 		return a.Exec(ctx, "put_object", put)
 	}
+
 	return a.ExecOnce(ctx, "put_object", put)
 }
 
@@ -111,10 +133,13 @@ func classify(err error) error {
 		) || apperr.StdIs(err, context.DeadlineExceeded) {
 		return err
 	}
+
 	var apiErr smithy.APIError
+
 	if !apperr.As(err, &apiErr) || apiErr.ErrorFault() != smithy.FaultClient {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "aws call failed")
 	}
+
 	switch name := apiErr.ErrorCode(); {
 	case strings.Contains(name, "Throttl"), name == "SlowDown", name == "RequestTimeout":
 		return apperr.Wrap(err, apperr.CodeUnavailable, "aws call throttled")

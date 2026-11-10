@@ -9,12 +9,15 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	promhttp "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http"
+	promhttp "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/httpapi"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/stub"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
+
+// defaultConfigTimeout is the default Timeout of Config.
+const defaultConfigTimeout = 30 * time.Second
 
 const (
 	// KindStub answers every query with a zero (the default).
@@ -47,7 +50,7 @@ type Deps struct {
 	decorate.Decorations
 
 	// Doer replaces the http.Client KindHTTP builds from Config.HTTP.Timeout.
-	Doer promhttp.HTTPDoer
+	Doer promhttp.Doer
 }
 
 // DefaultConfig returns the stub kind, a 30-second request timeout and a 32 MiB body
@@ -55,9 +58,12 @@ type Deps struct {
 func DefaultConfig() Config {
 	return Config{
 		HTTP: promhttp.Config{
-			Timeout:      30 * time.Second,
+			Timeout:      defaultConfigTimeout,
 			MaxBodyBytes: DefaultMaxBodyBytes,
+			BaseURL:      "",
 		},
+		Kind: "",
+		Name: "",
 	}
 }
 
@@ -72,6 +78,9 @@ func kinds() client.Kinds[Config, Deps, interfaces.MetricsQuerier] {
 			},
 			KindHTTP: newHTTP,
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -87,20 +96,29 @@ func newHTTP(
 			"prometheus: http.base_url is required for the http kind",
 		)
 	}
+
 	name := cfg.Name
 	if name == "" {
 		name = "prometheus"
 	}
+
 	base, err := client.NewWireBase(deps.Decorations, name)
 	if err != nil {
 		return nil, err
 	}
+
 	doer := deps.Doer
 	if doer == nil {
-		doer = &nethttp.Client{Timeout: cfg.HTTP.Timeout}
+		doer = &nethttp.Client{
+			Timeout:       cfg.HTTP.Timeout,
+			Transport:     nil,
+			CheckRedirect: nil,
+			Jar:           nil,
+		}
 	}
+
 	return promhttp.New(cfg.HTTP.BaseURL, promhttp.DecorateDoer(
-		doer, base, cfg.HTTP.MaxBodyBytes,
+		doer, &base, cfg.HTTP.MaxBodyBytes,
 	)), nil
 }
 

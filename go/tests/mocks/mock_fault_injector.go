@@ -57,7 +57,7 @@ func (mr *MockFaultInjectorMockRecorder) Active(ctx, namespace any) *gomock.Call
 }
 
 // Inject mocks base method.
-func (m *MockFaultInjector) Inject(ctx context.Context, f types.Fault) error {
+func (m *MockFaultInjector) Inject(ctx context.Context, f *types.Fault) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Inject", ctx, f)
 	ret0, _ := ret[0].(error)
@@ -71,7 +71,7 @@ func (mr *MockFaultInjectorMockRecorder) Inject(ctx, f any) *gomock.Call {
 }
 
 // Revert mocks base method.
-func (m *MockFaultInjector) Revert(ctx context.Context, f types.Fault) error {
+func (m *MockFaultInjector) Revert(ctx context.Context, f *types.Fault) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Revert", ctx, f)
 	ret0, _ := ret[0].(error)

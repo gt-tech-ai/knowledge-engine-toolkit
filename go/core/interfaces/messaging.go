@@ -33,67 +33,49 @@ type CountingPublisher interface {
 	PublishCount(ctx context.Context, topic string, payload []byte) (int, error)
 }
 
-// MessageConsumer consumes messages from a queue/topic, acking or nacking each one
-// by its handler's result.
-type MessageConsumer interface {
-	// Subscribe starts consuming messages from the specified topic.
-	// The handler is called for each message. Return nil to ack, error to nack.
-	Subscribe(ctx context.Context, topic string, handler MessageHandler) error
+// PartitionKeyAttribute is the message attribute (SQS) or metadata key (memory) a
+// KeyedPublisher carries a message's key in, so a consumer can read it back.
+const PartitionKeyAttribute = "partition_key"
 
-	// Close stops the consumer gracefully.
-	Close() error
-}
-
-// DynamicConsumer is a MessageConsumer that can also remove a per-channel subscription at
-// runtime. Pub/Sub brokers (e.g. Redis) multiplex many channels over one subscription and
-// add/remove them dynamically; SQS-style queue consumers do not. It is an opt-in
-// capability interface that composes with MessageConsumer
-// (ARCHITECTURE.md#interface-composition) rather than widening the shared contract —
-// backends that cannot unsubscribe simply do not implement it.
-type DynamicConsumer interface {
-	// MessageConsumer provides the base Subscribe/Close operations.
-	MessageConsumer
-
-	// Unsubscribe stops delivering messages from topic. It is a no-op if topic
-	// was never subscribed; a broker error is returned.
-	Unsubscribe(ctx context.Context, topic string) error
-}
-
-// PatternConsumer is a DynamicConsumer that also supports glob-pattern (wildcard)
-// subscriptions — the Redis PSUBSCRIBE model, where one subscription matches every
-// channel whose name matches a pattern. It composes with DynamicConsumer (and thus
-// MessageConsumer) per ARCHITECTURE.md#interface-composition; backends without pattern
-// matching do not implement it.
-type PatternConsumer interface {
-	// DynamicConsumer provides the base consume operations plus per-channel Unsubscribe.
-	DynamicConsumer
-
-	// PSubscribe starts delivering messages from every channel matching pattern
-	// (glob syntax) to handler. Runtime add.
-	PSubscribe(ctx context.Context, pattern string, handler MessageHandler) error
-
-	// PUnsubscribe stops delivering messages for pattern. It is a no-op if pattern
-	// was never subscribed; a broker error is returned. Runtime remove.
-	PUnsubscribe(ctx context.Context, pattern string) error
-}
-
-// MessageHandler processes a single message.
-type MessageHandler func(ctx context.Context, msg *Message) error
-
-// Message represents a message received from a queue.
-type Message struct {
-	// Metadata holds optional key-value pairs attached to the message.
-	Metadata map[string]string `json:"metadata,omitempty"`
-
-	// ID is the unique identifier of the message.
-	ID string `json:"id"`
-
-	// Topic is the queue or topic the message was received from.
-	Topic string `json:"topic"`
+// KeyedPayload is one message of a keyed batch: its partition key and body.
+type KeyedPayload struct {
+	// Key groups related messages (e.g. one document's events); a broker that orders
+	// per key delivers messages with the same key in publish order.
+	Key string
 
 	// Payload is the raw message body.
-	Payload []byte `json:"payload"`
+	Payload []byte
+}
 
-	// Timestamp is the Unix timestamp when the message was produced.
-	Timestamp int64 `json:"timestamp"`
+// KeyedPublisher is a MessagePublisher that also attaches a partition key to each
+// message. It is an opt-in capability interface (ARCHITECTURE.md#interface-composition):
+// a broker that partitions by key (Kafka, Kinesis, SQS FIFO groups) orders messages
+// per key, while SQS standard queues only carry the key as the partition_key attribute
+// so a consumer can still read it. Redis Pub/Sub carries no attributes and does not
+// implement it.
+type KeyedPublisher interface {
+	// MessagePublisher provides the unkeyed Publish/PublishBatch operations.
+	MessagePublisher
+
+	// PublishKeyed sends payload to topic under key.
+	PublishKeyed(ctx context.Context, topic, key string, payload []byte) error
+
+	// PublishBatchKeyed sends each item to topic under its own key, in order.
+	PublishBatchKeyed(ctx context.Context, topic string, items []KeyedPayload) error
+
+	// OrderedPerKey reports whether the broker delivers messages that share a key in
+	// publish order. A consumer that needs per-key order checks it at startup rather
+	// than assuming it.
+	OrderedPerKey() bool
+}
+
+// Backlog is the work waiting on one topic.
+type Backlog struct {
+	// OldestAgeSeconds is the age of the oldest waiting message, or nil when the broker
+	// cannot report it cheaply (SQS keeps it only as a CloudWatch metric).
+	OldestAgeSeconds *float64
+
+	// Messages is how many messages wait to be received (SQS:
+	// ApproximateNumberOfMessages; Kafka: consumer-group lag).
+	Messages int64
 }

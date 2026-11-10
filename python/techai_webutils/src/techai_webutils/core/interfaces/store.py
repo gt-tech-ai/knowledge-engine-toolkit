@@ -26,30 +26,77 @@ class Store[T, P, ID](ABC):
 
     @abstractmethod
     async def get(self, entity_id: ID) -> T:
-        """Retrieve an entity by ID."""
+        """Retrieve an entity by ID.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        Returns:
+            The stored entity.
+
+        """
         ...
 
     @abstractmethod
     async def list(self, params: P, page: PageRequest) -> Page[T]:
-        """Retrieve entities matching parameters with pagination."""
+        """Retrieve entities matching parameters with pagination.
+
+        Args:
+            params: The filter the entities must match.
+            page: Which page of results to return.
+
+        Returns:
+            One page of matching entities.
+
+        """
         ...
 
     @abstractmethod
     async def create(self, entity: T) -> T:
-        """Persist a new entity and return it with generated fields populated."""
+        """Persist a new entity and return it with generated fields populated.
+
+        Args:
+            entity: The entity to persist.
+
+        Returns:
+            The persisted entity, with generated fields filled.
+
+        """
         ...
 
     @abstractmethod
     async def update(self, entity_id: ID, entity: T) -> T:
-        """Modify an existing entity identified by id."""
+        """Modify an existing entity identified by id.
+
+        Args:
+            entity_id: The entity's identifier.
+            entity: The entity's new state.
+
+        Returns:
+            The persisted entity after the update.
+
+        """
         ...
 
     @abstractmethod
     async def delete(self, entity_id: ID) -> None:
-        """Remove an entity by ID."""
+        """Remove an entity by ID.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        """
         ...
 
     @abstractmethod
     async def exists(self, entity_id: ID) -> bool:
-        """Check if an entity with the given ID exists."""
+        """Check if an entity with the given ID exists.
+
+        Args:
+            entity_id: The entity's identifier.
+
+        Returns:
+            ``True`` when an entity with ``entity_id`` is persisted.
+
+        """
         ...

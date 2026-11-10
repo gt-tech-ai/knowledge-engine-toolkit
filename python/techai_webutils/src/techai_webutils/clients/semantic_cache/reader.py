@@ -1,28 +1,33 @@
-"""``SemanticCacheReader`` — one read-through step a decorator or a workflow drives by hand.
+"""``SemanticCacheReader``: one read-through step.
 
-The ``SemanticCacheProxy`` wraps a single model method; a cache placed elsewhere (a whole query
-workflow, keyed before retrieval) needs the same three steps without the method wrapper:
+A decorator or a workflow drives it by hand.
 
-1. ``read`` — resets ``served_from_cache()`` and looks the query up through the ``CacheLookup``
-   tier chain inside a ``semantic_cache.lookup`` span (``hit``, ``path``, ``similarity``,
-   ``tier``). A miss is reported at once; a hit is reported only when its fate is known;
-2. ``serve`` — awaits ``on_hit`` with the call's arguments, the decoded answer and the hit (it may
-   return a replacement, and refuses the hit by raising a coded ``AppError``), sets
-   ``served_from_cache()`` and reports the hit;
-3. ``refuse`` — reports a hit the caller will not serve (an undecodable entry, a check of its
-   own, or the hook's refusal) as a miss, so a hit that was never served counts no hit and no
-   saving;
-4. ``write`` — stores the encoded answer under the read's key, with a per-call TTL when given.
+The ``SemanticCacheProxy`` wraps a single model method; a cache placed elsewhere (a whole
+query workflow, keyed before retrieval) needs the same three steps without the method
+wrapper:
+
+1. ``read`` — resets ``served_from_cache()`` and looks the query up through the
+   ``CacheLookup`` tier chain inside a ``semantic_cache.lookup`` span (``hit``, ``path``,
+   ``similarity``, ``tier``). A miss is reported at once; a hit is reported only when its
+   fate is known;
+2. ``serve`` — awaits ``on_hit`` with the call's arguments, the decoded answer and the hit
+   (it may return a replacement, and refuses the hit by raising a coded ``AppError``),
+   sets ``served_from_cache()`` and reports the hit;
+3. ``refuse`` — reports a hit the caller will not serve (an undecodable entry, a check of
+   its own, or the hook's refusal) as a miss, so a hit that was never served counts no hit
+   and no saving;
+4. ``write`` — stores the encoded answer under the read's key, with a per-call TTL when
+   given.
 
 Reporting counts ``semantic_cache_lookups_total`` plus ``…_hits_total`` (labelled with the
 serving ``tier``, with ``…_saving_usd_total``) or ``…_misses_total``, and publishes one
 ``cache_lookups`` fact. Every hit a caller reads must end in ``serve`` or ``refuse``.
 
 Every failure but the hook's coded refusal is logged, counted
-(``semantic_cache_proxy_errors_total{op}``) and swallowed: the reader never fails a query. The
-lookup counters are labelled ``org_id`` (from ``fact_dimensions``), ``path`` and ``workspace``; the
-first lookup of a label set creates its hit (per tier), miss and saving series at 0, so
-``increase()`` counts their first increment.
+(``semantic_cache_proxy_errors_total{op}``) and swallowed: the reader never fails a query.
+The lookup counters are labelled ``org_id`` (from ``fact_dimensions``), ``path`` and
+``workspace``; the first lookup of a label set creates its hit (per tier), miss and saving
+series at 0, so ``increase()`` counts their first increment.
 """
 
 from __future__ import annotations
@@ -31,7 +36,7 @@ import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final
 
 from opentelemetry import trace
 
@@ -57,8 +62,8 @@ if TYPE_CHECKING:
         [tuple[object, ...], dict[str, object], object, CachedAnswer],
         Awaitable[object | None],
     ]
-    """Awaited before a hit is served with the call's args, kwargs, the decoded answer and the
-    hit; returns the answer to serve instead, or ``None`` to serve it as is."""
+    """Awaited before a hit is served with the call's args, kwargs, the decoded answer and
+    the hit; returns the answer to serve instead, or ``None`` to serve it as is."""
 
 CACHE_LOOKUPS_CUBE = "cache_lookups"
 """The analytics cube each lookup lands in."""
@@ -88,52 +93,71 @@ class CacheRead:
     """The hit (``tier`` set), or ``None`` for a miss or a failed lookup."""
 
 
+@dataclass(frozen=True, kw_only=True)
+class SemanticCacheReaderOptions:
+    """What ``SemanticCacheReader`` takes, grouped into one value."""
+
+    ttl_seconds: int
+    """How long a written answer lives unless ``write`` overrides it."""
+
+    path: str
+    """The metric label for this placement (``generation``, ``answer``, ``retrieval``)."""
+
+    metrics: MetricsProvider | None = None
+    """Emits the lookup, hit, miss, saving and error counters; ``None`` emits none."""
+
+    facts: FactPublisher | None = None
+    """Receives one ``cache_lookups`` fact per read; ``None`` publishes none."""
+
+    fact_dimensions: Callable[[], Mapping[str, str]] | None = None
+    """Returns the product dimensions (must include ``org_id``)."""
+
+    saving: Callable[[CachedAnswer], Decimal] | None = None
+    """Returns the US dollars a hit avoided (``0`` without it)."""
+
+    on_hit: HitHook | None = None
+    """Awaited by ``serve`` (e.g. the audit); it may return a replacement answer, and any
+    coded ``AppError`` it raises refuses the hit.
+    """
+
+    similarity_bins: tuple[float, ...] = (0.9, 0.95, 0.98, 1.0)
+    """The ascending lower edges a hit's similarity is binned by."""
+
+
+@final
 class SemanticCacheReader:
-    """Read, serve and write one cached answer; fail-open apart from the hook's refusal."""
+    """Read, serve and write one cached answer.
+
+    Fail-open apart from the hook's refusal.
+    """
 
     def __init__(
         self,
         cache: SemanticCache,
         lookup: CacheLookup,
-        *,
-        ttl_seconds: int,
-        path: str,
-        metrics: MetricsProvider | None = None,
-        facts: FactPublisher | None = None,
-        fact_dimensions: Callable[[], Mapping[str, str]] | None = None,
-        saving: Callable[[CachedAnswer], Decimal] | None = None,
-        on_hit: HitHook | None = None,
-        similarity_bins: tuple[float, ...] = (0.9, 0.95, 0.98, 1.0),
+        options: SemanticCacheReaderOptions,
     ) -> None:
         """Bind the backend, the tier chain and the telemetry.
 
         Args:
             cache: The backend answers are written to.
             lookup: The tier chain answers are read through.
-            ttl_seconds: How long a written answer lives unless ``write`` overrides it.
-            path: The metric label for this placement (``generation``, ``answer``, ``retrieval``).
-            metrics: Emits the lookup, hit, miss, saving and error counters; ``None`` emits none.
-            facts: Receives one ``cache_lookups`` fact per read; ``None`` publishes none.
-            fact_dimensions: Returns the product dimensions (must include ``org_id``).
-            saving: Returns the US dollars a hit avoided (``0`` without it).
-            on_hit: Awaited by ``serve`` (e.g. the audit); it may return a replacement answer,
-                and any coded ``AppError`` it raises refuses the hit.
-            similarity_bins: The ascending lower edges a hit's similarity is binned by.
+            options: The settings and collaborators, grouped.
 
         """
         self._cache = cache
         self._lookup = lookup
-        self._ttl = ttl_seconds
-        self._path = path
-        self._facts = facts
-        self._fact_dimensions = fact_dimensions
-        self._saving = saving
-        self._on_hit = on_hit
-        self._bins = similarity_bins
+        self._ttl = options.ttl_seconds
+        self._path = options.path
+        self._facts = options.facts
+        self._fact_dimensions = options.fact_dimensions
+        self._saving = options.saving
+        self._on_hit = options.on_hit
+        self._bins = options.similarity_bins
         self._logger = get_logger("semantic_cache_reader")
         self._counters: dict[str, MetricCounter] = {}
         self._seen: set[tuple[str, ...]] = set()
-        if metrics is not None:
+        if options.metrics is not None:
             for name, help_text, labels in (
                 (
                     "semantic_cache_lookups_total",
@@ -153,21 +177,22 @@ class SemanticCacheReader:
                 ),
                 (_ERRORS, "Swallowed semantic cache read-through errors.", ["op"]),
             ):
-                self._counters[name] = metrics.counter(name, help_text, labels)
+                self._counters[name] = options.metrics.counter(name, help_text, labels)
 
     @property
     def path(self) -> str:
         """The placement label this reader reports under."""
         return self._path
 
-    def failed(self, op: str, error: BaseException) -> None:
-        """Log and count a swallowed failure of ``op`` (also used by the proxy's decode step)."""
-        self._logger.warning(
-            "semantic cache read-through step failed",
-            op=op,
-            path=self._path,
-            exc_info=error,
-        )
+    def failed(self, op: str) -> None:
+        """Count a swallowed failure of ``op`` (the handler has logged it).
+
+        (also used by the proxy's decode step).
+
+        Args:
+            op: The failed operation.
+
+        """
         self._count(_ERRORS, op=op)
 
     async def read(
@@ -179,17 +204,17 @@ class SemanticCacheReader:
     ) -> CacheRead:
         """Look ``query`` up and return what was found (a failure is a miss).
 
-        A miss is reported here; a hit is reported by ``serve`` or ``refuse``, once the caller
-        knows whether it is served.
+        A miss is reported here; a hit is reported by ``serve`` or ``refuse``, once the
+        caller knows whether it is served.
 
         Args:
             query: The text to look up.
             namespace: The partition to look it up in.
-            min_similarity: A per-call direct-serve threshold (a tenant setting); ``None`` keeps
-                each tier's configured value.
+            min_similarity: A per-call direct-serve threshold (a tenant setting); ``None``
+                keeps each tier's configured value.
 
         Returns:
-            The read.
+            What the lookup found.
 
         """
         set_served_from_cache(value=False)
@@ -199,8 +224,9 @@ class SemanticCacheReader:
                 hit = await self._lookup.lookup(
                     query, namespace, min_similarity=min_similarity
                 )
-            except Exception as exc:
-                self.failed("lookup", exc)
+            except Exception:
+                self._logger.exception("read failed")
+                self.failed("lookup")
             span.set_attribute("semantic_cache.hit", hit is not None)
             span.set_attribute("semantic_cache.path", self._path)
             if hit is not None:
@@ -218,7 +244,7 @@ class SemanticCacheReader:
         kwargs: dict[str, object],
         answer: object,
     ) -> object:
-        """Run the hit hook, mark the call served from cache, report the hit, return the answer.
+        """Serve a hit: run the hook, mark the call cached, report, return.
 
         Args:
             read: The read whose hit is being served.
@@ -241,8 +267,9 @@ class SemanticCacheReader:
             except AppError:
                 self.refuse(read)
                 raise
-            except Exception as exc:
-                self.failed("on_hit", exc)
+            except Exception:
+                self._logger.exception("serve failed")
+                self.failed("on_hit")
             else:
                 served = answer if replaced is None else replaced
         set_served_from_cache(value=True)
@@ -276,35 +303,62 @@ class SemanticCacheReader:
                 read.namespace,
                 ttl_seconds=self._ttl if ttl_seconds is None else ttl_seconds,
             )
-        except Exception as exc:
-            self.failed("store", exc)
+        except Exception:
+            self._logger.exception("write failed")
+            self.failed("store")
 
     def _count(self, name: str, value: float = 1.0, **labels: str) -> None:
-        """Increment the counter ``name`` (no-op without metrics)."""
+        """Increment the counter ``name`` (no-op without metrics).
+
+        Args:
+            name: The counter.
+            value: The increment.
+            **labels: The series' labels.
+
+        """
         counter = self._counters.get(name)
         if counter is not None:
             counter.inc(value, **labels)
 
     def _report(self, found: CacheRead) -> None:
-        """Count the read and publish its fact; swallow any failure."""
+        """Count the read and publish its fact; swallow any failure.
+
+        Args:
+            found: The lookup's result.
+
+        """
         dims: dict[str, str] = {}
         try:
             if self._fact_dimensions is not None:
                 dims = dict(self._fact_dimensions())
-        except Exception as exc:
-            self.failed("fact", exc)
+        except Exception:
+            self._logger.exception("report failed")
+            self.failed("fact")
         saving = Decimal(0)
         try:
             saving = self._count_read(found, dims.get("org_id", ""))
-        except Exception as exc:
-            self.failed("metrics", exc)
+        except Exception:
+            self._logger.exception("report failed")
+            self.failed("metrics")
         try:
             self._publish_fact(found, saving, dims)
-        except Exception as exc:
-            self.failed("fact", exc)
+        except Exception:
+            self._logger.exception("report failed")
+            self.failed("fact")
 
     def _count_read(self, found: CacheRead, org_id: str) -> Decimal:
-        """Count the read and its hit (with the saving) or miss under ``org_id``; return the saving."""
+        """Count the read and its hit or miss under ``org_id``.
+
+        A hit counts its saving; returns the saving.
+
+        Args:
+            found: The lookup's result.
+            org_id: The tenant.
+
+        Returns:
+            The read and its hit (with the saving) or miss under ``org_id``.
+
+        """
         labels = {
             "org_id": org_id,
             "path": self._path,
@@ -321,11 +375,18 @@ class SemanticCacheReader:
         return saving
 
     def _materialize(self, labels: dict[str, str]) -> None:
-        """Create a label set's hit (per tier), miss and saving series at 0 the first time.
+        """Create a label set's hit, miss and saving series at 0 the first time.
 
-        A Prometheus counter series exists only once it is incremented, so its first sample is
-        already 1 and ``increase()`` reads it as no change. A hit always follows the miss that
-        stored its answer, so creating the hit series at 0 on that miss lets the first hit count.
+        Hits are per tier.
+
+        A Prometheus counter series exists only once it is incremented, so its first
+        sample is already 1 and ``increase()`` reads it as no change. A hit always follows
+        the miss that stored its answer, so creating the hit series at 0 on that miss lets
+        the first hit count.
+
+        Args:
+            labels: The label set.
+
         """
         key = tuple(labels[name] for name in _LOOKUP_LABELS)
         if key in self._seen:
@@ -337,14 +398,33 @@ class SemanticCacheReader:
             self._count(name, 0.0, **labels)
 
     def _bin(self, similarity: float) -> str:
-        """Return the lower edge of the bin ``similarity`` falls in (``<edge`` below the first)."""
+        """Return the lower edge of the bin ``similarity`` falls in.
+
+        Below the first edge it is ``<edge``.
+
+        Args:
+            similarity: The hit's similarity.
+
+        Returns:
+            The lower edge of the bin ``similarity`` falls in.
+
+        """
         edges = [edge for edge in self._bins if similarity >= edge]
         return f"{max(edges):.2f}" if edges else f"<{self._bins[0]:.2f}"
 
     def _publish_fact(
         self, found: CacheRead, saving: Decimal, dims: dict[str, str]
     ) -> None:
-        """Publish the read's ``cache_lookups`` fact (no-op without a publisher or an org)."""
+        """Publish the read's ``cache_lookups`` fact.
+
+        A no-op without a publisher or an org.
+
+        Args:
+            found: The lookup's result.
+            saving: The cost the hit saved.
+            dims: The fact's dimensions.
+
+        """
         if self._facts is None:
             return
         dims = dict(dims)

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -15,11 +16,12 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/procedure"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/suite"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -43,60 +45,87 @@ type recorder struct {
 	mu sync.Mutex
 }
 
+// recordStreamed is record for an invocation that streams its output.
+func (r *recorder) recordStreamed(
+	env []string,
+	exe string,
+	args []string,
+) (string, bool) {
+	line := strings.Join(append([]string{exe}, args...), " ")
+
+	r.mu.Lock()
+
+	r.streamed = append(r.streamed, line)
+	r.mu.Unlock()
+
+	return r.record(env, exe, args)
+}
+
 // record notes one invocation and answers it from out.
 func (r *recorder) record(
 	env []string,
 	exe string,
 	args []string,
-	stream bool,
 ) (string, bool) {
 	line := strings.Join(append([]string{exe}, args...), " ")
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	r.calls = append(r.calls, line)
-	if stream {
-		r.streamed = append(r.streamed, line)
-	}
+
 	if r.envs == nil {
 		r.envs = map[string][]string{}
 	}
+
 	r.envs[line] = env
-	rest, failed := strings.CutPrefix(r.out[line], "!")
+
+	rest, failed := strings.CutPrefix(r.out[line], textBang)
+
 	return rest, failed
 }
 
 // runner returns the mock.
 func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
-	m := mocks.NewMockCommandRunner(ctrl)
-	m.EXPECT().
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().
 		Exists(gomock.Any()).
-		DoAndReturn(func(n string) bool { return n != "absent" }).
+		DoAndReturn(func(n string) bool { return n != textAbsent }).
 		AnyTimes()
-	m.EXPECT().RunBufferedWithEnv(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-		gomock.Any()).
+	commandRunner.EXPECT().
+		RunBufferedWithEnv(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ string, env []string, exe string,
 			args ...string,
 		) interfaces.CmdResult {
-			out, failed := r.record(env, exe, args, false)
+			out, failed := r.record(env, exe, args)
 			if failed {
-				return interfaces.CmdResult{
-					Err:    apperr.Sentinel("exit 1"),
-					Stderr: []byte(out),
-				}
+				return fixtures.Build(func(row *interfaces.CmdResult) {
+					row.Err = apperr.Sentinel("exit 1")
+					row.Stderr = []byte(out)
+				})
 			}
-			return interfaces.CmdResult{Stdout: []byte(out)}
-		}).AnyTimes()
-	m.EXPECT().RunWithEnv(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-		gomock.Any()).
+
+			return fixtures.Build(func(row *interfaces.CmdResult) {
+				row.Stdout = []byte(out)
+			})
+		}).
+		AnyTimes()
+	commandRunner.EXPECT().
+		RunWithEnv(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			gomock.Any()).
 		DoAndReturn(func(_ context.Context, _ string, env []string, exe string,
 			args ...string,
 		) error {
-			if _, failed := r.record(env, exe, args, true); failed {
+			if _, failed := r.recordStreamed(env, exe, args); failed {
 				return apperr.Sentinel("exit 1")
 			}
+
 			return nil
-		}).AnyTimes()
-	return m
+		}).
+		AnyTimes()
+
+	return commandRunner
 }
 
 // procEngine builds procs over rec with every tool run directly by its name.
@@ -104,26 +133,36 @@ func procEngine(
 	t *testing.T,
 	rec *recorder,
 	procs []types.Procedure,
-	deps procedure.Deps,
+	depsRef *procedure.Deps,
 ) interfaces.ProcedureRunner {
 	t.Helper()
+
+	deps := *depsRef
+
 	ctrl := gomock.NewController(t)
+
 	deps.Runner = rec.runner(ctrl)
 	deps.Tools = func(name string) (interfaces.ToolSpec, bool) {
-		return toolOf(ctrl, name), name != "unknown"
+		return toolOf(ctrl, name), name != textUnknown
 	}
-	eng, err := procedure.NewFromConfig(procedure.Config{Procedures: procs}, deps)
+
+	eng, err := procedure.NewFromConfig(procedure.Config{Procedures: procs}, &deps)
 	require.NoError(t, err)
+
 	return eng
 }
 
 // pruneProcedure decodes the prune fixture.
 func pruneProcedure(t *testing.T) types.Procedure {
 	t.Helper()
+
 	raw, err := os.ReadFile(filepath.Join("testdata", "procedure", "prune.yaml"))
 	require.NoError(t, err)
+
 	var p types.Procedure
+
 	require.NoError(t, yaml.Unmarshal(raw, &p))
+
 	return p
 }
 
@@ -133,6 +172,7 @@ func statuses(res types.StepResults) map[string]types.StepStatus {
 	for _, r := range res {
 		out[r.Name] = r.Status
 	}
+
 	return out
 }
 
@@ -149,40 +189,81 @@ func statuses(res types.StepResults) map[string]types.StepStatus {
 //     mutating step reports its command without a question.
 func TestServicesProcedure_Prune(t *testing.T) {
 	t.Parallel()
-	in := map[string]any{
-		"project": "app", "compose_files": []string{"-f", "c.yaml"},
+
+	statusByName := map[string]any{
+		"project": textApp, "compose_files": []string{"-f", "c.yaml"},
 		"remove_all": false,
 	}
 	listings := map[string]string{
-		"docker images --filter reference=app-* --format {{.ID}}": "a1\nb2\n",
+		textDockerImagesFilter: "a1\nb2\n",
 	}
-	rec := &recorder{out: listings}
+	rec := fixtures.BuildRef(func(row *recorder) {
+		row.out = listings
+	})
 	ctrl := gomock.NewController(t)
 	prompter := mocks.NewMockPrompter(ctrl)
 	prompter.EXPECT().Confirm(gomock.Any(),
 		"Remove every app container, image and volume?").Return(true, nil)
-	eng := procEngine(t, rec, []types.Procedure{pruneProcedure(t)},
-		procedure.Deps{Prompter: prompter})
 
-	res, err := eng.Run(t.Context(), "prune", in, types.RunOptions{})
+	eng := procEngine(
+		t,
+		rec,
+		[]types.Procedure{pruneProcedure(t)},
+		fixtures.BuildRef(func(row *procedure.Deps) {
+			row.Prompter = prompter
+		}),
+	)
+
+	res, err := eng.Run(
+		t.Context(),
+		textPrune,
+		statusByName,
+		stdx.Zero[types.RunOptions](),
+	)
+
+	testServicesProcedurePruneChecksResults(t, statusByName, listings, rec, res, err)
+}
+
+// testServicesProcedurePruneChecksResults continues TestServicesProcedure_Prune.
+func testServicesProcedurePruneChecksResults(
+	t *testing.T,
+	statusByName map[string]any,
+	listings map[string]string,
+	rec *recorder,
+	res types.StepResults,
+	err error,
+) {
+	t.Helper()
+
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"docker compose -f c.yaml --profile gateway --profile observability down " +
 			"--volumes --remove-orphans --rmi local",
-		"docker images --filter reference=app-* --format {{.ID}}",
+		textDockerImagesFilter,
 		"docker rmi -f a1 b2",
 		"docker image prune -f",
 		"docker volume ls -q --filter name=app",
 	}, rec.calls)
 	assert.Equal(t, types.StatusSkip, statuses(res)["remove volumes"])
-	assert.Equal(t, "prune", res[0].Group)
+	assert.Equal(t, textPrune, res[0].Group)
 
-	dry := &recorder{out: listings}
-	eng = procEngine(t, dry, []types.Procedure{pruneProcedure(t)}, procedure.Deps{})
-	res, err = eng.Run(t.Context(), "prune", in, types.RunOptions{DryRun: true})
+	dry := fixtures.BuildRef(func(row *recorder) {
+		row.out = listings
+	})
+
+	eng := procEngine(t, dry, []types.Procedure{pruneProcedure(t)}, new(procedure.Deps))
+
+	res, err = eng.Run(
+		t.Context(),
+		textPrune,
+		statusByName,
+		fixtures.Build(func(row *types.RunOptions) {
+			row.DryRun = true
+		}),
+	)
 	require.NoError(t, err)
 	assert.Equal(t, []string{
-		"docker images --filter reference=app-* --format {{.ID}}",
+		textDockerImagesFilter,
 		"docker volume ls -q --filter name=app",
 	}, dry.calls)
 	assert.Equal(t, types.StatusSkip, res[2].Status)
@@ -203,63 +284,153 @@ func TestServicesProcedure_Prune(t *testing.T) {
 //     skip is skipped, as is one whose missing policy a variable set to skip.
 func TestServicesProcedure_ControlFlow(t *testing.T) {
 	t.Parallel()
-	rec := &recorder{out: map[string]string{
-		"kubectl get -o json": `{"items":["x"]}`, "false": "!boom", "probe": "!",
-	}}
-	setter := func(_ context.Context, vars procedure.Vars, _ types.RunOptions,
-	) (types.StepResults, procedure.Vars, error) {
-		return types.StepResults{{Name: "go", Status: types.StatusPass}},
-			procedure.Vars{"tag": vars["env"].(string) + "-1", "policy": "skip"}, nil
-	}
-	eng := procEngine(t, rec, []types.Procedure{
-		{Name: "main", Inputs: []string{"env", "svcs"}, Steps: []types.ProcStep{
-			{
-				Name: "deploy {svc}", Each: "svcs", As: "svc", Tool: "helm",
-				Args: []string{"upgrade", "{svc}", "--set", "env={env}"},
-			},
-			{Name: "fan", Parallel: []types.ProcStep{
-				{
-					Name: "pods", Tool: "kubectl", Args: []string{"get", "-o", "json"},
-					Capture: &types.Capture{Var: "pods", As: types.CaptureJSON},
-				},
-				{Name: "probe", Tool: "probe", Capture: &types.Capture{
-					Var: "ok",
-					As:  types.CaptureExit,
-				}},
-			}},
-			{Name: "set", Step: "set"},
-			{Name: "sub", Call: "sub"},
-			{Name: "count", Tool: "echo", Args: []string{"${size(pods.items)}", "${ok}"}},
-			{Name: "absent", Tool: "absent", Missing: "skip"},
-			{Name: "absent-var", Tool: "absent", Missing: "{policy}"},
-			{Name: "soft", Tool: "false", Advisory: true},
-			{Name: "hard", Tool: "false"},
-			{Name: "never", Tool: "echo"},
-		}},
-		{Name: "sub", Inputs: []string{"tag"}, Steps: []types.ProcStep{
-			{Name: "tag", Tool: "docker", Args: []string{"tag", "{tag}"}},
-		}},
-	}, procedure.Deps{Steps: map[string]procedure.StepFunc{"set": setter}})
 
-	res, err := eng.Run(t.Context(), "main",
-		map[string]any{"env": "dev", "svcs": []string{"api", "web"}}, types.RunOptions{})
+	rec := fixtures.BuildRef(func(row *recorder) {
+		row.out = map[string]string{
+			"kubectl get -o json": `{"items":["x"]}`,
+			textFalse:             textBoomFailure,
+			textProbe:             textBang,
+		}
+	})
+	setter := procedure.StepFunc(
+		func(_ context.Context, vars procedure.Vars, _ types.RunOptions,
+		) (types.StepResults, procedure.Vars, error) {
+			return types.StepResults{
+					fixtures.Build(func(row *types.StepResult) {
+						row.Name = textGoLower
+						row.Status = types.StatusPass
+					}),
+				},
+				procedure.Vars{
+					textTag:  asType[string](t, vars[textEnv]) + "-1",
+					"policy": textSkip,
+				}, nil
+		},
+	)
+	eng := procEngine(
+		t,
+		rec,
+		testServicesProcedureControlFlowTable(),
+		fixtures.BuildRef(func(row *procedure.Deps) {
+			row.Steps = map[string]procedure.StepFunc{textSet: setter}
+		}),
+	)
+
+	res, err := eng.Run(
+		t.Context(),
+		textMain,
+		map[string]any{
+			textEnv:  textDev,
+			textSvcs: []string{textAPI, textWeb},
+		},
+		stdx.Zero[types.RunOptions](),
+	)
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"helm upgrade api --set env=dev", "helm upgrade web --set env=dev",
 	}, rec.calls[:2])
-	assert.ElementsMatch(t, []string{"kubectl get -o json", "probe"}, rec.calls[2:4])
+	assert.ElementsMatch(t, []string{"kubectl get -o json", textProbe}, rec.calls[2:4])
 	assert.Equal(
 		t,
-		[]string{"docker tag dev-1", "echo 1 1", "false", "false"},
+		[]string{"docker tag dev-1", "echo 1 1", textFalse, textFalse},
 		rec.calls[4:],
 	)
-	st := statuses(res)
-	assert.Equal(t, types.StatusPass, st["deploy web"])
-	assert.Equal(t, types.StatusSkip, st["absent"])
-	assert.Equal(t, types.StatusSkip, st["absent-var"])
-	assert.Equal(t, types.StatusWarn, st["soft"])
-	assert.Equal(t, types.StatusFail, st["hard"])
-	assert.NotContains(t, st, "never")
+
+	statusByName := statuses(res)
+	assert.Equal(t, types.StatusPass, statusByName["deploy web"])
+	assert.Equal(t, types.StatusSkip, statusByName[textAbsent])
+	assert.Equal(t, types.StatusSkip, statusByName["absent-var"])
+	assert.Equal(t, types.StatusWarn, statusByName[textSoft])
+	assert.Equal(t, types.StatusFail, statusByName["hard"])
+	assert.NotContains(t, statusByName, textNever)
+}
+
+// testServicesProcedureControlFlowTable builds the table
+// TestServicesProcedure_ControlFlow runs.
+func testServicesProcedureControlFlowTable() []types.Procedure {
+	return []types.Procedure{
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = textMain
+			row.Inputs = []string{textEnv, textSvcs}
+			row.Steps = controlFlowMainSteps()
+		}),
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = textSub
+			row.Inputs = []string{textTag}
+			row.Steps = []types.ProcStep{toolStep(textTag, textDocker, textTag, "{tag}")}
+		}),
+	}
+}
+
+// toolStep returns a procedure step that runs tool with args.
+func toolStep(name, tool string, args ...string) types.ProcStep {
+	return fixtures.Build(func(row *types.ProcStep) {
+		row.Name = name
+		row.Tool = tool
+		row.Args = args
+	})
+}
+
+// controlFlowMainSteps returns the steps of the control-flow test's main procedure.
+func controlFlowMainSteps() []types.ProcStep {
+	deploy := toolStep("deploy {svc}", textHelm, "upgrade", "{svc}", "--set", "env={env}")
+
+	deploy.Each = textSvcs
+	deploy.As = textSvc
+
+	set := toolStep(textSet, "")
+
+	set.Step = textSet
+
+	sub := toolStep(textSub, "")
+
+	sub.Call = textSub
+
+	return slices.Concat(
+		[]types.ProcStep{
+			deploy,
+			controlFlowFanStep(),
+			set,
+			sub,
+			toolStep(textCount, textEcho, "${size(pods.items)}", "${ok}"),
+		},
+		controlFlowToleratedSteps(),
+		[]types.ProcStep{toolStep("hard", textFalse), toolStep(textNever, textEcho)},
+	)
+}
+
+// controlFlowFanStep returns the parallel step that captures pods and the probe exit.
+func controlFlowFanStep() types.ProcStep {
+	pods := toolStep(textPods, textKubectl, textGet, "-o", textStructuredFormat)
+
+	pods.Capture = &types.Capture{Var: textPods, As: types.CaptureJSON}
+
+	probe := toolStep(textProbe, textProbe)
+
+	probe.Capture = &types.Capture{Var: textOk, As: types.CaptureExit}
+
+	fan := toolStep("fan", "")
+
+	fan.Parallel = []types.ProcStep{pods, probe}
+
+	return fan
+}
+
+// controlFlowToleratedSteps returns the steps whose missing tool or failure is tolerated.
+func controlFlowToleratedSteps() []types.ProcStep {
+	absent := toolStep(textAbsent, textAbsent)
+
+	absent.Missing = textSkip
+
+	absentVar := toolStep("absent-var", textAbsent)
+
+	absentVar.Missing = "{policy}"
+
+	soft := toolStep(textSoft, textFalse)
+
+	soft.Advisory = true
+
+	return []types.ProcStep{absent, absentVar, soft}
 }
 
 // TestServicesProcedure_Refusals tests what stops a procedure with an error.
@@ -274,42 +445,95 @@ func TestServicesProcedure_ControlFlow(t *testing.T) {
 //     invalid steps fail NewFromConfig.
 func TestServicesProcedure_Refusals(t *testing.T) {
 	t.Parallel()
-	confirmed := []types.Procedure{{Name: "p", Steps: []types.ProcStep{
-		{Name: "rm", Confirm: "Delete?", Tool: "rm"},
-	}}}
-	rec := &recorder{}
-	eng := procEngine(t, rec, confirmed, procedure.Deps{})
-	_, err := eng.Run(t.Context(), "p", nil, types.RunOptions{})
+
+	confirmed := []types.Procedure{fixtures.Build(func(row *types.Procedure) {
+		row.Name = textP
+		row.Steps = []types.ProcStep{
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = textRm
+				row.Confirm = "Delete?"
+				row.Tool = textRm
+			}),
+		}
+	})}
+	rec := new(recorder)
+	eng := procEngine(t, rec, confirmed, new(procedure.Deps))
+	_, err := eng.Run(t.Context(), textP, nil, stdx.Zero[types.RunOptions]())
 	assert.Equal(t, apperr.CodeCanceled, apperr.Code(err))
 	assert.Empty(t, rec.calls)
-	_, err = eng.Run(t.Context(), "p", nil, types.RunOptions{Yes: true})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"rm"}, rec.calls)
 
-	_, err = eng.Run(t.Context(), "nope", nil, types.RunOptions{})
+	_, err = eng.Run(
+		t.Context(),
+		textP,
+		nil,
+		fixtures.Build(func(row *types.RunOptions) {
+			row.Yes = true
+		}),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, []string{textRm}, rec.calls)
+
+	_, err = eng.Run(t.Context(), textNope, nil, stdx.Zero[types.RunOptions]())
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
-	eng = procEngine(t, rec, []types.Procedure{{Name: "v", Steps: []types.ProcStep{
-		{Name: "x", Tool: "echo", Args: []string{"{missing}"}},
-	}}}, procedure.Deps{})
-	_, err = eng.Run(t.Context(), "v", nil, types.RunOptions{})
+
+	eng = procEngine(t, rec, []types.Procedure{fixtures.Build(func(row *types.Procedure) {
+		row.Name = textV
+		row.Steps = []types.ProcStep{
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = textX
+				row.Tool = textEcho
+				row.Args = []string{"{missing}"}
+			}),
+		}
+	})}, new(procedure.Deps))
+	_, err = eng.Run(t.Context(), textV, nil, stdx.Zero[types.RunOptions]())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
-	for name, st := range map[string]types.ProcStep{
-		"two kinds":    {Tool: "echo", Call: "p"},
-		"fail + tool":  {Tool: "echo", Fail: "no"},
-		"no kind":      {},
-		"unknown tool": {Tool: "unknown"},
-		"unknown step": {Step: "nope"},
-		"unknown call": {Call: "nope"},
-		"bad capture":  {Tool: "echo", Capture: &types.Capture{Var: "v", As: "xml"}},
-		"bad when":     {Tool: "echo", When: "size("},
-	} {
+	for name, procStep := range testServicesProcedureRefusalsTable() {
 		_, err := procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{
-			{Name: "p", Steps: []types.ProcStep{st}},
-		}}, procedure.Deps{Tools: func(n string) (interfaces.ToolSpec, bool) {
-			return nil, n != "unknown"
-		}})
+			fixtures.Build(func(row *types.Procedure) {
+				row.Name = textP
+				row.Steps = []types.ProcStep{procStep}
+			}),
+		}}, fixtures.BuildRef(func(row *procedure.Deps) {
+			row.Tools = func(n string) (interfaces.ToolSpec, bool) {
+				return nil, n != textUnknown
+			}
+		}))
 		require.Error(t, err, name)
+	}
+}
+
+// testServicesProcedureRefusalsTable builds the table TestServicesProcedure_Refusals
+// runs.
+func testServicesProcedureRefusalsTable() map[string]types.ProcStep {
+	return map[string]types.ProcStep{
+		"two kinds": fixtures.Build(func(row *types.ProcStep) {
+			row.Tool = textEcho
+			row.Call = textP
+		}),
+		"fail + tool": fixtures.Build(func(row *types.ProcStep) {
+			row.Tool = textEcho
+			row.Fail = "no"
+		}),
+		"no kind": stdx.Zero[types.ProcStep](),
+		"unknown tool": fixtures.Build(func(row *types.ProcStep) {
+			row.Tool = textUnknown
+		}),
+		"unknown step": fixtures.Build(func(row *types.ProcStep) {
+			row.Step = textNope
+		}),
+		"unknown call": fixtures.Build(func(row *types.ProcStep) {
+			row.Call = textNope
+		}),
+		"bad capture": fixtures.Build(func(row *types.ProcStep) {
+			row.Tool = textEcho
+			row.Capture = &types.Capture{Var: textV, As: "xml"}
+		}),
+		"bad when": fixtures.Build(func(row *types.ProcStep) {
+			row.Tool = textEcho
+			row.When = "size("
+		}),
 	}
 }
 
@@ -330,47 +554,101 @@ func TestServicesProcedure_Refusals(t *testing.T) {
 //     row, not an engine error.
 func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 	t.Parallel()
-	procs := []types.Procedure{
-		{Name: "db", Inputs: []string{"name", "soft"}, Steps: []types.ProcStep{
-			{Name: "name", When: "name.contains(' ')", Fail: "name {name} has a space"},
-			{Name: "soft", When: "soft", Fail: "soft {name}", Advisory: true},
-			{Name: "up", Tool: "docker", Args: []string{"compose", "up"}},
-			{Name: "work", Tool: "false"},
-			{Name: "never", Tool: "echo"},
-		}, Finally: []types.ProcStep{
-			{Name: "interrupted", When: "canceled", Fail: "interrupted"},
-			{Name: "broken", Tool: "echo", Args: []string{"{missing}"}},
-			{
-				Name: "down",
-				Tool: "docker",
-				Args: []string{"compose", "down", "${failed}"},
-			},
-		}},
-		{Name: "parse", Steps: []types.ProcStep{{
-			Name: "read", Tool: "cat",
-			Capture: &types.Capture{Var: "v", As: types.CaptureJSON},
-		}}},
-	}
-	rec := &recorder{out: map[string]string{"false": "!boom", "cat": "{not json"}}
-	eng := procEngine(t, rec, procs, procedure.Deps{})
 
-	res, err := eng.Run(t.Context(), "db", map[string]any{"name": "ok", "soft": true},
-		types.RunOptions{})
+	procs := finallyAndFailProcedures()
+	rec := fixtures.BuildRef(func(row *recorder) {
+		row.out = map[string]string{textFalse: textBoomFailure, "cat": textNotStructured}
+	})
+	eng := procEngine(t, rec, procs, new(procedure.Deps))
+
+	res, err := eng.Run(
+		t.Context(),
+		textDB,
+		map[string]any{textName: textOk, textSoft: true},
+		stdx.Zero[types.RunOptions](),
+	)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"docker compose up", "false", "docker compose down true"},
+	assert.Equal(t, []string{"docker compose up", textFalse, "docker compose down true"},
 		rec.calls)
+
 	st := statuses(res)
-	assert.Equal(t, types.StatusSkip, st["name"])
-	assert.Equal(t, types.StatusWarn, st["soft"])
-	assert.Equal(t, types.StatusFail, st["work"])
-	assert.NotContains(t, st, "never")
-	assert.Equal(t, types.StatusSkip, st["interrupted"])
-	assert.Equal(t, types.StatusFail, st["broken"])
-	assert.Equal(t, types.StatusPass, st["down"])
+	assert.Equal(t, types.StatusSkip, st[textName])
+
+	testServicesProcedureFinallyAndFailStatuses(t, rec, eng, st)
+}
+
+// failWhenStep returns a step that fails with message when the condition holds.
+func failWhenStep(name, when, message string) types.ProcStep {
+	return fixtures.Build(func(row *types.ProcStep) {
+		row.Name = name
+		row.When = when
+		row.Fail = message
+	})
+}
+
+// finallyAndFailProcedures returns the procedures TestServicesProcedure_FinallyAndFail
+// runs.
+func finallyAndFailProcedures() []types.Procedure {
+	soft := failWhenStep(textSoft, textSoft, "soft {name}")
+
+	soft.Advisory = true
+
+	parse := toolStep(textRead, "cat")
+
+	parse.Capture = &types.Capture{Var: textV, As: types.CaptureJSON}
+
+	return []types.Procedure{
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = textDB
+			row.Inputs = []string{textName, textSoft}
+			row.Steps = []types.ProcStep{
+				failWhenStep(textName, "name.contains(' ')", "name {name} has a space"),
+				soft,
+				toolStep(textUp, textDocker, textCompose, textUp),
+				toolStep("work", textFalse),
+				toolStep(textNever, textEcho),
+			}
+			row.Finally = []types.ProcStep{
+				failWhenStep(textInterrupted, "canceled", textInterrupted),
+				toolStep(textBroken, textEcho, "{missing}"),
+				toolStep(textDown, textDocker, textCompose, textDown, "${failed}"),
+			}
+		}),
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = "parse"
+			row.Steps = []types.ProcStep{parse}
+		}),
+	}
+}
+
+// testServicesProcedureFinallyAndFailStatuses continues
+// TestServicesProcedure_FinallyAndFail: statuses.
+func testServicesProcedureFinallyAndFailStatuses(
+	t *testing.T,
+	rec *recorder,
+	eng interfaces.ProcedureRunner,
+	statusByName map[string]types.StepStatus,
+) {
+	t.Helper()
+
+	var err error
+
+	var res types.StepResults
+
+	assert.Equal(t, types.StatusWarn, statusByName[textSoft])
+	assert.Equal(t, types.StatusFail, statusByName["work"])
+	assert.NotContains(t, statusByName, textNever)
+	assert.Equal(t, types.StatusSkip, statusByName[textInterrupted])
+	assert.Equal(t, types.StatusFail, statusByName[textBroken])
+	assert.Equal(t, types.StatusPass, statusByName[textDown])
 
 	rec.calls = nil
-	res, err = eng.Run(t.Context(), "db", map[string]any{"name": "a b", "soft": false},
-		types.RunOptions{})
+	res, err = eng.Run(
+		t.Context(),
+		textDB,
+		map[string]any{textName: "a b", textSoft: false},
+		stdx.Zero[types.RunOptions](),
+	)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"docker compose down true"}, rec.calls)
 	assert.Equal(t, types.StatusFail, res[0].Status)
@@ -378,21 +656,23 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
+
 	rec.calls = nil
-	res, err = eng.Run(ctx, "db", map[string]any{"name": "ok", "soft": false},
-		types.RunOptions{})
+	res, err = eng.Run(ctx, textDB, map[string]any{textName: textOk, textSoft: false},
+		stdx.Zero[types.RunOptions]())
 	require.NoError(t, err)
 	assert.Contains(t, rec.calls, "docker compose down true")
-	st = statuses(res)
-	assert.Equal(t, types.StatusFail, st["interrupted"])
-	assert.Equal(t, "interrupted", res[len(res)-3].Error)
 
-	res, err = eng.Run(t.Context(), "parse", nil, types.RunOptions{})
+	statusByName = statuses(res)
+	assert.Equal(t, types.StatusFail, statusByName[textInterrupted])
+	assert.Equal(t, textInterrupted, res[len(res)-3].Error)
+
+	res, err = eng.Run(t.Context(), "parse", nil, stdx.Zero[types.RunOptions]())
 	require.NoError(t, err)
 	require.Len(t, res, 1)
 	assert.Equal(t, types.StatusFail, res[0].Status)
 	assert.Contains(t, res[0].Error, "capture json")
-	assert.Equal(t, "{not json", string(res[0].Detail))
+	assert.Equal(t, textNotStructured, string(res[0].Detail))
 }
 
 // TestServicesProcedure_StepPanicIsAFailedRow tests that a Go step's panic is recovered.
@@ -409,35 +689,50 @@ func TestServicesProcedure_FinallyAndFail(t *testing.T) {
 //     steps still do, and Run returns no error.
 func TestServicesProcedure_StepPanicIsAFailedRow(t *testing.T) {
 	t.Parallel()
-	procs := []types.Procedure{
-		{
-			Name: "p",
-			Steps: []types.ProcStep{
-				{Name: "boom", Step: "boom"},
-				{Name: "after", Tool: "echo", Args: []string{"after"}},
-			},
-			Finally: []types.ProcStep{
-				{Name: "cleanup", Tool: "echo", Args: []string{"cleanup"}},
-			},
-		},
-	}
-	rec := &recorder{}
-	eng := procEngine(t, rec, procs, procedure.Deps{Steps: map[string]procedure.StepFunc{
-		"boom": func(
-			context.Context, procedure.Vars, types.RunOptions,
-		) (types.StepResults, procedure.Vars, error) {
-			panic("step bug")
-		},
-	}})
 
-	res, err := eng.Run(t.Context(), "p", nil, types.RunOptions{})
+	procs := []types.Procedure{
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = textP
+			row.Steps = []types.ProcStep{
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = textBoom
+					row.Step = textBoom
+				}),
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = textAfter
+					row.Tool = textEcho
+					row.Args = []string{textAfter}
+				}),
+			}
+			row.Finally = []types.ProcStep{
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = "cleanup"
+					row.Tool = textEcho
+					row.Args = []string{"cleanup"}
+				}),
+			}
+		}),
+	}
+	rec := new(recorder)
+	eng := procEngine(t, rec, procs, fixtures.BuildRef(func(row *procedure.Deps) {
+		row.Steps = map[string]procedure.StepFunc{
+			textBoom: func(
+				context.Context, procedure.Vars, types.RunOptions,
+			) (types.StepResults, procedure.Vars, error) {
+				panic("step bug")
+			},
+		}
+	}))
+
+	res, err := eng.Run(t.Context(), textP, nil, stdx.Zero[types.RunOptions]())
 
 	require.NoError(t, err)
+
 	st := statuses(res)
-	assert.Equal(t, types.StatusFail, st["boom"])
+	assert.Equal(t, types.StatusFail, st[textBoom])
 	assert.Contains(t, res[0].Error, "panic recovered")
 	assert.NotContains(t, res[0].Error, "step bug")
-	assert.NotContains(t, st, "after")
+	assert.NotContains(t, st, textAfter)
 	assert.Equal(t, []string{"echo cleanup"}, rec.calls)
 }
 
@@ -452,17 +747,36 @@ func TestServicesProcedure_StepPanicIsAFailedRow(t *testing.T) {
 //     procedure's group, and its job runs the procedure with the suite's options.
 func TestServicesProcedure_SuiteEntry(t *testing.T) {
 	t.Parallel()
-	procs := []types.Procedure{{Name: "p", Group: "Clean", Steps: []types.ProcStep{
-		{Name: "rm", Tool: "rm", Mutating: true},
-	}}}
-	rec := &recorder{}
-	es := suite.Procedures(procEngine(t, rec, procs, procedure.Deps{}), procs, "dev", nil)
-	require.Len(t, es, 1)
-	assert.Equal(t, "Clean", es[0].Group)
-	assert.Equal(t, suite.KindProcedure, es[0].Kind)
-	res, err := es[0].Job(suite.Env{
+
+	procs := []types.Procedure{fixtures.Build(func(row *types.Procedure) {
+		row.Name = textP
+		row.Group = "Clean"
+		row.Steps = []types.ProcStep{
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = textRm
+				row.Tool = textRm
+				row.Mutating = true
+			}),
+		}
+	})}
+	rec := new(recorder)
+	entrys := suite.Procedures(
+		procEngine(t, rec, procs, new(procedure.Deps)),
+		procs,
+		textDev,
+		nil,
+	)
+	require.Len(t, entrys, 1)
+	assert.Equal(t, "Clean", entrys[0].Group)
+	assert.Equal(t, suite.KindProcedure, entrys[0].Kind)
+
+	res, err := entrys[0].Job(suite.Env{
 		Decs: fixtures.Decorations(),
-		Opts: types.RunOptions{DryRun: true},
+		Opts: fixtures.Build(func(row *types.RunOptions) {
+			row.DryRun = true
+		}),
+		Snapshot:  nil,
+		Component: "",
 	}).Execute(t.Context(), nil, "")
 	require.NoError(t, err)
 	assert.Empty(t, rec.calls)
@@ -488,80 +802,147 @@ func TestServicesProcedure_SuiteEntry(t *testing.T) {
 //     when the engine is built.
 func TestServicesProcedure_EnvAndStream(t *testing.T) {
 	t.Parallel()
-	rec := &recorder{out: map[string]string{"uv fail": "!"}}
-	procs := []types.Procedure{{
-		Name: "run", Inputs: []string{"extra", "profile"},
-		Steps: []types.ProcStep{
-			{Name: "buffered", Tool: "go", Args: []string{"run", "./job"}, Env: []string{
-				"{extra...}",
-				"SEARCH_ENV=dev",
-				"${profile != '' ? ['PROFILE=' + profile] : []}",
-			}},
-			{
-				Name:   "streamed",
-				Tool:   "uv",
-				Args:   []string{"run"},
-				Stream: true,
-				Env: []string{
-					"A={profile}",
-				},
+
+	rec := fixtures.BuildRef(func(row *recorder) {
+		row.out = map[string]string{textUvFail: textBang}
+	})
+	procs := testServicesProcedureEnvAndStreamTable()
+	eng := procEngine(t, rec, procs, fixtures.BuildRef(func(row *procedure.Deps) {
+		row.Steps = map[string]procedure.StepFunc{
+			textMark: func(context.Context, procedure.Vars, types.RunOptions) (
+				types.StepResults, procedure.Vars, error,
+			) {
+				return nil, procedure.Vars{"marked": true}, nil
 			},
-			{
-				Name: "probe", Tool: "uv", Args: []string{"fail"}, Stream: true,
-				Capture: &types.Capture{Var: "probe_exit", As: types.CaptureExit},
-			},
-			{Name: "mark", Step: "mark", Sets: []string{"marked"}},
-			{
-				Name: "after", Tool: "uv", Args: []string{"run", "again"}, Stream: true,
-				When: "probe_exit == 1 && marked",
-			},
-			{Name: "broken", Tool: "uv", Args: []string{"fail"}, Stream: true},
-		},
-	}}
-	eng := procEngine(t, rec, procs, procedure.Deps{Steps: map[string]procedure.StepFunc{
-		"mark": func(context.Context, procedure.Vars, types.RunOptions) (
-			types.StepResults, procedure.Vars, error,
-		) {
-			return nil, procedure.Vars{"marked": true}, nil
-		},
-	}})
-	in := map[string]any{
-		"extra": []string{"DB_HOST=localhost", "DB_PORT=5432"}, "profile": "small",
+		}
+	}))
+	statusByName := map[string]any{
+		textExtra: []string{textDBHostLocalhost, textDBPort5432}, textProfile: "small",
 	}
-	res, err := eng.Run(t.Context(), "run", in, types.RunOptions{})
+	res, err := eng.Run(t.Context(), textRun, statusByName, stdx.Zero[types.RunOptions]())
 	require.NoError(t, err)
 	assert.Equal(
 		t,
-		[]string{"DB_HOST=localhost", "DB_PORT=5432", "SEARCH_ENV=dev", "PROFILE=small"},
+		[]string{textDBHostLocalhost, textDBPort5432, textSearchEnvDev, "PROFILE=small"},
 		rec.envs["go run ./job"],
 	)
 	assert.Equal(
 		t,
-		[]string{"uv run", "uv fail", "uv run again", "uv fail"},
+		[]string{"uv run", textUvFail, "uv run again", textUvFail},
 		rec.streamed,
 	)
 	assert.Equal(t, []string{"A=small"}, rec.envs["uv run"])
-	st := statuses(res)
-	assert.Equal(t, types.StatusPass, st["streamed"])
-	assert.Equal(t, types.StatusFail, st["broken"])
-	assert.Equal(t, types.StatusWarn, st["probe"], "an exit capture never fails")
-	assert.Equal(t, types.StatusPass, st["after"], "the condition read the exit and set")
 
-	in["profile"] = ""
-	_, err = eng.Run(t.Context(), "run", in, types.RunOptions{})
+	statusOf := statuses(res)
+	assert.Equal(t, types.StatusPass, statusOf["streamed"])
+	assert.Equal(t, types.StatusFail, statusOf[textBroken])
+	assert.Equal(t, types.StatusWarn, statusOf[textProbe], "an exit capture never fails")
+
+	testServicesProcedureEnvAndStreamChecksCalls(t, rec, eng, statusByName, statusOf)
+}
+
+// testServicesProcedureEnvAndStreamChecksCalls continues
+// TestServicesProcedure_EnvAndStream.
+func testServicesProcedureEnvAndStreamChecksCalls(
+	t *testing.T,
+	rec *recorder,
+	eng interfaces.ProcedureRunner,
+	statusByName map[string]any,
+	statusOf map[string]types.StepStatus,
+) {
+	t.Helper()
+
+	assert.Equal(
+		t,
+		types.StatusPass,
+		statusOf[textAfter],
+		"the condition read the exit and set",
+	)
+
+	statusByName[textProfile] = ""
+
+	_, err := eng.Run(t.Context(), textRun, statusByName, stdx.Zero[types.RunOptions]())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"DB_HOST=localhost", "DB_PORT=5432", "SEARCH_ENV=dev"},
+	assert.Equal(t, []string{textDBHostLocalhost, textDBPort5432, textSearchEnvDev},
 		rec.envs["go run ./job"])
 
-	_, err = procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{{
-		Name: "x", Steps: []types.ProcStep{{
-			Name: "s", Tool: "go", Stream: true, Capture: &types.Capture{Var: "v"},
-		}},
-	}}}, procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
-		return toolOf(gomock.NewController(t), "go"), true
-	}})
+	_, err = procedure.NewFromConfig(
+		procedure.Config{
+			Procedures: []types.Procedure{fixtures.Build(func(row *types.Procedure) {
+				row.Name = textX
+				row.Steps = []types.ProcStep{
+					fixtures.Build(func(row *types.ProcStep) {
+						row.Name = textS
+						row.Tool = textGoLower
+						row.Stream = true
+						row.Capture = &types.Capture{Var: textV, As: ""}
+					}),
+				}
+			})},
+		},
+		fixtures.BuildRef(func(row *procedure.Deps) {
+			row.Tools = func(string) (interfaces.ToolSpec, bool) {
+				return toolOf(gomock.NewController(t), textGoLower), true
+			}
+		}),
+	)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Contains(t, err.Error(), "stream")
+}
+
+// testServicesProcedureEnvAndStreamTable builds the table
+// TestServicesProcedure_EnvAndStream runs.
+func testServicesProcedureEnvAndStreamTable() []types.Procedure {
+	return []types.Procedure{fixtures.Build(func(row *types.Procedure) {
+		row.Name = textRun
+		row.Inputs = []string{textExtra, textProfile}
+		row.Steps = []types.ProcStep{
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = "buffered"
+				row.Tool = textGoLower
+				row.Args = []string{textRun, "./job"}
+				row.Env = []string{
+					"{extra...}",
+					textSearchEnvDev,
+					"${profile != '' ? ['PROFILE=' + profile] : []}",
+				}
+			}),
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = "streamed"
+				row.Tool = textUv
+				row.Args = []string{textRun}
+				row.Stream = true
+				row.Env = []string{
+					"A={profile}",
+				}
+			}),
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = textProbe
+				row.Tool = textUv
+				row.Args = []string{"fail"}
+				row.Stream = true
+				row.Capture = &types.Capture{Var: "probe_exit", As: types.CaptureExit}
+			}),
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = textMark
+				row.Step = textMark
+				row.Sets = []string{"marked"}
+			}),
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = textAfter
+				row.Tool = textUv
+				row.Args = []string{textRun, "again"}
+				row.Stream = true
+				row.When = "probe_exit == 1 && marked"
+			}),
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = textBroken
+				row.Tool = textUv
+				row.Args = []string{"fail"}
+				row.Stream = true
+			}),
+		}
+	})}
 }
 
 // TestServicesProcedure_VarsAccessors tests the typed reads a Go step makes of its
@@ -579,24 +960,38 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 //     missing, mistyped or unparseable key.
 func TestServicesProcedure_VarsAccessors(t *testing.T) {
 	t.Parallel()
+
 	vars := procedure.Vars{
-		"env": "staging", "yes": true, "only": []string{"api"}, "units": []any{"a", 2},
-		"code": 3, "exit": int64(4), "n": float64(5), "odd": struct{}{},
-		"wait": 3 * time.Second, "wait_text": "1m30s", "wait_bad": "soon",
+		textEnv:     textStaging,
+		textYes:     true,
+		textOnly:    []string{textAPI},
+		"units":     []any{textA, units},
+		"code":      code,
+		"exit":      int64(int64Accessors),
+		textN:       float64(textNAccessors),
+		"odd":       struct{}{},
+		textWait:    textWaitAccessors * time.Second,
+		"wait_text": "1m30s",
+		"wait_bad":  "soon",
 	}
-	assert.Equal(t, "staging", vars.Text("env"))
-	assert.Empty(t, vars.Text("yes"), "a non-string reads as empty")
-	assert.Empty(t, vars.Text("missing"))
-	assert.True(t, vars.Bool("yes"))
-	assert.False(t, vars.Bool("env"), "a non-bool reads as false")
-	assert.Equal(t, []string{"api"}, vars.Strings("only"))
-	assert.Equal(t, []string{"a", "2"}, vars.Strings("units"), "a JSON list is converted")
-	assert.Nil(t, vars.Strings("env"))
-	assert.Equal(t, 3, vars.Int("code"))
-	assert.Equal(t, 4, vars.Int("exit"))
-	assert.Equal(t, 5, vars.Int("n"))
+	assert.Equal(t, textStaging, vars.Text(textEnv))
+	assert.Empty(t, vars.Text(textYes), "a non-string reads as empty")
+	assert.Empty(t, vars.Text(textMissing))
+	assert.True(t, vars.Bool(textYes))
+	assert.False(t, vars.Bool(textEnv), "a non-bool reads as false")
+	assert.Equal(t, []string{textAPI}, vars.Strings(textOnly))
+	assert.Equal(
+		t,
+		[]string{textA, "2"},
+		vars.Strings("units"),
+		"a JSON list is converted",
+	)
+	assert.Nil(t, vars.Strings(textEnv))
+	assert.Equal(t, wantIntAccessors, vars.Int("code"))
+	assert.Equal(t, wantIntVarsAccessors, vars.Int("exit"))
+	assert.Equal(t, wantIntProcedureVarsAccessors, vars.Int(textN))
 	assert.Zero(t, vars.Int("odd"))
-	assert.Equal(t, 3*time.Second, vars.Duration("wait"))
+	assert.Equal(t, 3*time.Second, vars.Duration(textWait))
 	assert.Equal(
 		t,
 		90*time.Second,
@@ -604,8 +999,8 @@ func TestServicesProcedure_VarsAccessors(t *testing.T) {
 		"a duration's text parses",
 	)
 	assert.Zero(t, vars.Duration("wait_bad"))
-	assert.Zero(t, vars.Duration("env"))
-	assert.Zero(t, vars.Duration("missing"))
+	assert.Zero(t, vars.Duration(textEnv))
+	assert.Zero(t, vars.Duration(textMissing))
 }
 
 // TestServicesProcedure_ConcurrentEachOverObjects tests a concurrent each over object
@@ -624,53 +1019,110 @@ func TestServicesProcedure_VarsAccessors(t *testing.T) {
 //     without each fails compilation.
 func TestServicesProcedure_ConcurrentEachOverObjects(t *testing.T) {
 	t.Parallel()
-	rec := &recorder{out: map[string]string{"go build -o bin/b .": "!boom"}}
+
+	rec := fixtures.BuildRef(func(row *recorder) {
+		row.out = map[string]string{"go build -o bin/b .": textBoomFailure}
+	})
 	targets := []any{
 		map[string]any{
-			"name":  "a",
-			"dir":   "apps/a",
-			"bin":   "bin/a",
-			"extra": []string{"-race"},
+			textName:  textA,
+			textDir:   "apps/a",
+			textBin:   "bin/a",
+			textExtra: []string{"-race"},
 		},
-		map[string]any{"name": "b", "dir": "apps/b", "bin": "bin/b", "extra": []string{}},
-		map[string]any{"name": "c", "dir": "apps/c", "bin": "bin/c", "extra": []string{}},
+		map[string]any{
+			textName:  textB,
+			textDir:   "apps/b",
+			textBin:   "bin/b",
+			textExtra: []string{},
+		},
+		map[string]any{
+			textName:  textC,
+			textDir:   "apps/c",
+			textBin:   "bin/c",
+			textExtra: []string{},
+		},
 	}
 	eng := procEngine(t, rec, []types.Procedure{
-		{Name: "main", Inputs: []string{"targets"}, Steps: []types.ProcStep{
-			{
-				Name: "{t.name}: build", Each: "targets", As: "t", Concurrent: true,
-				Tool: "go", Cwd: "{t.dir}",
-				Args: []string{"build", "{t.extra...}", "-o", "{t.bin}", "."},
-			},
-			{Name: "never", Tool: "echo"},
-		}},
-		{Name: "badpath", Inputs: []string{"targets"}, Steps: []types.ProcStep{
-			{Name: "{t.nope}", Each: "targets", As: "t", Tool: "echo"},
-		}},
-	}, procedure.Deps{})
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = textMain
+			row.Inputs = []string{textTargets}
+			row.Steps = []types.ProcStep{
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = "{t.name}: build"
+					row.Each = textTargets
+					row.As = textT
+					row.Concurrent = true
+					row.Tool = textGoLower
+					row.Cwd = "{t.dir}"
+					row.Args = []string{textBuild, "{t.extra...}", "-o", "{t.bin}", "."}
+				}),
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = textNever
+					row.Tool = textEcho
+				}),
+			}
+		}),
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = "badpath"
+			row.Inputs = []string{textTargets}
+			row.Steps = []types.ProcStep{
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = "{t.nope}"
+					row.Each = textTargets
+					row.As = textT
+					row.Tool = textEcho
+				}),
+			}
+		}),
+	}, new(procedure.Deps))
 
-	res, err := eng.Run(t.Context(), "main", map[string]any{"targets": targets},
-		types.RunOptions{})
+	testServicesProcedureConcurrentEachOverObjectsChecksResults(t, rec, targets, eng)
+}
+
+// testServicesProcedureConcurrentEachOverObjectsChecksResults continues
+// TestServicesProcedure_ConcurrentEachOverObjects: checks results.
+func testServicesProcedureConcurrentEachOverObjectsChecksResults(
+	t *testing.T,
+	rec *recorder,
+	targets []any,
+	eng interfaces.ProcedureRunner,
+) {
+	t.Helper()
+
+	res, err := eng.Run(t.Context(), textMain, map[string]any{textTargets: targets},
+		stdx.Zero[types.RunOptions]())
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{
 		"go build -race -o bin/a .", "go build -o bin/b .", "go build -o bin/c .",
 	}, rec.calls, "every item runs, the failing one's siblings included")
-	require.Len(t, res, 3, "no step after the failing fan-out")
+	require.Len(t, res, wantResLen, "no step after the failing fan-out")
 	assert.Equal(t, []string{"a: build", "b: build", "c: build"},
 		[]string{res[0].Name, res[1].Name, res[2].Name}, "results keep item order")
 	assert.Equal(t, types.StatusFail, res[1].Status)
 	assert.Equal(t, types.StatusPass, res[2].Status)
 
-	_, err = eng.Run(t.Context(), "badpath", map[string]any{"targets": targets},
-		types.RunOptions{})
+	_, err = eng.Run(t.Context(), "badpath", map[string]any{textTargets: targets},
+		stdx.Zero[types.RunOptions]())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `no variable "t.nope"`)
 
 	_, err = procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{
-		{Name: "x", Steps: []types.ProcStep{{Name: "x", Tool: "echo", Concurrent: true}}},
-	}}, procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
-		return toolOf(gomock.NewController(t), "echo"), true
-	}})
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = textX
+			row.Steps = []types.ProcStep{
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = textX
+					row.Tool = textEcho
+					row.Concurrent = true
+				}),
+			}
+		}),
+	}}, fixtures.BuildRef(func(row *procedure.Deps) {
+		row.Tools = func(string) (interfaces.ToolSpec, bool) {
+			return toolOf(gomock.NewController(t), textEcho), true
+		}
+	}))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "concurrent needs each")
 }
@@ -688,19 +1140,33 @@ func TestServicesProcedure_ConcurrentEachOverObjects(t *testing.T) {
 //     skipped under the real one.
 func TestServicesProcedure_PlatformVariables(t *testing.T) {
 	t.Parallel()
-	rec := &recorder{}
-	eng := procEngine(t, rec, []types.Procedure{
-		{Name: "main", Vars: []types.ProcVar{
-			{Name: "winarm", Expr: "os == 'windows' && arch == 'arm64'"},
-		}, Steps: []types.ProcStep{
-			{Name: "platform", Tool: "echo", Args: []string{"{os}/{arch}"}},
-			{Name: "x86 python", Tool: "echo", Args: []string{"x86"}, When: "winarm"},
-		}},
-	}, procedure.Deps{})
 
-	res, err := eng.Run(t.Context(), "main", nil, types.RunOptions{})
+	rec := new(recorder)
+	eng := procEngine(t, rec, []types.Procedure{
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = textMain
+			row.Vars = []types.ProcVar{
+				{Name: "winarm", Expr: "os == 'windows' && arch == 'arm64'"},
+			}
+			row.Steps = []types.ProcStep{
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = "platform"
+					row.Tool = textEcho
+					row.Args = []string{"{os}/{arch}"}
+				}),
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = "x86 python"
+					row.Tool = textEcho
+					row.Args = []string{"x86"}
+					row.When = "winarm"
+				}),
+			}
+		}),
+	}, new(procedure.Deps))
+
+	res, err := eng.Run(t.Context(), textMain, nil, stdx.Zero[types.RunOptions]())
 	require.NoError(t, err)
-	assert.Equal(t, "echo "+runtime.GOOS+"/"+runtime.GOARCH, rec.calls[0])
+	assert.Equal(t, "echo "+runtime.GOOS+textSlash+runtime.GOARCH, rec.calls[0])
 	assert.Equal(
 		t,
 		types.StatusSkip,
@@ -709,8 +1175,8 @@ func TestServicesProcedure_PlatformVariables(t *testing.T) {
 	)
 
 	rec.calls = nil
-	res, err = eng.Run(t.Context(), "main",
-		map[string]any{"os": "windows", "arch": "arm64"}, types.RunOptions{})
+	res, err = eng.Run(t.Context(), textMain,
+		map[string]any{"os": textWindows, "arch": "arm64"}, stdx.Zero[types.RunOptions]())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"echo windows/arm64", "echo x86"}, rec.calls)
 	assert.Equal(t, types.StatusPass, res[1].Status)
@@ -731,47 +1197,153 @@ func TestServicesProcedure_PlatformVariables(t *testing.T) {
 //     a step setting both tool and exec is refused at compile.
 func TestServicesProcedure_ExecRunsTheCallersArgv(t *testing.T) {
 	t.Parallel()
-	rec := &recorder{}
-	procs := []types.Procedure{{
-		Name: "run", Inputs: []string{"command"},
-		Steps: []types.ProcStep{{
-			Name: "child", Exec: []string{"{command...}"}, Stream: true,
-			Env: []string{"KUBECONFIG=/tmp/k", "-AWS_PROFILE"},
-		}},
-	}, {
-		Name: "absent", Steps: []types.ProcStep{
-			{Name: "skipped", Exec: []string{"absent", "x"}, Missing: "skip"},
-			{Name: "failed", Exec: []string{"absent", "x"}},
-		},
-	}}
-	eng := procEngine(t, rec, procs, procedure.Deps{})
 
-	res, err := eng.Run(t.Context(), "run",
-		map[string]any{"command": []string{"kubectl", "get", "pods"}}, types.RunOptions{})
+	rec := new(recorder)
+	procs := testServicesProcedureExecRunsTheCallersArgvTable()
+	eng := procEngine(t, rec, procs, new(procedure.Deps))
+
+	res, err := eng.Run(
+		t.Context(),
+		textRun,
+		map[string]any{
+			textCommand: []string{textKubectl, textGet, textPods},
+		},
+		stdx.Zero[types.RunOptions](),
+	)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"kubectl get pods"}, rec.streamed)
 	assert.Equal(t, []string{"KUBECONFIG=/tmp/k", "-AWS_PROFILE"},
 		rec.envs["kubectl get pods"])
 	assert.Equal(t, types.StatusPass, res[0].Status)
 
-	res, err = eng.Run(t.Context(), "absent", nil, types.RunOptions{})
+	res, err = eng.Run(t.Context(), textAbsent, nil, stdx.Zero[types.RunOptions]())
 	require.NoError(t, err)
 	assert.Equal(t, types.StatusSkip, res[0].Status)
 	assert.Equal(t, "absent not installed", res[0].Error)
 	assert.Equal(t, types.StatusFail, res[1].Status)
 	assert.Contains(t, res[1].Error, "absent not installed")
 
-	_, err = eng.Run(t.Context(), "run",
-		map[string]any{"command": []string{}}, types.RunOptions{})
+	_, err = eng.Run(t.Context(), textRun,
+		map[string]any{textCommand: []string{}}, stdx.Zero[types.RunOptions]())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	_, err = procedure.NewFromConfig(procedure.Config{Procedures: []types.Procedure{
-		{
-			Name:  "x",
-			Steps: []types.ProcStep{{Name: "s", Tool: "echo", Exec: []string{"ls"}}},
-		},
-	}}, procedure.Deps{Tools: func(string) (interfaces.ToolSpec, bool) {
-		return toolOf(gomock.NewController(t), "echo"), true
-	}})
+		fixtures.Build(func(row *types.Procedure) {
+			row.Name = textX
+			row.Steps = []types.ProcStep{
+				fixtures.Build(func(row *types.ProcStep) {
+					row.Name = textS
+					row.Tool = textEcho
+					row.Exec = []string{"ls"}
+				}),
+			}
+		}),
+	}}, fixtures.BuildRef(func(row *procedure.Deps) {
+		row.Tools = func(string) (interfaces.ToolSpec, bool) {
+			return toolOf(gomock.NewController(t), textEcho), true
+		}
+	}))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+// testServicesProcedureExecRunsTheCallersArgvTable builds the table
+// TestServicesProcedure_ExecRunsTheCallersArgv runs.
+func testServicesProcedureExecRunsTheCallersArgvTable() []types.Procedure {
+	return []types.Procedure{fixtures.Build(func(row *types.Procedure) {
+		row.Name = textRun
+		row.Inputs = []string{textCommand}
+		row.Steps = []types.ProcStep{fixtures.Build(func(row *types.ProcStep) {
+			row.Name = "child"
+			row.Exec = []string{"{command...}"}
+			row.Stream = true
+			row.Env = []string{"KUBECONFIG=/tmp/k", "-AWS_PROFILE"}
+		})}
+	}), fixtures.Build(func(row *types.Procedure) {
+		row.Name = textAbsent
+		row.Steps = []types.ProcStep{
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = "skipped"
+				row.Exec = []string{textAbsent, textX}
+				row.Missing = textSkip
+			}),
+			fixtures.Build(func(row *types.ProcStep) {
+				row.Name = textFailed
+				row.Exec = []string{textAbsent, textX}
+			}),
+		}
+	})}
+}
+
+const (
+	// code is the value for "code" in TestServicesProcedure_VarsAccessors.
+	code = 3
+
+	// int64Accessors is argument 1 of int64 in TestServicesProcedure_VarsAccessors.
+	int64Accessors = 4
+
+	// textNAccessors is argument 1 of float64 in TestServicesProcedure_VarsAccessors.
+	textNAccessors = 5
+
+	// textWaitAccessors is the factor multiplying time.Second in
+	// TestServicesProcedure_VarsAccessors.
+	textWaitAccessors = 3
+
+	// units is an element of a []any in TestServicesProcedure_VarsAccessors.
+	units = 2
+
+	// wantIntAccessors is the expected int accessors.
+	wantIntAccessors = 3
+
+	// wantIntProcedureVarsAccessors is the expected int procedure vars accessors.
+	wantIntProcedureVarsAccessors = 5
+
+	// wantIntVarsAccessors is the expected int vars accessors.
+	wantIntVarsAccessors = 4
+)
+
+const (
+	// textBoomFailure is the literal "!boom".
+	textBoomFailure = "!boom"
+
+	// textDBHostLocalhost is the literal "DB_HOST=localhost".
+	textDBHostLocalhost = "DB_HOST=localhost"
+
+	// textDockerImagesFilter is the literal shown below.
+	textDockerImagesFilter = "docker images --filter reference=app-* --format {{.ID}}"
+
+	// textFalse is the literal "false".
+	textFalse = "false"
+
+	// textInterrupted is the literal "interrupted".
+	textInterrupted = "interrupted"
+
+	// textMark is the literal "mark".
+	textMark = "mark"
+
+	// textPrune is the literal "prune".
+	textPrune = "prune"
+
+	// textSearchEnvDev is the literal "SEARCH_ENV=dev".
+	textSearchEnvDev = "SEARCH_ENV=dev"
+
+	// textSkip is the literal "skip".
+	textSkip = "skip"
+
+	// textSoft is the literal "soft".
+	textSoft = "soft"
+
+	// textTargets is the literal "targets".
+	textTargets = "targets"
+
+	// textUvFail is the literal "uv fail".
+	textUvFail = "uv fail"
+
+	// textYes is the literal "yes".
+	textYes = "yes"
+
+	// textBang is the literal "!".
+	textBang = "!"
+
+	// textDBPort5432 is the literal "DB_PORT=5432".
+	textDBPort5432 = "DB_PORT=5432"
+)

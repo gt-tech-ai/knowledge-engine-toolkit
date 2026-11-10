@@ -6,10 +6,25 @@ import (
 
 	gb "github.com/sony/gobreaker/v2"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 )
+
+// defaultConfigInterval is the default Interval of Config.
+const defaultConfigInterval = 60 * time.Second
+
+// defaultConfigTimeout is the default Timeout of Config.
+const defaultConfigTimeout = 30 * time.Second
+
+// defaultConfigConsecutiveFailures is the default ConsecutiveFailures of Config.
+const defaultConfigConsecutiveFailures = 5
+
+// defaultConfigFailureRatio is the default FailureRatio of Config.
+const defaultConfigFailureRatio = 0.5
+
+// defaultConfigMinRequests is the default MinRequests of Config.
+const defaultConfigMinRequests = 10
 
 // Compile-time interface assertion.
 var _ interfaces.CircuitBreaker = (*Breaker)(nil)
@@ -47,23 +62,26 @@ func DefaultConfig(name string) Config {
 	return Config{
 		Name:                name,
 		MaxRequests:         1,
-		Interval:            60 * time.Second,
-		Timeout:             30 * time.Second,
-		ConsecutiveFailures: 5,
-		FailureRatio:        0.5,
-		MinRequests:         10,
+		Interval:            defaultConfigInterval,
+		Timeout:             defaultConfigTimeout,
+		ConsecutiveFailures: defaultConfigConsecutiveFailures,
+		FailureRatio:        defaultConfigFailureRatio,
+		MinRequests:         defaultConfigMinRequests,
 	}
 }
+
+// noResult is the value type of a breaker whose operations return only an error.
+type noResult = struct{}
 
 // Breaker implements interfaces.CircuitBreaker backed by sony/gobreaker.
 type Breaker struct {
 	// inner is the underlying gobreaker circuit breaker.
-	inner *gb.CircuitBreaker[struct{}]
+	inner *gb.CircuitBreaker[noResult]
 }
 
 // New creates a circuit breaker from the given config.
 func New(cfg Config) *Breaker {
-	cb := gb.NewCircuitBreaker[struct{}](gb.Settings{
+	circuitBreaker := gb.NewCircuitBreaker[noResult](gb.Settings{
 		Name:        cfg.Name,
 		MaxRequests: cfg.MaxRequests,
 		Interval:    cfg.Interval,
@@ -82,12 +100,17 @@ func New(cfg Config) *Breaker {
 			if counts.ConsecutiveFailures >= cfg.ConsecutiveFailures {
 				return true
 			}
+
 			return cfg.MinRequests > 0 &&
 				counts.Requests >= cfg.MinRequests &&
 				float64(counts.TotalFailures)/float64(counts.Requests) >= cfg.FailureRatio
 		},
+		BucketPeriod:  0,
+		OnStateChange: nil,
+		IsExcluded:    nil,
 	})
-	return &Breaker{inner: cb}
+
+	return &Breaker{inner: circuitBreaker}
 }
 
 // Execute runs fn through the circuit breaker. A call the breaker rejects (open, or
@@ -104,5 +127,6 @@ func (b *Breaker) Execute(fn func() error) error {
 			"circuit breaker "+b.inner.Name()+" open",
 		)
 	}
+
 	return err
 }

@@ -8,7 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
 )
@@ -49,18 +50,20 @@ func TestLoggingInterceptor_StatusCodeMapping(t *testing.T) {
 		// outcome, logged at Warn so it does not fire an Error-level alert.
 		{connect.CodeCanceled, true},
 	}
-	for _, tc := range cases {
-		t.Run(tc.code.String(), func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.code.String(), func(t *testing.T) {
 			t.Parallel()
+
 			spy := fixtures.NewSpyLogger()
 			handler := interceptors.NewLoggingInterceptor(spy).WrapUnary(
 				func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-					return nil, connect.NewError(tc.code, apperr.Sentinel("boom"))
+					return nil, connect.NewError(testCase.code, apperr.Sentinel(textBoom))
 				},
 			)
 			_, err := handler(context.Background(), newTestRequest())
 			require.Error(t, err)
-			if tc.wantWarn {
+
+			if testCase.wantWarn {
 				assert.Len(t, *spy.ChildWarnCalls, 1, "4xx codes log at Warn")
 				assert.Empty(t, *spy.ChildErrorCalls, "4xx codes must not log at Error")
 			} else {
@@ -85,13 +88,15 @@ func TestAuthInterceptor_StreamingClientIsNoOp(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	wrapped := interceptors.NewAuthInterceptor(false, testHeaders()).WrapStreamingClient(
-		func(context.Context, connect.Spec) connect.StreamingClientConn {
-			called = true
-			return nil
-		},
-	)
-	wrapped(context.Background(), connect.Spec{})
+	wrapped := interceptors.NewAuthInterceptor(false, new(testHeaders())).
+		WrapStreamingClient(
+			func(context.Context, connect.Spec) connect.StreamingClientConn {
+				called = true
+
+				return nil
+			},
+		)
+	wrapped(context.Background(), stdx.Zero[connect.Spec]())
 	assert.True(t, called, "the wrapped client func delegates to next unchanged")
 }
 
@@ -115,10 +120,10 @@ func TestPrincipalInterceptor_StreamingFailsClosed(t *testing.T) {
 			apperr.Sentinel("not a member"),
 		)
 	}
-	claims := &interceptors.AuthClaims{
-		Sub:      "sub-1",
-		TenantID: "tenant-1",
-	} // non-synthetic
+	claims := fixtures.BuildRef(func(row *interceptors.AuthClaims) {
+		row.Sub = "sub-1"
+		row.TenantID = textTenant1
+	}) // non-synthetic
 
 	called := false
 	handler := interceptors.NewPrincipalInterceptor[string](
@@ -127,6 +132,7 @@ func TestPrincipalInterceptor_StreamingFailsClosed(t *testing.T) {
 	).WrapStreamingHandler(
 		func(context.Context, connect.StreamingHandlerConn) error {
 			called = true
+
 			return nil
 		},
 	)
@@ -149,6 +155,7 @@ func TestPrincipalInterceptor_StreamingFailsClosed(t *testing.T) {
 //     the error branch), including for a procedure with no method segment.
 func TestConnectTracingInterceptors_RecordErrorOnFailure(t *testing.T) {
 	t.Parallel()
+
 	tracer := fixtures.NopTracer()
 	boom := connect.NewError(connect.CodeInternal, apperr.Sentinel("handler fault"))
 	failing := func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {

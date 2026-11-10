@@ -3,7 +3,7 @@ package river
 import (
 	"context"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -15,6 +15,7 @@ func (r *Runtime) Liveness(_ context.Context) error {
 	if r.pool == nil {
 		return apperr.Internal("river runtime not initialized")
 	}
+
 	return nil
 }
 
@@ -23,6 +24,7 @@ func (r *Runtime) Readiness(ctx context.Context) error {
 	if r.pool == nil {
 		return apperr.Internal("river runtime not initialized")
 	}
+
 	return apperr.Wrap(
 		r.pool.Ping(ctx),
 		apperr.CodeUnavailable,

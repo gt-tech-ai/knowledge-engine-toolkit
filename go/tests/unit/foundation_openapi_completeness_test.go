@@ -33,14 +33,22 @@ import (
 //     Violation whose RPC is the offending method and whose Reason names it.
 func TestCheckCompleteness_FlagsUnannotatedRESTRPC(t *testing.T) {
 	t.Parallel()
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
-		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage("Empty")},
+		jsonapiSetter.FileOptsWithService(),
+		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmptyTitle)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", "Empty", "Empty",
-				s.MethodOpts("POST", "/api/v1/notifications/mark-read", false)),
+			fixtures.Method(
+				"MarkRead",
+				textEmptyTitle,
+				textEmptyTitle,
+				jsonapiSetter.MethodOpts(
+					textPost,
+					"/api/v1/notifications/mark-read",
+				),
+			),
 		},
 	)
 
@@ -63,14 +71,22 @@ func TestCheckCompleteness_FlagsUnannotatedRESTRPC(t *testing.T) {
 //   - The same unclassifiable POST, when exempt, yields no violations.
 func TestCheckCompleteness_RespectsExemptMethods(t *testing.T) {
 	t.Parallel()
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
-		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage("Empty")},
+		jsonapiSetter.FileOptsWithService(),
+		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmptyTitle)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", "Empty", "Empty",
-				s.MethodOpts("POST", "/api/v1/notifications/mark-read", false)),
+			fixtures.Method(
+				"MarkRead",
+				textEmptyTitle,
+				textEmptyTitle,
+				jsonapiSetter.MethodOpts(
+					textPost,
+					"/api/v1/notifications/mark-read",
+				),
+			),
 		},
 	)
 
@@ -93,12 +109,13 @@ func TestCheckCompleteness_RespectsExemptMethods(t *testing.T) {
 //     yields zero violations.
 func TestCheckCompleteness_PassesFullyAnnotatedSurface(t *testing.T) {
 	t.Parallel()
+
 	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 	fds := fixtures.BuildRouteFDS(
 		t,
 		s.FileOptsWithService(),
-		docMessages(s),
-		docMethods(s),
+		docMessages(&s),
+		docMethods(&s),
 	)
 
 	violations, err := openapi.CheckCompleteness(fds, nil)
@@ -121,22 +138,29 @@ func TestCheckCompleteness_PassesFullyAnnotatedSurface(t *testing.T) {
 //     and BuildRouteTable emits no routes for that same off-surface file (parity).
 func TestCheckCompleteness_SurfaceParityWithRouteTable(t *testing.T) {
 	t.Parallel()
-	s := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
+
+	jsonapiSetter := fixtures.NewJSONAPISetter(t, fixtures.JSONAPIAnnotations(t))
 
 	svcFDS := fixtures.BuildRouteFDS(
 		t,
-		s.FileOptsWithService(),
+		jsonapiSetter.FileOptsWithService(),
 		[]*descriptorpb.DescriptorProto{
-			fixtures.ResourceMessage(s, "Document", "documents", "document", ""),
-			fixtures.EmptyMessage("Empty"),
+			fixtures.ResourceMessage(
+				&jsonapiSetter,
+				textDocumentTitle,
+				textDocuments,
+				textDocument,
+				"",
+			),
+			fixtures.EmptyMessage(textEmptyTitle),
 		},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("GetDocument", "Empty", "Document",
-				s.MethodOpts("GET", "/api/v1/documents/{document_id}", false)),
+			fixtures.Method(textGetdocument, textEmptyTitle, textDocumentTitle,
+				jsonapiSetter.MethodOpts(textGetUpper, textAPIV1DocumentsDocument)),
 			fixtures.Method(
 				"InternalPing",
-				"Empty",
-				"Empty",
+				textEmptyTitle,
+				textEmptyTitle,
 				nil,
 			), // gRPC-only → off-surface
 		},
@@ -148,10 +172,10 @@ func TestCheckCompleteness_SurfaceParityWithRouteTable(t *testing.T) {
 	offFDS := fixtures.BuildRouteFDS(
 		t,
 		nil, // no (jsonapi.v1.service) file option
-		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage("Empty")},
+		[]*descriptorpb.DescriptorProto{fixtures.EmptyMessage(textEmptyTitle)},
 		[]*descriptorpb.MethodDescriptorProto{
-			fixtures.Method("MarkRead", "Empty", "Empty",
-				s.MethodOpts("POST", "/api/v1/x/mark-read", false)),
+			fixtures.Method("MarkRead", textEmptyTitle, textEmptyTitle,
+				jsonapiSetter.MethodOpts(textPost, "/api/v1/x/mark-read")),
 		},
 	)
 	offSurface, err := openapi.CheckCompleteness(offFDS, nil)

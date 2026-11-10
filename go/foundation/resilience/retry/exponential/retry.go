@@ -7,10 +7,25 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/budget"
 )
+
+// defaultConfigMaxRetries is the default MaxRetries of Config.
+const defaultConfigMaxRetries = 3
+
+// defaultConfigInitialInterval is the default InitialInterval of Config.
+const defaultConfigInitialInterval = 100 * time.Millisecond
+
+// defaultConfigMaxInterval is the default MaxInterval of Config.
+const defaultConfigMaxInterval = 5 * time.Second
+
+// defaultConfigMultiplier is the default Multiplier of Config.
+const defaultConfigMultiplier = 2.0
+
+// defaultConfigMaxElapsedTime is the default MaxElapsedTime of Config.
+const defaultConfigMaxElapsedTime = 30 * time.Second
 
 // Compile-time interface assertion.
 var _ interfaces.Retrier = (*Retrier)(nil)
@@ -55,6 +70,7 @@ func defaultIsRetryable(err error) bool {
 	if apperr.StdIs(err, context.Canceled) {
 		return false
 	}
+
 	switch apperr.Code(err) {
 	case apperr.CodeConflict,
 		apperr.CodeInvalidInput,
@@ -73,8 +89,10 @@ func defaultIsRetryable(err error) bool {
 		apperr.CodeUpstream:
 		return true
 	default:
-		return true
+		// Any other value takes the shared result below.
 	}
+
+	return true
 }
 
 // IsRetryable reports whether an error is worth retrying under the package's
@@ -90,11 +108,12 @@ func IsRetryable(err error) bool {
 // DefaultConfig returns sensible defaults for exponential backoff.
 func DefaultConfig() Config {
 	return Config{
-		MaxRetries:      3,
-		InitialInterval: 100 * time.Millisecond,
-		MaxInterval:     5 * time.Second,
-		Multiplier:      2.0,
-		MaxElapsedTime:  30 * time.Second,
+		MaxRetries:      defaultConfigMaxRetries,
+		InitialInterval: defaultConfigInitialInterval,
+		MaxInterval:     defaultConfigMaxInterval,
+		Multiplier:      defaultConfigMultiplier,
+		MaxElapsedTime:  defaultConfigMaxElapsedTime,
+		IsRetryable:     nil,
 	}
 }
 
@@ -109,76 +128,86 @@ func New(cfg Config) *Retrier {
 	return &Retrier{cfg: cfg}
 }
 
-// classify returns the configured retryability predicate, falling back to
-// defaultIsRetryable when none is set.
-func (r *Retrier) classify() func(error) bool {
-	if r.cfg.IsRetryable != nil {
-		return r.cfg.IsRetryable
-	}
-	return defaultIsRetryable
-}
-
 // Retry executes the operation with exponential backoff and jitter.
 // Each attempt after the first consumes one retry from the context's retry budget (if
 // present); the first attempt is free, so a budget of N allows N retries.
-func (r *Retrier) Retry(ctx context.Context, op func() error) error {
+func (r *Retrier) Retry(ctx context.Context, operation func() error) error {
 	isRetryable := r.classify()
 	retrying := false
 	_, err := backoff.Retry(ctx, func() (struct{}, error) {
 		if retrying && !budget.ConsumeRetry(ctx) {
 			return struct{}{}, backoff.Permanent(budget.ErrRetryBudgetExhausted)
 		}
+
 		retrying = true
-		if e := op(); e != nil {
-			if !isRetryable(e) {
-				return struct{}{}, backoff.Permanent(e)
-			}
-			return struct{}{}, e
+
+		e := operation()
+		if e != nil && !isRetryable(e) {
+			return struct{}{}, backoff.Permanent(e)
 		}
-		return struct{}{}, nil
+
+		return struct{}{}, e
 	}, r.retryOpts()...)
 
 	return err
+}
+
+// classify returns the configured retryability predicate, falling back to
+// defaultIsRetryable when none is set.
+func (r *Retrier) classify() func(error) bool {
+	if r.cfg.IsRetryable != nil {
+		return r.cfg.IsRetryable
+	}
+
+	return defaultIsRetryable
 }
 
 // RetryWithResult executes an operation that returns a value with exponential backoff.
 // Same retry semantics as Retry, but preserves the operation's return value on success.
 func RetryWithResult[T any](
 	ctx context.Context,
-	r *Retrier,
-	op func() (T, error),
+	retrier *Retrier,
+	operation func() (T, error),
 ) (T, error) {
-	isRetryable := r.classify()
+	isRetryable := retrier.classify()
 	retrying := false
+
 	return backoff.Retry(ctx, func() (T, error) {
 		if retrying && !budget.ConsumeRetry(ctx) {
 			var zero T
+
 			return zero, backoff.Permanent(budget.ErrRetryBudgetExhausted)
 		}
+
 		retrying = true
-		v, e := op()
-		if e != nil && !isRetryable(e) {
-			return v, backoff.Permanent(e)
+
+		value, cause := operation()
+
+		if cause != nil && !isRetryable(cause) {
+			return value, backoff.Permanent(cause)
 		}
-		return v, e
-	}, r.retryOpts()...)
+
+		return value, cause
+	}, retrier.retryOpts()...)
 }
 
 // retryOpts builds backoff v5 retry options from the stored config.
 func (r *Retrier) retryOpts() []backoff.RetryOption {
-	b := backoff.NewExponentialBackOff()
-	b.InitialInterval = r.cfg.InitialInterval
-	b.MaxInterval = r.cfg.MaxInterval
-	b.Multiplier = r.cfg.Multiplier
-	b.RandomizationFactor = 0.5 // jitter
+	exponentialBackOff := backoff.NewExponentialBackOff()
+
+	exponentialBackOff.InitialInterval = r.cfg.InitialInterval
+	exponentialBackOff.MaxInterval = r.cfg.MaxInterval
+	exponentialBackOff.Multiplier = r.cfg.Multiplier
+	exponentialBackOff.RandomizationFactor = defaultRandomizationFactor // jitter
 
 	opts := []backoff.RetryOption{
-		backoff.WithBackOff(b),
+		backoff.WithBackOff(exponentialBackOff),
 		backoff.WithMaxElapsedTime(r.cfg.MaxElapsedTime),
 	}
 	if r.cfg.MaxRetries > 0 {
 		// WithMaxTries counts the first attempt; MaxRetries counts only the retries.
 		opts = append(opts, backoff.WithMaxTries(uint(r.cfg.MaxRetries)+1))
 	}
+
 	return opts
 }

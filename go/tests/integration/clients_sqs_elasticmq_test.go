@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 
 	messagingclient "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	elasticmqdb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/elasticmq"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
@@ -23,6 +25,7 @@ const emqTestQueue = "test-events"
 // SQSElasticMQSuite runs the real AWS-SDK SQS publisher against a real ElasticMQ.
 type SQSElasticMQSuite struct {
 	testsuite.ElasticMQIntegrationSuite
+
 	raw *awssqs.Client
 	cfg infra.SQSConfig
 }
@@ -36,6 +39,8 @@ type SQSElasticMQSuite struct {
 // What it tests:
 //   - Wires SQSElasticMQSuite into the runner.
 func TestSQSElasticMQSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(SQSElasticMQSuite))
 }
 
@@ -46,30 +51,13 @@ func (s *SQSElasticMQSuite) SetupSuite() {
 	s.cfg.Endpoint = s.ElasticMQEndpoint
 
 	s.raw = s.rawClient()
+
 	_, err := s.raw.CreateQueue(context.Background(), &awssqs.CreateQueueInput{
-		QueueName: aws.String(emqTestQueue),
+		QueueName:  aws.String(emqTestQueue),
+		Attributes: nil,
+		Tags:       nil,
 	})
 	s.Require().NoError(err, "create queue")
-}
-
-// rawClient builds an SQS client pointed at the test ElasticMQ for queue setup +
-// assertions (receive).
-func (s *SQSElasticMQSuite) rawClient() *awssqs.Client {
-	awsCfg, err := awsconfig.LoadDefaultConfig(
-		context.Background(),
-		awsconfig.WithRegion("us-east-1"),
-		awsconfig.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(
-				elasticmqdb.AccessKey,
-				elasticmqdb.SecretKey,
-				"",
-			),
-		),
-	)
-	s.Require().NoError(err)
-	return awssqs.NewFromConfig(awsCfg, func(o *awssqs.Options) {
-		o.BaseEndpoint = aws.String(s.ElasticMQEndpoint)
-	})
 }
 
 // TestPublish_RoundTrip verifies a message published through the real publisher is
@@ -84,25 +72,61 @@ func (s *SQSElasticMQSuite) rawClient() *awssqs.Client {
 func (s *SQSElasticMQSuite) TestPublish_RoundTrip() {
 	pub, err := messagingclient.NewFromConfig(
 		context.Background(),
-		messagingclient.Config{Kind: messagingclient.KindSQS, SQS: s.cfg},
-		messagingclient.Deps{},
+		&messagingclient.Config{
+			Kind:    messagingclient.KindSQS,
+			SQS:     s.cfg,
+			Name:    "",
+			Receive: stdx.Zero[messagingclient.Receive](),
+		},
+		stdx.Zero[messagingclient.Deps](),
 	)
 	s.Require().NoError(err)
 
 	const body = `{"event":"widget.created","id":"abc"}`
+
 	s.Require().NoError(pub.Publish(context.Background(), emqTestQueue, []byte(body)))
 
 	url, err := s.raw.GetQueueUrl(
 		context.Background(),
-		&awssqs.GetQueueUrlInput{QueueName: aws.String(emqTestQueue)},
+		&awssqs.GetQueueUrlInput{
+			QueueName:              aws.String(emqTestQueue),
+			QueueOwnerAWSAccountId: nil,
+		},
 	)
 	s.Require().NoError(err)
-	out, err := s.raw.ReceiveMessage(context.Background(), &awssqs.ReceiveMessageInput{
-		QueueUrl:            url.QueueUrl,
-		MaxNumberOfMessages: 1,
-		WaitTimeSeconds:     2,
-	})
+
+	out, err := s.raw.ReceiveMessage(
+		context.Background(),
+		fixtures.BuildRef(func(row *awssqs.ReceiveMessageInput) {
+			row.QueueUrl = url.QueueUrl
+			row.MaxNumberOfMessages = 1
+			row.WaitTimeSeconds = 2
+		}),
+	)
 	s.Require().NoError(err)
 	s.Require().Len(out.Messages, 1, "published message must be receivable")
 	s.JSONEq(body, aws.ToString(out.Messages[0].Body))
+}
+
+// rawClient builds an SQS client pointed at the test ElasticMQ for queue setup +
+// assertions (receive).
+func (s *SQSElasticMQSuite) rawClient() *awssqs.Client {
+	s.T().Helper()
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(
+		context.Background(),
+		awsconfig.WithRegion(textUsEast1),
+		awsconfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(
+				elasticmqdb.AccessKey,
+				elasticmqdb.SecretKey,
+				"",
+			),
+		),
+	)
+	s.Require().NoError(err)
+
+	return awssqs.NewFromConfig(awsCfg, func(o *awssqs.Options) {
+		o.BaseEndpoint = aws.String(s.ElasticMQEndpoint)
+	})
 }

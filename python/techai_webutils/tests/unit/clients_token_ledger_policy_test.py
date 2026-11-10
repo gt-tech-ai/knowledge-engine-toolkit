@@ -7,18 +7,18 @@ from decimal import Decimal
 
 import pytest
 
-from techai_webutils.clients.token_ledger.policy import (
+from techai_webutils.core.interfaces.token_ledger import (
+    LEDGER_UNAVAILABLE_REASON,
+    BudgetDecision,
+)
+from techai_webutils.core.interfaces.token_ledger import Enforcement as CoreEnforcement
+from techai_webutils.foundation.tokens.policy import (
     BudgetPolicy,
     Enforcement,
     OnLedgerError,
     Verdict,
     decide,
 )
-from techai_webutils.core.interfaces.token_ledger import (
-    LEDGER_UNAVAILABLE_REASON,
-    BudgetDecision,
-)
-from techai_webutils.core.interfaces.token_ledger import Enforcement as CoreEnforcement
 
 _ALLOWED = BudgetDecision(
     allowed=True, reason="within_budget", remaining_tokens=None, remaining_cost_usd=None
@@ -103,27 +103,39 @@ def test_budget_decision_table(
     error: Exception | None,
     expected: Verdict,
 ) -> None:
-    """Test every enforcement mode against an allowed, an exhausted and a failed budget check.
+    """Test every enforcement mode against three budget checks.
+
+    They are allowed, exhausted and failed.
 
     **Why this test is important:**
-      - The table is the whole rollout story (shadow → soft → hard); one wrong cell either blocks
-        tenants during a dual run or lets a hard cap spend for free.
+      - The table is the whole rollout story (shadow → soft → hard); one wrong cell either
+        blocks tenants during a dual run or lets a hard cap spend for free.
 
     **What it tests:**
       - shadow never rejects; soft and hard reject an exhausted budget
       - a ledger error serves under shadow and soft and denies under hard
+
+    Args:
+        enforcement: The policy's level.
+        decision: The budget decision.
+        error: The ledger's failure, if any.
+        expected: The expected verdict.
+
     """
     assert decide(BudgetPolicy(enforcement=enforcement), decision, error) == expected
 
 
 def test_soft_fails_open_on_ledger_error() -> None:
-    """Test that soft enforcement serves when the ledger fails, including a ledger that failed open itself.
+    """Test that soft enforcement serves when the ledger fails.
+
+    That includes a ledger that failed open itself.
 
     **Why this test is important:**
       - A FinOps outage must not become a product outage under the default policy.
 
     **What it tests:**
-      - a raised error and a ``ledger_unavailable_fail_open`` decision both serve under ``soft``
+      - a raised error and a ``ledger_unavailable_fail_open`` decision both serve under
+        ``soft``
     """
     soft = BudgetPolicy(enforcement=Enforcement.SOFT)
 
@@ -132,11 +144,13 @@ def test_soft_fails_open_on_ledger_error() -> None:
 
 
 def test_hard_fails_closed_on_ledger_error() -> None:
-    """Test that hard enforcement denies when the ledger can't answer, unless the policy opts out.
+    """Test that hard enforcement denies when the ledger can't answer.
+
+    Unless the policy opts out.
 
     **Why this test is important:**
-      - A missing accounting signal must not become unlimited spend under a hard cap, even when
-        the backend reports the outage as a fail-open decision rather than raising.
+      - A missing accounting signal must not become unlimited spend under a hard cap, even
+        when the backend reports the outage as a fail-open decision rather than raising.
 
     **What it tests:**
       - a ``ledger_unavailable_fail_open`` decision denies under ``hard``
@@ -157,12 +171,13 @@ def test_enforcement_is_a_core_type_and_decisions_carry_none_by_default() -> Non
     """Test that ``Enforcement`` lives in core and a decision carries no level by default.
 
     **Why this test is important:**
-      - A ledger backend reports a budget's own enforcement on its ``BudgetDecision``, so the
-        enum must be importable from core; existing importers of the policy module and every
-        backend that sets no level must keep working.
+      - A ledger backend reports a budget's own enforcement on its ``BudgetDecision``, so
+        the enum must be importable from core; existing importers of the policy module and
+        every backend that sets no level must keep working.
 
     **What it tests:**
-      - ``core.interfaces.token_ledger.Enforcement`` is the policy module's ``Enforcement``
+      - ``core.interfaces.token_ledger.Enforcement`` is the policy module's
+        ``Enforcement``
       - a ``BudgetDecision`` built without ``enforcement`` has ``None``
     """
     assert CoreEnforcement is Enforcement
@@ -187,10 +202,16 @@ def test_per_budget_uses_the_budget_level_for_an_exhausted_budget(
         ``shadow``, but only once a deployment opts in; without the flag nothing changes.
 
     **What it tests:**
-      - exhausted: served exactly when the effective level is ``shadow``, where the effective
-        level is the budget's when ``per_budget`` is set and the budget has one, else the
-        policy's; ``would_exceed`` is always set
+      - exhausted: served exactly when the effective level is ``shadow``, where the
+        effective level is the budget's when ``per_budget`` is set and the budget has one,
+        else the policy's; ``would_exceed`` is always set
       - within budget: always served, whatever the levels
+
+    Args:
+        policy_level: The policy's level.
+        budget_level: The budget's own level.
+        per_budget: Whether each budget sets its level.
+
     """
     policy = BudgetPolicy(enforcement=policy_level, per_budget=per_budget)
     effective = budget_level if per_budget and budget_level is not None else policy_level
@@ -225,5 +246,14 @@ def test_per_budget_leaves_ledger_errors_to_the_policy() -> None:
 
 
 def _with(decision: BudgetDecision, level: Enforcement | None) -> BudgetDecision:
-    """Return ``decision`` carrying the budget's own ``level``."""
+    """Return ``decision`` carrying the budget's own ``level``.
+
+    Args:
+        decision: The budget decision.
+        level: The budget's level; ``None`` leaves it unset.
+
+    Returns:
+        ``decision`` carrying the budget's own ``level``.
+
+    """
     return dataclasses.replace(decision, enforcement=level)

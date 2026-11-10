@@ -1,4 +1,7 @@
-"""Integration test: the Redis per-key rate limiter enforces one limit across instances."""
+"""Integration test: the Redis per-key rate limiter.
+
+It enforces one limit across instances.
+"""
 
 from __future__ import annotations
 
@@ -17,12 +20,22 @@ from techai_webutils.foundation.resilience.per_key_builder import (
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+_EXPECTED_ALLOWED = 5
+
 
 @pytest_asyncio.fixture
 async def redis_pair(redis_container: object) -> AsyncIterator[tuple[Redis, Redis]]:
-    """Yield two independent clients (two "replicas") on the session's Redis."""
-    host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
-    port = int(redis_container.get_exposed_port(redis_container.port))  # type: ignore[attr-defined]
+    """Yield two independent clients (two "replicas") on the session's Redis.
+
+    Args:
+        redis_container: A real Redis server for the session.
+
+    Yields:
+        Two independent clients (two "replicas") on the session's Redis.
+
+    """
+    host = redis_container.get_container_host_ip()
+    port = int(redis_container.get_exposed_port(redis_container.port))
     first, second = Redis(host=host, port=port), Redis(host=host, port=port)
     try:
         yield first, second
@@ -39,11 +52,17 @@ async def test_two_limiters_share_one_window(
     """Test that two limiter instances on one Redis share a single allowance.
 
     **Why this test is important:**
-      - A per-replica limit multiplies by the replica count; the shared kind exists to stop that.
+      - A per-replica limit multiplies by the replica count; the shared kind exists to
+        stop that.
 
     **What it tests:**
       - with a limit of 5, ten calls alternating between two instances allow exactly five
       - a different key has its own allowance
+
+    Args:
+        redis_pair: Two independent clients (two "replicas") on the session's Redis.
+        request: The test's pytest request.
+
     """
     config = PerKeyRateLimiterConfig(
         kind=PerKeyRateLimiterKind.REDIS,
@@ -58,5 +77,5 @@ async def test_two_limiters_share_one_window(
     allowed = [await limiters[i % 2].allow_key("u-1") for i in range(10)]
     other = await limiters[1].allow_key("u-2")
 
-    assert sum(allowed) == 5
+    assert sum(allowed) == _EXPECTED_ALLOWED
     assert other

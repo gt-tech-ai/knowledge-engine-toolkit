@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -30,19 +30,14 @@ func New(runner interfaces.CommandRunner, kubeContext string) *Client {
 	return &Client{runner: runner, kubeContext: kubeContext}
 }
 
-// kubectl runs kubectl args and returns stdout or a coded error.
-func (c *Client) kubectl(
-	ctx context.Context,
-	what string,
-	args ...string,
-) ([]byte, error) {
-	if c.kubeContext != "" {
-		args = append([]string{"--context", c.kubeContext}, args...)
+// Get runs `kubectl get kind [name] -o json`.
+func (c *Client) Get(ctx context.Context, text, kind, name string) ([]byte, error) {
+	args := []string{"get", kind}
+	if name != "" {
+		args = append(args, name)
 	}
-	return client.Output(
-		c.runner.RunBuffered(ctx, "", "kubectl", args...),
-		"kubectl "+what,
-	)
+
+	return c.kubectl(ctx, "get", namespaced(text, append(args, "-o", "json")...)...)
 }
 
 // namespaced prefixes args with -n ns when ns is set.
@@ -50,30 +45,27 @@ func namespaced(ns string, args ...string) []string {
 	if ns == "" {
 		return args
 	}
-	return append([]string{"-n", ns}, args...)
-}
 
-// Get runs `kubectl get kind [name] -o json`.
-func (c *Client) Get(ctx context.Context, ns, kind, name string) ([]byte, error) {
-	args := []string{"get", kind}
-	if name != "" {
-		args = append(args, name)
-	}
-	return c.kubectl(ctx, "get", namespaced(ns, append(args, "-o", "json")...)...)
+	return append([]string{"-n", ns}, args...)
 }
 
 // Apply runs `kubectl apply -f file…`; no files is CodeInvalidInput, as the contract
 // says (kubectl would refuse it too).
-func (c *Client) Apply(ctx context.Context, ns string, files ...string) error {
+func (c *Client) Apply(ctx context.Context, text string, files ...string) error {
 	if len(files) == 0 {
 		return apperr.New(apperr.CodeInvalidInput, "kubectl apply: no files")
 	}
+
 	args := make([]string, 0, 1+2*len(files))
+
 	args = append(args, "apply")
+
 	for _, f := range files {
 		args = append(args, "-f", f)
 	}
-	_, err := c.kubectl(ctx, "apply", namespaced(ns, args...)...)
+
+	_, err := c.kubectl(ctx, "apply", namespaced(text, args...)...)
+
 	return err
 }
 
@@ -85,6 +77,7 @@ func (c *Client) Rollout(
 ) error {
 	_, err := c.kubectl(ctx, "rollout status", namespaced(ns, "rollout", "status",
 		kind+"/"+name, "--timeout="+timeout.String())...)
+
 	return err
 }
 
@@ -95,19 +88,40 @@ func (c *Client) AuthCanI(ctx context.Context, verb, resource string) (bool, err
 	if c.kubeContext != "" {
 		args = append([]string{"--context", c.kubeContext}, args...)
 	}
+
 	res := c.runner.RunBuffered(ctx, "", "kubectl", args...)
 	if res.Err != nil && res.ExitCode == 1 &&
 		strings.TrimSpace(string(res.Stdout)) == "no" {
 		return false, nil
 	}
-	if _, err := client.Output(res, "kubectl auth can-i"); err != nil {
+
+	_, err := client.Output(&res, "kubectl auth can-i")
+	if err != nil {
 		return false, err
 	}
+
 	return true, nil
 }
 
 // CurrentContext runs `kubectl config current-context`.
 func (c *Client) CurrentContext(ctx context.Context) (string, error) {
 	out, err := c.kubectl(ctx, "config current-context", "config", "current-context")
+
 	return strings.TrimSpace(string(out)), err
+}
+
+// kubectl runs kubectl args and returns stdout or a coded error.
+func (c *Client) kubectl(
+	ctx context.Context,
+	what string,
+	args ...string,
+) ([]byte, error) {
+	if c.kubeContext != "" {
+		args = append([]string{"--context", c.kubeContext}, args...)
+	}
+
+	return client.Output(
+		new(c.runner.RunBuffered(ctx, "", "kubectl", args...)),
+		"kubectl "+what,
+	)
 }

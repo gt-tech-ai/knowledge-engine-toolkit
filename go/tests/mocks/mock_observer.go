@@ -90,7 +90,7 @@ func (mr *MockExecutionObserverMockRecorder) OnPhaseStart(name, jobs any) *gomoc
 }
 
 // OnStepComplete mocks base method.
-func (m *MockExecutionObserver) OnStepComplete(result types.StepResult) {
+func (m *MockExecutionObserver) OnStepComplete(result *types.StepResult) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "OnStepComplete", result)
 }

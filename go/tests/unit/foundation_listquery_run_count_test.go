@@ -9,6 +9,8 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // countStubRunner is a tiny in-test double of the small consumer-side ListRunner
@@ -35,21 +37,30 @@ func (r *countStubRunner) Count(
 	if r.total > bound {
 		return bound, nil
 	}
+
 	return r.total, nil
 }
 
 // runCountReader builds an offset-arm Reader over the stub with the given count limit.
 func runCountReader(r *countStubRunner, limit int) listquery.Reader[int, int] {
-	return listquery.Reader[int, int]{
-		Runner:     r,
-		ToDomain:   func(i int) (int, error) { return i, nil },
-		Resolve:    listquery.IdentityColumn,
-		Sort:       []types.OrderField{{Field: "name", Desc: false}},
-		Tiebreaker: "id",
-		Bounds:     listquery.Bounds{DefaultSize: 50, CountCap: limit},
-		MapErr:     func(err error) error { return err },
-		Count:      true,
-	}
+	return fixtures.Build(func(row *listquery.Reader[int, int]) {
+		row.Runner = r
+		row.ToDomain = func(i int) (int, error) { return i, nil }
+		row.Resolve = listquery.IdentityColumn
+		row.Sort = []types.OrderField{
+			fixtures.Build(func(row *types.OrderField) {
+				row.Field = textName
+			}),
+		}
+		row.Tiebreaker = textID
+		row.Bounds = listquery.Bounds{
+			DefaultSize: defaultSize,
+			CountCap:    limit,
+			MaxSize:     0,
+		}
+		row.MapErr = func(err error) error { return err }
+		row.Count = true
+	})
 }
 
 // TestRun_OffsetTotalCount_BoundedExactVsEstimate tests the offset arm's bounded
@@ -71,66 +82,74 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 
 	t.Run("within cap is exact", func(t *testing.T) {
 		t.Parallel()
-		r := &countStubRunner{rows: []int{1, 2, 3}, total: 3}
+
+		currentCountStubRunner := &countStubRunner{
+			rows:     []int{1, 2, 3},
+			total:    3,
+			gotBound: 0,
+		}
 		page, err := listquery.Run(
 			context.Background(),
-			types.PageRequest{},
-			runCountReader(r, 10),
+			stdx.Zero[types.PageRequest](),
+			runCountReader(currentCountStubRunner, 10),
 		)
 		require.NoError(t, err)
 		assert.Equal(t, int64(3), page.Total)
 		assert.False(t, page.TotalIsEstimate, "an at-or-under-cap count is exact")
-		assert.Equal(t, 11, r.gotBound, "Run asks the runner for count_cap+1")
+		assert.Equal(
+			t,
+			11,
+			currentCountStubRunner.gotBound,
+			"Run asks the runner for count_cap+1",
+		)
 	})
 
 	t.Run("over cap is a capped estimate", func(t *testing.T) {
 		t.Parallel()
-		r := &countStubRunner{rows: []int{1, 2, 3}, total: 5000}
-		page, err := listquery.Run(
-			context.Background(),
-			types.PageRequest{},
-			runCountReader(r, 10),
-		)
-		require.NoError(t, err)
-		assert.Equal(t, int64(10), page.Total, "an over-cap count is reported as the cap")
-		assert.True(t, page.TotalIsEstimate, "an over-cap count is flagged an estimate")
-		assert.Equal(t, 11, r.gotBound)
+		assertRunCountAtCap(t, 5000, true, "an over-cap count")
 	})
+
+	testRunOffsetTotalCountBoundedExactVsEstimateAtCap(t)
+}
+
+// assertRunCountAtCap runs a page whose true count is total against a cap of 10 and
+// asserts the page reports the cap, with the estimate flag set to wantEstimate.
+func assertRunCountAtCap(t *testing.T, total int, wantEstimate bool, label string) {
+	t.Helper()
+
+	runner := &countStubRunner{rows: []int{1, rows2, rows3}, total: total, gotBound: 0}
+	page, err := listquery.Run(
+		context.Background(),
+		stdx.Zero[types.PageRequest](),
+		runCountReader(runner, limit10),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int64(int64Arg10), page.Total, label)
+	assert.Equal(t, wantEstimate, page.TotalIsEstimate, label)
+	assert.Equal(
+		t,
+		wantGotBound11,
+		runner.gotBound,
+		"Run asks the runner for count_cap+1",
+	)
+}
+
+// testRunOffsetTotalCountBoundedExactVsEstimateAtCap continues
+// TestRun_OffsetTotalCount_BoundedExactVsEstimate: at cap.
+func testRunOffsetTotalCountBoundedExactVsEstimateAtCap(t *testing.T) {
+	t.Helper()
 
 	// The exact boundary — total == cap and total == cap+1 — pins the `>` in boundedTotal
 	// so a `>`/`>=` off-by-one can't slip through (the below/above cases are too far to
 	// catch it).
 	t.Run("exactly at cap is exact", func(t *testing.T) {
 		t.Parallel()
-		r := &countStubRunner{rows: []int{1, 2, 3}, total: 10}
-		page, err := listquery.Run(
-			context.Background(),
-			types.PageRequest{},
-			runCountReader(r, 10),
-		)
-		require.NoError(t, err)
-		assert.Equal(
-			t,
-			int64(10),
-			page.Total,
-			"a count equal to the cap is exact, not an estimate",
-		)
-		assert.False(t, page.TotalIsEstimate, "total == cap is exact")
-		assert.Equal(t, 11, r.gotBound)
+		assertRunCountAtCap(t, 10, false, "total == cap")
 	})
 
 	t.Run("one over cap is a capped estimate", func(t *testing.T) {
 		t.Parallel()
-		r := &countStubRunner{rows: []int{1, 2, 3}, total: 11}
-		page, err := listquery.Run(
-			context.Background(),
-			types.PageRequest{},
-			runCountReader(r, 10),
-		)
-		require.NoError(t, err)
-		assert.Equal(t, int64(10), page.Total, "total == cap+1 is reported as the cap")
-		assert.True(t, page.TotalIsEstimate, "total == cap+1 is flagged an estimate")
-		assert.Equal(t, 11, r.gotBound)
+		assertRunCountAtCap(t, 11, true, "total == cap+1")
 	})
 }
 
@@ -147,13 +166,19 @@ func TestRun_OffsetTotalCount_BoundedExactVsEstimate(t *testing.T) {
 //   - With Bounds.CountCap == 0, Run asks the runner for DefaultCountCap+1.
 func TestRun_OffsetTotalCount_DefaultCapFallback(t *testing.T) {
 	t.Parallel()
-	r := &countStubRunner{rows: []int{1}, total: 1}
+
+	currentCountStubRunner := &countStubRunner{rows: []int{1}, total: 1, gotBound: 0}
 	_, err := listquery.Run(
 		context.Background(),
-		types.PageRequest{},
-		runCountReader(r, 0),
+		stdx.Zero[types.PageRequest](),
+		runCountReader(currentCountStubRunner, 0),
 	)
 	require.NoError(t, err)
-	assert.Equal(t, listquery.DefaultCountCap+1, r.gotBound,
+	assert.Equal(t, listquery.DefaultCountCap+1, currentCountStubRunner.gotBound,
 		"an unset cap falls back to the foundation default")
 }
+
+const (
+	// defaultSize is the DefaultSize field in runCountReader.
+	defaultSize = 50
+)

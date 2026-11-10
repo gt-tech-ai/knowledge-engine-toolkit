@@ -1,6 +1,6 @@
 [project]
 name = "techai-webutils"
-version = "0.9.4"
+version = "0.10.0"
 # The published version, bumped by hand in the release PR whenever the package changes. It must
 # be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
 # earlier release line, so this line continues from 0.4.0.
@@ -13,13 +13,15 @@ authors = [
 requires-python = ">= 3.12"
 dependencies = [
     "aiobotocore>=3.5.0",
+    # botocore: imported directly for its exception types (ClientError, BotoCoreError) at the AWS
+    # boundary; aiobotocore bounds the version from above.
+    "botocore>=1.43.0",
     # aiohttp: the health + metrics HTTP app a gRPC server serves beside its port
     # (controllers/health); also aiobotocore's transport.
     "aiohttp>=3.14.3",
     # aiosmtplib: async SMTP send for the SMTP email backend (clients/email/smtp); lazy-imported by
     # new_email_from_config only on the SMTP path. Peer of aiobotocore (the SES backend's transport).
     "aiosmtplib>=3.0.0",
-    "fastapi>=0.136.0",
     "grpcio>=1.80.0",
     "grpcio-health-checking>=1.80.0",
     "grpcio-reflection>=1.80.0",
@@ -35,8 +37,11 @@ dependencies = [
     "redis>=7.4.0",
     "structlog>=25.5.0",
     "tenacity>=9.1.4",
-    "uvicorn>=0.48.0",
     "protovalidate>=2.0.0,<3",
+    # protobuf: imported directly (google.protobuf.message.Message) by the gRPC edge interceptors.
+    "protobuf>=7.36.0",
+    # zstandard: the `zstd` compression of the s3db checkpoint store; reads detect it from the bytes.
+    "zstandard>=0.25.0",
 ]
 classifiers = [
     "Operating System :: MacOS",
@@ -77,6 +82,44 @@ parsing = ["markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6", "pymupdf>=1.28.0"]
 # `metadata_extractor_from_config`, so the default import graph never pulls it.
 langdetect = ["langdetect>=1.0.9"]
 
+# OpenSearch vector store (the `opensearch` VectorStore Kind and the multi-domain store). Optional:
+# only a deployable that indexes or searches OpenSearch installs `techai-webutils[opensearch]`. The
+# store never imports `opensearchpy` at run time: the composition root builds the `AsyncOpenSearch`
+# client (hosts, SigV4 auth, timeouts) and injects it.
+opensearch = ["opensearch-py[async]>=3.2.0"]
+
+# spaCy for the `spacy` Annotator Kind (entities). Optional: only a deployable that annotates text
+# in process installs `techai-webutils[nlp]`; `clients/nlp` imports spaCy lazily in that backend.
+# The `gliner` Kind has no extra: the composition root loads the GLiNER model (and its torch
+# stack) and injects it, so the engine never imports gliner.
+nlp = ["spacy>=3.8"]
+
+# fastText inference for the `fasttext` and `glotlid` LanguageIdentifier Kinds. Optional: only a
+# deployable that identifies languages with a fastText model installs `techai-webutils[fasttext]`.
+# `fasttext-predict` is the inference-only fastText build: wheels for Linux and macOS on x86_64
+# and arm64 and no NumPy (the `fasttext` 0.9.3 package has no wheels and breaks on NumPy 2). The
+# model file is the deployable's; the engine downloads nothing.
+fasttext = ["fasttext-predict>=0.9.2.4"]
+
+# Lingua for the `lingua` LanguageIdentifier Kind (short text: queries, interview answers).
+# Optional and heavy (a ~170 MB wheel of bundled language models): only a deployable that selects
+# `lingua` installs `techai-webutils[lingua]`, and CI's `--all-extras` sync excludes it
+# (`--no-extra lingua`); the unit tests mock the library at its import.
+lingua = ["lingua-language-detector>=2.2.0"]
+
+# Docling for the `layout` parser Kind (typed blocks, reading order, tables, OCR). Optional and very
+# heavy (torch and model weights, over 1 GB): only a deployable that selects `layout` installs
+# `techai-webutils[layout]`, and CI's `--all-extras` sync excludes it (`--no-extra layout`). The
+# `layout` backend imports Docling only inside the bounded parse child; its block mapping is typed
+# against `docling-core`, the light schema package in the dev group.
+layout = ["docling>=2.147.0", "docling-core>=2.106.0"]
+
+# Hugging Face `tokenizers` for the `huggingface` TokenCounter Kind (chunk sizes in the embedding
+# model's own tokens). Optional: only a deployable that counts with a model's `tokenizer.json`
+# installs `techai-webutils[tokenizers]`; `clients/tokenizer` imports it lazily in that Kind. The
+# tokenizer file is the deployable's; the engine downloads nothing.
+tokenizers = ["tokenizers>=0.23.3"]
+
 [project.license]
 text = "MIT"
 
@@ -112,17 +155,38 @@ dev = [
     # langdetect in dev so basedpyright resolves the `langdetect` metadata backend and its parity
     # tests run; production consumers pull it via the `langdetect` extra.
     "langdetect>=1.0.9",
+    # fasttext-predict in dev so basedpyright and the unit tests resolve the `fasttext` language
+    # identifier's lazy import; production consumers pull it via the `fasttext` extra.
+    "fasttext-predict>=0.9.2.4",
+    # opensearch-py in dev so basedpyright resolves the OpenSearch store's client types and its
+    # integration tests run against an OpenSearch testcontainer; production consumers pull it via the
+    # `opensearch` extra.
+    "opensearch-py[async]>=3.2.0",
     "testcontainers[postgres,redis]>=4.14.2",
     "ty>=0.0.38",
     # hypothesis drives the property tests (e.g. the token-ledger Decimal cost arithmetic).
     "hypothesis>=6.168.5",
     "asyncpg-stubs==0.31.3",
     "types-aiobotocore-lite[s3,sesv2,sqs]==3.9.0",
+    "import-linter>=2.15",
+    # The `nlp` extra, so basedpyright resolves the spacy backend and its tests run real spaCy.
+    "spacy>=3.8",
+    # docling-core (Docling's document schema, no torch) so the `layout` parser's block mapping is
+    # typed and tested against real DoclingDocuments; full Docling stays in the `layout` extra.
+    "docling-core>=2.106.0",
+    # starlette types the FastAPI/Starlette HTTP middleware adapter (imported for type checking
+    # only) and its tests; a consumer serving FastAPI or Starlette brings its own.
+    "starlette>=1.6.0",
+    # Hygiene gates, pinned to the product's versions: dead code, dependency declarations,
+    # docstring/signature agreement and docstring coverage (CONTRIBUTING.md#local-checks).
+    "vulture==2.16",
+    "deptry==0.25.1",
+    "pydoclint==0.12.0",
+    "interrogate==1.7.0",
 ]
 
 [tool.pytest.ini_options]
-# tests/ is put on sys.path by pytest's default prepend import mode (there is no
-# tests/__init__.py). Test doubles are built inline with unittest.mock in each
+# tests/ is a package, so a shared test module imports as tests.contract.<name>. Test doubles are built inline with unittest.mock in each
 # test (spec-bound to the real core interfaces), so no shared test-double package
 # and no pythonpath directive are needed.
 # Hand-written unit coverage is gated at >=90%. The denominator excludes the
@@ -187,67 +251,94 @@ preview = true
 select = ["ALL"]
 
 ignore = [
-    "missing-type-args", # Missing type annotation for `*args`
-    "missing-type-kwargs", # Missing type annotation for `**kwargs`
-    "blind-except", # Do not catch blind exception: `Exception`
-    "missing-trailing-comma", # Trailing comma missing
-    "missing-copyright-notice", # flake8-copyright: repo does not use file copyright headers
-    "undocumented-magic-method", # Missing docstring in magic method
-    "undocumented-public-init", # Missing docstring in `__init__` method
-    "blank-line-after-function", # No blank lines allowed after function docstring
-    "incorrect-blank-line-before-class", # 1 blank line before class docstring (conflicts with D211; ruff keeps D211)
-    "multi-line-summary-second-line", # Multi-line summary on second line (conflicts with D212; ruff keeps D212)
-    "DOC", # pydoclint family (preview): listed as "Consider", not adopted
-    "line-too-long", # Line too long
-    "line-contains-todo", # Line contains TODO, consider resolving the issue
-    "FURB", # refurb family (preview): listed as "Consider", not adopted
-    "invalid-function-name", # Function name `xxx` should be lowercase
-    "invalid-module-name", # Invalid module name
-    "pytest-fixture-autouse", # flake8-pytest-style (preview, no assigned rule code so it cannot be suppressed per-line via `# noqa`): autouse is a deliberate cross-cutting test pattern here — per-test env isolation and the integration-suite Docker gate — so this opinionated preview rule is deferred like DOC/FURB.
-    "unnecessary-paren-on-raise-exception", # Unnecessary parentheses on raise exception
-    "noqa-comments", # noqa-comments (preview): opinionated/stylistic rule preferring `# ruff: ignore[...]` over `# noqa`; ruff itself sanctions disabling it. We keep the universal, tool-agnostic `# noqa: <CODE>` form.
-    "runtime-cast-value", # Add quotes to type expression in `typing.cast()`
-    "missing-todo-author", # Missing author in TODO
-    "missing-todo-link", # Missing issue link for this TODO
-    "raise-vanilla-class", # Create your own exception
-    "try-consider-else", # Consider moving this statement to an `else` block
-    "f-string", # Use f-string instead of `format` call
+    "missing-trailing-comma", # conflicts with `ruff format`
+    "missing-copyright-notice", # the repo carries no per-file copyright headers
+    "incorrect-blank-line-before-class", # mutually exclusive with D211
+    "multi-line-summary-second-line", # mutually exclusive with D212
 ]
 
 [tool.ruff.lint.isort]
 known-first-party = ["techai_webutils"]
 
 [tool.ruff.lint.per-file-ignores]
-# The bedrock clients mirror the AWS bedrock-runtime / bedrock-agent-runtime / bedrock-agent APIs, whose
-# keyword params are camelCase (knowledgeBaseId, modelId, retrievalQuery, dataSourceId, …) — N803 does
-# not apply to a wire mirror.
-"src/techai_webutils/clients/llm/bedrock/*.py" = ["invalid-argument-name"]
-"src/techai_webutils/clients/retrieval/bedrock/*.py" = ["invalid-argument-name"]
-"src/techai_webutils/clients/kb_ingestion/bedrock/*.py" = ["invalid-argument-name"]
-"src/techai_webutils/clients/embedding/bedrock/*.py" = ["invalid-argument-name"]
-# Each entry is a rule wrong-by-design for the whole test tree.
-"**/tests/**" = [
-    "S", # flake8-bandit: bandit is the dedicated security gate and excludes tests; fixtures use fake credentials and intentionally exercise flagged patterns (assert, e2e subprocess, bind-all in local config)
-    "magic-value-comparison", # magic-value comparisons are expected in test assertions
-    "missing-type-function-argument", # test fixtures/params need no redundant annotations (types still resolve under basedpyright)
-    "no-self-use", # pytest groups tests as methods on a class; `self` is required by the collector even when unused
-    "implicit-namespace-package", # test trees are flat implicit-namespace packages (no __init__.py), collected by pytest
-    "import-outside-top-level", # tests import the concrete implementation under test locally to keep each case's deps explicit
+# Pytest asserts are the one rule wrong-by-design for the test tree.
+"**/tests/**" = ["assert"]
+
+# Layer and family boundaries (`uv run lint-imports`, run in CI). Layers import downward only, and
+# one client family never imports another (a family needing a sibling's object takes it injected).
+# import-linter follows indirect imports too, so a chain through a third module is caught.
+[tool.importlinter]
+root_package = "techai_webutils"
+
+[[tool.importlinter.contracts]]
+name = "Layers import downward only"
+type = "layers"
+containers = ["techai_webutils"]
+layers = [
+    "controllers",
+    "workflows",
+    "pipelines",
+    "services",
+    "repos",
+    "clients",
+    "execution",
+    "foundation",
+    "core",
 ]
 
-[tool.ruff.lint.mccabe]
-max-complexity = 15
-
-[tool.ruff.lint.pylint]
-max-args = 10
-max-branches = 20
-max-returns = 20
+[[tool.importlinter.contracts]]
+name = "Client families are independent"
+type = "independence"
+modules = [
+    "techai_webutils.clients.audit",
+    "techai_webutils.clients.cache",
+    "techai_webutils.clients.checkpoint",
+    "techai_webutils.clients.chunking",
+    "techai_webutils.clients.dataset",
+    "techai_webutils.clients.decorators",
+    "techai_webutils.clients.distinct_counter",
+    "techai_webutils.clients.email",
+    "techai_webutils.clients.embedding",
+    "techai_webutils.clients.facts",
+    "techai_webutils.clients.grader",
+    "techai_webutils.clients.inflight_claim",
+    "techai_webutils.clients.jobs",
+    "techai_webutils.clients.kb_ingestion",
+    "techai_webutils.clients.language",
+    "techai_webutils.clients.llm",
+    "techai_webutils.clients.lock",
+    "techai_webutils.clients.messaging",
+    "techai_webutils.clients.metadata",
+    "techai_webutils.clients.model_gateway",
+    "techai_webutils.clients.near_duplicate",
+    "techai_webutils.clients.nlp",
+    "techai_webutils.clients.parsing",
+    "techai_webutils.clients.prometheus",
+    "techai_webutils.clients.reranking",
+    "techai_webutils.clients.retrieval",
+    "techai_webutils.clients.rpc",
+    "techai_webutils.clients.safety",
+    "techai_webutils.clients.semantic_cache",
+    "techai_webutils.clients.sentences",
+    "techai_webutils.clients.sink",
+    "techai_webutils.clients.splitting",
+    "techai_webutils.clients.start_budget",
+    "techai_webutils.clients.storage",
+    "techai_webutils.clients.token_ledger",
+    "techai_webutils.clients.token_source",
+    "techai_webutils.clients.tokenizer",
+    "techai_webutils.clients.vector",
+    "techai_webutils.clients.vector_kb",
+]
 
 # Strict type-checking over src and tests. include is an allowlist, so tests are analyzed
 # only because they are listed here.
 [tool.pyright]
 pythonVersion = "3.12"
-typeCheckingMode = "strict"
+typeCheckingMode = "all"
+# Implicit concatenation is how a long message or docstring wraps under the line limit;
+# ruff's ISC rules already police the accidental kind (a missing comma in a list).
+reportImplicitStringConcatenation = "none"
 include = ["src/techai_webutils", "tests"]
 
 # Mock-noise relaxation for the test tree: pytest fixtures and unittest.mock doubles are
@@ -257,12 +348,114 @@ include = ["src/techai_webutils", "tests"]
 # (argument types, optional access, private usage) is still enforced in tests.
 [[tool.pyright.executionEnvironments]]
 root = "tests"
+extraPaths = ["."]
 reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 reportUnknownLambdaType = "none"
 reportAttributeAccessIssue = "none"
+
+# Dead code (vulture over src and tests). Genuinely dead code is deleted; each entry below is
+# a false positive vulture structurally cannot resolve. KE is a library: its contracts, value
+# types and config are read or implemented by consumers vulture never scans.
+[tool.vulture]
+ignore_decorators = [
+  "@pytest.fixture", # pytest injects fixtures by parameter name, never by a call
+  "@overload",       # typing overload stubs describe the one implementation below them
+  "@override",       # an override is called through its base contract or framework
+]
+ignore_names = [
+  # unittest.mock and pytest: attributes and hooks the framework reads
+  "side_effect", "return_value", "pytestmark", "pytest_*",
+  # names a type-only import binds for a cast("...") string vulture does not parse
+  "_Lazy*", "_CostAwareRanker", "EncodableT", "FieldT", "ClientCreatorContext",
+  "DockerClient", "EntityRuler",
+  # private Protocols describing an SDK object, used only in cast("...") strings, and the
+  # SDK attributes they declare or set
+  "_SesSession", "_AwsSession", "_DetectorBuilders", "_InputFormats", "_PdfOptions",
+  "_TokenizerFiles", "_ClientRegistry", "_TitledApp", "page_id", "force_full_page_ocr",
+  "page_range", "add_special_tokens", "sequence", "max_length", "__call__",
+  # TypedDict keys of AWS / Ollama wire requests and responses, read by subscript
+  "modelId", "contentType", "knowledgeBaseId", "dataSourceId", "clientToken",
+  "ingestionJobId", "nextToken", "documentIdentifiers", "inputTokens", "outputTokens",
+  "stopReason", "contentBlockDelta", "messageStop", "prompt_eval_count", "eval_count",
+  "retrievalQuery", "retrievalConfiguration", "piiEntities", "regexes", "customWords",
+  "managedWordLists", "contentPolicy", "topicPolicy", "sensitiveInformationPolicy",
+  "wordPolicy", "_ApplyGuardrailResponse", "assessments", "BeginOffset", "EndOffset",
+  "Type", "_DetectPiiResponse", "Entities",
+  # AwsClientKwargs keys, unpacked into an aiobotocore create_client call
+  "endpoint_url", "region_name", "aws_access_key_id", "aws_secret_access_key",
+  "aws_session_token",
+  # core contracts: methods a consumer implements or calls, and value-type fields and enum
+  # members a consumer reads (core/interfaces, core/types)
+  "s3_key", "trust_level", "classification", "ENRICH", "INDEX", "format_version",
+  "artifact_key", "get_states", "heartbeat", "start_offset", "end_offset",
+  "supported_types", "chunk_size", "overlap", "dataset_version", "pass_rate",
+  "mean_score", "per_grader", "regressions", "rationale", "status_reason", "file_name",
+  "error_message", "documents_added", "documents_updated", "documents_removed",
+  "chunks_created", "sync", "liveness", "readiness", "escalated", "OpService", "commit",
+  "rollback", "intent_type", "keywords", "is_healthy", "startup", "health_check",
+  "last_modified", "max_output", "LOW", "HIGH", "TRIMMED", "MINIMAL", "vision",
+  "long_context", "reasoning", "complexity", "max_cost_usd", "escalation_reason",
+  "stickiness_key", "planner_version",
+  # public client API a consumer calls (Go parity: client.AtMostOnce, Server reflection,
+  # Decorations.VerifyExplicit) and the no-op DLQ backend a consumer selects
+  "at_most_once", "enable_reflection", "verify_explicit", "NoopDeadLetterBackend",
+  # enum members selected by config value, never named in code
+  "NDCG", "PERSON",
+  # config fields a consumer sets and reads: the settings mixins' fields, the routed
+  # catalog's capability settings, the caller-consumed actor pool size, the decoration
+  # tiers read by name, and the Go-only breaker field kept in the shared schema
+  "database_*", "redis_password", "server_*_timeout", "storage_s3_*", "messaging_sqs_*",
+  "observability_*", "json_mode", "actor_pool_size", "workflows", "gates", "min_requests",
+  # test contracts whose methods the tier base reads as operations by reflection
+  "find_by_email", "refund", "command", "crash", "_helper",
+]
+
+# deptry checks that every import is a declared dependency and every dependency is imported.
+[tool.deptry]
+# techai_webutils is this package's own top-level module (the wheel built from src/), not a
+# third-party import.
+known_first_party = ["techai_webutils"]
+
+[tool.deptry.per_rule_ignores]
+# DEP002 (declared but not imported): deptry reads import statements only, and each of these is
+# loaded with importlib.import_module inside the Kind or code path that needs it, so a process
+# that never selects that backend never pays its import cost (ruff PLC0415 forbids the in-function
+# `import` statement instead).
+DEP002 = [
+    "grpcio-reflection",        # controllers/grpc/server.py: server reflection, when enabled
+    "protovalidate",            # controllers/grpc/interceptors/edge.py: request validation
+    "markitdown",               # clients/parsing/isolated: the `isolated` parser (`parsing` extra)
+    "pymupdf",                  # clients/parsing/{isolated,layout}: PDF page access (`parsing` extra)
+    "fasttext-predict",         # clients/language/fasttext: the `fasttext` identifier (extra)
+    "lingua-language-detector", # clients/language/lingua: the `lingua` identifier (extra)
+    "docling",                  # clients/parsing/layout: the `layout` parser (extra)
+    "tokenizers",               # clients/tokenizer: the `huggingface` TokenCounter (extra)
+]
+
+# Docstring coverage, at 100% of the in-scope surface (the product's settings).
+[tool.interrogate]
+fail-under = 100
+ignore-init-module = true      # an empty package __init__.py carries no module docstring
+ignore-init-method = true      # __init__ intent lives in the class docstring
+ignore-semiprivate = true      # single-underscore helpers are exempt; the exported surface is enforced
+ignore-nested-functions = true # closures and inline test generators are trivial
+ignore-nested-classes = true   # inline test-local classes are trivial
+ignore-overloaded-functions = true # an @overload stub shares its implementation's docstring; ruff D418 forbids one
+
+# Docstrings agree with their signatures and bodies: Args, Returns, Yields and Raises sections,
+# and each class attribute's trailing docstring (the product's `search check docs` options).
+[tool.pydoclint]
+style = "google"
+require-inline-class-var-docs = true
+skip-checking-short-docstrings = false
+allow-init-docstring = true
+arg-type-hints-in-docstring = false
+check-return-types = false
+check-yield-types = false
+quiet = true
 
 [tool.uv.build-backend]
 module-name = "techai_webutils"

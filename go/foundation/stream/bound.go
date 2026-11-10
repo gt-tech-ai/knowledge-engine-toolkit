@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -18,26 +18,36 @@ func Chunk[T any](items []T, size func(T) int, maxBytes int) ([][]T, error) {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("stream: chunk max bytes must be positive, got %d", maxBytes))
 	}
-	var chunks [][]T
-	var cur []T
+
+	var (
+		chunks [][]T
+		cur    []T
+	)
+
 	used := 0
+
 	for i, item := range items {
-		n := size(item)
-		if n > maxBytes {
+		count := size(item)
+		if count > maxBytes {
 			return nil, apperr.New(apperr.CodeResourceExhausted,
 				fmt.Sprintf("stream: item %d is %d bytes, over the %d-byte chunk limit",
-					i, n, maxBytes))
+					i, count, maxBytes))
 		}
-		if used+n > maxBytes {
+
+		if used+count > maxBytes {
 			chunks = append(chunks, cur)
 			cur, used = nil, 0
 		}
+
 		cur = append(cur, item)
-		used += n
+
+		used += count
 	}
+
 	if len(cur) > 0 {
 		chunks = append(chunks, cur)
 	}
+
 	return chunks, nil
 }
 
@@ -47,33 +57,52 @@ func Chunk[T any](items []T, size func(T) int, maxBytes int) ([][]T, error) {
 // every path.
 func Collect[T any](
 	ctx context.Context,
-	s interfaces.Stream[T],
+	stream interfaces.Stream[T],
 	size func(T) int,
 	maxBytes int,
 ) (items []T, err error) {
 	defer func() {
-		if cerr := s.Close(); err == nil && cerr != nil {
+		cerr := stream.Close()
+		if err == nil && cerr != nil {
 			items, err = nil, cerr
 		}
 	}()
+
 	if maxBytes <= 0 {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			fmt.Sprintf("stream: collect max bytes must be positive, got %d", maxBytes))
 	}
+
+	return collectBounded(ctx, stream, size, maxBytes)
+}
+
+// collectBounded reads the stream to its end, failing once the items outgrow maxBytes.
+func collectBounded[T any](
+	ctx context.Context,
+	stream interfaces.Stream[T],
+	size func(T) int,
+	maxBytes int,
+) ([]T, error) {
+	var items []T
+
 	used := 0
+
 	for {
-		item, ok, err := s.Next(ctx)
+		item, ok, err := stream.Next(ctx)
 		if err != nil {
 			return nil, err
 		}
+
 		if !ok {
 			return items, nil
 		}
+
 		used += size(item)
 		if used > maxBytes {
 			return nil, apperr.New(apperr.CodeResourceExhausted,
 				fmt.Sprintf("stream: result is over the %d-byte limit", maxBytes))
 		}
+
 		items = append(items, item)
 	}
 }

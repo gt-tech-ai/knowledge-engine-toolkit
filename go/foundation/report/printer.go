@@ -8,9 +8,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// maxMessageLen is the longest message printed before truncation.
+const maxMessageLen = 100
 
 // Level is a console verbosity.
 type Level int32
@@ -65,19 +68,27 @@ type lockedWriter struct {
 func (l *lockedWriter) Write(b []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.w.Write(b) //nolint:wrapcheck // a pass-through writer
+
+	written, err := l.w.Write(b)
+	if err != nil {
+		return written, apperr.Wrap(err, apperr.CodeUnavailable, "report: write output")
+	}
+
+	return written, nil
 }
 
 // newPrinter returns a printer over w at level; writes are serialized (lockedWriter).
 func newPrinter(w io.Writer, level Level, rich, color bool, hints []Hint) *printer {
-	p := &printer{
-		w:     &lockedWriter{w: w},
+	currentPrinter := &printer{
+		w:     &lockedWriter{w: w, mu: sync.Mutex{}},
 		rich:  rich,
 		pal:   newPalette(color),
 		hints: hints,
+		level: atomic.Int32{},
 	}
-	p.level.Store(int32(level))
-	return p
+	currentPrinter.level.Store(int32(level))
+
+	return currentPrinter
 }
 
 // at reports whether the printer's verbosity is at least l.
@@ -115,6 +126,7 @@ func (p *printer) resultsTable(results types.StepResults) {
 	if !p.at(LevelNormal) {
 		return
 	}
+
 	_, _ = fmt.Fprintln(p.w)
 	_, _ = fmt.Fprintf(
 		p.w,
@@ -128,22 +140,27 @@ func (p *printer) resultsTable(results types.StepResults) {
 		p.w, "  %-30s %-8s %10s  %s\n",
 		"──────────────────────────────", "──────", "────────", "─────",
 	)
+
 	var group string
-	for _, r := range results {
-		if r.Group != group {
-			group = r.Group
+
+	for _, stepResult := range results {
+		if stepResult.Group != group {
+			group = stepResult.Group
 			_, _ = fmt.Fprintln(p.w)
 			p.pal.bold.Fprintf(p.w, "  %s\n", group)
 		}
-		msg := stripCode(r.Error)
-		if len(msg) > 100 {
-			msg = msg[:97] + "..."
+
+		msg := stripCode(stepResult.Error)
+		if len(msg) > maxMessageLen {
+			msg = msg[:maxMessageLen-len("...")] + "..."
 		}
+
 		_, _ = fmt.Fprintf(
 			p.w, "    %-28s %-8s %10s  %s\n",
-			r.Name, p.status(r.Status), round(r.Duration), msg,
+			stepResult.Name, p.status(stepResult.Status), round(stepResult.Duration), msg,
 		)
 	}
+
 	_, _ = fmt.Fprintln(p.w)
 }
 
@@ -153,11 +170,13 @@ func (p *printer) total(results types.StepResults, elapsed time.Duration) {
 	if !p.at(LevelNormal) {
 		return
 	}
+
 	if elapsed <= 0 {
 		for _, r := range results {
 			elapsed += r.Duration
 		}
 	}
+
 	_, _ = fmt.Fprintf(
 		p.w,
 		"  TOTAL: %s (%s)\n\n",
@@ -168,9 +187,11 @@ func (p *printer) total(results types.StepResults, elapsed time.Duration) {
 
 // counts joins the non-zero status counts, labelling passes as passed.
 func (p *printer) counts(results types.StepResults, passed string) string {
-	n := results.CountByStatus()
+	lookup := results.CountByStatus()
+
 	var parts []string
-	for _, c := range []struct {
+
+	for _, item := range []struct {
 		label  string
 		status types.StepStatus
 	}{
@@ -179,13 +200,15 @@ func (p *printer) counts(results types.StepResults, passed string) string {
 		{"warned", types.StatusWarn},
 		{"skipped", types.StatusSkip},
 	} {
-		if n[c.status] > 0 {
+		if lookup[item.status] > 0 {
 			parts = append(
 				parts,
-				p.countStyle(c.status).Sprintf("%d %s", n[c.status], c.label),
+				p.countStyle(item.status).
+					Sprintf("%d %s", lookup[item.status], item.label),
 			)
 		}
 	}
+
 	return strings.Join(parts, ", ")
 }
 
@@ -201,8 +224,10 @@ func (p *printer) countStyle(s types.StepStatus) style {
 	case types.StatusSkip:
 		return p.pal.muted
 	default:
-		return p.pal.muted
+		// Any other value takes the shared result below.
 	}
+
+	return p.pal.muted
 }
 
 // lineSummary prints the line reporter's closing "n ok, … (elapsed)" line (normal
@@ -211,10 +236,12 @@ func (p *printer) lineSummary(results types.StepResults, elapsed time.Duration) 
 	if !p.at(LevelNormal) {
 		return
 	}
+
 	summary := p.counts(results, "ok")
 	if summary == "" {
 		summary = "no steps"
 	}
+
 	_, _ = fmt.Fprintf(
 		p.w,
 		"\n%s  %s\n",
@@ -229,8 +256,32 @@ func (p *printer) failureBlock(results types.StepResults) {
 	if !p.at(LevelNormal) {
 		return
 	}
+
+	flagged, failed := flaggedResults(results)
+	if len(flagged) == 0 {
+		return
+	}
+
+	heading := "Warnings:"
+	if failed {
+		heading = "Failures:"
+	}
+
+	p.pal.bold.Fprintf(p.w, "  %s\n", heading)
+
+	for _, r := range flagged {
+		p.stepDetail(r)
+	}
+
+	_, _ = fmt.Fprintln(p.w)
+}
+
+// flaggedResults picks the failed and warned results, reporting whether any failed.
+func flaggedResults(results types.StepResults) ([]*types.StepResult, bool) {
 	var flagged []*types.StepResult
+
 	failed := false
+
 	for i := range results {
 		r := &results[i]
 		if r.Status == types.StatusFail || r.Status == types.StatusWarn {
@@ -238,45 +289,47 @@ func (p *printer) failureBlock(results types.StepResults) {
 			failed = failed || r.Status == types.StatusFail
 		}
 	}
-	if len(flagged) == 0 {
-		return
-	}
-	heading := "Warnings:"
-	if failed {
-		heading = "Failures:"
-	}
-	p.pal.bold.Fprintf(p.w, "  %s\n", heading)
-	for _, r := range flagged {
-		p.stepDetail(r)
-	}
-	_, _ = fmt.Fprintln(p.w)
+
+	return flagged, failed
 }
 
 // stepDetail prints one flagged step: its name, the actionable lines of its output
 // (or its error, split into clauses, when the output has none) and its hint.
-func (p *printer) stepDetail(r *types.StepResult) {
+func (p *printer) stepDetail(stepResult *types.StepResult) {
 	label := p.pal.failure.Sprint("FAIL")
-	if r.Status == types.StatusWarn {
+	if stepResult.Status == types.StatusWarn {
 		label = p.pal.warn.Sprint("WARN")
 	}
-	_, _ = fmt.Fprintf(p.w, "\n    %s %s\n", label, p.pal.bold.Sprint(r.Name))
 
-	lines := ActionableLines(r.Detail, actionableLineLimit)
-	if len(lines) == 0 && r.Error != "" {
-		for part := range strings.SplitSeq(r.Error, "\n") {
-			for clause := range strings.SplitSeq(strings.TrimSpace(part), "; ") {
-				if clause = strings.TrimSpace(clause); clause != "" {
-					lines = append(lines, truncate(clause))
-				}
-			}
-		}
+	_, _ = fmt.Fprintf(p.w, "\n    %s %s\n", label, p.pal.bold.Sprint(stepResult.Name))
+
+	lines := ActionableLines(stepResult.Detail, actionableLineLimit)
+	if len(lines) == 0 && stepResult.Error != "" {
+		lines = errorClauses(stepResult.Error)
 	}
+
 	for _, l := range lines {
 		_, _ = fmt.Fprintf(p.w, "      %s\n", l)
 	}
-	if hint := p.hint(r); hint != "" {
+
+	if hint := p.hint(stepResult); hint != "" {
 		_, _ = fmt.Fprintf(p.w, "      %s\n", p.pal.info.Sprint(hint))
 	}
+}
+
+// errorClauses splits an error on newlines and semicolons into truncated clauses.
+func errorClauses(msg string) []string {
+	var lines []string
+
+	for part := range strings.SplitSeq(msg, "\n") {
+		for clause := range strings.SplitSeq(strings.TrimSpace(part), "; ") {
+			if clause = strings.TrimSpace(clause); clause != "" {
+				lines = append(lines, truncate(clause))
+			}
+		}
+	}
+
+	return lines
 }
 
 // hint returns the first hint whose group equals r's and whose name fragment (empty
@@ -287,6 +340,7 @@ func (p *printer) hint(r *types.StepResult) string {
 			return h.Text
 		}
 	}
+
 	return ""
 }
 
@@ -299,5 +353,6 @@ func stripCode(msg string) string {
 	if _, rest, ok := apperr.SplitCode(msg); ok {
 		return rest
 	}
+
 	return msg
 }

@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/wire"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
 )
@@ -40,29 +40,40 @@ type Edge struct {
 // A handler's error reaches the caller unchanged; a rejection the tier produced itself
 // (a panic, a shed request, a denial, a timeout) becomes a status of its code carrying
 // only the code's client-safe message, the real error captured for the request log.
-func ServerOptions(name string, d decorate.Deps, edge Edge) []grpc.ServerOption {
+// d must not be nil.
+func ServerOptions(name string, deps *decorate.Deps, edge Edge) []grpc.ServerOption {
 	var opts []grpc.ServerOption
-	unaries := transport.Interceptors(name, d, nativeUnary(d), adaptUnary, edge.Authn)
+
+	unaries := transport.Interceptors(
+		name,
+		deps,
+		nativeUnary(deps),
+		adaptUnary,
+		edge.Authn,
+	)
+
 	if len(unaries) > 0 {
 		opts = append(opts, grpc.ChainUnaryInterceptor(unaries...))
 	}
+
 	streams := transport.Interceptors(
 		name,
-		d,
-		nativeStream(d),
+		deps,
+		nativeStream(deps),
 		adaptStream,
 		edge.StreamAuthn,
 	)
 	if len(streams) > 0 {
 		opts = append(opts, grpc.ChainStreamInterceptor(streams...))
 	}
+
 	return opts
 }
 
 // nativeUnary returns the unary interceptors standing in for the tier's observability
 // layers.
 func nativeUnary(
-	d decorate.Deps,
+	d *decorate.Deps,
 ) func(decorate.Layer) ([]grpc.UnaryServerInterceptor, bool) {
 	return native(d, unary)
 }
@@ -70,7 +81,7 @@ func nativeUnary(
 // nativeStream returns the stream interceptors standing in for the tier's observability
 // layers.
 func nativeStream(
-	d decorate.Deps,
+	d *decorate.Deps,
 ) func(decorate.Layer) ([]grpc.StreamServerInterceptor, bool) {
 	return native(d, stream)
 }
@@ -79,29 +90,19 @@ func nativeStream(
 // from its around) standing in for it — none when its collaborator is absent — and
 // reports false for every other layer, which the tier's own middleware runs.
 func native[I any](
-	d decorate.Deps,
+	dRef *decorate.Deps,
 	shape func(around) I,
 ) func(decorate.Layer) ([]I, bool) {
+	deps := *dRef
+
 	return func(layer decorate.Layer) ([]I, bool) {
 		switch layer {
 		case decorate.LayerTracing:
-			return when(
-				d.Tracer != nil,
-				func() around { return tracing(d.Tracer) },
-				shape,
-			), true
+			return nativeTracing(&deps, shape), true
 		case decorate.LayerMetrics:
-			return when(
-				d.Metrics != nil,
-				func() around { return metrics(d.Metrics) },
-				shape,
-			), true
+			return nativeMetrics(&deps, shape), true
 		case decorate.LayerLogging:
-			return when(
-				d.Logger != nil,
-				func() around { return logging(d.Logger) },
-				shape,
-			), true
+			return nativeLogging(&deps, shape), true
 		case decorate.LayerRecovery,
 			decorate.LayerAuth,
 			decorate.LayerTimeout,
@@ -111,17 +112,47 @@ func native[I any](
 			decorate.LayerRateLimit:
 			return nil, false
 		default:
-			return nil, false
+			// Any other value takes the shared result below.
 		}
+
+		return nil, false
 	}
 }
 
+// nativeTracing is the tracing interceptor, when a tracer is wired.
+func nativeTracing[I any](dRef *decorate.Deps, shape func(around) I) []I {
+	d := *dRef
+
+	return when(d.Tracer, func() around { return tracing(d.Tracer) }, shape)
+}
+
+// nativeMetrics is the metrics interceptor, when a recorder is wired.
+func nativeMetrics[I any](dRef *decorate.Deps, shape func(around) I) []I {
+	d := *dRef
+
+	return when(d.Metrics, func() around { return metrics(d.Metrics) }, shape)
+}
+
+// nativeLogging is the access-log interceptor, when a logger is wired.
+func nativeLogging[I any](dRef *decorate.Deps, shape func(around) I) []I {
+	d := *dRef
+
+	return when(d.Logger, func() around { return logging(d.Logger) }, shape)
+}
+
 // when returns the interceptor shape makes from build's around, or none when its
-// collaborator is absent.
-func when[I any](present bool, build func() around, shape func(around) I) []I {
-	if !present {
+// collaborator is unset.
+func when[C comparable, I any](
+	collaborator C,
+	build func() around,
+	shape func(around) I,
+) []I {
+	var unset C
+
+	if collaborator == unset {
 		return nil
 	}
+
 	return []I{shape(build())}
 }
 
@@ -137,31 +168,35 @@ func adaptStream(_, mw decorate.OpMiddleware) grpc.StreamServerInterceptor {
 
 // tier runs an RPC through mw as the operation named by its method. The handler's own
 // error is returned unchanged; one the tier produced is sanitized (statusError).
-func tier(mw decorate.OpMiddleware) around {
+func tier(opMiddleware decorate.OpMiddleware) around {
 	return func(
 		ctx context.Context, fullMethod string, next func(context.Context) error,
 	) error {
 		var handlerErr error
-		err := mw.WrapOp(
+
+		err := opMiddleware.WrapOp(
 			ctx,
 			strings.TrimPrefix(fullMethod, "/"),
 			func(ctx context.Context) error {
 				handlerErr = next(ctx)
+
 				return handlerErr
 			},
 		)
+
 		return statusError(ctx, err, handlerErr)
 	}
 }
 
 // statusError returns the handler's own error unchanged, and an error the tier produced
 // (or rewrapped) as a sanitized status of its code; the real error is captured for the
-// request log (core/errors.Capture).
+// request log (core/apperr.Capture).
 func statusError(ctx context.Context, err, handlerErr error) error {
-	if err == nil ||
-		err == handlerErr { //nolint:errorlint // identity: the handler's own error
+	if err == nil || apperr.Identical(err, handlerErr) {
 		return err
 	}
+
 	apperr.Capture(ctx, err)
+
 	return wire.SanitizeGRPC(err)
 }

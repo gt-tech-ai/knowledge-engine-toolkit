@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -32,39 +32,22 @@ func New(root string) *Source {
 // List walks root, skipping `.git`, and returns every regular file, sorted.
 func (s *Source) List(ctx context.Context) ([]types.File, error) {
 	var out []types.File
+
 	err := filepath.WalkDir(s.root, func(p string, d iofs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if err := ctx.Err(); err != nil {
-			return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "walk")
-		}
-		if d.IsDir() {
-			if d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !d.Type().IsRegular() {
-			return nil
-		}
-		rel, err := filepath.Rel(s.root, p)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "relative path of "+p)
-		}
-		out = append(out, types.File{Path: filepath.ToSlash(rel)})
-		return nil
+		return s.visit(ctx, &out, p, d, err)
 	})
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeInternal),
 			"walk "+s.root)
 	}
+
 	// A walk orders by entry name, so "a/x" would precede "a-b/x"; the contract is
 	// sorted by path.
 	slices.SortFunc(
 		out,
 		func(a, b types.File) int { return strings.Compare(a.Path, b.Path) },
 	)
+
 	return out, nil
 }
 
@@ -75,25 +58,65 @@ func (s *Source) Read(_ context.Context, p string) ([]byte, error) {
 }
 
 // Changed returns an empty set: the source has no version control.
-func (s *Source) Changed(context.Context, string) (map[string]bool, error) {
+func (*Source) Changed(context.Context, string) (map[string]bool, error) {
 	return map[string]bool{}, nil
+}
+
+// visit records one regular file, skipping the .git directory and stopping on cancel.
+func (s *Source) visit(
+	ctx context.Context,
+	out *[]types.File,
+	text string,
+	dirEntry iofs.DirEntry,
+	err error,
+) error {
+	if err != nil {
+		return err
+	}
+
+	err = ctx.Err()
+	if err != nil {
+		return apperr.Wrap(err, apperr.ContextCode(err, apperr.CodeCanceled), "walk")
+	}
+
+	if dirEntry.IsDir() && dirEntry.Name() == ".git" {
+		return filepath.SkipDir
+	}
+
+	if !dirEntry.Type().IsRegular() {
+		return nil
+	}
+
+	rel, err := filepath.Rel(s.root, text)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "relative path of "+text)
+	}
+
+	*out = append(
+		*out,
+		types.File{Path: filepath.ToSlash(rel), Untracked: false, Ignored: false},
+	)
+
+	return nil
 }
 
 // ReadFile reads the repository-relative path p under root through an os.Root; a
 // missing file is CodeNotFound and a path escaping the root CodeInvalidInput.
-func ReadFile(root, p string) ([]byte, error) {
-	r, err := os.OpenRoot(root)
+func ReadFile(root, text string) ([]byte, error) {
+	currentRoot, err := os.OpenRoot(root)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "open "+root)
 	}
-	defer func() { _ = r.Close() }()
-	data, err := r.ReadFile(filepath.FromSlash(p))
+
+	defer func() { _ = currentRoot.Close() }()
+
+	data, err := currentRoot.ReadFile(filepath.FromSlash(text))
 	switch {
 	case err == nil:
 		return data, nil
 	case os.IsNotExist(err):
-		return nil, apperr.Wrap(err, apperr.CodeNotFound, "no file "+p)
+		return nil, apperr.Wrap(err, apperr.CodeNotFound, "no file "+text)
 	default:
-		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "read "+p)
+		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "read "+text)
 	}
 }

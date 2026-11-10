@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Emergency is one image-scan finding the gate blocks a deploy on: a vulnerability that
@@ -28,41 +29,53 @@ type Emergency struct {
 	FixedIn string
 }
 
+// grypeReportFix is the Fix element of grypeReport.
+type grypeReportFix struct {
+	// State is "fixed" when a fixed version exists.
+	State string `json:"state"`
+
+	// Versions are the versions that fix the advisory.
+	Versions []string `json:"versions"`
+}
+
+// grypeReportArtifact is the Artifact element of grypeReport.
+type grypeReportArtifact struct {
+	// Name is the package name.
+	Name string `json:"name"`
+
+	// Version is the installed version.
+	Version string `json:"version"`
+}
+
+// grypeReportVulnerability is the Vulnerability element of grypeReport.
+type grypeReportVulnerability struct {
+	// ID is the advisory id.
+	ID string `json:"id"`
+
+	// Severity is grype's severity label.
+	Severity string `json:"severity"`
+
+	// KnownExploited is the advisory's KEV records; empty when nobody is known
+	// to exploit it.
+	KnownExploited []json.RawMessage `json:"knownExploited"`
+
+	// Fix is the advisory's fix state and fixed versions.
+	Fix grypeReportFix `json:"fix"`
+}
+
+// grypeReportMatches is the Matches element of grypeReport.
+type grypeReportMatches struct {
+	// Artifact is the matched package.
+	Artifact grypeReportArtifact `json:"artifact"`
+
+	// Vulnerability is the matched advisory.
+	Vulnerability grypeReportVulnerability `json:"vulnerability"`
+}
+
 // grypeReport is the slice of grype's `-o json` report the emergency policy reads.
 type grypeReport struct {
 	// Matches are grype's vulnerability matches, one per (advisory, package).
-	Matches []struct {
-		// Artifact is the matched package.
-		Artifact struct {
-			// Name is the package name.
-			Name string `json:"name"`
-
-			// Version is the installed version.
-			Version string `json:"version"`
-		} `json:"artifact"`
-
-		// Vulnerability is the matched advisory.
-		Vulnerability struct {
-			// ID is the advisory id.
-			ID string `json:"id"`
-
-			// Severity is grype's severity label.
-			Severity string `json:"severity"`
-
-			// KnownExploited is the advisory's KEV records; empty when nobody is known
-			// to exploit it.
-			KnownExploited []json.RawMessage `json:"knownExploited"`
-
-			// Fix is the advisory's fix state and fixed versions.
-			Fix struct {
-				// State is "fixed" when a fixed version exists.
-				State string `json:"state"`
-
-				// Versions are the versions that fix the advisory.
-				Versions []string `json:"versions"`
-			} `json:"fix"`
-		} `json:"vulnerability"`
-	} `json:"matches"`
+	Matches []grypeReportMatches `json:"matches"`
 }
 
 // GrypeEmergencies returns the findings in a grype JSON report that warrant blocking a
@@ -72,26 +85,34 @@ type grypeReport struct {
 // cleared by an upgrade. A report that is not valid grype JSON is a CodeInvalidInput
 // error.
 func GrypeEmergencies(report []byte) ([]Emergency, error) {
-	var r grypeReport
-	if err := json.Unmarshal(report, &r); err != nil {
+	var currentGrypeReport grypeReport
+
+	err := json.Unmarshal(report, &currentGrypeReport)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse grype JSON report")
 	}
+
 	var out []Emergency
-	for i := range r.Matches {
-		m := &r.Matches[i]
-		v := &m.Vulnerability
-		if len(v.KnownExploited) == 0 || v.Fix.State != "fixed" ||
-			len(v.Fix.Versions) == 0 {
+
+	for i := range currentGrypeReport.Matches {
+		secondGrypeReportMatches := &currentGrypeReport.Matches[i]
+		secondGrypeReportVulnerability := &secondGrypeReportMatches.Vulnerability
+
+		if len(secondGrypeReportVulnerability.KnownExploited) == 0 ||
+			secondGrypeReportVulnerability.Fix.State != "fixed" ||
+			len(secondGrypeReportVulnerability.Fix.Versions) == 0 {
 			continue
 		}
+
 		out = append(out, Emergency{
-			ID:       v.ID,
-			Severity: v.Severity,
-			Package:  m.Artifact.Name,
-			Version:  m.Artifact.Version,
-			FixedIn:  v.Fix.Versions[0],
+			ID:       secondGrypeReportVulnerability.ID,
+			Severity: secondGrypeReportVulnerability.Severity,
+			Package:  secondGrypeReportMatches.Artifact.Name,
+			Version:  secondGrypeReportMatches.Artifact.Version,
+			FixedIn:  secondGrypeReportVulnerability.Fix.Versions[0],
 		})
 	}
+
 	return out, nil
 }
 
@@ -100,22 +121,26 @@ func GrypeEmergencies(report []byte) ([]Emergency, error) {
 // each one as "<id> <package> <version> (fixed in <version>)". A report that cannot be
 // read fails too, so a grype that wrote nothing never passes the gate.
 func CheckGrypeReport(path string) error {
-	report, err := os.ReadFile(path)
+	report, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeNotFound, "read grype report "+path)
 	}
+
 	found, err := GrypeEmergencies(report)
 	if err != nil {
 		return err
 	}
+
 	if len(found) == 0 {
 		return nil
 	}
+
 	lines := make([]string, 0, len(found))
 	for _, e := range found {
 		lines = append(lines, fmt.Sprintf("%s %s %s (fixed in %s)",
 			e.ID, e.Package, e.Version, e.FixedIn))
 	}
+
 	return apperr.New(apperr.CodeUpstream,
 		"known-exploited vulnerabilities with a fix: "+strings.Join(lines, "; "))
 }

@@ -10,7 +10,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/session"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -28,11 +28,14 @@ func (c expiringCred) ExpiresAt() time.Time { return c.Exp }
 func expiryProvider[T any](src *mocks.MockSource) *session.Provider[T] {
 	return session.NewProvider(src,
 		func(b []byte) (T, error) {
-			var c T
-			if err := json.Unmarshal(b, &c); err != nil {
-				return c, apperr.Wrap(err, apperr.CodeInvalidInput, "parse")
+			var value T
+
+			err := json.Unmarshal(b, &value)
+			if err != nil {
+				return value, apperr.Wrap(err, apperr.CodeInvalidInput, "parse")
 			}
-			return c, nil
+
+			return value, nil
 		},
 		func(context.Context, T) error { return nil },
 		func(T) []string { return nil })
@@ -52,11 +55,13 @@ func expiryProvider[T any](src *mocks.MockSource) *session.Provider[T] {
 //     zero expiry and a non-Expiring credential are cached.
 func TestProvider_ExpiryAwareCache(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
-	ref := types.Ref{Env: "stg", Class: "deploy", Field: "aws"}
+	ref := types.Ref{Env: textStg, Class: textDeploy, Field: "aws"}
 	secretAt := func(exp time.Time) types.Secret {
 		b, err := json.Marshal(expiringCred{Exp: exp})
 		require.NoError(t, err)
+
 		return types.NewSecret(string(b))
 	}
 
@@ -66,17 +71,23 @@ func TestProvider_ExpiryAwareCache(t *testing.T) {
 		reads int
 	}{
 		{time.Now().Add(time.Hour), "far future is cached", 1},
-		{time.Now().Add(session.ExpirySkew / 2), "inside the skew is refetched", 2},
+		{
+			time.Now().Add(session.ExpirySkew / 2),
+			"inside the skew is refetched",
+			casesCache,
+		},
 		{time.Time{}, "zero never expires", 1},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			src := mocks.NewMockSource(gomock.NewController(t))
 			src.EXPECT().
 				Get(gomock.Any(), ref).
-				Return(secretAt(tc.exp), nil).
-				Times(tc.reads)
+				Return(secretAt(testCase.exp), nil).
+				Times(testCase.reads)
+
 			p := expiryProvider[expiringCred](src)
 			for range 2 {
 				_, err := p.Resolve(ctx, ref)
@@ -90,9 +101,15 @@ func TestProvider_ExpiryAwareCache(t *testing.T) {
 		Get(gomock.Any(), ref).
 		Return(types.NewSecret(`{"key":"AK"}`), nil).
 		Times(1)
+
 	p := expiryProvider[sessionCred](plain)
-	for range 2 {
+	for range iterations {
 		_, err := p.Resolve(ctx, ref)
 		require.NoError(t, err)
 	}
 }
+
+const (
+	// casesCache is an element of a literal in TestProvider_ExpiryAwareCache.
+	casesCache = 2
+)

@@ -9,10 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -26,14 +27,21 @@ func sleepingJob(
 	err error,
 ) *mocks.MockAnyJob {
 	job := mocks.NewMockAnyJob(ctrl)
-	job.EXPECT().Meta().Return(types.JobMeta{Name: "j"}).AnyTimes()
+	job.EXPECT().
+		Meta().
+		Return(fixtures.Build(func(row *types.JobMeta) {
+			row.Name = "j"
+		})).
+		AnyTimes()
 	job.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(context.Context, interfaces.CommandRunner, string) (types.StepResults, error) {
 			time.Sleep(sleep)
+
 			return results, err
 		},
 	).
 		AnyTimes()
+
 	return job
 }
 
@@ -51,12 +59,17 @@ func sleepingJob(
 //   - Every returned result whose fn did not set Duration comes back with a
 //     positive Duration reflecting the elapsed time of the invocation.
 func TestFanOut_StampsDurationWhenZero(t *testing.T) {
+	t.Parallel()
+
 	results := engine.Pool(2).
 		FanOut(
 			context.Background(), []int{0, 1},
 			func(_ context.Context, _ int) types.StepResult {
 				time.Sleep(2 * time.Millisecond)
-				return types.StepResult{Status: types.StatusPass} // Duration left zero
+
+				return fixtures.Build(func(row *types.StepResult) {
+					row.Status = types.StatusPass
+				}) // Duration left zero
 			})
 	for i, r := range results {
 		assert.Positive(t, r.Duration, "result %d: expected stamped Duration > 0", i)
@@ -75,12 +88,18 @@ func TestFanOut_StampsDurationWhenZero(t *testing.T) {
 //   - A result returned with a non-zero Duration is reported back verbatim,
 //     not replaced by FanOut's measured elapsed.
 func TestFanOut_PreservesNonZeroDuration(t *testing.T) {
+	t.Parallel()
+
 	const want = 42 * time.Second
+
 	results := engine.Pool(1).
 		FanOut(
 			context.Background(), []int{0},
 			func(_ context.Context, _ int) types.StepResult {
-				return types.StepResult{Status: types.StatusPass, Duration: want}
+				return fixtures.Build(func(row *types.StepResult) {
+					row.Status = types.StatusPass
+					row.Duration = want
+				})
 			})
 	assert.Equal(t, want, results[0].Duration)
 }
@@ -99,17 +118,24 @@ func TestFanOut_PreservesNonZeroDuration(t *testing.T) {
 //   - A job result that arrives with no Duration is reported with a positive
 //     Duration drawn from the surrounding job.Execute elapsed.
 func TestRunJobGroup_StampsDurationOnZeroResult(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	job := sleepingJob(
 		ctrl,
 		3*time.Millisecond,
-		types.StepResults{{Name: "j", Status: types.StatusPass}},
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = "j"
+				row.Status = types.StatusPass
+			}),
+		},
 		nil,
 	)
 	results, err := engine.RunJobGroup(
 		context.Background(),
 		engineNopRunner(t),
-		"/root",
+		textRoot,
 		[]interfaces.AnyJob{job},
 		engine.NopObserver{},
 	)
@@ -130,18 +156,27 @@ func TestRunJobGroup_StampsDurationOnZeroResult(t *testing.T) {
 //   - A result that already carries a non-zero Duration is reported unchanged,
 //     not overwritten by the job-execute elapsed.
 func TestRunJobGroup_PreservesNonZeroDuration(t *testing.T) {
+	t.Parallel()
+
 	const want = 99 * time.Second
+
 	ctrl := gomock.NewController(t)
 	job := sleepingJob(
 		ctrl,
 		2*time.Millisecond,
-		types.StepResults{{Name: "j", Status: types.StatusPass, Duration: want}},
+		types.StepResults{
+			fixtures.Build(func(row *types.StepResult) {
+				row.Name = "j"
+				row.Status = types.StatusPass
+				row.Duration = want
+			}),
+		},
 		nil,
 	)
 	results, err := engine.RunJobGroup(
 		context.Background(),
 		engineNopRunner(t),
-		"/root",
+		textRoot,
 		[]interfaces.AnyJob{job},
 		engine.NopObserver{},
 	)
@@ -162,12 +197,14 @@ func TestRunJobGroup_PreservesNonZeroDuration(t *testing.T) {
 //   - An erroring job yields exactly one StatusFail result, and that result
 //     comes back with a positive Duration.
 func TestRunJobGroup_StampsDurationOnErrorResult(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	job := sleepingJob(ctrl, 3*time.Millisecond, nil, apperr.Sentinel("boom"))
+	job := sleepingJob(ctrl, 3*time.Millisecond, nil, apperr.Sentinel(textBoom))
 	results, err := engine.RunJobGroup(
 		context.Background(),
 		engineNopRunner(t),
-		"/root",
+		textRoot,
 		[]interfaces.AnyJob{job},
 		engine.NopObserver{},
 	)

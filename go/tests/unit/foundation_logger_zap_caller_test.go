@@ -10,40 +10,53 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	zaplogger "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger/zap"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // zapCaptureStdout runs fn with os.Stdout redirected to a pipe and returns what
 // was written. The zap logger binds to os.Stdout at construction, so callers must
 // build the logger inside fn.
-func zapCaptureStdout(t *testing.T, fn func()) string {
+func zapCaptureStdout(t *testing.T, callback func()) string {
 	t.Helper()
-	r, w, err := os.Pipe()
+
+	file, currentFile, err := os.Pipe()
 	require.NoError(t, err)
+
 	orig := os.Stdout
-	os.Stdout = w
+
+	os.Stdout = currentFile
+
 	defer func() { os.Stdout = orig }()
 
-	fn()
+	callback()
 
-	_ = w.Close()
-	out, _ := io.ReadAll(r)
+	_ = currentFile.Close()
+
+	out, _ := io.ReadAll(file)
+
 	return string(out)
 }
 
 // zapLastJSONLine parses the last non-empty JSON line from captured logger output.
 func zapLastJSONLine(t *testing.T, s string) map[string]any {
 	t.Helper()
+
 	var rec map[string]any
-	for _, line := range strings.Split(strings.TrimSpace(s), "\n") {
+
+	for line := range strings.SplitSeq(strings.TrimSpace(s), textNewline) {
 		if line == "" {
 			continue
 		}
+
 		require.NoError(t, json.Unmarshal([]byte(line), &rec),
 			"log line is not JSON: %q", line)
 	}
+
 	require.NotNil(t, rec, "no log output captured")
+
 	return rec
 }
 
@@ -59,17 +72,28 @@ func zapLastJSONLine(t *testing.T, s string) map[string]any {
 //   - An Info call's caller field excludes zap/logger.go and points at the
 //     calling code (this test file).
 func TestZapLogger_CallerIsCallSite(t *testing.T) {
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestZapLogger_CallerIsCallSite")
+
+		return
+	}
+
 	out := zapCaptureStdout(t, func() {
-		zaplogger.New(zaplogger.Config{Level: "info", Format: "json", RedactPII: false}).
+		zaplogger.New(zaplogger.Config{
+			Level: textInfo, Format: textStructuredFormat,
+			RedactPII: false,
+		}).
 			Info("hello")
 	})
 	rec := zapLastJSONLine(t, out)
 
-	caller, _ := rec["caller"].(string)
+	caller := stdx.As[string](rec["caller"])
 	require.NotEmpty(t, caller, "expected a caller field in the log output")
 	assert.NotContains(t, caller, "zap/logger.go",
 		"caller still points at the logger wrapper instead of the call site")
-	assert.Contains(t, caller, "logger_zap_caller_test.go",
+	assert.Contains(t, caller, textLoggerZapCallerTest,
 		"caller should point at the calling code (this test file)")
 }
 
@@ -86,37 +110,48 @@ func TestZapLogger_CallerIsCallSite(t *testing.T) {
 //   - The error object's stack and the top-level stacktrace are rooted at the
 //     caller (this test file), not the logging call site (logger/zap/logger.go).
 func TestZapLogger_AppErrorSurfacesCauseAndStack(t *testing.T) {
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestZapLogger_AppErrorSurfacesCauseAndStack")
+
+		return
+	}
+
 	out := zapCaptureStdout(t, func() {
 		underlying := apperr.Sentinel(
 			`ERROR: column "deleted_at" does not exist (SQLSTATE 42703)`,
 		)
 		err := apperr.Wrap(underlying, apperr.CodeInternal, "failed to query database")
-		zaplogger.New(zaplogger.Config{Level: "info", Format: "json", RedactPII: false}).
-			Error("pipeline.Execute failed", "error", err)
+		zaplogger.New(zaplogger.Config{
+			Level: textInfo, Format: textStructuredFormat,
+			RedactPII: false,
+		}).
+			Error("pipeline.Execute failed", textError, err)
 	})
 	rec := zapLastJSONLine(t, out)
 
-	errObj, ok := rec["error"].(map[string]any)
+	errObj, ok := rec[textError].(map[string]any)
 	require.Truef(
 		t,
 		ok,
 		"expected structured error object, got %T: %v",
-		rec["error"],
-		rec["error"],
+		rec[textError],
+		rec[textError],
 	)
 
-	cause, _ := errObj["cause"].(string)
+	cause := stdx.As[string](errObj["cause"])
 	assert.Contains(t, cause, "deleted_at",
 		"expected cause to surface the underlying DB error")
 
-	stack, _ := errObj["stack"].(string)
-	assert.Contains(t, stack, "logger_zap_caller_test.go",
+	stack := stdx.As[string](errObj["stack"])
+	assert.Contains(t, stack, textLoggerZapCallerTest,
 		"expected origin stack rooted at the caller")
 
 	// The single top-level "stacktrace" must be the error's origin stack (rooted
 	// at the caller that created it), not the logger's own call site.
-	topStack, _ := rec["stacktrace"].(string)
-	assert.Contains(t, topStack, "logger_zap_caller_test.go",
+	topStack := stdx.As[string](rec["stacktrace"])
+	assert.Contains(t, topStack, textLoggerZapCallerTest,
 		"expected top-level stacktrace rooted at the caller")
 	assert.NotContains(t, topStack, "logger/zap/logger.go",
 		"top-level stacktrace still points at the logging call site")
@@ -133,11 +168,27 @@ func TestZapLogger_AppErrorSurfacesCauseAndStack(t *testing.T) {
 // What it tests:
 //   - A Warn call produces a record with level="warn" and the given message.
 func TestZapLogger_LevelAndMessage(t *testing.T) {
+	t.Parallel()
+
+	if !fixtures.InReexec() {
+		fixtures.ReexecTest(t, "TestZapLogger_LevelAndMessage")
+
+		return
+	}
+
 	out := zapCaptureStdout(t, func() {
-		zaplogger.New(zaplogger.Config{Level: "info", Format: "json", RedactPII: false}).
+		zaplogger.New(zaplogger.Config{
+			Level: textInfo, Format: textStructuredFormat,
+			RedactPII: false,
+		}).
 			Warn("careful")
 	})
 	rec := zapLastJSONLine(t, out)
-	assert.Equal(t, "warn", rec["level"])
+	assert.Equal(t, textWarn, rec["level"])
 	assert.Equal(t, "careful", rec["message"])
 }
+
+const (
+	// textLoggerZapCallerTest is the literal "logger_zap_caller_test.go".
+	textLoggerZapCallerTest = "logger_zap_caller_test.go"
+)

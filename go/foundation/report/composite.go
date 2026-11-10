@@ -37,7 +37,8 @@ func (c composite) OnStepStart(name, group string) {
 }
 
 // OnStepComplete forwards the event.
-func (c composite) OnStepComplete(r types.StepResult) {
+// r must not be nil.
+func (c composite) OnStepComplete(r *types.StepResult) {
 	for _, o := range c {
 		o.OnStepComplete(r)
 	}

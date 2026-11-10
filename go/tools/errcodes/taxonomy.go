@@ -7,7 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // The retry classes a row may declare.
@@ -100,6 +100,7 @@ func grpcNumber(name string) (int, bool) {
 			return i, true
 		}
 	}
+
 	return 0, false
 }
 
@@ -109,52 +110,92 @@ func grpcNumber(name string) (int, bool) {
 func parse(src []byte) ([]code, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(src))
 	dec.KnownFields(true)
-	var tx taxonomy
-	if err := dec.Decode(&tx); err != nil {
+
+	var currentTaxonomy taxonomy
+
+	err := dec.Decode(&currentTaxonomy)
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "decode "+SourcePath)
 	}
-	if len(tx.Codes) == 0 {
+
+	if len(currentTaxonomy.Codes) == 0 {
 		return nil, apperr.InvalidInput(SourcePath + ": no codes")
 	}
+
 	seen := map[string]bool{}
-	for i := range tx.Codes {
-		c := &tx.Codes[i]
-		if err := validate(c, seen); err != nil {
+
+	for i := range currentTaxonomy.Codes {
+		c := &currentTaxonomy.Codes[i]
+
+		err := validate(c, seen)
+		if err != nil {
 			return nil, err
 		}
 	}
-	return tx.Codes, nil
+
+	return currentTaxonomy.Codes, nil
 }
 
 // validate checks one row against the rules parse documents, resolves its gRPC number
 // and records its names in seen.
-func validate(c *code, seen map[string]bool) error {
-	bad := func(why string) error {
-		return apperr.InvalidInput(
-			SourcePath + ": code " + strconv.Quote(c.Code) + ": " + why,
+func validate(errCode *code, seen map[string]bool) error {
+	why := formatProblem(errCode)
+	if why == "" {
+		why = policyProblem(errCode, seen)
+	}
+
+	if why != "" {
+		return rowError(errCode, why)
+	}
+
+	count, ok := grpcNumber(errCode.GRPC)
+	if !ok {
+		return rowError(
+			errCode,
+			"grpc "+strconv.Quote(errCode.GRPC)+" is not a gRPC status",
 		)
 	}
-	switch {
-	case !codeRE.MatchString(c.Code):
-		return bad("the code is not upper snake case")
-	case !goRE.MatchString(c.Go):
-		return bad("go must be an exported Code<Name> constant")
-	case c.Doc == "":
-		return bad("doc is empty")
-	case c.HTTP < 100 || c.HTTP > 599:
-		return bad("http is not a status code")
-	case c.Retry != retryTransient && c.Retry != retryPermanent && c.Retry != retryNone:
-		return bad("retry must be transient, permanent or none")
-	case c.FixedClientMessage && c.SafeMessage == "":
-		return bad("fixed_client_message needs a safe_message")
-	case seen["code "+c.Code] || seen["go "+c.Go]:
-		return bad("the code or its Go name is declared twice")
-	}
-	n, ok := grpcNumber(c.GRPC)
-	if !ok {
-		return bad("grpc " + strconv.Quote(c.GRPC) + " is not a gRPC status")
-	}
-	c.GRPCNumber = n
-	seen["code "+c.Code], seen["go "+c.Go] = true, true
+
+	errCode.GRPCNumber = count
+	seen["code "+errCode.Code], seen["go "+errCode.Go] = true, true
+
 	return nil
+}
+
+// rowError names the row a rule rejected.
+func rowError(c *code, why string) error {
+	return apperr.InvalidInput(
+		SourcePath + ": code " + strconv.Quote(c.Code) + ": " + why,
+	)
+}
+
+// formatProblem says which field is malformed, or "" when all are well formed.
+func formatProblem(errCode *code) string {
+	switch {
+	case !codeRE.MatchString(errCode.Code):
+		return "the code is not upper snake case"
+	case !goRE.MatchString(errCode.Go):
+		return "go must be an exported Code<Name> constant"
+	case errCode.Doc == "":
+		return "doc is empty"
+	case errCode.HTTP < minHTTPStatus || errCode.HTTP > maxHTTPStatus:
+		return "http is not a status code"
+	default:
+		return ""
+	}
+}
+
+// policyProblem says which cross-field rule the row breaks, or "" when none.
+func policyProblem(errCode *code, seen map[string]bool) string {
+	switch {
+	case errCode.Retry != retryTransient && errCode.Retry != retryPermanent &&
+		errCode.Retry != retryNone:
+		return "retry must be transient, permanent or none"
+	case errCode.FixedClientMessage && errCode.SafeMessage == "":
+		return "fixed_client_message needs a safe_message"
+	case seen["code "+errCode.Code] || seen["go "+errCode.Go]:
+		return "the code or its Go name is declared twice"
+	default:
+		return ""
+	}
 }

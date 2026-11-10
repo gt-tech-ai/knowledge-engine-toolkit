@@ -1,9 +1,13 @@
-"""Tests for the service tier: ``ServiceBase`` decorates services (Go ``services/service``)."""
+"""Tests for the service tier: ``ServiceBase`` decorates services.
+
+Go's is ``services/service``.
+"""
 
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from abc import ABC
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,7 +28,7 @@ if TYPE_CHECKING:
     from conftest import Observed
 
 
-class _Orders(CrudService[Any, Any, Any]):
+class _Orders(CrudService[str, object, str], ABC):
     """The test service's contract: CRUD plus two domain operations."""
 
     async def refund(self) -> None:
@@ -35,7 +39,12 @@ class _Orders(CrudService[Any, Any, Any]):
 
 
 def _repo() -> MagicMock:
-    """Return a Repository mock answering every CRUD call."""
+    """Return a Repository mock answering every CRUD call.
+
+    Returns:
+        A Repository mock answering every CRUD call.
+
+    """
     repo = MagicMock(spec=Repository)
     repo.get = AsyncMock(return_value="e1")
     repo.list = AsyncMock(return_value=Page(items=["e1"], total=1))
@@ -46,7 +55,15 @@ def _repo() -> MagicMock:
 
 
 def _reject_blank(entity: str) -> None:
-    """Validate an entity: a blank one is invalid input."""
+    """Validate an entity: a blank one is invalid input.
+
+    Args:
+        entity: The entity.
+
+    Raises:
+        InvalidInputError: Entity must not be blank.
+
+    """
     if not entity:
         msg = "entity must not be blank"
         raise InvalidInputError(msg)
@@ -73,14 +90,22 @@ def test_tier_order_matches_go() -> None:
 
 @pytest.mark.asyncio
 async def test_crud_runs_through_the_tier_and_validates(observed: Observed) -> None:
-    """CRUD reaches the repository under its operation names; Create and Update validate first.
+    """CRUD reaches the repository under its operation names.
+
+    Create and Update validate first.
 
     Why this test is important:
-      - An invalid entity must be rejected before the repository sees it, with a coded error.
+      - An invalid entity must be rejected before the repository sees it, with a coded
+        error.
 
     What it tests:
-      - Each call returns the repository's answer in an ``orders.<Op>`` span; a blank entity
-        raises ``InvalidInputError`` from Create and Update without reaching the repository.
+      - Each call returns the repository's answer in an ``orders.<Op>`` span; a blank
+        entity raises ``InvalidInputError`` from Create and Update without reaching the
+        repository.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     repo = _repo()
     svc = ServiceBase(
@@ -93,12 +118,12 @@ async def test_crud_runs_through_the_tier_and_validates(observed: Observed) -> N
     assert await svc.update("1", "e") == "e"
     await svc.delete("1")
     with pytest.raises(InvalidInputError):
-        await svc.create("")
+        _ = await svc.create("")
     with pytest.raises(InvalidInputError):
-        await svc.update("1", "")
+        _ = await svc.update("1", "")
 
-    assert repo.create.await_count == 1
-    assert repo.update.await_count == 1
+    assert (cast("AsyncMock", repo.create).await_count) == 1
+    assert (cast("AsyncMock", repo.update).await_count) == 1
     ops = ["get", "list", "create", "update", "delete", "create", "update"]
     assert [name for name, _, _ in observed.spans] == [f"orders.{op}" for op in ops]
 
@@ -121,7 +146,7 @@ async def test_auth_authorizes_the_service_action() -> None:
     with pytest.raises(ForbiddenError):
         await svc.delete("1")
     auth.assert_awaited_once_with("orders.delete")
-    repo.delete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", repo.delete).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -132,12 +157,13 @@ async def test_domain_operations() -> None:
       - Non-CRUD operations need the same recovery and budget as CRUD.
 
     What it tests:
-      - The base reports its name; an uncoded failure in ``exec`` becomes ``InternalError``; a
-        slow operation times out.
+      - The base reports its name; an uncoded failure in ``exec`` becomes
+        ``InternalError``; a slow operation times out.
     """
     base = ServiceBase(_Orders, Decorations.fixed(Deps(timeout=0.01)), "billing")
 
     async def slow() -> None:
+        """Run past the deadline."""
         await asyncio.sleep(1)
 
     assert base.name == "billing"

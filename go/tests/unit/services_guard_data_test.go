@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/guard"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestServicesGuard_ExprData tests an expr row's data: structured expectations read as
@@ -28,7 +29,9 @@ import (
 //   - A row with no data sees `data` as null.
 func TestServicesGuard_ExprData(t *testing.T) {
 	t.Parallel()
+
 	var rows []types.GuardRow
+
 	require.NoError(t, yaml.Unmarshal([]byte(`
 - name: "{set} admits only its callers"
   kind: expr
@@ -46,23 +49,31 @@ func TestServicesGuard_ExprData(t *testing.T) {
   kind: expr
   expr: data == null
 `), &rows))
+
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
-		return []map[string]string{{"set": "open"}, {"set": "closed"}}, nil
+		return []map[string]string{{textSet: "open"}, {textSet: "closed"}}, nil
 	}
-	gs, err := guard.NewFromConfig(rows, guard.Deps{
-		Expanders: map[string]guard.Expander{"sets": each},
-	})
+	guards, err := guard.NewFromConfig(rows, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Expanders = map[string]guard.Expander{"sets": each}
+	}))
 	require.NoError(t, err)
+
 	cb := memoryCodebase(t, guardFiles())
-	v := map[string]types.Verdict{}
-	for _, g := range gs {
-		v[g.Name()] = g.Run(t.Context(), cb)
+	statusByName := map[string]types.Verdict{}
+
+	for _, g := range guards {
+		statusByName[g.Name()] = g.Run(t.Context(), cb)
 	}
 
-	set := v["{set} admits only its callers"]
+	set := statusByName["{set} admits only its callers"]
 	require.Equal(t, types.StatusFail, set.Status, set.Detail)
 	assert.Equal(t, "policy/p.yaml: api is not admitted\n", set.Detail)
-	assert.Equal(t, types.StatusPass, v["no data"].Status, v["no data"].Detail)
+	assert.Equal(
+		t,
+		types.StatusPass,
+		statusByName["no data"].Status,
+		statusByName["no data"].Detail,
+	)
 }
 
 // TestServicesGuard_For tests a row repeated over its data: `for` returns the placeholder
@@ -82,7 +93,9 @@ func TestServicesGuard_ExprData(t *testing.T) {
 //     building.
 func TestServicesGuard_For(t *testing.T) {
 	t.Parallel()
+
 	var rows []types.GuardRow
+
 	require.NoError(t, yaml.Unmarshal([]byte(`
 - name: "{set} has port {port}"
   kind: expr
@@ -101,30 +114,38 @@ func TestServicesGuard_For(t *testing.T) {
   for: data
   expr: "true"
 `), &rows))
+
 	each := func(context.Context, interfaces.Codebase) ([]map[string]string, error) {
-		return []map[string]string{{"env": "dev"}, {"env": "prod"}}, nil
+		return []map[string]string{{textEnv: textDev}, {textEnv: "prod"}}, nil
 	}
-	gs, err := guard.NewFromConfig(rows, guard.Deps{
-		Expanders: map[string]guard.Expander{"envs": each},
-	})
+	guards, err := guard.NewFromConfig(rows, fixtures.BuildRef(func(row *guard.Deps) {
+		row.Expanders = map[string]guard.Expander{textEnvs: each}
+	}))
 	require.NoError(t, err)
+
 	cb := memoryCodebase(t, guardFiles())
-	v := map[string]types.Verdict{}
-	for _, g := range gs {
-		v[g.Name()] = g.Run(t.Context(), cb)
+	statusByName := map[string]types.Verdict{}
+
+	for _, g := range guards {
+		statusByName[g.Name()] = g.Run(t.Context(), cb)
 	}
 
-	assert.Equal(t, "port 9090 of closed\n", v["{set} has port {port}"].Detail)
+	assert.Equal(t, "port 9090 of closed\n", statusByName["{set} has port {port}"].Detail)
 	assert.Equal(
 		t,
 		"ran dev/open\nran prod/open\nran prod/closed\n",
-		v["{env}/{set}"].Detail,
+		statusByName["{env}/{set}"].Detail,
 	)
-	assert.Equal(t, types.StatusFail, v["bad for"].Status)
-	assert.Contains(t, v["bad for"].Detail, "for")
+	assert.Equal(t, types.StatusFail, statusByName["bad for"].Status)
+	assert.Contains(t, statusByName["bad for"].Detail, "for")
 
 	_, err = guard.NewFromConfig([]types.GuardRow{
-		{Name: "x", Kind: types.GuardExpr, Expr: "true", For: "data.("},
-	}, guard.Deps{})
+		fixtures.Build(func(row *types.GuardRow) {
+			row.Name = textX
+			row.Kind = types.GuardExpr
+			row.Expr = textTrue
+			row.For = "data.("
+		}),
+	}, new(guard.Deps))
 	require.Error(t, err)
 }

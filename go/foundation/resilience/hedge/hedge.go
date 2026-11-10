@@ -14,10 +14,16 @@ import (
 	"fmt"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 )
+
+// hedgeAttempts is the attempts one hedged call can race.
+const hedgeAttempts = 2
+
+// defaultConfigDelay is the default Delay of Config.
+const defaultConfigDelay = 50 * time.Millisecond
 
 // Kind specifies which hedger implementation to use.
 type Kind int
@@ -59,7 +65,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Kind:  KindDisabled,
-		Delay: 50 * time.Millisecond,
+		Delay: defaultConfigDelay,
 	}
 }
 
@@ -72,8 +78,10 @@ func WithDelay(d time.Duration) options.Option[Config] {
 // error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.Hedger, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -121,7 +129,7 @@ var _ interfaces.Hedger = (*delayHedger)(nil)
 // op must observe ctx.
 func (h *delayHedger) Hedge(ctx context.Context, op func() error) error {
 	// Buffered for both attempts so the loser's goroutine never blocks on its send.
-	results := make(chan error, 2)
+	results := make(chan error, hedgeAttempts)
 	run := func() { go func() { results <- op() }() }
 
 	run() // first attempt

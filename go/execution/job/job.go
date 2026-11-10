@@ -14,13 +14,17 @@ import (
 // Tier is the job decoration tier: recovery outermost, then logging, tracing,
 // metrics, and the per-job timeout. A job runs as the operation "execute".
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "job", Order: []decorate.Layer{
-		decorate.LayerRecovery,
-		decorate.LayerLogging,
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerTimeout,
-	}}
+	return decorate.Tier{
+		Name: "job", Order: []decorate.Layer{
+			decorate.LayerRecovery,
+			decorate.LayerLogging,
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // Run is a job's work: it executes against runner under root and returns the
@@ -48,18 +52,19 @@ func NewBase(decs decorate.Decorations, name string) (Base, error) {
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }
 
 // Func builds the job name in group that runs run.
-func (b Base) Func(name, group string, run Run) interfaces.AnyJob {
-	return b.job(types.JobMeta{Name: name, Group: group}, run)
+func (b *Base) Func(name, group string, run Run) interfaces.AnyJob {
+	return b.job(types.JobMeta{Name: name, Group: group, Tool: "", WarnOnly: false}, run)
 }
 
 // Local builds the job name in group that runs fn, in-process work (a seeder, a
 // sync) that needs no command runner or root; a gate of Local jobs runs with
 // gate.RunLocal.
-func (b Base) Local(
+func (b *Base) Local(
 	name, group string,
 	fn func(context.Context) (types.StepResults, error),
 ) interfaces.AnyJob {
@@ -72,27 +77,39 @@ func (b Base) Local(
 
 // Check builds the job name in group that runs one pass/fail check: one step named
 // name, Pass when run returns nil, otherwise Fail carrying the error's message.
-func (b Base) Check(
+func (b *Base) Check(
 	name, group string,
 	run func(context.Context) error,
 ) interfaces.AnyJob {
 	return b.Local(name, group, func(ctx context.Context) (types.StepResults, error) {
-		sr := types.StepResult{Name: name, Status: types.StatusPass}
-		if err := run(ctx); err != nil {
-			sr.Status, sr.Error = types.StatusFail, err.Error()
+		stepResult := types.StepResult{
+			Name:     name,
+			Status:   types.StatusPass,
+			Group:    "",
+			Error:    "",
+			Detail:   nil,
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
 		}
-		return types.StepResults{sr}, nil
+
+		err := run(ctx)
+		if err != nil {
+			stepResult.Status, stepResult.Error = types.StatusFail, err.Error()
+		}
+
+		return types.StepResults{stepResult}, nil
 	})
 }
 
 // Wrap decorates an existing job, keeping its metadata.
-func (b Base) Wrap(j interfaces.AnyJob) interfaces.AnyJob {
+func (b *Base) Wrap(j interfaces.AnyJob) interfaces.AnyJob {
 	return b.job(j.Meta(), j.Execute)
 }
 
 // job binds meta and run to the job tier.
-func (b Base) job(meta types.JobMeta, run Run) interfaces.AnyJob {
-	return decorated{meta: meta, run: run, op: b.Subject}
+func (b *Base) job(meta types.JobMeta, run Run) interfaces.AnyJob {
+	return &decorated{meta: meta, run: run, op: b.Subject}
 }
 
 // decorated is the one AnyJob implementation every Base method returns.
@@ -107,13 +124,13 @@ type decorated struct {
 	meta types.JobMeta
 }
 
-var _ interfaces.AnyJob = decorated{}
+var _ interfaces.AnyJob = new(decorated)
 
 // Meta returns the job's identity.
-func (d decorated) Meta() types.JobMeta { return d.meta }
+func (d *decorated) Meta() types.JobMeta { return d.meta }
 
 // Execute runs the job through the job tier as the operation "execute".
-func (d decorated) Execute(
+func (d *decorated) Execute(
 	ctx context.Context,
 	runner interfaces.CommandRunner,
 	root string,

@@ -1,12 +1,13 @@
 """Go-style durations in config (mirrors Go ``time.ParseDuration``).
 
-The layered YAML is shared by the Go and Python services, so a duration is written the Go way
-(``"30s"``, ``"1m30s"``, ``"250ms"``); ``parse_duration`` reads it as seconds.
+The layered YAML is shared by the Go and Python services, so a duration is written the Go
+way (``"30s"``, ``"1m30s"``, ``"250ms"``); ``parse_duration`` reads it as seconds.
 """
 
 from __future__ import annotations
 
 import re
+from typing import cast
 
 from techai_webutils.core.errors import AppValueError
 
@@ -31,8 +32,19 @@ _PART = re.compile(
 def parse_duration(value: object) -> float:
     """Return ``value`` in seconds: a Go duration string, or a number of seconds.
 
-    A string is a signed sequence of ``<number><unit>`` terms (``"1h30m"``, ``"-1.5s"``), or
-    ``"0"``. A malformed string, or a value of any other type, raises ``AppValueError``.
+    A string is a signed sequence of ``<number><unit>`` terms (``"1h30m"``, ``"-1.5s"``),
+    or ``"0"``. A malformed string, or a value of any other type, raises
+    ``AppValueError``.
+
+    Args:
+        value: A Go duration string or a number of seconds.
+
+    Returns:
+        ``value`` in seconds: a Go duration string, or a number of seconds.
+
+    Raises:
+        AppValueError: Invalid duration ``value``.
+
     """
     if isinstance(value, bool):
         msg = f"invalid duration {value!r}"
@@ -47,7 +59,7 @@ def parse_duration(value: object) -> float:
     body = text.lstrip("+-")
     if body == "0":
         return 0.0
-    parts = _PART.findall(body)
+    parts = cast("list[tuple[str, str]]", _PART.findall(body))
     if not body or "".join(n + u for n, u in parts) != body:
         msg = f"invalid duration {value!r}"
         raise AppValueError(msg)

@@ -19,10 +19,17 @@ import (
 
 // UnitSuite provides a test suite for unit tests with a gomock controller.
 type UnitSuite struct {
+	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
+	*base.TestSuite
+
 	// Ctrl is the gomock controller, refreshed before each (sub)test.
 	Ctrl *gomock.Controller
-	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
-	base.TestSuite
+}
+
+// NewUnitSuite returns a UnitSuite with its base suite set; suite.Run needs it, since the
+// base is embedded by pointer.
+func NewUnitSuite() UnitSuite {
+	return UnitSuite{TestSuite: new(base.TestSuite), Ctrl: nil}
 }
 
 // SetupTest creates a fresh gomock controller for each parent test.
@@ -49,12 +56,13 @@ func (s *UnitSuite) TearDownSubTest() {
 // The RedisAddr field exposes the host:port for the caller to construct its own
 // Redis client; no go-redis dependency lives in this package.
 type RedisIntegrationSuite struct {
+	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
+	base.TestSuite
+
 	// redis is the running Redis testcontainer, terminated in TearDownSuite.
 	redis *redisdb.TestRedis
 	// RedisAddr is the host:port callers use to build a Redis client.
 	RedisAddr string
-	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
-	base.TestSuite
 }
 
 // SetupSuite creates a Redis container and waits until it accepts connections.
@@ -81,12 +89,13 @@ func (s *RedisIntegrationSuite) TearDownSuite() {
 // The MinIOEndpoint field exposes the S3 API URL for the caller to construct its
 // own S3 client; credentials are miniodb.RootUser / miniodb.RootPassword.
 type MinIOIntegrationSuite struct {
+	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
+	base.TestSuite
+
 	// minio is the running MinIO container, terminated in TearDownSuite.
 	minio *miniodb.TestMinIO
 	// MinIOEndpoint is the S3 API URL callers use to build a client.
 	MinIOEndpoint string
-	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
-	base.TestSuite
 }
 
 // SetupSuite creates a MinIO container and waits until it reports healthy.
@@ -114,12 +123,13 @@ func (s *MinIOIntegrationSuite) TearDownSuite() {
 // construct its own AWS-SDK SQS client; credentials are elasticmqdb.AccessKey /
 // elasticmqdb.SecretKey.
 type ElasticMQIntegrationSuite struct {
+	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
+	base.TestSuite
+
 	// elasticmq is the running ElasticMQ container, terminated in TearDownSuite.
 	elasticmq *elasticmqdb.TestElasticMQ
 	// ElasticMQEndpoint is the SQS API URL callers use to build a client.
 	ElasticMQEndpoint string
-	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
-	base.TestSuite
 }
 
 // SetupSuite creates an ElasticMQ container and waits until it accepts connections.
@@ -145,12 +155,13 @@ func (s *ElasticMQIntegrationSuite) TearDownSuite() {
 // Cassandra 5. CassandraHost/CassandraPort let the caller build its own session;
 // Cassandra.Exec runs schema bootstrap through cqlsh.
 type CassandraIntegrationSuite struct {
+	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
+	base.TestSuite
+
 	// Cassandra is the running Cassandra container, terminated in TearDownSuite.
 	Cassandra *cassandradb.TestCassandra
 	// CassandraHost is the host callers connect to.
 	CassandraHost string
-	// TestSuite is the embedded base suite (assertions, TempDir, IsIntegration).
-	base.TestSuite
 	// CassandraPort is the mapped native-protocol port.
 	CassandraPort int
 }

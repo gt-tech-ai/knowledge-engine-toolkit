@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -36,19 +36,29 @@ func (s Step) Execute(ctx context.Context) types.StepResult {
 		Group:    s.Group,
 		Status:   types.StatusPass,
 		Duration: time.Since(start),
+		Error:    "",
+		Detail:   nil,
+		Children: nil,
+		Tests:    0,
 	}
+
 	if err == nil {
 		return result
 	}
+
 	var appErr *apperr.AppError
+
 	if !apperr.As(err, &appErr) {
 		err = apperr.Wrap(err, apperr.CodeInternal, s.Name+" failed")
 	}
+
 	result.Status = types.StatusFail
 	if s.WarnOnly {
 		result.Status = types.StatusWarn
 	}
+
 	result.Error = err.Error()
+
 	return result
 }
 
@@ -61,9 +71,11 @@ func (s Steps) Serial(ctx context.Context) types.StepResults {
 	if len(s) == 0 {
 		return nil
 	}
+
 	results := make(types.StepResults, 0, len(s))
 	for _, step := range s {
 		results = append(results, step.Execute(ctx))
 	}
+
 	return results
 }

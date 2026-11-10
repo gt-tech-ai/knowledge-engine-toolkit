@@ -5,7 +5,8 @@
 // exercise the real RPUSH/LTRIM/EXPIRE/LRANGE list semantics + the companion
 // low-water-mark key that no mock or in-memory substitute can validate (the
 // SQL/driver-behaviour analogue for a list store).
-package integration
+
+package integration_test
 
 import (
 	"context"
@@ -17,14 +18,16 @@ import (
 
 	replayredis "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/replaybuffer/redis"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
 
 // ReplayBufferRedisSuite holds a real Redis container and a go-redis client backing the
 // buffer.
 type ReplayBufferRedisSuite struct {
+	*testsuite.RedisIntegrationSuite
+
 	client *goredis.Client
-	testsuite.RedisIntegrationSuite
 }
 
 // TestReplayBufferRedisSuite runs all Redis ReplayBuffer integration tests.
@@ -35,33 +38,29 @@ type ReplayBufferRedisSuite struct {
 // What it tests:
 //   - Suite entrypoint wires ReplayBufferRedisSuite into the testify runner.
 func TestReplayBufferRedisSuite(t *testing.T) {
-	suite.Run(t, new(ReplayBufferRedisSuite))
+	t.Parallel()
+
+	suite.Run(
+		t,
+		&ReplayBufferRedisSuite{
+			RedisIntegrationSuite: new(testsuite.RedisIntegrationSuite),
+			client:                nil,
+		},
+	)
 }
 
 func (s *ReplayBufferRedisSuite) SetupTest() {
-	s.client = goredis.NewClient(&goredis.Options{Addr: s.RedisAddr})
+	s.client = goredis.NewClient(
+		fixtures.BuildRef(func(row *goredis.Options) {
+			row.Addr = s.RedisAddr
+		}),
+	)
 	s.Require().NoError(s.client.FlushDB(context.Background()).Err())
 }
 
 func (s *ReplayBufferRedisSuite) TearDownTest() {
 	if s.client != nil {
 		_ = s.client.Close()
-	}
-}
-
-func (s *ReplayBufferRedisSuite) newBuffer(
-	maxSize int,
-	ttl time.Duration,
-) interfaces.ReplayBuffer {
-	return replayredis.New(s.client, replayredis.Config{MaxSize: maxSize, TTL: ttl})
-}
-
-func (s *ReplayBufferRedisSuite) appendSeq(b interfaces.ReplayBuffer, key string, n int) {
-	for i := 1; i <= n; i++ {
-		id := "msg-" + itoaI(i)
-		s.Require().NoError(
-			b.Append(context.Background(), key, id, []byte("payload-"+id)),
-		)
 	}
 }
 
@@ -78,16 +77,16 @@ func (s *ReplayBufferRedisSuite) appendSeq(b interfaces.ReplayBuffer, key string
 //   - after appending msg-1..5, ReplayAfter(msg-2) returns msg-3,4,5 in order (complete)
 //     with their exact payloads.
 func (s *ReplayBufferRedisSuite) TestAppendReplayRoundtrip() {
-	b := s.newBuffer(100, time.Minute)
-	s.appendSeq(b, "k", 5)
+	b := s.newBuffer(newBufferInput, time.Minute)
+	s.appendSeq(b, textK, appendSeqInput)
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-2")
+	tail, complete, err := b.ReplayAfter(context.Background(), textK, "msg-2")
 	s.Require().NoError(err)
 	s.True(complete)
-	s.Require().Len(tail, 3)
-	s.Equal("msg-3", tail[0].ID)
+	s.Require().Len(tail, lenInputRoundtrip)
+	s.Equal(textMsg3, tail[0].ID)
 	s.Equal([]byte("payload-msg-3"), tail[0].Payload)
-	s.Equal([]string{"msg-3", "msg-4", "msg-5"}, idsI(tail))
+	s.Equal([]string{textMsg3, textMsg4, textMsg5}, idsI(tail))
 }
 
 // TestNBoundEvicts tests that LTRIM bounds the list to MaxSize and a request for an
@@ -102,17 +101,17 @@ func (s *ReplayBufferRedisSuite) TestAppendReplayRoundtrip() {
 //   - with MaxSize=3, appending msg-1..5 retains msg-3,4,5; ReplayAfter(msg-1) is a gap;
 //     ReplayAfter(msg-3) → msg-4,5.
 func (s *ReplayBufferRedisSuite) TestNBoundEvicts() {
-	b := s.newBuffer(3, time.Minute)
-	s.appendSeq(b, "k", 5)
+	replayBuffer := s.newBuffer(newBufferInputEvicts, time.Minute)
+	s.appendSeq(replayBuffer, textK, appendSeqInput)
 
-	_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+	_, complete, err := replayBuffer.ReplayAfter(context.Background(), textK, textMsg1)
 	s.Require().NoError(err)
 	s.False(complete, "evicted id → gap")
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-3")
+	tail, complete, err := replayBuffer.ReplayAfter(context.Background(), textK, textMsg3)
 	s.Require().NoError(err)
 	s.True(complete)
-	s.Equal([]string{"msg-4", "msg-5"}, idsI(tail))
+	s.Equal([]string{textMsg4, textMsg5}, idsI(tail))
 }
 
 // TestPrune tests that Prune drops the acked prefix and records the low-water mark, so a
@@ -127,17 +126,17 @@ func (s *ReplayBufferRedisSuite) TestNBoundEvicts() {
 //   - after Prune(msg-3), ReplayAfter(msg-3) returns msg-4,5 (complete) and
 //     ReplayAfter(msg-1) is a gap.
 func (s *ReplayBufferRedisSuite) TestPrune() {
-	b := s.newBuffer(100, time.Minute)
-	s.appendSeq(b, "k", 5)
+	replayBuffer := s.newBuffer(newBufferInput, time.Minute)
+	s.appendSeq(replayBuffer, textK, appendSeqInput)
 
-	s.Require().NoError(b.Prune(context.Background(), "k", "msg-3"))
+	s.Require().NoError(replayBuffer.Prune(context.Background(), textK, textMsg3))
 
-	tail, complete, err := b.ReplayAfter(context.Background(), "k", "msg-3")
+	tail, complete, err := replayBuffer.ReplayAfter(context.Background(), textK, textMsg3)
 	s.Require().NoError(err)
 	s.True(complete)
-	s.Equal([]string{"msg-4", "msg-5"}, idsI(tail))
+	s.Equal([]string{textMsg4, textMsg5}, idsI(tail))
 
-	_, complete, err = b.ReplayAfter(context.Background(), "k", "msg-1")
+	_, complete, err = replayBuffer.ReplayAfter(context.Background(), textK, textMsg1)
 	s.Require().NoError(err)
 	s.False(complete, "pruned prefix → gap")
 }
@@ -155,17 +154,19 @@ func (s *ReplayBufferRedisSuite) TestPrune() {
 //   - with a 1s TTL, ReplayAfter eventually reports a gap; and after Delete, ReplayAfter
 //     is a gap.
 func (s *ReplayBufferRedisSuite) TestTTLExpiresAndDelete() {
-	b := s.newBuffer(100, time.Second)
-	s.appendSeq(b, "k", 3)
+	b := s.newBuffer(newBufferInput, time.Second)
+	s.appendSeq(b, textK, appendSeqInputDelete)
 	s.Eventually(func() bool {
-		_, complete, err := b.ReplayAfter(context.Background(), "k", "msg-1")
+		_, complete, err := b.ReplayAfter(context.Background(), textK, textMsg1)
+
 		return err == nil && !complete
 	}, 4*time.Second, 100*time.Millisecond, "buffer must expire after its TTL")
 
-	b2 := s.newBuffer(100, time.Minute)
-	s.appendSeq(b2, "d", 3)
-	s.Require().NoError(b2.Delete(context.Background(), "d"))
-	_, complete, err := b2.ReplayAfter(context.Background(), "d", "msg-1")
+	secondB := s.newBuffer(newBufferInput, time.Minute)
+	s.appendSeq(secondB, textD, appendSeqInputDelete)
+	s.Require().NoError(secondB.Delete(context.Background(), textD))
+
+	_, complete, err := secondB.ReplayAfter(context.Background(), textD, textMsg1)
 	s.Require().NoError(err)
 	s.False(complete, "deleted buffer → gap")
 }
@@ -185,15 +186,15 @@ func (s *ReplayBufferRedisSuite) TestTTLExpiresAndDelete() {
 //     entries for the same key.
 func (s *ReplayBufferRedisSuite) TestKeyPrefix() {
 	ctx := context.Background()
-	def := s.newBuffer(100, time.Minute)
+	def := s.newBuffer(newBufferInput, time.Minute)
 	custom := replayredis.New(s.client, replayredis.Config{
 		MaxSize: 100, TTL: time.Minute, KeyPrefix: "app:replay:",
 	})
-	s.appendSeq(def, "k", 3)
-	s.Require().NoError(custom.Append(ctx, "k", "msg-8", []byte("custom-8")))
-	s.Require().NoError(custom.Append(ctx, "k", "msg-9", []byte("custom-9")))
-	s.Require().NoError(def.Prune(ctx, "k", "msg-1"))
-	s.Require().NoError(custom.Prune(ctx, "k", "msg-8"))
+	s.appendSeq(def, textK, appendSeqInputPrefix)
+	s.Require().NoError(custom.Append(ctx, textK, textMsg8, []byte("custom-8")))
+	s.Require().NoError(custom.Append(ctx, textK, "msg-9", []byte("custom-9")))
+	s.Require().NoError(def.Prune(ctx, textK, textMsg1))
+	s.Require().NoError(custom.Prune(ctx, textK, textMsg8))
 
 	keys, err := s.client.Keys(ctx, "*").Result()
 	s.Require().NoError(err)
@@ -202,28 +203,53 @@ func (s *ReplayBufferRedisSuite) TestKeyPrefix() {
 		keys,
 	)
 
-	tail, complete, err := def.ReplayAfter(ctx, "k", "msg-1")
+	tail, complete, err := def.ReplayAfter(ctx, textK, textMsg1)
 	s.Require().NoError(err)
 	s.True(complete)
-	s.Equal([]string{"msg-2", "msg-3"}, idsI(tail))
+	s.Equal([]string{"msg-2", textMsg3}, idsI(tail))
 
-	tail, complete, err = custom.ReplayAfter(ctx, "k", "msg-8")
+	tail, complete, err = custom.ReplayAfter(ctx, textK, textMsg8)
 	s.Require().NoError(err)
 	s.True(complete)
 	s.Equal([]string{"msg-9"}, idsI(tail))
 }
 
-func itoaI(i int) string {
-	if i == 0 {
+func (s *ReplayBufferRedisSuite) newBuffer(
+	maxSize int,
+	ttl time.Duration,
+) interfaces.ReplayBuffer {
+	return replayredis.New(
+		s.client,
+		replayredis.Config{MaxSize: maxSize, TTL: ttl, KeyPrefix: ""},
+	)
+}
+
+func (s *ReplayBufferRedisSuite) appendSeq(b interfaces.ReplayBuffer, key string, n int) {
+	for i := 1; i <= n; i++ {
+		id := "msg-" + itoaI(i)
+		s.Require().NoError(
+			b.Append(context.Background(), key, id, []byte("payload-"+id)),
+		)
+	}
+}
+
+func itoaI(index int) string {
+	if index == 0 {
 		return "0"
 	}
+
 	var buf [20]byte
+
 	pos := len(buf)
-	for i > 0 {
+
+	for index > 0 {
 		pos--
-		buf[pos] = byte('0' + i%10)
-		i /= 10
+
+		buf[pos] = byte('0' + index%10)
+
+		index /= initialIndex
 	}
+
 	return string(buf[pos:])
 }
 
@@ -232,5 +258,31 @@ func idsI(msgs []interfaces.BufferedMessage) []string {
 	for i, m := range msgs {
 		out[i] = m.ID
 	}
+
 	return out
 }
+
+const (
+	// appendSeqInput is the n passed to appendSeq in TestAppendReplayRoundtrip,
+	// TestNBoundEvicts and 1 more.
+	appendSeqInput = 5
+
+	// appendSeqInputDelete is the n passed to appendSeq in TestTTLExpiresAndDelete.
+	appendSeqInputDelete = 3
+
+	// appendSeqInputPrefix is the n passed to appendSeq in TestKeyPrefix.
+	appendSeqInputPrefix = 3
+
+	// initialIndex is the value assigned to index in itoaI.
+	initialIndex = 10
+
+	// lenInputRoundtrip is the length passed to Len in TestAppendReplayRoundtrip.
+	lenInputRoundtrip = 3
+
+	// newBufferInput is the maxSize passed to newBuffer in TestAppendReplayRoundtrip,
+	// TestKeyPrefix and 2 more.
+	newBufferInput = 100
+
+	// newBufferInputEvicts is the maxSize passed to newBuffer in TestNBoundEvicts.
+	newBufferInputEvicts = 3
+)

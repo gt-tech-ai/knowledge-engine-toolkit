@@ -10,7 +10,7 @@ import (
 	"context"
 	"database/sql"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/store"
 )
@@ -29,6 +29,7 @@ func New(db *sql.DB) *Manager {
 	if db == nil {
 		panic("sqltx: db must not be nil")
 	}
+
 	return &Manager{db: db}
 }
 
@@ -43,10 +44,11 @@ func Tx(ctx context.Context) (*sql.Tx, bool) {
 func (m *Manager) Begin(
 	ctx context.Context,
 ) (context.Context, interfaces.Transaction, error) {
-	tx, err := m.begin(ctx)
+	tx, err := m.beginTx(ctx)
 	if err != nil {
 		return ctx, nil, err
 	}
+
 	return interfaces.WithInTx(store.WithClient(ctx, tx)), tx, nil
 }
 
@@ -55,38 +57,47 @@ func (m *Manager) Begin(
 // interfaces.RegisterAfterCommit. fn's error is returned with its code intact.
 func (m *Manager) WithTransaction(
 	ctx context.Context,
-	fn func(context.Context) error,
+	callback func(context.Context) error,
 ) error {
-	tx, err := m.begin(ctx)
+	value, err := m.beginTx(ctx)
 	if err != nil {
 		return err
 	}
+
 	// A no-op after a successful commit, so it also covers a failed one.
-	defer func() { _ = tx.Rollback() }()
-	txCtx := interfaces.WithAfterCommit(interfaces.WithInTx(store.WithClient(ctx, tx)))
-	if err := fn(txCtx); err != nil {
+	defer func() { _ = value.Rollback() }()
+
+	txCtx := interfaces.WithAfterCommit(interfaces.WithInTx(store.WithClient(ctx, value)))
+
+	err = callback(txCtx)
+	if err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
+
+	err = value.Commit()
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeOr(err, apperr.CodeUnavailable),
 			"sqltx: commit",
 		)
 	}
+
 	interfaces.RunAfterCommit(txCtx)
+
 	return nil
 }
 
-// begin opens a transaction, refusing one on a context already in a transaction.
-func (m *Manager) begin(ctx context.Context) (*sql.Tx, error) {
+// beginTx opens a transaction, refusing one on a context already in a transaction.
+func (m *Manager) beginTx(ctx context.Context) (*sql.Tx, error) {
 	if interfaces.InTx(ctx) {
 		return nil, apperr.New(
 			apperr.CodeInternal,
 			"sqltx: a transaction is already open on this context",
 		)
 	}
-	tx, err := m.db.BeginTx(ctx, nil)
+
+	value, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, apperr.Wrap(
 			err,
@@ -94,5 +105,6 @@ func (m *Manager) begin(ctx context.Context) (*sql.Tx, error) {
 			"sqltx: begin",
 		)
 	}
-	return tx, nil
+
+	return value, nil
 }

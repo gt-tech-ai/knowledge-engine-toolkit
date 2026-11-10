@@ -3,11 +3,13 @@ package listquery
 import (
 	"bytes"
 	"context"
+	"math"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // DefaultCountCap is the fallback total_count cap when a reader leaves Bounds.CountCap
@@ -39,6 +41,7 @@ func (b Bounds) countCap() int {
 	if b.CountCap > 0 {
 		return b.CountCap
 	}
+
 	return DefaultCountCap
 }
 
@@ -122,38 +125,43 @@ type Reader[T, D any] struct {
 func Run[T, D any](
 	ctx context.Context,
 	page types.PageRequest,
-	r Reader[T, D],
+	reader Reader[T, D],
 ) (*types.Page[D], error) {
 	tok, err := DecodeToken(page.Cursor)
 	if err != nil {
 		return nil, err
 	}
+
 	cols := KeysetColumns(
-		r.Resolve,
-		r.ResolveJoin,
-		r.ResolveOrdinal,
-		r.ResolveDerived,
-		r.Sort,
-		r.Tiebreaker,
+		reader.Resolve,
+		reader.ResolveJoin,
+		reader.ResolveOrdinal,
+		reader.ResolveDerived,
+		reader.Sort,
+		reader.Tiebreaker,
 	)
 	order := orderFields(cols)
-	userF := ResolveFilter(r.Resolve, r.ResolveJoin, r.Filter)
-	limit := pageLimit(page, r.Bounds)
+	userF := ResolveFilter(reader.Resolve, reader.ResolveJoin, reader.Filter)
+	limit := pageLimit(page, reader.Bounds)
+
 	if tok.Keyset != nil {
-		if r.Keyset == nil {
+		if reader.Keyset == nil {
 			return nil, apperr.InvalidInput(
 				"keyset pagination is not supported for this resource",
 			)
 		}
-		if !defaultOrdering(r) {
+
+		if !defaultOrdering(reader) {
 			return nil, apperr.InvalidInput(
 				"keyset (infinite-scroll) pagination is only available for the default ordering; " +
 					"a custom sort uses page navigation",
 			)
 		}
-		return keysetPage(ctx, *tok.Keyset, cols, order, userF, limit, r)
+
+		return keysetPage(ctx, *tok.Keyset, cols, order, userF, limit, reader)
 	}
-	return offsetPage(ctx, int(tok.OffsetPage), cols, order, userF, limit, r)
+
+	return offsetPage(ctx, int(tok.OffsetPage), cols, order, userF, limit, reader)
 }
 
 // defaultOrdering reports whether a keyset-wired read is on its DEFAULT ordering — the
@@ -169,17 +177,19 @@ func defaultOrdering[T, D any](r Reader[T, D]) bool {
 
 // pageLimit resolves the effective LIMIT: the client's page size, defaulted to the
 // reader's default (10 as a final floor) and clamped to the configured maximum.
-func pageLimit(page types.PageRequest, b Bounds) int {
+func pageLimit(page types.PageRequest, bounds Bounds) int {
 	limit := page.PageSize
 	if limit <= 0 {
-		limit = b.DefaultSize
+		limit = bounds.DefaultSize
 		if limit <= 0 {
-			limit = 10
+			limit = defaultLimit
 		}
 	}
-	if b.MaxSize > 0 && limit > b.MaxSize {
-		limit = b.MaxSize
+
+	if bounds.MaxSize > 0 && limit > bounds.MaxSize {
+		limit = bounds.MaxSize
 	}
+
 	return limit
 }
 
@@ -194,43 +204,46 @@ func offsetPage[T, D any](
 	order []types.OrderField,
 	userF types.Filter,
 	limit int,
-	r Reader[T, D],
+	reader Reader[T, D],
 ) (*types.Page[D], error) {
 	if pageNum < 1 {
 		pageNum = 1
 	}
+
 	filters := nonEmpty(userF)
-	rows, err := r.Runner.List(ctx, types.ListSpec{
+
+	rows, err := reader.Runner.List(ctx, types.ListSpec{
 		Filters: filters,
 		Order:   order,
 		Limit:   limit + 1,
 		Offset:  (pageNum - 1) * limit,
 	})
 	if err != nil {
-		return nil, r.MapErr(err)
+		return nil, reader.MapErr(err)
 	}
-	hasMore := len(rows) > limit
-	if hasMore {
-		rows = rows[:limit]
-	}
-	var total int64
-	var estimate bool
-	// A count-cache decorator that already holds the total sets WithSkipCount on its
-	// inner call, so Run skips the (otherwise recomputed) bounded count and the decorator
-	// injects the cached value.
-	if r.Count && !CountSkipped(ctx) {
-		if total, estimate, err = boundedTotal(ctx, filters, r); err != nil {
-			return nil, err
-		}
-	}
-	next, err := offsetNextCursor(hasMore, pageNum, cols, rows, r)
+
+	rows, hasMore := trimProbeRow(rows, limit)
+
+	total, estimate, err := pageTotal(ctx, filters, reader)
 	if err != nil {
 		return nil, err
 	}
-	items, err := mapAll(rows, r.ToDomain)
+
+	next, err := offsetNextCursor(
+		probedPage[T]{rows: rows, hasMore: hasMore},
+		pageNum,
+		cols,
+		reader,
+	)
 	if err != nil {
 		return nil, err
 	}
+
+	items, err := mapAll(rows, reader.ToDomain)
+	if err != nil {
+		return nil, err
+	}
+
 	return &types.Page[D]{
 		Items:           items,
 		NextCursor:      next,
@@ -241,6 +254,28 @@ func offsetPage[T, D any](
 	}, nil
 }
 
+// trimProbeRow drops the extra row fetched to detect another page.
+func trimProbeRow[T any](rows []T, limit int) ([]T, bool) {
+	if len(rows) > limit {
+		return rows[:limit], true
+	}
+
+	return rows, false
+}
+
+// pageTotal computes the bounded count when asked. A count-cache decorator that already
+// holds the total sets WithSkipCount on its inner call, so Run skips the (otherwise
+// recomputed) bounded count and the decorator injects the cached value.
+func pageTotal[T, D any](
+	ctx context.Context, filters []types.Filter, reader Reader[T, D],
+) (total int64, known bool, retErr error) {
+	if !reader.Count || CountSkipped(ctx) {
+		return 0, false, nil
+	}
+
+	return boundedTotal(ctx, filters, reader)
+}
+
 // boundedTotal computes the offset pager's total_count, bounded at the reader's count
 // cap. It asks the runner to tally matching rows up to cap+1; a tally within the cap is
 // the exact total, while a tally over the cap is reported AS the cap with estimate=true —
@@ -249,17 +284,20 @@ func offsetPage[T, D any](
 func boundedTotal[T, D any](
 	ctx context.Context,
 	filters []types.Filter,
-	r Reader[T, D],
+	reader Reader[T, D],
 ) (total int64, isEstimate bool, err error) {
-	capN := r.Bounds.countCap()
-	n, err := r.Runner.Count(ctx, filters, capN+1)
+	capN := reader.Bounds.countCap()
+
+	count, err := reader.Runner.Count(ctx, filters, capN+1)
 	if err != nil {
-		return 0, false, r.MapErr(err)
+		return 0, false, reader.MapErr(err)
 	}
-	if n > capN {
+
+	if count > capN {
 		return int64(capN), true, nil
 	}
-	return int64(n), false, nil
+
+	return int64(count), false, nil
 }
 
 // keysetPage serves the keyset (infinite-scroll) arm: it verifies the cursor fingerprint,
@@ -273,50 +311,70 @@ func keysetPage[T, D any](
 	order []types.OrderField,
 	userF types.Filter,
 	limit int,
-	r Reader[T, D],
+	reader Reader[T, D],
 ) (*types.Page[D], error) {
-	if !bytes.Equal(cur.Fingerprint, types.Fingerprint(r.Sort, r.Filter)) {
+	if !bytes.Equal(cur.Fingerprint, types.Fingerprint(reader.Sort, reader.Filter)) {
 		return nil, apperr.InvalidInput(
 			"page token does not match the current query (sort or filter changed)",
 		)
 	}
-	values, err := cursorValues(r.Keyset, cols, cur)
+
+	values, err := cursorValues(reader.Keyset, cols, cur)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := r.Runner.List(ctx, types.ListSpec{
+
+	rows, err := reader.Runner.List(ctx, types.ListSpec{
 		Filters: append(nonEmpty(userF), SeekFilter(cols, values)),
 		Order:   order,
 		Limit:   limit + 1,
+		Offset:  0,
 	})
 	if err != nil {
-		return nil, r.MapErr(err)
+		return nil, reader.MapErr(err)
 	}
-	hasMore := len(rows) > limit
-	if hasMore {
-		rows = rows[:limit]
-	}
-	next := ""
-	if hasMore && len(rows) > 0 {
-		if next, err = mintKeysetCursor(
-			r.Keyset,
-			cols,
-			rows[len(rows)-1],
-			r.Sort,
-			r.Filter,
-		); err != nil {
-			return nil, err
-		}
-	}
-	items, err := mapAll(rows, r.ToDomain)
+
+	rows, hasMore := trimProbeRow(rows, limit)
+
+	next, err := keysetNextCursor(
+		probedPage[T]{rows: rows, hasMore: hasMore},
+		cols,
+		reader,
+	)
 	if err != nil {
 		return nil, err
 	}
+
+	items, err := mapAll(rows, reader.ToDomain)
+	if err != nil {
+		return nil, err
+	}
+
 	return &types.Page[D]{
-		Items:      items,
-		NextCursor: next,
-		PageSize:   limit,
+		Items:           items,
+		NextCursor:      next,
+		PageSize:        limit,
+		Total:           0,
+		PageNumber:      0,
+		TotalIsEstimate: false,
 	}, nil
+}
+
+// keysetNextCursor mints the next page's cursor from the last row, "" on the last page.
+func keysetNextCursor[T, D any](
+	page probedPage[T], cols []KeysetColumn, reader Reader[T, D],
+) (string, error) {
+	if !page.hasMore || len(page.rows) == 0 {
+		return "", nil
+	}
+
+	return mintKeysetCursor(
+		reader.Keyset,
+		cols,
+		page.rows[len(page.rows)-1],
+		reader.Sort,
+		reader.Filter,
+	)
 }
 
 // cursorValues pairs the cursor's values with the ordered keyset columns and restores
@@ -324,43 +382,58 @@ func keysetPage[T, D any](
 // unix-µs to time.Time. A count mismatch is a malformed cursor (InvalidInput), never a
 // panic.
 func cursorValues[T any](
-	ks *Keyset[T],
+	keyset *Keyset[T],
 	cols []KeysetColumn,
 	cur types.KeysetCursor,
 ) ([]any, error) {
 	values := make([]any, len(cols))
-	si := 0
-	for i, c := range cols {
-		if c.Column == KeysetIDColumn {
-			id, err := parseID(ks, cur.ID)
-			if err != nil {
-				return nil, err
-			}
-			values[i] = id
-			continue
+	count := 0
+
+	for index, c := range cols {
+		v, consumed, err := cursorColumnValue(keyset, c.Column, &cur, count)
+		if err != nil {
+			return nil, err
 		}
-		if si >= len(cur.SortValues) {
-			return nil, apperr.InvalidInput(
-				"keyset cursor has too few sort values for the sort",
-			)
-		}
-		v := cur.SortValues[si]
-		si++
-		if ks.TimestampCols[c.Column] {
-			t, err := unixMicroToTime(v)
-			if err != nil {
-				return nil, err
-			}
-			v = t
-		}
-		values[i] = v
+
+		values[index] = v
+
+		count += consumed
 	}
-	if si != len(cur.SortValues) {
+
+	if count != len(cur.SortValues) {
 		return nil, apperr.InvalidInput(
 			"keyset cursor has too many sort values for the sort",
 		)
 	}
+
 	return values, nil
+}
+
+// cursorColumnValue decodes one column's seek value, reporting how many sort values
+// it consumed from position si: none for the id column, which has its own field.
+func cursorColumnValue[T any](
+	keyset *Keyset[T], column string, cur *types.KeysetCursor, count int,
+) (value any, next int, retErr error) {
+	if column == KeysetIDColumn {
+		id, err := parseID(keyset, cur.ID)
+
+		return id, 0, err
+	}
+
+	if count >= len(cur.SortValues) {
+		return nil, 0, apperr.InvalidInput(
+			"keyset cursor has too few sort values for the sort",
+		)
+	}
+
+	v := cur.SortValues[count]
+	if !keyset.TimestampCols[column] {
+		return v, 1, nil
+	}
+
+	t, err := unixMicroToTime(v)
+
+	return t, 1, err
 }
 
 // mintKeysetCursor encodes the forward keyset token for the page whose last row is
@@ -369,43 +442,75 @@ func cursorValues[T any](
 // which the next request recomputes. A timestamp value is carried as a unix-microsecond
 // int64.
 func mintKeysetCursor[T any](
-	ks *Keyset[T],
+	keyset *Keyset[T],
 	cols []KeysetColumn,
 	lastRow T,
 	sort []types.OrderField,
 	filter types.Filter,
 ) (string, error) {
 	sortValues := make([]any, 0, len(cols))
-	var id string
-	for _, c := range cols {
-		v, ok := ks.RowValue(lastRow, c.Column)
-		if !ok {
-			return "", apperr.Internal("keyset cursor cannot extract column " + c.Column)
+
+	var identifier string
+
+	for _, keysetColumn := range cols {
+		value, err := cursorRowValue(keyset, lastRow, keysetColumn.Column)
+		if err != nil {
+			return "", err
 		}
-		if c.Column == KeysetIDColumn {
-			s, isStr := v.(string)
-			if !isStr {
-				return "", apperr.Internal("keyset id column value is not a string")
-			}
-			id = s
+
+		if keysetColumn.Column == KeysetIDColumn {
+			identifier = stdx.As[string](value) // cursorRowValue checked it
+
 			continue
 		}
-		if ks.TimestampCols[c.Column] {
-			t, isTime := v.(time.Time)
-			if !isTime {
-				return "", apperr.Internal(
-					"keyset timestamp column value is not a time.Time",
-				)
-			}
-			v = t.UnixMicro()
-		}
-		sortValues = append(sortValues, v)
+
+		sortValues = append(sortValues, value)
 	}
-	return EncodeToken(types.PageToken{Keyset: &types.KeysetCursor{
-		SortValues:  sortValues,
-		ID:          id,
-		Fingerprint: types.Fingerprint(sort, filter),
-	}})
+
+	return EncodeToken(types.PageToken{
+		Keyset: &types.KeysetCursor{
+			SortValues:  sortValues,
+			ID:          identifier,
+			Fingerprint: types.Fingerprint(sort, filter),
+		},
+		OffsetPage: 0,
+	})
+}
+
+// cursorRowValue reads a column from the row in its cursor form: the id as a string, a
+// timestamp as Unix microseconds, anything else as it is.
+func cursorRowValue[T any](keyset *Keyset[T], row T, column string) (any, error) {
+	value, ok := keyset.RowValue(row, column)
+	if !ok {
+		return nil, apperr.Internal("keyset cursor cannot extract column " + column)
+	}
+
+	if column == KeysetIDColumn {
+		if _, isStr := value.(string); !isStr {
+			return nil, apperr.Internal("keyset id column value is not a string")
+		}
+
+		return value, nil
+	}
+
+	if !keyset.TimestampCols[column] {
+		return value, nil
+	}
+
+	t, isTime := value.(time.Time)
+	if !isTime {
+		return nil, apperr.Internal("keyset timestamp column value is not a time.Time")
+	}
+
+	return t.UnixMicro(), nil
+}
+
+// probedPage is one page of rows read with an extra probe row.
+type probedPage[T any] struct {
+	// rows holds the page, without the probe row.
+	rows []T
+	// hasMore reports whether the probe row came back, so another page follows.
+	hasMore bool
 }
 
 // offsetNextCursor returns the next-page token for an offset page. A keyset-wired reader
@@ -416,20 +521,33 @@ func mintKeysetCursor[T any](
 // sorted list pages by navigation, not an un-indexed seek (curated set = default only).
 // It is empty when no further rows remain.
 func offsetNextCursor[T, D any](
-	hasMore bool,
+	page probedPage[T],
 	pageNum int,
 	cols []KeysetColumn,
-	rows []T,
-	r Reader[T, D],
+	reader Reader[T, D],
 ) (string, error) {
-	if !hasMore {
+	if !page.hasMore {
 		return "", nil
 	}
-	if defaultOrdering(r) && len(rows) > 0 {
-		return mintKeysetCursor(r.Keyset, cols, rows[len(rows)-1], r.Sort, r.Filter)
+
+	if defaultOrdering(reader) && len(page.rows) > 0 {
+		return mintKeysetCursor(
+			reader.Keyset,
+			cols,
+			page.rows[len(page.rows)-1],
+			reader.Sort,
+			reader.Filter,
+		)
 	}
-	//nolint:gosec // G115: a 1-based page number is small and positive, well within int32.
-	return EncodeToken(types.PageToken{OffsetPage: int32(pageNum + 1)})
+
+	// A 1-based page number stays far inside int32; clamping keeps the conversion exact
+	// rather than wrapping negative should it ever not.
+	next := pageNum + 1
+	if next < 1 || next > math.MaxInt32 {
+		next = math.MaxInt32
+	}
+
+	return EncodeToken(types.PageToken{OffsetPage: int32(next), Keyset: nil})
 }
 
 // parseID converts a cursor id string to its bound value via the reader's ParseID (nil →
@@ -439,10 +557,12 @@ func parseID[T any](ks *Keyset[T], id string) (any, error) {
 	if ks.ParseID == nil {
 		return id, nil
 	}
+
 	v, err := ks.ParseID(id)
 	if err != nil {
 		return nil, apperr.InvalidInput("keyset cursor id is malformed")
 	}
+
 	return v, nil
 }
 
@@ -450,18 +570,19 @@ func parseID[T any](ks *Keyset[T], id string) (any, error) {
 // storage column).
 func orderFields(cols []KeysetColumn) []types.OrderField {
 	out := make([]types.OrderField, len(cols))
-	for i, c := range cols {
+	for i, keysetColumn := range cols {
 		// Carry a joined sort target, a value ordinal, and a derived-sort spec through to
 		// the runner's FoldOrder so it renders the correlated-subquery / CASE / aggregate
 		// ORDER BY; a plain column carries only its resolved Field.
 		out[i] = types.OrderField{
-			Field:   c.Column,
-			Join:    c.Join,
-			Ordinal: c.Ordinal,
-			Derived: c.Derived,
-			Desc:    c.Desc,
+			Field:   keysetColumn.Column,
+			Join:    keysetColumn.Join,
+			Ordinal: keysetColumn.Ordinal,
+			Derived: keysetColumn.Derived,
+			Desc:    keysetColumn.Desc,
 		}
 	}
+
 	return out
 }
 
@@ -471,6 +592,7 @@ func nonEmpty(f types.Filter) []types.Filter {
 	if f == nil || f.IsEmpty() {
 		return nil
 	}
+
 	return []types.Filter{f}
 }
 
@@ -479,13 +601,13 @@ func nonEmpty(f types.Filter) []types.Filter {
 // instant is what the seek compares, so UTC vs local is immaterial; UTC keeps the bound
 // parameter canonical.
 func unixMicroToTime(v any) (time.Time, error) {
-	switch n := v.(type) {
+	switch count := v.(type) {
 	case float64:
-		return time.UnixMicro(int64(n)).UTC(), nil
+		return time.UnixMicro(int64(count)).UTC(), nil
 	case int64:
-		return time.UnixMicro(n).UTC(), nil
+		return time.UnixMicro(count).UTC(), nil
 	case int:
-		return time.UnixMicro(int64(n)).UTC(), nil
+		return time.UnixMicro(int64(count)).UTC(), nil
 	default:
 		return time.Time{}, apperr.InvalidInput(
 			"keyset timestamp cursor value is not numeric",
@@ -498,12 +620,14 @@ func unixMicroToTime(v any) (time.Time, error) {
 // the database).
 func mapAll[T, D any](rows []T, toDomain func(T) (D, error)) ([]D, error) {
 	items := make([]D, len(rows))
-	for i, r := range rows {
+	for index, r := range rows {
 		d, err := toDomain(r)
 		if err != nil {
 			return nil, err
 		}
-		items[i] = d
+
+		items[index] = d
 	}
+
 	return items, nil
 }

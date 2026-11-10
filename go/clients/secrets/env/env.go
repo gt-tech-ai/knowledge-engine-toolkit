@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -37,19 +37,21 @@ func (s source) Get(_ context.Context, ref types.Ref) (types.Secret, error) {
 			fmt.Sprintf("no environment variable mapped for credential %s", ref),
 		)
 	}
+
 	value := os.Getenv(name)
 	if value == "" {
 		return types.Secret{}, apperr.NotFound(
 			fmt.Sprintf("environment variable %s is unset for credential %s", name, ref),
 		)
 	}
+
 	return types.NewSecret(value), nil
 }
 
 // Put is unsupported: environment variables are set out-of-band, never written by the
 // process. It returns a coded error so a caller routing a write to this backend fails
 // loudly instead of silently losing the value.
-func (s source) Put(_ context.Context, ref types.Ref, _ types.Secret) error {
+func (source) Put(_ context.Context, ref types.Ref, _ types.Secret) error {
 	return apperr.New(
 		apperr.CodeInvalidInput,
 		fmt.Sprintf("env credential source is read-only: cannot write %s", ref),

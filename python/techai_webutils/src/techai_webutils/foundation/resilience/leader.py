@@ -18,5 +18,10 @@ class AlwaysLeader(LeaderElector):
 
     @override
     async def is_leader(self) -> bool:
-        """Return True unconditionally: a single process is always its own leader."""
+        """Return True unconditionally: a single process is always its own leader.
+
+        Returns:
+            True unconditionally: a single process is always its own leader.
+
+        """
         return True

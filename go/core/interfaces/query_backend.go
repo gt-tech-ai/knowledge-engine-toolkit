@@ -26,7 +26,8 @@ type QueryBackend[Q, S any] interface {
 	// join.Columns (ORed when >1). It never joins the base query, so
 	// scope/soft-delete/keyset are untouched. v is the parser-validated operand (a
 	// scalar, or a []any for OpIn/OpNotIn), same as Clause.
-	ExistsClause(join types.JoinTarget, op types.FilterOperator, v any) Q
+	// join must not be nil.
+	ExistsClause(join *types.JoinTarget, op types.FilterOperator, v any) Q
 
 	// And combines sub-predicates so that every one must match.
 	And(subs []Q) Q
@@ -47,7 +48,8 @@ type QueryBackend[Q, S any] interface {
 	// member "name" over first_name+last_name). Like ExistsClause it never joins the base
 	// query. Joined sorts always ride the offset pager (keyset stays same-table), so no
 	// keyset-seek counterpart is needed.
-	OrderJoin(join types.JoinTarget, desc bool) S
+	// join must not be nil.
+	OrderJoin(join *types.JoinTarget, desc bool) S
 
 	// OrderOrdinal interprets a sort directive with a value ORDINAL into a sort node that
 	// orders col by the given values' positions (`CASE col WHEN v0 THEN 0 … ELSE len

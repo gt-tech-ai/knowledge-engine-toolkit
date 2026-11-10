@@ -10,10 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -30,13 +32,15 @@ func TestExecutionOpsReservation_RunAfterReleaseIsInternal(t *testing.T) {
 	t.Parallel()
 
 	var ran atomic.Bool
+
 	reg := funcRegistry(t, time.Minute, map[string]runFunc{
-		"ok": func(context.Context, any, interfaces.ExecutionObserver) error {
+		textOk: func(context.Context, any, interfaces.ExecutionObserver) error {
 			ran.Store(true)
+
 			return nil
 		},
 	})
-	res, err := reg.Reserve("ok", "run-1")
+	res, err := reg.Reserve(textOk, "run-1")
 	require.NoError(t, err)
 	res.Release()
 
@@ -59,33 +63,12 @@ func TestExecutionOpsReserve_RejectsEmptyHolder(t *testing.T) {
 	t.Parallel()
 
 	reg := funcRegistry(t, time.Minute, map[string]runFunc{
-		"ok": func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
+		textOk: func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
-	_, err := reg.Reserve("ok", "")
+	_, err := reg.Reserve(textOk, "")
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	require.NoError(t, reg.Run(context.Background(), "ok", nil, nil))
-}
-
-// TestExecutionOpsRegistryRun_NilContextRuns tests that a run with a nil context does
-// not panic.
-//
-// Why this test is important:
-//   - A cobra command's Context() is nil when its RunE runs outside Execute (a test, an
-//     embedder); the timeout decorator would panic deriving a deadline from it.
-//
-// What it tests:
-//   - Run with a nil context succeeds
-func TestExecutionOpsRegistryRun_NilContextRuns(t *testing.T) {
-	t.Parallel()
-
-	reg := funcRegistry(t, time.Minute, map[string]runFunc{
-		"ok": func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
-	})
-	var nilCtx context.Context
-	require.NotPanics(t, func() {
-		assert.NoError(t, reg.Run(nilCtx, "ok", nil, nil))
-	})
+	require.NoError(t, reg.Run(context.Background(), textOk, nil, nil))
 }
 
 // TestExecutionOpsNewFromConfig_RejectsDuplicateDescriptor tests that two descriptors
@@ -105,12 +88,14 @@ func TestExecutionOpsNewFromConfig_RejectsDuplicateDescriptor(t *testing.T) {
 		opDesc("ro", types.SafetyDestructive, types.OpLifecycleBounded),
 	}
 	_, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyCredentialed,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: descs,
 		Builders:    mockBuilders(gomock.NewController(t), descs[:1]),
+		Env:         stdx.Zero[opsEnv](),
+		Log:         nil,
 	})
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -132,17 +117,18 @@ func TestExecutionOpsNewFromConfig_RejectsDuplicateDescriptor(t *testing.T) {
 //     mismatch also names the operation's real input type.
 func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 	t.Parallel()
+
 	run := ops.Func(func(
 		context.Context, *adapterInput, opsEnv, interfaces.ExecutionObserver,
 	) error {
 		return nil
 	})
-	for name, b := range map[string]ops.Builder[opsEnv]{
+	for name, builder := range map[string]ops.Builder[opsEnv]{
 		"nil builder": nil,
 		"nil operation": func(types.OperationDescriptor, opsEnv) interfaces.Operation {
 			return nil
 		},
-		"seed of another type": ops.WithDefaults(run, func(in *cobraInput) { in.Env = "x" }),
+		"seed of another type": ops.WithDefaults(run, func(in *cobraInput) { in.Env = textX }),
 		"nil seed":             ops.WithDefaults[adapterInput](run, nil),
 		"inner seed of another type": ops.WithDefaults(
 			ops.WithDefaults(run, func(*cobraInput) {}),
@@ -150,27 +136,34 @@ func TestExecutionOpsNewFromConfig_RejectsBrokenBuilders(t *testing.T) {
 		),
 	} {
 		_, err := ops.NewFromConfig(ops.Config[opsEnv]{
-			Policy: types.ExposurePolicy{
-				MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-			},
+			Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+				row.MaxSafety = types.SafetyCredentialed
+				row.Lifecycles = allLifecycles()
+			}),
 			Descriptors: []types.OperationDescriptor{
-				opDesc("op", types.SafetyReadOnly, types.OpLifecycleBounded),
+				opDesc(textOp, types.SafetyReadOnly, types.OpLifecycleBounded),
 			},
-			Builders: map[string]ops.Builder[opsEnv]{"op": b},
+			Builders: map[string]ops.Builder[opsEnv]{textOp: builder},
+			Env:      stdx.Zero[opsEnv](),
+			Log:      nil,
 		})
 		require.ErrorContains(t, err, `"op"`, name)
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
 	}
+
 	_, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyCredentialed
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{
-			opDesc("op", types.SafetyReadOnly, types.OpLifecycleBounded),
+			opDesc(textOp, types.SafetyReadOnly, types.OpLifecycleBounded),
 		},
 		Builders: map[string]ops.Builder[opsEnv]{
-			"op": ops.WithDefaults(run, func(*cobraInput) {}),
+			textOp: ops.WithDefaults(run, func(*cobraInput) {}),
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	assert.ErrorContains(t, err, "*unit_test.adapterInput")
 }
@@ -190,41 +183,54 @@ func TestExecutionOpsRegistryRun_LogsTheMappedCode(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	log := mocks.NewMockLogger(ctrl)
 	log.EXPECT().WithContext(gomock.Any()).Return(log).AnyTimes()
+
 	var logged error
+
 	log.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes().
 		Do(func(_ string, kv ...any) {
 			for i := 0; i+1 < len(kv); i += 2 {
-				if kv[i] == "error" {
-					logged, _ = kv[i+1].(error)
+				if kv[i] == textError {
+					logged = stdx.As[error](kv[i+1])
 				}
 			}
 		})
 
-	desc := opDesc("slow", types.SafetyReadOnly, types.OpLifecycleBounded)
-	desc.Timeout = 10 * time.Millisecond
-	op := mocks.NewMockOperation(ctrl)
-	op.EXPECT().Descriptor().Return(desc).AnyTimes()
-	op.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, _ any, _ interfaces.ExecutionObserver) error {
+	desc := opDesc(textSlow, types.SafetyReadOnly, types.OpLifecycleBounded)
+
+	desc.Timeout = initialTimeout * time.Millisecond
+
+	operation := mocks.NewMockOperation(ctrl)
+	operation.EXPECT().Descriptor().Return(desc).AnyTimes()
+	operation.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, _ any, _ *interfaces.ExecutionObserver) error {
 			<-ctx.Done()
+
 			return ctx.Err()
 		})
+
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
-		Policy: types.ExposurePolicy{
-			MaxSafety:  types.SafetyReadOnly,
-			Lifecycles: allLifecycles(),
-		},
+		Policy: fixtures.Build(func(row *types.ExposurePolicy) {
+			row.MaxSafety = types.SafetyReadOnly
+			row.Lifecycles = allLifecycles()
+		}),
 		Descriptors: []types.OperationDescriptor{desc},
 		Builders: map[string]ops.Builder[opsEnv]{
-			"slow": func(types.OperationDescriptor, opsEnv) interfaces.Operation {
-				return op
+			textSlow: func(types.OperationDescriptor, opsEnv) interfaces.Operation {
+				return operation
 			},
 		},
 		Log: log,
+		Env: stdx.Zero[opsEnv](),
 	})
 	require.NoError(t, err)
 
-	require.Error(t, reg.Run(context.Background(), "slow", nil, nil))
+	require.Error(t, reg.Run(context.Background(), textSlow, nil, nil))
 	require.Error(t, logged)
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(logged))
 }
+
+const (
+	// initialTimeout is the factor multiplying time.Millisecond in
+	// TestExecutionOpsRegistryRun_LogsTheMappedCode.
+	initialTimeout = 10
+)

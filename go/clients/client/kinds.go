@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
@@ -20,6 +20,29 @@ const KindStub Kind = "stub"
 // Backend builds one Kind of a family from its Config C and Deps D into its interface T;
 // ctx bounds any I/O the backend does to construct.
 type Backend[C, D, T any] = func(ctx context.Context, cfg C, deps D) (T, error)
+
+// RefConfig adapts a backend that takes its config by pointer to the Backend signature.
+// Backend passes the Config by value, so it is copied once on the call; the adapted
+// backend reads that copy through a pointer and never copies it again (gocritic's
+// hugeParam asks a constructor to take a large struct by pointer).
+func RefConfig[C, D, T any](
+	fn func(context.Context, *C, D) (T, error),
+) Backend[C, D, T] {
+	return func(ctx context.Context, cfg C, deps D) (T, error) {
+		return fn(ctx, &cfg, deps)
+	}
+}
+
+// RefDeps adapts a backend that takes its deps by pointer to the Backend signature.
+// Backend passes the Deps by value, so they are copied once on the call; the adapted
+// backend reads that copy through a pointer and never copies it again.
+func RefDeps[C, D, T any](
+	fn func(context.Context, C, *D) (T, error),
+) Backend[C, D, T] {
+	return func(ctx context.Context, cfg C, deps D) (T, error) {
+		return fn(ctx, cfg, &deps)
+	}
+}
 
 // Kinds is a client family's backend table: Family labels its errors and names the
 // client in the tier, Default is the backend an empty Kind selects, Backends builds
@@ -54,13 +77,16 @@ func (k Kinds[C, D, T]) New(ctx context.Context, kind Kind, cfg C, deps D) (T, e
 	if kind == "" {
 		kind = k.Default
 	}
+
 	build, ok := k.Backends[kind]
 	if !ok {
 		var zero T
+
 		return zero, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"%s: unknown kind %q (want one of %s)", k.Family, kind, k.known(),
 		))
 	}
+
 	return build(ctx, cfg, deps)
 }
 
@@ -76,20 +102,25 @@ func (k Kinds[C, D, T]) Build(
 	name string,
 ) (T, error) {
 	var zero T
+
 	base, err := k.New(ctx, kind, cfg, deps)
 	if err != nil {
 		return zero, err
 	}
+
 	if name == "" {
 		name = k.Family
 	}
+
 	if kind == "" {
 		kind = k.Default
 	}
+
 	opts := slices.Clone(k.Options)
 	if slices.Contains(k.AtMostOnce, kind) {
 		opts = append(opts, AtMostOnce())
 	}
+
 	return k.Decorate(base, decs, name, opts...)
 }
 
@@ -99,6 +130,8 @@ func (k Kinds[C, D, T]) known() string {
 	for kind := range k.Backends {
 		names = append(names, string(kind))
 	}
+
 	slices.Sort(names)
+
 	return strings.Join(names, ", ")
 }

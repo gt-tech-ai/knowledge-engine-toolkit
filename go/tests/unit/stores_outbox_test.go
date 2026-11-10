@@ -8,11 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	outboxstore "github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/outbox/postgres"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated tests the outbox-store factory.
@@ -31,31 +34,48 @@ import (
 //   - The postgres kind without a DB is CodeInvalidInput.
 func TestOutboxStoreNewFromConfig_StubBootsAndIsDecorated(t *testing.T) {
 	t.Parallel()
+
 	reg := promclient.NewRegistry()
 	on := true
 	cfg := decoration.DefaultConfig()
-	cfg.Stores.Defaults.Metrics = &on
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
-		Observability: decorate.Observability{Metrics: prom.NewFromRegistry(reg)},
-	})
 
-	s, err := outboxstore.NewFromConfig(t.Context(), outboxstore.Config{},
-		outboxstore.Deps{Decorations: decs})
+	cfg.Stores.Defaults.Metrics = &on
+
+	decs := decorate.NewDecorations(
+		&cfg,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Metrics = prom.NewFromRegistry(reg)
+		}),
+	)
+
+	outboxStore, err := outboxstore.NewFromConfig(t.Context(), new(outboxstore.Config),
+		outboxstore.Deps{Decorations: decs, DB: nil})
 	require.NoError(t, err)
-	recs, err := s.Claim(t.Context(), "events", 10)
+
+	recs, err := outboxStore.Claim(t.Context(), "events", 0, claimInput)
 	require.NoError(t, err)
 	assert.Empty(t, recs)
-	stats, err := s.Stats(t.Context(), "events")
+
+	stats, err := outboxStore.Stats(t.Context(), "events")
 	require.NoError(t, err)
 	assert.Zero(t, stats.Pending)
-	n, err := s.DeleteSentBefore(t.Context(), time.Now())
+
+	n, err := outboxStore.DeleteSentBefore(t.Context(), time.Now())
 	require.NoError(t, err)
 	assert.Zero(t, n)
+
 	for _, op := range []string{"claim", "stats", "delete_sent_before"} {
 		assert.InDelta(t, 1, storeOpCounter(t, reg, op), 0, op)
 	}
 
-	_, err = outboxstore.NewFromConfig(t.Context(),
-		outboxstore.Config{Kind: outboxstore.KindPostgres}, outboxstore.Deps{})
+	_, err = outboxstore.NewFromConfig(
+		t.Context(),
+		&outboxstore.Config{
+			Kind:     outboxstore.KindPostgres,
+			Name:     "",
+			Postgres: stdx.Zero[postgres.Config](),
+		},
+		stdx.Zero[outboxstore.Deps](),
+	)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }

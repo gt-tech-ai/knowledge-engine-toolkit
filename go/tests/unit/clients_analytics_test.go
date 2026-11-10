@@ -11,9 +11,12 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/analytics"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -38,22 +41,40 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 		types.GrainMinute: types.GrainHour, types.GrainHour: types.GrainDay,
 		types.GrainDay: types.GrainMonth, types.GrainMonth: types.GrainMonth,
 	}, cfg.BucketWidth)
-	assert.Equal(t, 8, cfg.MaxConcurrentBuckets)
+	assert.Equal(t, wantMaxConcurrentBuckets, cfg.MaxConcurrentBuckets)
 
 	ctx := context.Background()
-	store, err := analytics.NewFromConfig(ctx, analytics.Config{}, analytics.Deps{})
+	store, err := analytics.NewFromConfig(
+		ctx,
+		new(analytics.Config),
+		stdx.Zero[analytics.Deps](),
+	)
 	require.NoError(t, err)
 
 	require.NoError(t, store.Start(ctx))
 	require.NoError(
 		t,
-		store.Write(ctx, []types.Fact{{Cube: "genai_calls", OrgID: "o", TS: time.Now()}}),
+		store.Write(
+			ctx,
+			[]types.Fact{
+				fixtures.Build(func(row *types.Fact) {
+					row.Cube = textGenaiCalls
+					row.OrgID = textO
+					row.TS = time.Now()
+				}),
+			},
+		),
 	)
+
 	stream, err := store.Aggregate(
 		ctx,
-		types.AggregateQuery{Cube: "genai_calls", OrgID: "o"},
+		fixtures.BuildRef(func(row *types.AggregateQuery) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textO
+		}),
 	)
 	require.NoError(t, err)
+
 	rows, more, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
@@ -81,47 +102,68 @@ func TestNewFromConfig_DefaultsToStub(t *testing.T) {
 //   - a session factory error is returned by Start, coded
 func TestNewFromConfig_CassandraKindDialsNestedConfigAtStart(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	ctrl := gomock.NewController(t)
 	session := mocks.NewMockCQLSession(ctrl)
+
 	var got []cql.Config
+
 	cfg := analytics.DefaultConfig()
+
 	cfg.Kind = analytics.KindCassandra
 	cfg.CQL.Kind = cql.KindKeyspaces
-	cfg.CQL.Keyspaces.Region = "us-east-1"
-	cfg.CQL.Keyspace = "analytics"
-	cfg.Cubes = map[string][]types.Grain{"genai_calls": {types.GrainHour, types.GrainDay}}
-	store, err := analytics.NewFromConfig(ctx, cfg, analytics.Deps{
+	cfg.CQL.Keyspaces.Region = textUsEast1
+	cfg.CQL.Keyspace = textAnalytics
+	cfg.Cubes = map[string][]types.Grain{
+		textGenaiCalls: {types.GrainHour, types.GrainDay},
+	}
+
+	store, err := analytics.NewFromConfig(ctx, &cfg, analytics.Deps{
 		Dial: func(_ context.Context, c cql.Config) (interfaces.CQLSession, error) {
 			got = append(got, c)
+
 			return session, nil
 		},
+		Decorations: decorate.Decorations{},
 	})
 	require.NoError(t, err)
 	assert.Empty(t, got, "no dial at construction")
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(store.Write(ctx, []types.Fact{
-		{Cube: "genai_calls", OrgID: "o", IdempotencyKey: "k"},
+		fixtures.Build(func(row *types.Fact) {
+			row.Cube = textGenaiCalls
+			row.OrgID = textO
+			row.IdempotencyKey = textK
+		}),
 	})))
 
 	require.NoError(t, store.Start(ctx))
 	require.NoError(t, store.Start(ctx))
 	require.Len(t, got, 1)
 	assert.Equal(t, cql.KindKeyspaces, got[0].Kind)
-	assert.Equal(t, "us-east-1", got[0].Keyspaces.Region)
-	assert.Equal(t, "analytics", got[0].Keyspace)
+	assert.Equal(t, textUsEast1, got[0].Keyspaces.Region)
+	assert.Equal(t, textAnalytics, got[0].Keyspace)
 	assert.Implements(t, (*interfaces.AnalyticsStore)(nil), store)
 	assert.Implements(t, (*interfaces.AnalyticsCompactor)(nil), store)
 
 	failing, err := analytics.NewFromConfig(
 		ctx,
-		analytics.Config{Kind: analytics.KindCassandra},
+		fixtures.BuildRef(func(row *analytics.Config) {
+			row.Kind = analytics.KindCassandra
+		}),
 		analytics.Deps{
 			Dial: func(context.Context, cql.Config) (interfaces.CQLSession, error) {
 				return nil, apperr.New(apperr.CodeUnavailable, "dial refused")
 			},
+			Decorations: decorate.Decorations{},
 		},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(failing.Start(ctx)))
 }
+
+const (
+	// wantMaxConcurrentBuckets is the expected max concurrent buckets.
+	wantMaxConcurrentBuckets = 8
+)

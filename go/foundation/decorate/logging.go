@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -29,36 +29,39 @@ type loggingMW struct {
 
 // NewLogging returns the logging middleware for the subject name in tier.
 func NewLogging(logger interfaces.Logger, tier, name string) OpMiddleware {
-	return loggingMW{logger: logger, tier: tier, name: name}
+	return loggingMW{logger: logger, tier: tier, name: name, edge: false}
 }
 
 // WrapOp logs op before running next and again if it fails.
 func (m loggingMW) WrapOp(
 	ctx context.Context,
-	op string,
+	operation string,
 	next func(context.Context) error,
 ) error {
-	l := m.logger.WithContext(ctx)
-	l.Debug(m.tier+"."+op, m.tier, m.name, "operation", op)
+	currentLogger := m.logger.WithContext(ctx)
+	currentLogger.Debug(m.tier+"."+operation, m.tier, m.name, textOperation, operation)
+
 	err := next(ctx)
 	if err == nil {
 		return nil
 	}
-	msg, fields := m.tier+"."+op+" failed", []any{
+
+	msg, fields := m.tier+"."+operation+" failed", []any{
 		m.tier,
 		m.name,
-		"operation",
-		op,
+		textOperation,
+		operation,
 		"error",
 		err,
 	}
 	switch {
 	case !m.edge:
-		l.Debug(msg, fields...)
+		currentLogger.Debug(msg, fields...)
 	case apperr.ToHTTPStatus(apperr.Code(err)) < http.StatusInternalServerError:
-		l.Warn(msg, fields...)
+		currentLogger.Warn(msg, fields...)
 	default:
-		l.Error(msg, fields...)
+		currentLogger.Error(msg, fields...)
 	}
+
 	return err
 }

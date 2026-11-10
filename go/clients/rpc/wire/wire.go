@@ -11,7 +11,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // mapping is the domain code and fixed message a wire status maps back to.
@@ -26,19 +27,11 @@ type mapping struct {
 // Unimplemented is the caller's error (a method the server lacks), so it is invalid
 // input, never retried. An unrecognized status maps to CodeUnknown.
 func fromWire(c connect.Code) mapping {
+	if m, ok := callerFault(c); ok {
+		return m
+	}
+
 	switch c {
-	case connect.CodeNotFound:
-		return mapping{code: apperr.CodeNotFound, msg: "resource not found"}
-	case connect.CodeInvalidArgument:
-		return mapping{code: apperr.CodeInvalidInput, msg: "invalid input"}
-	case connect.CodeUnimplemented:
-		return mapping{code: apperr.CodeInvalidInput, msg: "unimplemented"}
-	case connect.CodeAlreadyExists:
-		return mapping{code: apperr.CodeConflict, msg: "resource already exists"}
-	case connect.CodeUnauthenticated:
-		return mapping{code: apperr.CodeUnauthorized, msg: "unauthenticated"}
-	case connect.CodePermissionDenied:
-		return mapping{code: apperr.CodeForbidden, msg: "permission denied"}
 	case connect.CodeUnavailable:
 		return mapping{code: apperr.CodeUpstream, msg: "upstream service unavailable"}
 	case connect.CodeDeadlineExceeded:
@@ -54,6 +47,26 @@ func fromWire(c connect.Code) mapping {
 	}
 }
 
+// callerFault maps the wire codes that blame the request.
+func callerFault(c connect.Code) (mapping, bool) {
+	switch c {
+	case connect.CodeNotFound:
+		return mapping{code: apperr.CodeNotFound, msg: "resource not found"}, true
+	case connect.CodeInvalidArgument:
+		return mapping{code: apperr.CodeInvalidInput, msg: "invalid input"}, true
+	case connect.CodeUnimplemented:
+		return mapping{code: apperr.CodeInvalidInput, msg: "unimplemented"}, true
+	case connect.CodeAlreadyExists:
+		return mapping{code: apperr.CodeConflict, msg: "resource already exists"}, true
+	case connect.CodeUnauthenticated:
+		return mapping{code: apperr.CodeUnauthorized, msg: "unauthenticated"}, true
+	case connect.CodePermissionDenied:
+		return mapping{code: apperr.CodeForbidden, msg: "permission denied"}, true
+	default:
+		return stdx.Zero[mapping](), false
+	}
+}
+
 // FromError codes a Connect or gRPC status error with its domain code, keeping the
 // original in the chain (ToGRPC and ToConnect return it unchanged). Nil returns nil;
 // an error that already carries a code is returned unchanged. Connect codes are
@@ -63,16 +76,20 @@ func FromError(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	if apperr.Code(err) != apperr.CodeUnknown {
 		return err
 	}
-	c := connect.CodeOf(err)
-	if c == connect.CodeUnknown {
+
+	errCode := connect.CodeOf(err)
+	if errCode == connect.CodeUnknown {
 		if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
-			c = connect.Code(st.Code())
+			errCode = connect.Code(st.Code())
 		}
 	}
-	m := fromWire(c)
+
+	m := fromWire(errCode)
+
 	return apperr.Wrap(err, m.code, m.msg)
 }
 
@@ -96,10 +113,13 @@ func ToGRPC(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	var sent grpcStatus
+
 	if apperr.As(err, &sent) {
 		return sent
 	}
+
 	return status.Error(codes.Code(Code(apperr.Code(err))), err.Error())
 }
 
@@ -109,9 +129,12 @@ func ToConnect(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	var cerr *connect.Error
+
 	if apperr.As(err, &cerr) {
 		return cerr
 	}
+
 	return connect.NewError(Code(apperr.Code(err)), err)
 }

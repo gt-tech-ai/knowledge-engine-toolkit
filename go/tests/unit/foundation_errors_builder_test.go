@@ -1,6 +1,7 @@
 // Package foundation_test verifies foundation-layer infrastructure helpers:
 // DB error mappers, cache decorators, options application, and middleware
 // chains. All external I/O is mocked; no real databases or networks are used.
+
 package unit_test
 
 import (
@@ -10,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stores/storeerr"
 )
 
 // TestErrorsBuilder_KindPostgres tests that the DB error mapper factory
@@ -27,7 +28,7 @@ import (
 func TestErrorsBuilder_KindPostgres(t *testing.T) {
 	t.Parallel()
 
-	mapper, err := errors.NewDBMapper(errors.KindPostgres)
+	mapper, err := storeerr.NewDBMapper(storeerr.KindPostgres)
 	require.NoError(t, err, "expected nil error from NewDBMapper(KindPostgres)")
 	require.NotNil(t, mapper, "expected non-nil mapper")
 
@@ -48,7 +49,7 @@ func TestErrorsBuilder_KindPostgres(t *testing.T) {
 func TestErrorsBuilder_NilError(t *testing.T) {
 	t.Parallel()
 
-	mapper, _ := errors.NewDBMapper(errors.KindPostgres)
+	mapper, _ := storeerr.NewDBMapper(storeerr.KindPostgres)
 	result := mapper(nil)
 	assert.NoError(t, result, "mapper must return nil for nil input")
 }
@@ -66,10 +67,11 @@ func TestErrorsBuilder_NilError(t *testing.T) {
 func TestErrorsBuilder_UnknownKindReturnsError(t *testing.T) {
 	t.Parallel()
 
-	_, err := errors.NewDBMapper("bogus")
-	require.Error(t, err, "expected error for unknown kind")
+	_, err := storeerr.NewDBMapper(textBogus)
+	require.Error(t, err, textExpectedErrorForUnknown)
 	assert.Contains(t, err.Error(), `"bogus"`)
-	mapper, err := errors.NewDBMapper("")
+
+	mapper, err := storeerr.NewDBMapper("")
 	require.NoError(t, err)
 	assert.NotNil(t, mapper)
 }

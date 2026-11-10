@@ -1,8 +1,12 @@
-"""Tests for the gate composition layer (Gate / GateBuilder / run_gate / run_job_group)."""
+"""Tests for the gate composition layer.
+
+Gate, GateBuilder, run_gate and run_job_group.
+"""
 
 from __future__ import annotations
 
 import asyncio
+from typing import cast, final
 from unittest.mock import MagicMock
 
 import pytest
@@ -16,14 +20,32 @@ from techai_webutils.core.interfaces.execution import (
 )
 from techai_webutils.execution.gate import Gate, new_gate, run_gate
 
+_EXPECTED_TOTAL = 2
+
 
 def _ok(name: str) -> BatchResult:
-    """Return a single-item passing batch."""
+    """Return a single-item passing batch.
+
+    Args:
+        name: The job.
+
+    Returns:
+        A single-item passing batch.
+
+    """
     return BatchResult(results=[StepResult(name=name, status=StepStatus.PASS)])
 
 
 def _fail(name: str) -> BatchResult:
-    """Return a single-item failing batch."""
+    """Return a single-item failing batch.
+
+    Args:
+        name: The job.
+
+    Returns:
+        A single-item failing batch.
+
+    """
     return BatchResult(
         results=[StepResult(name=name, status=StepStatus.FAIL, error="boom")]
     )
@@ -35,16 +57,34 @@ class _RecordingJob:
     def __init__(
         self, name: str, result: BatchResult, ran: list[str] | None = None
     ) -> None:
+        """Bind the job's name, its result and the run log.
+
+        Args:
+            name: The job.
+            result: What the job returns.
+            ran: Receives the name of each job run; ``None`` records nothing.
+
+        """
         self._name: str = name
         self._result: BatchResult = result
         self._ran: list[str] | None = ran
 
     def meta(self) -> JobMeta:
-        """Identify the job."""
+        """Identify the job.
+
+        Returns:
+            The job metadata.
+
+        """
         return JobMeta(name=self._name, group="test")
 
     async def execute(self) -> BatchResult:
-        """Record execution and return the preset result."""
+        """Record execution and return the preset result.
+
+        Returns:
+            The preset result.
+
+        """
         await asyncio.sleep(0)
         if self._ran is not None:
             self._ran.append(self._name)
@@ -52,47 +92,67 @@ class _RecordingJob:
 
 
 def _recording_observer() -> tuple[MagicMock, list[tuple[str, str]]]:
-    """Build a spec-bound ExecutionObserver mock that appends lifecycle events in call order.
+    """Build a spec-bound ExecutionObserver mock.
 
-    Returns the mock plus the ``events`` list its gate/phase side-effects populate. The gate's
-    other (batch/step) callbacks stay silent no-op mocks, so ``events`` holds exactly the
-    gate/phase lifecycle in the order the gate fired it — preserving the ordering assertion.
+    It appends lifecycle events in call order.
+
+    Returns the mock plus the ``events`` list its gate/phase side-effects populate. The
+    gate's other (batch/step) callbacks stay silent no-op mocks, so ``events`` holds
+    exactly the gate/phase lifecycle in the order the gate fired it — preserving the
+    ordering assertion.
+
+    Returns:
+        A spec-bound ExecutionObserver mock that appends lifecycle events.
+
     """
     events: list[tuple[str, str]] = []
     obs = MagicMock(spec=ExecutionObserver)
-    obs.on_gate_start.side_effect = lambda name, _phases: events.append((
-        "gate_start",
-        name,
-    ))
-    obs.on_phase_start.side_effect = lambda name, _jobs: events.append((
-        "phase_start",
-        name,
-    ))
-    obs.on_phase_complete.side_effect = lambda name, _result, _elapsed: events.append((
-        "phase_complete",
-        name,
-    ))
-    obs.on_gate_complete.side_effect = lambda name, _result, _elapsed: events.append((
-        "gate_complete",
-        name,
-    ))
+    cast("MagicMock", obs.on_gate_start).side_effect = lambda name, _phases: (
+        events.append((
+            "gate_start",
+            name,
+        ))
+    )
+    cast("MagicMock", obs.on_phase_start).side_effect = lambda name, _jobs: (
+        events.append((
+            "phase_start",
+            name,
+        ))
+    )
+    cast("MagicMock", obs.on_phase_complete).side_effect = (
+        lambda name, _result, _elapsed: events.append((
+            "phase_complete",
+            name,
+        ))
+    )
+
+    def on_gate_complete(name: str, _result: object, _elapsed: object) -> None:
+        events.append(("gate_complete", name))
+
+    cast("MagicMock", obs.on_gate_complete).side_effect = on_gate_complete
     return obs, events
 
 
+@final
 class TestRunGate:
     """Tests for the run gate."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_aggregates_results_and_fires_lifecycle(self) -> None:
-        """Test that a gate runs its phases in order, aggregates results, and fires the observer.
+    async def test_aggregates_results_and_fires_lifecycle() -> None:
+        """Test that a gate runs its phases in order and aggregates results.
+
+        It fires the observer.
 
         **Why this test is important:**
-          - The gate is the run unit the worker loop drives; if it dropped a phase's results or
-            skipped a lifecycle event, the worker would under-count outcomes and starve metrics.
+          - The gate is the run unit the worker loop drives; if it dropped a phase's
+            results or skipped a lifecycle event, the worker would under-count outcomes
+            and starve metrics.
 
         **What it tests:**
-          - A two-phase gate returns a BatchResult covering both phases' items, and the observer
-            sees gate_start -> (phase_start -> phase_complete) x2 -> gate_complete in order.
+          - A two-phase gate returns a BatchResult covering both phases' items, and the
+            observer sees gate_start -> (phase_start -> phase_complete) x2 ->
+            gate_complete in order.
         """
         obs, events = _recording_observer()
         gate: Gate = (
@@ -103,7 +163,7 @@ class TestRunGate:
             .build()
         )
         result = await run_gate(gate)
-        assert result.total == 2
+        assert result.total == _EXPECTED_TOTAL
         assert result.all_passed is True
         assert events == [
             ("gate_start", "notify"),
@@ -114,13 +174,14 @@ class TestRunGate:
             ("gate_complete", "notify"),
         ]
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_parallel_phase_runs_every_job(self) -> None:
+    async def test_parallel_phase_runs_every_job() -> None:
         """Test that a parallel phase executes all of its jobs and merges their results.
 
         **Why this test is important:**
-          - A parallel phase must fan every job out; if it silently ran only the first, half the
-            batch would go unprocessed.
+          - A parallel phase must fan every job out; if it silently ran only the first,
+            half the batch would go unprocessed.
 
         **What it tests:**
           - A two-job parallel phase runs both jobs and returns a two-item aggregate.
@@ -135,18 +196,20 @@ class TestRunGate:
         )
         result = await run_gate(gate)
         assert sorted(ran) == ["a", "b"]
-        assert result.total == 2
+        assert result.total == _EXPECTED_TOTAL
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_serial_phase_stops_at_first_failure(self) -> None:
+    async def test_serial_phase_stops_at_first_failure() -> None:
         """Test that a serial phase halts after the first failing job.
 
         **Why this test is important:**
-          - Serial phases model ordered dependencies; running a later job after an upstream failure
-            would act on invalid state.
+          - Serial phases model ordered dependencies; running a later job after an
+            upstream failure would act on invalid state.
 
         **What it tests:**
-          - Given [fail, ok] serially, the ok job never runs and the aggregate reports the failure.
+          - Given [fail, ok] serially, the ok job never runs and the aggregate reports the
+            failure.
         """
         ran: list[str] = []
         gate = (
@@ -162,16 +225,19 @@ class TestRunGate:
         assert ran == ["bad"]
         assert result.has_failures is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_stop_on_failure_halts_subsequent_phases(self) -> None:
+    async def test_stop_on_failure_halts_subsequent_phases() -> None:
         """Test that stop_on_failure skips remaining phases after a phase fails.
 
         **Why this test is important:**
-          - When a gate is configured stop-on-failure, a failed early phase must short-circuit the
-            rest; otherwise later phases run against a known-bad precondition.
+          - When a gate is configured stop-on-failure, a failed early phase must
+            short-circuit the rest; otherwise later phases run against a known-bad
+            precondition.
 
         **What it tests:**
-          - A stop_on_failure gate whose first phase fails never runs the second phase's job.
+          - A stop_on_failure gate whose first phase fails never runs the second phase's
+            job.
         """
         ran: list[str] = []
         gate = (
@@ -185,17 +251,18 @@ class TestRunGate:
         assert ran == ["bad"]
         assert result.has_failures is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_default_gate_continues_past_failed_phase(self) -> None:
+    async def test_default_gate_continues_past_failed_phase() -> None:
         """Test that without stop_on_failure a failed phase does not halt later phases.
 
         **Why this test is important:**
-          - The default (non-stop) gate must run every phase even when an earlier one fails; halting
-            by default would silently skip independent later work.
+          - The default (non-stop) gate must run every phase even when an earlier one
+            fails; halting by default would silently skip independent later work.
 
         **What it tests:**
-          - A two-phase gate (no stop_on_failure) whose first phase fails still runs the second, and
-            the aggregate reports the failure.
+          - A two-phase gate (no stop_on_failure) whose first phase fails still runs the
+            second, and the aggregate reports the failure.
         """
         ran: list[str] = []
         gate = (
@@ -208,20 +275,23 @@ class TestRunGate:
         assert ran == ["bad", "later"]
         assert result.has_failures is True
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_parallel_phase_runs_jobs_concurrently(self) -> None:
+    async def test_parallel_phase_runs_jobs_concurrently() -> None:
         """Test that a parallel phase runs its jobs truly concurrently, not one-at-a-time.
 
         **Why this test is important:**
-          - "parallel" must mean concurrent; a serial implementation would still pass a "both ran"
-            assertion, so concurrency needs a test that a serial impl cannot satisfy.
+          - "parallel" must mean concurrent; a serial implementation would still pass a
+            "both ran" assertion, so concurrency needs a test that a serial impl cannot
+            satisfy.
 
         **What it tests:**
-          - Two jobs that each await a 2-party barrier both complete — only possible if they run
-            concurrently (a serial impl deadlocks and the wait_for times out).
+          - Two jobs that each await a 2-party barrier both complete — only possible if
+            they run concurrently (a serial impl deadlocks and the wait_for times out).
         """
         barrier = asyncio.Barrier(2)
 
+        @final
         class _BarrierJob:
             def __init__(self, name: str) -> None:
                 self._name = name
@@ -230,34 +300,40 @@ class TestRunGate:
                 return JobMeta(name=self._name, group="test")
 
             async def execute(self) -> BatchResult:
-                await barrier.wait()
+                _ = await barrier.wait()
                 return _ok(self._name)
 
         gate = new_gate("g").parallel("p", _BarrierJob("a"), _BarrierJob("b")).build()
         result = await asyncio.wait_for(run_gate(gate), timeout=1.0)
-        assert result.total == 2
+        assert result.total == _EXPECTED_TOTAL
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_job_exception_settles_siblings_and_completes_gate(self) -> None:
-        """Test that a raising job propagates, its siblings still settle, and on_gate_complete fires.
+    async def test_job_exception_settles_siblings_and_completes_gate() -> None:
+        """Test that a raising job propagates and its siblings still settle.
+
+        on_gate_complete fires.
 
         **Why this test is important:**
-          - A job raising in a parallel phase must not leave siblings running detached (orphaned
-            I/O), and the gate lifecycle must still balance (on_gate_complete) before the exception
-            propagates — so the caller's error handling stays honest.
+          - A job raising in a parallel phase must not leave siblings running detached
+            (orphaned I/O), and the gate lifecycle must still balance (on_gate_complete)
+            before the exception propagates — so the caller's error handling stays honest.
 
         **What it tests:**
-          - Given a raising job beside a good one, the good job runs to completion, run_gate re-raises
-            the exception, and the observer still received gate_complete.
+          - Given a raising job beside a good one, the good job runs to completion,
+            run_gate re-raises the exception, and the observer still received
+            gate_complete.
         """
         obs, events = _recording_observer()
         ran: list[str] = []
 
         class _BoomJob:
-            def meta(self) -> JobMeta:
+            @staticmethod
+            def meta() -> JobMeta:
                 return JobMeta(name="boom", group="test")
 
-            async def execute(self) -> BatchResult:
+            @staticmethod
+            async def execute() -> BatchResult:
                 await asyncio.sleep(0)
                 msg = "kaboom"
                 raise RuntimeError(msg)
@@ -269,9 +345,51 @@ class TestRunGate:
             .build()
         )
         with pytest.raises(RuntimeError, match="kaboom"):
-            await run_gate(gate)
+            _ = await run_gate(gate)
         assert ran == ["good"]
-        # Both the phase and the gate lifecycle balance even though a job raised: an observer that
-        # pairs on_phase_start/on_phase_complete (or the gate pair) must not leak on a raised job.
+        # Both the phase and the gate lifecycle balance even though a job raised: an
+        # observer that pairs on_phase_start/on_phase_complete (or the gate pair) must not
+        # leak on a raised job.
         assert ("phase_complete", "p") in events
         assert ("gate_complete", "g") in events
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_cancelling_a_parallel_phase_waits_for_its_jobs_to_unwind() -> None:
+        """Test that a cancelled parallel phase returns only after its jobs have unwound.
+
+        **Why this test is important:**
+          - A job still running its cleanup after the gate reported cancelled outlives the
+            run: its I/O commits after the caller moved on.
+
+        **What it tests:**
+          - Cancelling ``run_gate`` while both jobs of a parallel phase are blocked raises
+            ``CancelledError``, and by then each job's cleanup, which itself awaits, has
+            finished.
+        """
+        started = asyncio.Event()
+        unwound: list[str] = []
+
+        class _BlockingJob:
+            def __init__(self, name: str) -> None:
+                self._name: str = name
+
+            def meta(self) -> JobMeta:
+                return JobMeta(name=self._name, group="test")
+
+            async def execute(self) -> BatchResult:
+                try:
+                    started.set()
+                    _ = await asyncio.Event().wait()
+                finally:
+                    await asyncio.sleep(0)
+                    unwound.append(self._name)
+                return _ok(self._name)
+
+        gate = new_gate("g").parallel("p", _BlockingJob("a"), _BlockingJob("b")).build()
+        task = asyncio.create_task(run_gate(gate))
+        _ = await started.wait()
+        _ = task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            _ = await task
+        assert sorted(unwound) == ["a", "b"]

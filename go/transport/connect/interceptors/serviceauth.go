@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -31,18 +31,27 @@ var _ interfaces.ServiceTokenValidator = (*StaticTokenValidator)(nil)
 // token is dropped (so it can never match).
 func NewStaticTokenValidator(serviceTokens map[string]string) *StaticTokenValidator {
 	accepted := make(map[string][]string, len(serviceTokens))
+
 	for caller, raw := range serviceTokens {
-		var toks []string
-		for t := range strings.SplitSeq(raw, ",") {
-			if t = strings.TrimSpace(t); t != "" {
-				toks = append(toks, t)
-			}
-		}
-		if len(toks) > 0 {
+		if toks := splitTokens(raw); len(toks) > 0 {
 			accepted[caller] = toks
 		}
 	}
+
 	return &StaticTokenValidator{accepted: accepted}
+}
+
+// splitTokens reads a comma-separated token list, dropping blanks.
+func splitTokens(raw string) []string {
+	var toks []string
+
+	for t := range strings.SplitSeq(raw, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			toks = append(toks, t)
+		}
+	}
+
+	return toks
 }
 
 // Validate returns the caller whose current-or-previous token matches, using a
@@ -51,6 +60,7 @@ func (v *StaticTokenValidator) Validate(token string) (string, bool) {
 	if token == "" {
 		return "", false
 	}
+
 	for caller, toks := range v.accepted {
 		for _, t := range toks {
 			if subtle.ConstantTimeCompare([]byte(token), []byte(t)) == 1 {
@@ -58,6 +68,7 @@ func (v *StaticTokenValidator) Validate(token string) (string, bool) {
 			}
 		}
 	}
+
 	return "", false
 }
 
@@ -84,6 +95,7 @@ func WithCallerIdentity(ctx context.Context, caller string) context.Context {
 // interceptor, if the request was authenticated.
 func GetCallerIdentity(ctx context.Context) (string, bool) {
 	caller, ok := ctx.Value(callerContextKey{}).(string)
+
 	return caller, ok
 }
 
@@ -128,12 +140,13 @@ func (s serviceAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 		if err != nil {
 			return nil, err
 		}
+
 		return next(ctx, req)
 	}
 }
 
 // WrapStreamingClient is a no-op — this is a server-side authentication interceptor.
-func (s serviceAuthInterceptor) WrapStreamingClient(
+func (serviceAuthInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -149,6 +162,7 @@ func (s serviceAuthInterceptor) WrapStreamingHandler(
 		if err != nil {
 			return err
 		}
+
 		return next(ctx, conn)
 	}
 }
@@ -159,28 +173,18 @@ func (s serviceAuthInterceptor) WrapStreamingHandler(
 // admits.
 func (s serviceAuthInterceptor) authenticate(
 	ctx context.Context,
-	h http.Header,
+	header http.Header,
 	procedure string,
 ) (context.Context, error) {
 	if s.stub {
 		return WithCallerIdentity(ctx, stubCaller), nil
 	}
-	caller, ok := s.validator.Validate(bearerToken(h.Get(headerAuthorization)))
+
+	caller, ok := s.validator.Validate(bearerToken(header.Get(headerAuthorization)))
 	if !ok {
-		if s.audit {
-			if s.logger != nil {
-				s.logger.Warn(
-					"service auth: unauthenticated internal call admitted (audit mode)",
-					"procedure", procedure,
-				)
-			}
-			return ctx, nil
-		}
-		return nil, connect.NewError(
-			connect.CodeUnauthenticated,
-			apperr.Unauthorized("service authentication required"),
-		)
+		return s.unauthenticated(ctx, procedure)
 	}
+
 	if s.audit && s.logger != nil {
 		s.logger.Info(
 			"service auth: caller authenticated (audit mode)",
@@ -188,7 +192,29 @@ func (s serviceAuthInterceptor) authenticate(
 			"procedure", procedure,
 		)
 	}
+
 	return WithCallerIdentity(ctx, caller), nil
+}
+
+// unauthenticated rejects the call, or in audit mode logs it and admits it.
+func (s serviceAuthInterceptor) unauthenticated(
+	ctx context.Context, procedure string,
+) (context.Context, error) {
+	if !s.audit {
+		return nil, connect.NewError(
+			connect.CodeUnauthenticated,
+			apperr.Unauthorized("service authentication required"),
+		)
+	}
+
+	if s.logger != nil {
+		s.logger.Warn(
+			"service auth: unauthenticated internal call admitted (audit mode)",
+			"procedure", procedure,
+		)
+	}
+
+	return ctx, nil
 }
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header value,
@@ -198,5 +224,6 @@ func bearerToken(header string) string {
 		strings.EqualFold(header[:len(bearerPrefix)], bearerPrefix) {
 		return strings.TrimSpace(header[len(bearerPrefix):])
 	}
+
 	return ""
 }

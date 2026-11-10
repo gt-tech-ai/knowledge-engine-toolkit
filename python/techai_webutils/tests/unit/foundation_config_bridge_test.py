@@ -7,11 +7,28 @@ Why these tests are important:
   - Idempotency is critical for test isolation and multi-call scenarios
 """
 
+import logging
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import ClassVar
 
 import pytest
+import yaml
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from techai_webutils.core.errors import AppFileNotFoundError, AppValueError
+from techai_webutils.foundation.config.bridge import (
+    apply_yaml_defaults,
+    export_yaml_sections,
+    initialize_config,
+    reset_config,
+)
+from techai_webutils.foundation.config.config_loader import YamlConfigLoader
+from techai_webutils.foundation.config.settings import DatabaseSettings
+
+_EXPECTED_DATABASE_PORT = 6543
 
 
 def test_initialize_config_sets_env_vars_from_yaml(
@@ -29,13 +46,15 @@ def test_initialize_config_sets_env_vars_from_yaml(
       - YAML keys are flattened to MYAPP_* env vars (every scalar leaf)
       - Dotted paths like database.host become MYAPP_DATABASE_HOST, with both
         host and port from the database and redis sections exported
-    """
-    from techai_webutils.foundation.config.bridge import initialize_config, reset_config
 
+    Args:
+        monkeypatch: Patches the environment for the test.
+
+    """
     # Arrange: Create temp config directory with YAML
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: test-db-host
   port: 5555
@@ -69,18 +88,20 @@ def test_initialize_config_merges_environment_overlay(
 
     **Why this test is important:**
       - Deployments mount base.yaml + {env}.yaml and rely on the overlay to flip
-        stub/localhost defaults to the real backend (e.g. a ``kind: bedrock``). If the overlay
-        is not merged, or a deeply nested key is dropped, the service silently runs against
-        stub/localhost defaults.
+        stub/localhost defaults to the real backend (e.g. a ``kind: bedrock``). If the
+        overlay is not merged, or a deeply nested key is dropped, the service silently
+        runs against stub/localhost defaults.
 
     **What it tests:**
       - With APP_ENV set, base.yaml + {env}.yaml deep-merge (overlay wins on conflict).
       - A base-only key survives; a deeply nested key is exported.
-    """
-    from techai_webutils.foundation.config.bridge import initialize_config, reset_config
 
+    Args:
+        monkeypatch: Patches the environment for the test.
+
+    """
     with TemporaryDirectory() as tmpdir:
-        (Path(tmpdir) / "base.yaml").write_text("""
+        _ = (Path(tmpdir) / "base.yaml").write_text("""
 retrieval:
   llm:
     kind: stub
@@ -88,7 +109,7 @@ retrieval:
   kb:
     kind: stub
 """)
-        (Path(tmpdir) / "staging.yaml").write_text("""
+        _ = (Path(tmpdir) / "staging.yaml").write_text("""
 retrieval:
   llm:
     kind: bedrock
@@ -123,13 +144,15 @@ def test_initialize_config_env_var_precedence(monkeypatch: pytest.MonkeyPatch) -
       - A pre-set MYAPP_DATABASE_HOST keeps its value after initialize_config
       - Keys absent from the environment (database.port) are still populated
         from YAML
-    """
-    from techai_webutils.foundation.config.bridge import initialize_config, reset_config
 
+    Args:
+        monkeypatch: Patches the environment for the test.
+
+    """
     # Arrange
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: yaml-host
   port: 5432
@@ -165,9 +188,11 @@ def test_initialize_config_missing_directory_graceful_fallback(
     **What it tests:**
       - initialize_config does not raise for a nonexistent directory
       - A "config directory not found" warning is emitted
-    """
-    from techai_webutils.foundation.config.bridge import initialize_config, reset_config
 
+    Args:
+        caplog: Captures the log records.
+
+    """
     # Arrange: Use a directory that doesn't exist
     nonexistent_dir = "/nonexistent/config/path"
 
@@ -193,13 +218,15 @@ def test_initialize_config_idempotency(monkeypatch: pytest.MonkeyPatch) -> None:
     **What it tests:**
       - After the first call set the value, a value modified between calls
         survives the second call (the second call does not re-apply YAML)
-    """
-    from techai_webutils.foundation.config.bridge import initialize_config, reset_config
 
+    Args:
+        monkeypatch: Patches the environment for the test.
+
+    """
     # Arrange
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: first-host
 """)
@@ -235,13 +262,15 @@ def test_reset_config_clears_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
     **What it tests:**
       - After reset_config, a second initialize_config picks up newly-written
         YAML (second-run value), proving re-initialization occurred
-    """
-    from techai_webutils.foundation.config.bridge import initialize_config, reset_config
 
+    Args:
+        monkeypatch: Patches the environment for the test.
+
+    """
     # Arrange
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: first-run
 """)
@@ -254,7 +283,7 @@ database:
         reset_config()
 
         # Modify YAML
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: second-run
 """)
@@ -284,9 +313,11 @@ def test_apply_yaml_defaults_stringifies_bool(monkeypatch: pytest.MonkeyPatch) -
 
     **What it tests:**
       - apply_yaml_defaults({"flag": True}, "MYAPP") exports MYAPP_FLAG="True".
-    """
-    from techai_webutils.foundation.config.bridge import apply_yaml_defaults
 
+    Args:
+        monkeypatch: Patches the environment for the test.
+
+    """
     monkeypatch.delenv("MYAPP_FLAG", raising=False)
     apply_yaml_defaults({"flag": True}, "MYAPP")
     assert os.environ["MYAPP_FLAG"] == "True"
@@ -302,8 +333,6 @@ def test_initialize_config_missing_base_yaml_is_graceful() -> None:
     **What it tests:**
       - initialize_config against an empty dir returns without error and marks init.
     """
-    from techai_webutils.foundation.config.bridge import initialize_config, reset_config
-
     reset_config()
     with TemporaryDirectory() as empty:
         initialize_config(
@@ -315,23 +344,28 @@ def test_initialize_config_missing_base_yaml_is_graceful() -> None:
 def test_initialize_config_uses_consumer_prefix_and_env_selector(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """initialize_config exports under the consumer's prefix and picks the overlay from its env vars.
+    """initialize_config exports under the consumer's prefix.
+
+    It picks the overlay from its env vars.
 
     **Why this test is important:**
-      - The env-var prefix and the variable that selects the overlay are a consumer's conventions; a
-        library that hard-codes its own names exports config the consumer's settings never read.
+      - The env-var prefix and the variable that selects the overlay are a consumer's
+        conventions; a library that hard-codes its own names exports config the consumer's
+        settings never read.
 
     **What it tests:**
-      - With env_prefix="MYAPP" and env_selectors=("MYAPP_ENV",), base + the MYAPP_ENV overlay export
-        as MYAPP_* (overlay wins) and nothing is exported unprefixed.
-    """
-    from techai_webutils.foundation.config.bridge import initialize_config, reset_config
+      - With env_prefix="MYAPP" and env_selectors=("MYAPP_ENV",), base + the MYAPP_ENV
+        overlay export as MYAPP_* (overlay wins) and nothing is exported unprefixed.
 
+    Args:
+        monkeypatch: Patches the environment for the test.
+
+    """
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.setenv("MYAPP_ENV", "staging")
     with TemporaryDirectory() as tmpdir:
-        (Path(tmpdir) / "base.yaml").write_text("widget:\n  size: 3\n  color: red\n")
-        (Path(tmpdir) / "staging.yaml").write_text("widget:\n  size: 7\n")
+        _ = (Path(tmpdir) / "base.yaml").write_text("widget:\n  size: 3\n  color: red\n")
+        _ = (Path(tmpdir) / "staging.yaml").write_text("widget:\n  size: 7\n")
         try:
             initialize_config(tmpdir, env_prefix="MYAPP", env_selectors=("MYAPP_ENV",))
 
@@ -340,15 +374,23 @@ def test_initialize_config_uses_consumer_prefix_and_env_selector(
             assert "WIDGET_SIZE" not in os.environ
         finally:
             for key in ("MYAPP_WIDGET_SIZE", "MYAPP_WIDGET_COLOR"):
-                os.environ.pop(key, None)
+                _ = os.environ.pop(key, None)
             reset_config()
 
 
 def _write_widget_config(tmpdir: str, overlays: dict[str, str] | None = None) -> None:
-    """Write a base.yaml (``kebridge.size: 3``, ``kebridge.color: red``) plus any named overlays."""
-    (Path(tmpdir) / "base.yaml").write_text("kebridge:\n  size: 3\n  color: red\n")
+    """Write a base.yaml plus any named overlays.
+
+    The base sets ``kebridge.size: 3`` and ``kebridge.color: red``.
+
+    Args:
+        tmpdir: A fresh directory for the test.
+        overlays: Each overlay file's content.
+
+    """
+    _ = (Path(tmpdir) / "base.yaml").write_text("kebridge:\n  size: 3\n  color: red\n")
     for env, body in (overlays or {}).items():
-        (Path(tmpdir) / f"{env}.yaml").write_text(body)
+        _ = (Path(tmpdir) / f"{env}.yaml").write_text(body)
 
 
 @pytest.mark.parametrize("prefix", ["MYAPP", "MYAPP_"])
@@ -360,28 +402,31 @@ def test_initialize_config_prefix_round_trips_into_a_prefixed_settings_class(
     It does so whether or not the bridge prefix carries the trailing underscore.
 
     Why this test is important:
-      - A consumer naturally passes its settings' ``env_prefix`` ("MYAPP_") to initialize_config. Joining
-        it with another "_" exported ``MYAPP__DATABASE_HOST``, which pydantic never reads, so the whole
-        YAML was silently ignored and the service ran on built-in defaults.
+      - A consumer naturally passes its settings' ``env_prefix`` ("MYAPP_") to
+        initialize_config. Joining it with another "_" exported ``MYAPP__DATABASE_HOST``,
+        which pydantic never reads, so the whole YAML was silently ignored and the service
+        ran on built-in defaults.
 
     What it tests:
-      - With env_prefix "MYAPP" or "MYAPP_", a DatabaseSettings subclass with env_prefix "MYAPP_" reads
-        database.host/port from base.yaml, and no double-underscore variable is exported.
-    """
-    from pydantic_settings import SettingsConfigDict
+      - With env_prefix "MYAPP" or "MYAPP_", a DatabaseSettings subclass with env_prefix
+        "MYAPP_" reads database.host/port from base.yaml, and no double-underscore
+        variable is exported.
 
-    from techai_webutils.foundation.config.bridge import initialize_config
-    from techai_webutils.foundation.config.settings import DatabaseSettings
+    Args:
+        monkeypatch: Patches the environment for the test.
+        prefix: The settings prefix.
+
+    """
 
     class _AppSettings(DatabaseSettings):
-        model_config = SettingsConfigDict(
+        model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
             env_prefix="MYAPP_", frozen=True, extra="ignore"
         )
 
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     with TemporaryDirectory() as tmpdir:
-        (Path(tmpdir) / "base.yaml").write_text(
+        _ = (Path(tmpdir) / "base.yaml").write_text(
             "database:\n  host: yaml-db\n  port: 6543\n"
         )
 
@@ -389,25 +434,26 @@ def test_initialize_config_prefix_round_trips_into_a_prefixed_settings_class(
 
         settings = _AppSettings()
         assert settings.database_host == "yaml-db"
-        assert settings.database_port == 6543
+        assert settings.database_port == _EXPECTED_DATABASE_PORT
         assert not [key for key in os.environ if key.startswith("MYAPP__")]
 
 
 def test_initialize_config_rejects_a_second_call_with_different_arguments() -> None:
-    """A second initialize_config with a different dir, prefix or selectors raises instead of no-opping.
+    """A second initialize_config with different arguments raises.
+
+    Different dir, prefix or selectors; it never no-ops.
 
     Why this test is important:
-      - The first call wins process-wide. A later call with another prefix used to return silently, so
-        an early default-prefix call left the app's own prefixed settings on built-in defaults with no
-        error anywhere.
+      - The first call wins process-wide. A later call with another prefix used to return
+        silently, so an early default-prefix call left the app's own prefixed settings on
+        built-in defaults with no error anywhere.
 
     What it tests:
-      - After initialize_config(dir, env_prefix="MYAPP"), a call with another prefix, another directory
-        or other selectors raises ValueError naming the conflict; repeating the same arguments (including
-        the "MYAPP_" spelling of the same prefix) stays a no-op.
+      - After initialize_config(dir, env_prefix="MYAPP"), a call with another prefix,
+        another directory or other selectors raises ValueError naming the conflict;
+        repeating the same arguments (including the "MYAPP_" spelling of the same prefix)
+        stays a no-op.
     """
-    from techai_webutils.foundation.config.bridge import initialize_config
-
     with TemporaryDirectory() as tmpdir, TemporaryDirectory() as other_dir:
         _write_widget_config(tmpdir)
         initialize_config(tmpdir, env_prefix="MYAPP")
@@ -416,30 +462,34 @@ def test_initialize_config_rejects_a_second_call_with_different_arguments() -> N
         initialize_config(
             tmpdir, env_prefix="MYAPP_"
         )  # same prefix, other spelling: no-op
-        with pytest.raises(ValueError, match="env_prefix"):
+        with pytest.raises(AppValueError, match="env_prefix"):
             initialize_config(tmpdir, env_prefix="OTHER")
-        with pytest.raises(ValueError, match="config_dir"):
+        with pytest.raises(AppValueError, match="config_dir"):
             initialize_config(other_dir, env_prefix="MYAPP")
-        with pytest.raises(ValueError, match="env_selectors"):
+        with pytest.raises(AppValueError, match="env_selectors"):
             initialize_config(tmpdir, env_prefix="MYAPP", env_selectors=("MYAPP_ENV",))
 
 
 def test_initialize_config_defaults_export_unprefixed_names_from_the_app_env_overlay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With no arguments beyond the directory, the bridge exports bare names and APP_ENV picks the overlay.
+    """With only the directory, the bridge exports bare names.
+
+    APP_ENV picks the overlay.
 
     Why this test is important:
-      - No prefix and the APP_ENV/ENVIRONMENT selectors are the documented defaults every consumer gets
-        when it omits them; a regression there would load the wrong overlay or export names the
-        unprefixed settings mixins never read.
+      - No prefix and the APP_ENV/ENVIRONMENT selectors are the documented defaults every
+        consumer gets when it omits them; a regression there would load the wrong overlay
+        or export names the unprefixed settings mixins never read.
 
     What it tests:
-      - With APP_ENV=staging (and ENVIRONMENT=prod, which APP_ENV outranks), base + staging.yaml export
-        as KEBRIDGE_SIZE=7 / KEBRIDGE_COLOR=red.
-    """
-    from techai_webutils.foundation.config.bridge import initialize_config
+      - With APP_ENV=staging (and ENVIRONMENT=prod, which APP_ENV outranks), base +
+        staging.yaml export as KEBRIDGE_SIZE=7 / KEBRIDGE_COLOR=red.
 
+    Args:
+        monkeypatch: Patches the environment for the test.
+
+    """
     monkeypatch.setenv("APP_ENV", "staging")
     monkeypatch.setenv("ENVIRONMENT", "prod")
     with TemporaryDirectory() as tmpdir:
@@ -454,7 +504,7 @@ def test_initialize_config_defaults_export_unprefixed_names_from_the_app_env_ove
             assert os.environ.get("KEBRIDGE_COLOR") == "red"
         finally:
             for key in ("KEBRIDGE_SIZE", "KEBRIDGE_COLOR"):
-                os.environ.pop(key, None)
+                _ = os.environ.pop(key, None)
 
 
 @pytest.mark.parametrize(
@@ -465,17 +515,25 @@ def test_initialize_config_defaults_export_unprefixed_names_from_the_app_env_ove
 def test_initialize_config_falls_back_to_environment_then_dev(
     monkeypatch: pytest.MonkeyPatch, environment: str | None, expected_size: str
 ) -> None:
-    """Without APP_ENV the overlay comes from ENVIRONMENT, and with neither set from dev.yaml.
+    """Without APP_ENV the overlay comes from ENVIRONMENT.
+
+    With neither set it is dev.yaml.
 
     Why this test is important:
-      - Deployments that set only ENVIRONMENT, and local runs that set nothing, rely on these fallbacks
-        to load their overlay; losing either silently runs the service on base.yaml alone.
+      - Deployments that set only ENVIRONMENT, and local runs that set nothing, rely on
+        these fallbacks to load their overlay; losing either silently runs the service on
+        base.yaml alone.
 
     What it tests:
-      - APP_ENV unset + ENVIRONMENT=prod loads prod.yaml (size 9); neither set loads dev.yaml (size 5).
-    """
-    from techai_webutils.foundation.config.bridge import initialize_config
+      - APP_ENV unset + ENVIRONMENT=prod loads prod.yaml (size 9); neither set loads
+        dev.yaml (size 5).
 
+    Args:
+        monkeypatch: Patches the environment for the test.
+        environment: The environment variable's value.
+        expected_size: The size the loaded config has.
+
+    """
     monkeypatch.delenv("APP_ENV", raising=False)
     if environment is None:
         monkeypatch.delenv("ENVIRONMENT", raising=False)
@@ -491,27 +549,30 @@ def test_initialize_config_falls_back_to_environment_then_dev(
             assert os.environ.get("MYAPP_KEBRIDGE_SIZE") == expected_size
         finally:
             for key in ("MYAPP_KEBRIDGE_SIZE", "MYAPP_KEBRIDGE_COLOR"):
-                os.environ.pop(key, None)
+                _ = os.environ.pop(key, None)
 
 
 def test_initialize_config_logs_the_selected_overlay_and_warns_when_it_is_missing(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The bridge logs which overlay it selected and warns when a selected overlay file does not exist.
+    """The bridge logs which overlay it selected.
+
+    It warns when a selected overlay file does not exist.
 
     Why this test is important:
-      - A generic selector such as ENVIRONMENT may be set by other tooling to a name with no matching
-        file (ENVIRONMENT=production beside prod.yaml). Skipping the overlay silently runs the service on
-        base.yaml alone with nothing in the logs.
+      - A generic selector such as ENVIRONMENT may be set by other tooling to a name with
+        no matching file (ENVIRONMENT=production beside prod.yaml). Skipping the overlay
+        silently runs the service on base.yaml alone with nothing in the logs.
 
     What it tests:
-      - With ENVIRONMENT=production and no production.yaml, a warning names the missing overlay file and
-        the ENVIRONMENT selector; the base values are still exported.
+      - With ENVIRONMENT=production and no production.yaml, a warning names the missing
+        overlay file and the ENVIRONMENT selector; the base values are still exported.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+        caplog: Captures the log records.
+
     """
-    import logging
-
-    from techai_webutils.foundation.config.bridge import initialize_config
-
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.setenv("ENVIRONMENT", "production")
     caplog.set_level(logging.INFO, logger="techai_webutils.foundation.config.bridge")
@@ -528,34 +589,33 @@ def test_initialize_config_logs_the_selected_overlay_and_warns_when_it_is_missin
             assert os.environ.get("MYAPP_KEBRIDGE_SIZE") == "3"
         finally:
             for key in ("MYAPP_KEBRIDGE_SIZE", "MYAPP_KEBRIDGE_COLOR"):
-                os.environ.pop(key, None)
+                _ = os.environ.pop(key, None)
 
 
 def test_initialize_config_strict_raises_on_malformed_yaml_instead_of_continuing() -> (
     None
 ):
-    """strict=True turns an unreadable config into a startup error; the default still degrades to a warning.
+    """strict=True turns an unreadable config into a startup error.
+
+    The default still degrades to a warning.
 
     Why this test is important:
-      - A YAML typo in a deployment otherwise starts the service on env vars and code defaults (stub
-        kinds, localhost) instead of failing fast; strict mode lets a consumer that always ships YAML make
-        that a hard error.
+      - A YAML typo in a deployment otherwise starts the service on env vars and code
+        defaults (stub kinds, localhost) instead of failing fast; strict mode lets a
+        consumer that always ships YAML make that a hard error.
 
     What it tests:
-      - initialize_config(strict=True) on a malformed base.yaml raises the YAML error, and on a missing
-        directory raises FileNotFoundError; the default (strict=False) returns without raising.
+      - initialize_config(strict=True) on a malformed base.yaml raises the YAML error, and
+        on a missing directory raises FileNotFoundError; the default (strict=False)
+        returns without raising.
     """
-    import yaml
-
-    from techai_webutils.foundation.config.bridge import initialize_config, reset_config
-
     with TemporaryDirectory() as tmpdir:
-        (Path(tmpdir) / "base.yaml").write_text("kebridge: [unclosed\n")
+        _ = (Path(tmpdir) / "base.yaml").write_text("kebridge: [unclosed\n")
 
         with pytest.raises(yaml.YAMLError):
             initialize_config(tmpdir, env_prefix="MYAPP", strict=True)
         reset_config()
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(AppFileNotFoundError):
             initialize_config(Path(tmpdir) / "absent", env_prefix="MYAPP", strict=True)
         reset_config()
 
@@ -565,25 +625,26 @@ def test_initialize_config_strict_raises_on_malformed_yaml_instead_of_continuing
 def test_export_yaml_sections_exports_structured_sections_as_json(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Test that a structured YAML section reaches its settings field as a JSON env default.
+    """Test that a structured YAML section reaches its settings field.
+
+    It arrives as a JSON env default.
 
     **Why this test is important:**
       - The bridge exports only scalar leaves, so a field holding a map or a list (a route
-        table, a model catalog) would silently keep its default; it must still be read from
-        the YAML and stay overridable per deployment like every other key.
+        table, a model catalog) would silently keep its default; it must still be read
+        from the YAML and stay overridable per deployment like every other key.
 
     **What it tests:**
       - the merged section (base plus the loader's overlay) is exported as JSON under
         ``<PREFIX>_<FIELD>`` and a prefixed settings class parses it into the field's type
       - an env var already set is left alone and wins
       - a section absent from the YAML exports nothing
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+        tmp_path: A fresh directory for the test.
+
     """
-    from pydantic import Field
-    from pydantic_settings import BaseSettings, SettingsConfigDict
-
-    from techai_webutils.foundation.config.bridge import export_yaml_sections
-    from techai_webutils.foundation.config.config_loader import YamlConfigLoader
-
     _ = (tmp_path / "base.yaml").write_text("app:\n  routes:\n    a: {threshold: 0.1}\n")
     _ = (tmp_path / "staging.yaml").write_text(
         "app:\n  routes:\n    b: {threshold: 0.2}\n"
@@ -592,7 +653,9 @@ def test_export_yaml_sections_exports_structured_sections_as_json(
     monkeypatch.delenv("MYAPP_APP_MISSING", raising=False)
 
     class _Probe(BaseSettings):
-        model_config = SettingsConfigDict(env_prefix="MYAPP_")
+        model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+            env_prefix="MYAPP_"
+        )
         app_routes: dict[str, dict[str, float]] = Field(default_factory=dict)
         app_missing: dict[str, int] = Field(default_factory=dict)
 

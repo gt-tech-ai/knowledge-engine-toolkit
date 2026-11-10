@@ -18,17 +18,22 @@ import (
 // force-sampled header triggers).
 func remoteSampledParent(t *testing.T) context.Context {
 	t.Helper()
+
 	tid, err := oteltrace.TraceIDFromHex("0123456789abcdef0123456789abcdef")
 	require.NoError(t, err)
+
 	sid, err := oteltrace.SpanIDFromHex("0123456789abcdef")
 	require.NoError(t, err)
-	sc := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
+
+	spanContext := oteltrace.NewSpanContext(oteltrace.SpanContextConfig{
 		TraceID:    tid,
 		SpanID:     sid,
 		TraceFlags: oteltrace.FlagsSampled,
 		Remote:     true,
+		TraceState: oteltrace.TraceState{},
 	})
-	return oteltrace.ContextWithRemoteSpanContext(context.Background(), sc)
+
+	return oteltrace.ContextWithRemoteSpanContext(context.Background(), spanContext)
 }
 
 // TestTracer_HonorsSampledParent tests that the OTel tracer records a child span when its
@@ -46,22 +51,24 @@ func remoteSampledParent(t *testing.T) context.Context {
 //     started under a sampled remote parent is itself sampled (observed via the standard
 //     context Start returns).
 func TestTracer_HonorsSampledParent(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
-	tr, err := tracer.New(
+	currentTracer, err := tracer.New(
 		ctx,
 		tracer.KindOTel,
 		tracer.WithServiceName("tracer-sampling-test"),
-		tracer.WithEndpoint("localhost:4317"),
+		tracer.WithEndpoint(textLocalhost4317),
 		tracer.WithSampleRate(
-			1e-9,
+			withSampleRateInputParent,
 		), // fractional (not 0) → TraceIDRatioBased branch, rejects ~every root
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tr.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = currentTracer.Shutdown(context.Background()) })
 
 	// The sampled span is deliberately never ended: ending it would queue it for export
 	// to the collector at Shutdown (a network dial and a 30s retry in a unit test).
-	retCtx, _ := tr.Start(remoteSampledParent(t), "child")
+	retCtx, _ := currentTracer.Start(remoteSampledParent(t), "child")
 
 	assert.True(
 		t,
@@ -85,18 +92,20 @@ func TestTracer_HonorsSampledParent(t *testing.T) {
 //   - Given an effectively-zero sample rate and NO parent, a root span is not sampled
 //     (the ratio still governs roots after the ParentBased wrap).
 func TestTracer_RootSpanKeepsRatio(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
-	tr, err := tracer.New(
+	currentTracer, err := tracer.New(
 		ctx,
 		tracer.KindOTel,
 		tracer.WithServiceName("tracer-sampling-root-test"),
-		tracer.WithEndpoint("localhost:4317"),
-		tracer.WithSampleRate(1e-9),
+		tracer.WithEndpoint(textLocalhost4317),
+		tracer.WithSampleRate(withSampleRateInputRatio),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tr.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = currentTracer.Shutdown(context.Background()) })
 
-	retCtx, span := tr.Start(context.Background(), "root")
+	retCtx, span := currentTracer.Start(context.Background(), "root")
 	defer span.End()
 
 	assert.False(
@@ -119,18 +128,20 @@ func TestTracer_RootSpanKeepsRatio(t *testing.T) {
 //   - A span started from the forced context is sampled (ParentBased honours the seeded
 //     sampled remote parent) and TraceIDFromContext yields its 32-hex id.
 func TestContextWithForcedSample(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
-	tr, err := tracer.New(
+	currentTracer, err := tracer.New(
 		ctx,
 		tracer.KindOTel,
 		tracer.WithServiceName("tracer-forced-sample-test"),
-		tracer.WithEndpoint("localhost:4317"),
-		tracer.WithSampleRate(1e-9),
+		tracer.WithEndpoint(textLocalhost4317),
+		tracer.WithSampleRate(withSampleRateInputSample),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tr.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = currentTracer.Shutdown(context.Background()) })
 
-	retCtx, span := tr.Start(
+	retCtx, span := currentTracer.Start(
 		tracer.ContextWithForcedSample(context.Background()),
 		"ws.query",
 	)
@@ -144,7 +155,7 @@ func TestContextWithForcedSample(t *testing.T) {
 	assert.Len(
 		t,
 		tracer.TraceIDFromContext(retCtx),
-		32,
+		wantTraceIDFromContextLen,
 		"the forced span carries a 32-hex trace id",
 	)
 }
@@ -162,47 +173,82 @@ func TestContextWithForcedSample(t *testing.T) {
 //   - With rate-0 and rate-1 tracers created in parallel, every rate-0 root span is
 //     non-recording and every rate-1 root span is recording.
 func TestTracer_ConcurrentNewKeepsOwnSampler(t *testing.T) {
+	t.Parallel()
+
 	const pairs = 64
+
 	ctx := t.Context()
 
-	type result struct {
-		err       error
-		rate      float64
-		recording bool
-	}
-	results := make(chan result, 2*pairs)
-	var wg sync.WaitGroup
-	for i := range 2 * pairs {
+	results := make(chan samplerProbe, 2*pairs)
+
+	var group sync.WaitGroup
+
+	for i := range iterations * pairs {
 		rate := float64(i % 2)
-		wg.Go(func() {
-			tr, err := tracer.New(ctx, tracer.KindOTel,
-				tracer.WithServiceName("tracer-concurrent-test"),
-				tracer.WithEndpoint("localhost:4317"),
-				tracer.WithSampleRate(rate),
-			)
-			if err != nil {
-				results <- result{err: err}
-				return
-			}
-			t.Cleanup(func() { _ = tr.Shutdown(context.WithoutCancel(ctx)) })
-			// Spans are never ended, so nothing is queued for export to the collector.
-			retCtx, _ := tr.Start(ctx, "root")
-			results <- result{
-				rate: rate, recording: oteltrace.SpanFromContext(retCtx).IsRecording(),
-			}
-		})
+
+		group.Go(func() { results <- probeSampler(ctx, t, rate) })
 	}
-	wg.Wait()
+
+	group.Wait()
 	close(results)
 
-	for r := range results {
-		require.NoError(t, r.err)
+	for currentSamplerProbe := range results {
+		require.NoError(t, currentSamplerProbe.err)
 		assert.Equal(
 			t,
-			r.rate == 1,
-			r.recording,
+			currentSamplerProbe.rate == 1,
+			currentSamplerProbe.recording,
 			"a tracer at rate %v must follow its own sampler",
-			r.rate,
+			currentSamplerProbe.rate,
 		)
 	}
 }
+
+// samplerProbe is what one concurrently built tracer did with a root span.
+type samplerProbe struct {
+	err       error
+	rate      float64
+	recording bool
+}
+
+// probeSampler builds a tracer at rate and reports whether its root span records.
+func probeSampler(ctx context.Context, t *testing.T, rate float64) samplerProbe {
+	t.Helper()
+
+	currentTracer, err := tracer.New(ctx, tracer.KindOTel,
+		tracer.WithServiceName("tracer-concurrent-test"),
+		tracer.WithEndpoint(textLocalhost4317),
+		tracer.WithSampleRate(rate),
+	)
+	if err != nil {
+		return samplerProbe{err: err, rate: 0, recording: false}
+	}
+
+	t.Cleanup(func() { _ = currentTracer.Shutdown(context.WithoutCancel(ctx)) })
+
+	// Spans are never ended, so nothing is queued for export to the collector.
+	retCtx, _ := currentTracer.Start(ctx, "root")
+
+	return samplerProbe{
+		rate:      rate,
+		recording: oteltrace.SpanFromContext(retCtx).IsRecording(),
+		err:       nil,
+	}
+}
+
+const (
+	// wantTraceIDFromContextLen is the expected trace idfrom context len.
+	wantTraceIDFromContextLen = 32
+
+	// withSampleRateInputParent is the rate passed to WithSampleRate in
+	// TestTracer_HonorsSampledParent.
+	withSampleRateInputParent = 1e-9
+
+	// withSampleRateInputRatio is the rate passed to WithSampleRate in
+	// TestTracer_RootSpanKeepsRatio.
+	withSampleRateInputRatio = 1e-9
+
+	// withSampleRateInputSample is the rate passed to WithSampleRate in
+	// TestContextWithForcedSample.
+	withSampleRateInputSample = 1e-9
+)

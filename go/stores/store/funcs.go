@@ -64,87 +64,128 @@ func NewEntity[S, C, T, P any, ID comparable](
 	decs decorate.Decorations,
 	name string,
 	raw C,
-	f Funcs[C, T, P, ID],
+	funcs Funcs[C, T, P, ID],
 ) (Entity[C, T, P, ID], error) {
-	b, err := NewBase[S](decs, name, raw)
+	base, err := NewBase[S](decs, name, raw)
 	if err != nil {
 		return Entity[C, T, P, ID]{}, err
 	}
+
 	run := func(
 		ctx context.Context,
-		op string,
+		operation string,
 		kind decorate.RoleKind,
 		fn func(context.Context) error,
 	) error {
 		body := func(ctx context.Context) (struct{}, error) { return struct{}{}, fn(ctx) }
 		if kind == decorate.RoleRead {
-			_, err := b.Exec(ctx, op, body)
-			return err
+			_, opErr := base.Exec(ctx, operation, body)
+
+			return opErr
 		}
-		_, err := b.Write(ctx, op, body)
-		return err
+
+		_, opErr := base.Write(ctx, operation, body)
+
+		return opErr
 	}
-	e, err := decorate.NewEntity[S](name, rolesOf(b, f), run, nil)
+
+	e, err := decorate.NewEntity[S](name, rolesOf(base, funcs), run, nil)
 	if err != nil {
 		return Entity[C, T, P, ID]{}, err
 	}
-	return Entity[C, T, P, ID]{Base: b, Entity: e}, nil
+
+	return Entity[C, T, P, ID]{Base: base, Entity: e}, nil
 }
 
 // rolesOf binds each of f's statements to the client b gives its context.
 func rolesOf[C, T, P any, ID comparable](
-	b Base[C],
-	f Funcs[C, T, P, ID],
+	base Base[C],
+	funcs Funcs[C, T, P, ID],
 ) decorate.Roles[T, P, ID] {
-	var r decorate.Roles[T, P, ID]
-	if f.Get != nil {
-		r.Get = func(ctx context.Context, id ID) (*T, error) {
-			return f.Get(ctx, b.Client(ctx), id)
+	var roles decorate.Roles[T, P, ID]
+
+	bindReads(&roles, base, funcs)
+	bindWrites(&roles, base, funcs)
+	bindBulk(&roles, base, funcs)
+
+	return roles
+}
+
+// bindReads binds the declared read roles over the store's client.
+func bindReads[C, T, P any, ID comparable](
+	roles *decorate.Roles[T, P, ID],
+	base Base[C],
+	funcs Funcs[C, T, P, ID],
+) {
+	if funcs.Get != nil {
+		roles.Get = func(ctx context.Context, id ID) (*T, error) {
+			return funcs.Get(ctx, base.Client(ctx), id)
 		}
 	}
-	if f.List != nil {
-		r.List = func(
+
+	if funcs.List != nil {
+		roles.List = func(
 			ctx context.Context,
 			params P,
 			page types.PageRequest,
 		) (*types.Page[T], error) {
-			return f.List(ctx, b.Client(ctx), params, page)
+			return funcs.List(ctx, base.Client(ctx), params, page)
 		}
 	}
-	if f.Create != nil {
-		r.Create = func(ctx context.Context, v *T) (*T, error) {
-			return f.Create(ctx, b.Client(ctx), v)
+
+	if funcs.Exists != nil {
+		roles.Exists = func(ctx context.Context, id ID) (bool, error) {
+			return funcs.Exists(ctx, base.Client(ctx), id)
 		}
 	}
-	if f.Update != nil {
-		r.Update = func(ctx context.Context, id ID, v *T) (*T, error) {
-			return f.Update(ctx, b.Client(ctx), id, v)
+}
+
+// bindWrites binds the declared single-entity write roles over the store's client.
+func bindWrites[C, T, P any, ID comparable](
+	roles *decorate.Roles[T, P, ID],
+	base Base[C],
+	funcs Funcs[C, T, P, ID],
+) {
+	if funcs.Create != nil {
+		roles.Create = func(ctx context.Context, v *T) (*T, error) {
+			return funcs.Create(ctx, base.Client(ctx), v)
 		}
 	}
-	if f.Delete != nil {
-		r.Delete = func(ctx context.Context, id ID) error {
-			return f.Delete(ctx, b.Client(ctx), id)
+
+	if funcs.Update != nil {
+		roles.Update = func(ctx context.Context, id ID, v *T) (*T, error) {
+			return funcs.Update(ctx, base.Client(ctx), id, v)
 		}
 	}
-	if f.Exists != nil {
-		r.Exists = func(ctx context.Context, id ID) (bool, error) {
-			return f.Exists(ctx, b.Client(ctx), id)
+
+	if funcs.Delete != nil {
+		roles.Delete = func(ctx context.Context, id ID) error {
+			return funcs.Delete(ctx, base.Client(ctx), id)
 		}
 	}
-	if f.Insert != nil {
-		r.Insert = func(ctx context.Context, v *T) error {
-			return f.Insert(ctx, b.Client(ctx), v)
+}
+
+// bindBulk binds the declared insert, upsert and purge roles over the store's client.
+func bindBulk[C, T, P any, ID comparable](
+	roles *decorate.Roles[T, P, ID],
+	base Base[C],
+	funcs Funcs[C, T, P, ID],
+) {
+	if funcs.Insert != nil {
+		roles.Insert = func(ctx context.Context, v *T) error {
+			return funcs.Insert(ctx, base.Client(ctx), v)
 		}
 	}
-	if f.Upsert != nil {
-		r.Upsert = func(ctx context.Context, v *T) error {
-			return f.Upsert(ctx, b.Client(ctx), v)
+
+	if funcs.Upsert != nil {
+		roles.Upsert = func(ctx context.Context, v *T) error {
+			return funcs.Upsert(ctx, base.Client(ctx), v)
 		}
 	}
-	if f.PurgeBefore != nil {
-		r.PurgeBefore = func(ctx context.Context, cutoff time.Time) (int, error) {
-			return f.PurgeBefore(ctx, b.Client(ctx), cutoff)
+
+	if funcs.PurgeBefore != nil {
+		roles.PurgeBefore = func(ctx context.Context, cutoff time.Time) (int, error) {
+			return funcs.PurgeBefore(ctx, base.Client(ctx), cutoff)
 		}
 	}
-	return r
 }

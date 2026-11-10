@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,20 +15,29 @@ from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps, Layer
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from conftest import Observed
+
+_EXPECTED_EXEC = 2
 
 
 def _retrier() -> MagicMock:
-    """Return a Retrier mock that retries one transient failure."""
+    """Return a Retrier mock that retries one transient failure.
+
+    Returns:
+        A Retrier mock that retries one transient failure.
+
+    """
     retrier = MagicMock(spec=Retrier)
 
-    async def retry(op: object) -> object:
+    async def retry(op: Callable[[], Awaitable[object]]) -> object:
         try:
-            return await op()  # type: ignore[operator]
+            return await op()
         except AppError as exc:
             if not exc.is_transient:
                 raise
-            return await op()  # type: ignore[operator]
+            return await op()
 
     retrier.retry = AsyncMock(side_effect=retry)
     return retrier
@@ -38,7 +47,15 @@ class _Queue(Protocol):
     """The client contract under decoration."""
 
     async def send(self, body: str) -> str:
-        """Send one message."""
+        """Send one message.
+
+        Args:
+            body: The message.
+
+        Returns:
+            The message id.
+
+        """
         ...
 
 
@@ -49,7 +66,8 @@ def test_tier_order_matches_go() -> None:
       - Each retry attempt must pass the breaker and get its own deadline and span.
 
     What it tests:
-      - bulkhead → retry → circuit breaker → timeout → tracing → metrics → logging, kind CLIENT.
+      - bulkhead → retry → circuit breaker → timeout → tracing → metrics → logging, kind
+        CLIENT.
     """
     assert tier().order == (
         Layer.BULKHEAD,
@@ -65,15 +83,22 @@ def test_tier_order_matches_go() -> None:
 
 @pytest.mark.asyncio
 async def test_client_base_exec_once_handler_and_producer(observed: Observed) -> None:
-    """``exec`` retries, ``exec_once`` never does, and a handler base drops the call-side layers.
+    """``exec`` retries and ``exec_once`` never does.
+
+    A handler base drops the call-side layers.
 
     Why this test is important:
-      - A message handler is retried by the broker's redelivery; a client retry on top would
-        multiply deliveries.
+      - A message handler is retried by the broker's redelivery; a client retry on top
+        would multiply deliveries.
 
     What it tests:
-      - ``exec`` retries a flap; ``exec_once`` raises it; a wire base with ``handler()`` does
-        not retry and observes in CONSUMER spans; ``producer()`` opens PRODUCER spans.
+      - ``exec`` retries a flap; ``exec_once`` raises it; a wire base with ``handler()``
+        does not retry and observes in CONSUMER spans; ``producer()`` opens PRODUCER
+        spans.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     retrier = _retrier()
     decorations = Decorations.fixed(
@@ -88,10 +113,10 @@ async def test_client_base_exec_once_handler_and_producer(observed: Observed) ->
             "send", AsyncMock(side_effect=AppError(ErrorCode.UNAVAILABLE, "x"))
         )
     handlers = ClientBase.wire(decorations, "queue.handler", handler())
-    retrier.retry.reset_mock()
+    cast("MagicMock", cast("MagicMock", retrier.retry).reset_mock)()
     assert handlers.name == "queue.handler"
     assert await handlers.exec("orders", AsyncMock(return_value=1)) == 1
-    retrier.retry.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", retrier.retry).assert_not_awaited)()
     assert observed.spans[-1][:2] == ("queue.handler.orders", SpanKind.CONSUMER)
     bus = ClientBase.wire(
         Decorations.fixed(Deps(observability=observed.observability)), "bus", producer()
@@ -111,6 +136,10 @@ async def test_client_base_applies_the_clients_tier_per_operation(
 
     What it tests:
       - With tracing off for ``quiet``, its calls open no span while ``loud``'s do.
+
+    Args:
+        observed: Mocked observability collaborators that record the spans.
+
     """
     config = decoration.from_mapping({
         "clients": {"overrides": {"quiet.send": {"tracing": False}}}
@@ -120,5 +149,5 @@ async def test_client_base_applies_the_clients_tier_per_operation(
     loud = ClientBase(_Queue, decorations, "loud")
 
     assert await quiet.exec("send", AsyncMock(return_value=1)) == 1
-    assert await loud.exec("send", AsyncMock(return_value=2)) == 2
+    assert await loud.exec("send", AsyncMock(return_value=2)) == _EXPECTED_EXEC
     assert [name for name, _, _ in observed.spans] == ["loud.send"]

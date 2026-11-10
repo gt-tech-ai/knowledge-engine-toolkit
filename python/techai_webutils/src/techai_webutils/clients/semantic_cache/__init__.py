@@ -1,8 +1,11 @@
-"""Semantic answer cache: the backend, its match tiers, the verifier, admission and the reader.
+"""Semantic answer cache.
 
-A config-selected ``SemanticCache`` (``stub`` or ``redis``), the tiers that read it (``exact``,
-``semantic``, ``verified``), the ``CacheVerifier``, the ``CacheAdmission`` rules and the
-``SemanticCacheReader`` a decorator or workflow reads through.
+The backend, its match tiers, the verifier, admission and the reader.
+
+A config-selected ``SemanticCache`` (``stub`` or ``redis``), the tiers that read it
+(``exact``, ``semantic``, ``verified``), the ``CacheVerifier``, the ``CacheAdmission``
+rules and the ``SemanticCacheReader`` a decorator or workflow reads through, and
+``SemanticCacheProxy``, the read-through decorator around one model method.
 """
 
 from techai_webutils.clients.semantic_cache.admission import (
@@ -11,9 +14,15 @@ from techai_webutils.clients.semantic_cache.admission import (
     cache_admission_from_config,
 )
 from techai_webutils.clients.semantic_cache.builder import (
+    semantic_cache_from_config,
+)
+from techai_webutils.clients.semantic_cache.config import (
     SemanticCacheConfig,
     SemanticCacheKind,
-    semantic_cache_from_config,
+)
+from techai_webutils.clients.semantic_cache.proxy import (
+    SemanticCacheBinding,
+    SemanticCacheProxy,
 )
 from techai_webutils.clients.semantic_cache.reader import CacheRead, SemanticCacheReader
 from techai_webutils.clients.semantic_cache.tiers import (
@@ -35,8 +44,10 @@ __all__ = [
     "CacheTierKind",
     "CacheVerifierConfig",
     "CacheVerifierKind",
+    "SemanticCacheBinding",
     "SemanticCacheConfig",
     "SemanticCacheKind",
+    "SemanticCacheProxy",
     "SemanticCacheReader",
     "cache_admission_from_config",
     "cache_lookup_from_config",

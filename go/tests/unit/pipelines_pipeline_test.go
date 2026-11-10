@@ -9,10 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/pipelines/pipeline"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -28,10 +29,14 @@ import (
 //     timeout.
 func TestPipelineTier_Order(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, decorate.Tier{Name: "pipeline", Order: []decorate.Layer{
-		decorate.LayerRecovery, decorate.LayerLogging, decorate.LayerTracing,
-		decorate.LayerMetrics, decorate.LayerTimeout,
-	}}, pipeline.Tier())
+	assert.Equal(t, decorate.Tier{
+		Name: "pipeline", Order: []decorate.Layer{
+			decorate.LayerRecovery, decorate.LayerLogging, decorate.LayerTracing,
+			decorate.LayerMetrics, decorate.LayerTimeout,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}, pipeline.Tier())
 }
 
 // TestPipelineStage_ThenComposesAndStopsOnError tests stage composition.
@@ -47,7 +52,8 @@ func TestPipelineTier_Order(t *testing.T) {
 //   - A nil next stage or a nil stage function panics at wiring time.
 func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 	t.Parallel()
-	stages := pipeline.Base{}
+
+	stages := stdx.Zero[pipeline.Base]()
 	parse := stages.Stage("parse", func(_ context.Context, s string) (int, error) {
 		return strconv.Atoi(s)
 	})
@@ -67,7 +73,8 @@ func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 		return 0, boom
 	})
 	untouched := mocks.NewMockPipeline[int, string](gomock.NewController(t))
-	_, err = failing.Then(untouched).Execute(t.Context(), "x")
+
+	_, err = failing.Then(untouched).Execute(t.Context(), textX)
 	require.ErrorIs(t, err, boom)
 
 	assert.Panics(t, func() { failing.Then(interfaces.Pipeline[int, string](nil)) })
@@ -89,9 +96,12 @@ func TestPipelineStage_ThenComposesAndStopsOnError(t *testing.T) {
 //     "<pipeline>.<stage>", in order.
 func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	t.Parallel()
-	boom := fixtures.Must(pipeline.NewBase[boomPipeline](fixtures.Decorations(), "boom"))
-	_, err := boom.Stage("boom", func(context.Context, int) (int, error) {
-		panic("boom")
+
+	boom := fixtures.Must(
+		pipeline.NewBase[boomPipeline](fixtures.Decorations(), textBoom),
+	)
+	_, err := boom.Stage(textBoom, func(context.Context, int) (int, error) {
+		panic(textBoom)
 	}).Execute(t.Context(), 1)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 
@@ -99,7 +109,8 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 	tracer := mocks.NewMockTracer(ctrl)
 	span := mocks.NewMockSpan(ctrl)
 	span.EXPECT().SetAttribute(gomock.Any(), gomock.Any()).AnyTimes()
-	span.EXPECT().End().Times(2)
+	span.EXPECT().End().Times(wantCalls)
+
 	start := func(
 		ctx context.Context, _ string, _ ...interfaces.SpanOption,
 	) (context.Context, interfaces.Span) {
@@ -113,9 +124,15 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 			Start(gomock.Any(), "spec.reduce", gomock.Any()).
 			DoAndReturn(start),
 	)
-	stages := fixtures.Must(pipeline.NewBase[specPipeline](decorate.Fixed(decorate.Deps{
-		Observability: decorate.Observability{Tracer: tracer},
-	}), "spec"))
+
+	stages := fixtures.Must(
+		pipeline.NewBase[specPipeline](
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Tracer = tracer
+			})),
+			"spec",
+		),
+	)
 	compile := stages.Stage("compile", func(_ context.Context, s string) (int, error) {
 		return len(s), nil
 	})
@@ -142,21 +159,26 @@ func TestPipelineStage_RecoversAndObservesEachStage(t *testing.T) {
 //   - A fan-out with no stages returns an empty result.
 func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	t.Parallel()
-	stages := pipeline.Base{}
-	started := make(chan struct{}, 3)
+
+	stages := stdx.Zero[pipeline.Base]()
+	started := make(chan struct{}, makeInputOrder)
 	all := make(chan struct{})
+
 	go func() {
 		for range 3 {
 			<-started
 		}
+
 		close(all)
 	}()
-	times := func(k int) interfaces.Pipeline[int, int] {
+
+	times := func(index int) interfaces.Pipeline[int, int] {
 		return pipeline.Stage[int, int](func(ctx context.Context, n int) (int, error) {
 			started <- struct{}{}
+
 			select {
 			case <-all:
-				return n * k, nil
+				return n * index, nil
 			case <-ctx.Done():
 				return 0, ctx.Err()
 			}
@@ -164,7 +186,7 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	}
 
 	got, err := stages.FanOut("multiply", times(1), times(2), times(3)).
-		Execute(t.Context(), 7)
+		Execute(t.Context(), executeInput)
 	require.NoError(t, err)
 	assert.Equal(t, []int{7, 14, 21}, got)
 
@@ -174,12 +196,14 @@ func TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder(t *testing.T) {
 	})
 	blocked := pipeline.Stage[int, int](func(ctx context.Context, _ int) (int, error) {
 		<-ctx.Done()
+
 		return 0, ctx.Err()
 	})
+
 	_, err = stages.FanOut("sources", blocked, failing).Execute(t.Context(), 1)
 	require.ErrorIs(t, err, boom)
 
-	none, err := stages.FanOut[int, int]("none").Execute(t.Context(), 1)
+	none, err := stages.FanOut[int, int](textNone).Execute(t.Context(), 1)
 	require.NoError(t, err)
 	assert.Empty(t, none)
 }
@@ -198,3 +222,13 @@ type boomPipeline interface {
 	// Boom panics.
 	Boom(ctx context.Context, n int) (int, error)
 }
+
+const (
+	// executeInput is the input passed to Execute in
+	// TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder.
+	executeInput = 7
+
+	// makeInputOrder is argument 2 of make in
+	// TestPipelineFanOut_RunsEveryStageOnTheInputAndKeepsOrder.
+	makeInputOrder = 3
+)

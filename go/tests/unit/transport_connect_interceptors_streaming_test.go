@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
@@ -24,13 +25,20 @@ const streamProcedure = "/test.v1.StreamService/Stream"
 // spec available any number of times so a test only asserts the behavior it cares about.
 func newStreamConn(t *testing.T) *mocks.MockStreamingHandlerConn {
 	t.Helper()
+
 	conn := mocks.NewMockStreamingHandlerConn(gomock.NewController(t))
-	conn.EXPECT().Spec().Return(connect.Spec{Procedure: streamProcedure}).AnyTimes()
+	conn.EXPECT().
+		Spec().
+		Return(fixtures.Build(func(row *connect.Spec) {
+			row.Procedure = streamProcedure
+		})).
+		AnyTimes()
 	// Tracing reads the request headers (propagation + X-Request-ID) and writes the
 	// response header (the traceresponse trace id); the others don't, so empty
 	// headers available AnyTimes keep the helper reusable across all tests.
 	conn.EXPECT().RequestHeader().Return(http.Header{}).AnyTimes()
 	conn.EXPECT().ResponseHeader().Return(http.Header{}).AnyTimes()
+
 	return conn
 }
 
@@ -49,22 +57,24 @@ func newStreamConn(t *testing.T) *mocks.MockStreamingHandlerConn {
 //     "ok") and observes one duration for (service, method).
 func TestMetricsInterceptor_Streaming_RecordsCounterAndDuration(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockMetrics(ctrl)
+	metrics := mocks.NewMockMetrics(ctrl)
 	counter := mocks.NewMockCounter(ctrl)
 	hist := mocks.NewMockHistogram(ctrl)
-	m.EXPECT().
-		Counter("connect_rpc_requests_total", gomock.Any(), "service", "method", "code").
+
+	metrics.EXPECT().
+		Counter("connect_rpc_requests_total", gomock.Any(), textService, textMethod, "code").
 		Return(counter)
-	m.EXPECT().
+	metrics.EXPECT().
 		Histogram(
-			"connect_rpc_duration_seconds", gomock.Any(), gomock.Any(), "service", "method",
+			"connect_rpc_duration_seconds", gomock.Any(), gomock.Any(), textService, textMethod,
 		).
 		Return(hist)
-	counter.EXPECT().Inc("test.v1.StreamService", "Stream", "ok")
-	hist.EXPECT().Observe(gomock.Any(), "test.v1.StreamService", "Stream")
+	counter.EXPECT().Inc(textTestV1Streamservice, "Stream", textOk)
+	hist.EXPECT().Observe(gomock.Any(), textTestV1Streamservice, "Stream")
 
-	interceptor := interceptors.MetricsInterceptor(m)
+	interceptor := interceptors.MetricsInterceptor(metrics)
 	conn := newStreamConn(t)
 	next := func(context.Context, connect.StreamingHandlerConn) error { return nil }
 
@@ -85,10 +95,12 @@ func TestMetricsInterceptor_Streaming_RecordsCounterAndDuration(t *testing.T) {
 //     stream's service (captured via the SpyTracer attribute hook).
 func TestTracingInterceptor_Streaming_CreatesSpan(t *testing.T) {
 	t.Parallel()
+
 	var gotService string
+
 	tracer := fixtures.SpyTracer(func(k string, v any) {
 		if k == "rpc.service" {
-			gotService, _ = v.(string)
+			gotService = stdx.As[string](v)
 		}
 	})
 	interceptor := interceptors.TracingInterceptor(tracer)
@@ -97,7 +109,7 @@ func TestTracingInterceptor_Streaming_CreatesSpan(t *testing.T) {
 
 	err := interceptor.WrapStreamingHandler(next)(context.Background(), conn)
 	require.NoError(t, err)
-	assert.Equal(t, "test.v1.StreamService", gotService,
+	assert.Equal(t, textTestV1Streamservice, gotService,
 		"the streaming path must open a span with the rpc.service attribute")
 }
 
@@ -112,6 +124,7 @@ func TestTracingInterceptor_Streaming_CreatesSpan(t *testing.T) {
 //   - A successful streamed RPC produces exactly one Info access line and no error line.
 func TestLoggingInterceptor_Streaming_EmitsOneAccessLine(t *testing.T) {
 	t.Parallel()
+
 	spy := fixtures.NewSpyLogger()
 	interceptor := interceptors.NewLoggingInterceptor(spy)
 	conn := newStreamConn(t)
@@ -129,3 +142,8 @@ func TestLoggingInterceptor_Streaming_EmitsOneAccessLine(t *testing.T) {
 	)
 	assert.Empty(t, *spy.ChildErrorCalls, "a successful stream logs no error line")
 }
+
+const (
+	// textTestV1Streamservice is the literal "test.v1.StreamService".
+	textTestV1Streamservice = "test.v1.StreamService"
+)

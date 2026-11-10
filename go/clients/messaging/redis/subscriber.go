@@ -7,7 +7,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/lifecycle"
 )
@@ -70,16 +70,24 @@ type Subscriber struct {
 
 // NewSubscriber creates a Redis Pub/Sub subscriber over the injected client. It
 // returns a coded InvalidInput error if the client is nil.
-func NewSubscriber(cfg Config) (*Subscriber, error) {
+// cfg must not be nil.
+func NewSubscriber(cfg *Config) (*Subscriber, error) {
 	if cfg.Client == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput, "redis messaging: nil client")
 	}
+
 	return &Subscriber{
 		client:   cfg.Client,
 		logger:   cfg.Logger,
 		handlers: cfg.Handlers,
 		channels: make(map[string]interfaces.MessageHandler),
 		patterns: make(map[string]interfaces.MessageHandler),
+		NoOp:     lifecycle.NoOp{},
+		pubsub:   nil,
+		cancel:   nil,
+		wg:       sync.WaitGroup{},
+		mu:       sync.RWMutex{},
+		closed:   false,
 	}, nil
 }
 
@@ -92,10 +100,14 @@ func (s *Subscriber) Subscribe(
 	if err != nil {
 		return err
 	}
-	if err := ps.Subscribe(ctx, topic); err != nil {
+
+	err = ps.Subscribe(ctx, topic)
+	if err != nil {
 		s.rollback(s.channels, topic)
+
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis subscribe")
 	}
+
 	return nil
 }
 
@@ -106,9 +118,12 @@ func (s *Subscriber) Unsubscribe(ctx context.Context, topic string) error {
 	if ps == nil || !ok {
 		return nil
 	}
-	if err := ps.Unsubscribe(ctx, topic); err != nil {
+
+	err := ps.Unsubscribe(ctx, topic)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis unsubscribe")
 	}
+
 	return nil
 }
 
@@ -121,10 +136,14 @@ func (s *Subscriber) PSubscribe(
 	if err != nil {
 		return err
 	}
-	if err := ps.PSubscribe(ctx, pattern); err != nil {
+
+	err = ps.PSubscribe(ctx, pattern)
+	if err != nil {
 		s.rollback(s.patterns, pattern)
+
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis psubscribe")
 	}
+
 	return nil
 }
 
@@ -135,16 +154,60 @@ func (s *Subscriber) PUnsubscribe(ctx context.Context, pattern string) error {
 	if ps == nil || !ok {
 		return nil
 	}
-	if err := ps.PUnsubscribe(ctx, pattern); err != nil {
+
+	err := ps.PUnsubscribe(ctx, pattern)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "redis punsubscribe")
 	}
+
+	return nil
+}
+
+// Close stops the dispatch loop and tears down the subscription. It is idempotent
+// and nil-safe (Close before any Subscribe is a no-op).
+func (s *Subscriber) Close() error {
+	s.mu.Lock()
+
+	if s.closed {
+		s.mu.Unlock()
+
+		return nil
+	}
+
+	s.closed = true
+
+	pubSub := s.pubsub
+
+	s.pubsub = nil
+
+	cancel := s.cancel
+	s.mu.Unlock()
+
+	// Signal in-flight handlers that the subscriber is shutting down.
+	if cancel != nil {
+		cancel()
+	}
+
+	if pubSub == nil {
+		return nil
+	}
+
+	// Closing the pubsub closes the channel returned by Channel(), so the dispatch
+	// goroutine's range loop exits; wait for it to drain.
+	err := pubSub.Close()
+
+	s.wg.Wait()
+
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "redis subscriber close")
+	}
+
 	return nil
 }
 
 // register lazily starts the subscription (deriving its lifetime context from ctx),
-// records handler under reg[key], and returns the pubsub
-// to issue the broker (P)SUBSCRIBE on. It returns a coded error if the subscriber is
-// already closed.
+// records handler under reg[key], and returns the pubsub to issue the broker (P)SUBSCRIBE
+// on. It returns a coded error if the subscriber is already closed.
 func (s *Subscriber) register(
 	ctx context.Context,
 	reg map[string]interfaces.MessageHandler,
@@ -153,11 +216,15 @@ func (s *Subscriber) register(
 ) (*goredis.PubSub, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.closed {
 		return nil, apperr.New(apperr.CodeUnavailable, "redis subscriber closed")
 	}
+
 	s.ensureStartedLocked(ctx)
+
 	reg[key] = handler
+
 	return s.pubsub, nil
 }
 
@@ -176,40 +243,11 @@ func (s *Subscriber) unregister(
 ) (*goredis.PubSub, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	_, ok := reg[key]
 	delete(reg, key)
+
 	return s.pubsub, ok
-}
-
-// Close stops the dispatch loop and tears down the subscription. It is idempotent
-// and nil-safe (Close before any Subscribe is a no-op).
-func (s *Subscriber) Close() error {
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return nil
-	}
-	s.closed = true
-	ps := s.pubsub
-	s.pubsub = nil
-	cancel := s.cancel
-	s.mu.Unlock()
-
-	// Signal in-flight handlers that the subscriber is shutting down.
-	if cancel != nil {
-		cancel()
-	}
-	if ps == nil {
-		return nil
-	}
-	// Closing the pubsub closes the channel returned by Channel(), so the dispatch
-	// goroutine's range loop exits; wait for it to drain.
-	err := ps.Close()
-	s.wg.Wait()
-	if err != nil {
-		return apperr.Wrap(err, apperr.CodeUnavailable, "redis subscriber close")
-	}
-	return nil
 }
 
 // ensureStartedLocked lazily creates the one multiplexed subscription and launches
@@ -218,6 +256,7 @@ func (s *Subscriber) ensureStartedLocked(ctx context.Context) {
 	if s.pubsub != nil {
 		return
 	}
+
 	// A subscriber-lifetime context, cancelled by Close, is passed to every handler
 	// so an in-flight handler can observe shutdown. It is derived from the first
 	// subscribing call's ctx without its cancellation: the dispatch loop outlives that
@@ -226,12 +265,15 @@ func (s *Subscriber) ensureStartedLocked(ctx context.Context) {
 	// any other request-scoped value reach every handler's ctx for the subscriber's
 	// whole life; a handler must read per-message identity from the message itself.
 	dispatchCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+
 	s.cancel = cancel
 	// Subscribe with no channels: the subscription is opened, and channels/patterns
 	// are added dynamically by Subscribe/PSubscribe.
 	s.pubsub = s.client.Subscribe(dispatchCtx)
+
 	ch := s.pubsub.Channel()
 	s.wg.Add(1)
+
 	go s.dispatch(dispatchCtx, ch)
 }
 
@@ -242,24 +284,46 @@ func (s *Subscriber) ensureStartedLocked(ctx context.Context) {
 // (Pub/Sub has no requeue).
 func (s *Subscriber) dispatch(ctx context.Context, ch <-chan *goredis.Message) {
 	defer s.wg.Done()
+
 	for msg := range ch {
-		s.mu.RLock()
-		handler, ok := s.channels[msg.Channel]
-		if !ok && msg.Pattern != "" {
-			handler, ok = s.patterns[msg.Pattern]
+		handler, ok := s.handlerFor(msg)
+		if ok {
+			s.deliver(ctx, msg, handler)
 		}
-		s.mu.RUnlock()
-		if !ok {
-			continue
-		}
-		m := &interfaces.Message{Topic: msg.Channel, Payload: []byte(msg.Payload)}
-		err := s.handlers.DoOnce(ctx, m.Topic, func(ctx context.Context) error {
-			return handler(ctx, m)
-		})
-		if err != nil && s.logger != nil {
-			s.logger.WithContext(ctx).Error(
-				"message handle failed", "topic", m.Topic, "error", err,
-			)
-		}
+	}
+}
+
+// handlerFor finds the message's handler by channel, then by pattern.
+func (s *Subscriber) handlerFor(msg *goredis.Message) (interfaces.MessageHandler, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	handler, ok := s.channels[msg.Channel]
+	if !ok && msg.Pattern != "" {
+		handler, ok = s.patterns[msg.Pattern]
+	}
+
+	return handler, ok
+}
+
+// deliver runs the handler through the tier, logging a failure.
+func (s *Subscriber) deliver(
+	ctx context.Context, msg *goredis.Message, handler interfaces.MessageHandler,
+) {
+	message := &interfaces.Message{
+		Topic:     msg.Channel,
+		Payload:   []byte(msg.Payload),
+		Metadata:  nil,
+		ID:        "",
+		Timestamp: 0,
+	}
+
+	err := s.handlers.DoOnce(ctx, message.Topic, func(ctx context.Context) error {
+		return handler(ctx, message)
+	})
+	if err != nil && s.logger != nil {
+		s.logger.WithContext(ctx).Error(
+			"message handle failed", "topic", message.Topic, "error", err,
+		)
 	}
 }

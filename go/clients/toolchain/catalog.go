@@ -1,8 +1,9 @@
 package toolchain
 
 import (
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Catalog is the projected, in-memory set of lifecycle tool specs, grouped by category.
@@ -32,18 +33,22 @@ func NewCatalog(tools []types.ToolEntry) (*Catalog, error) {
 		return nil, apperr.Wrap(apperr.Join(errs...), apperr.CodeInvalidInput,
 			"invalid tool manifest")
 	}
+
 	pre, err := ProjectToolsByCategory(tools, types.CategoryPrerequisite)
 	if err != nil {
 		return nil, err
 	}
+
 	req, err := ProjectToolsByCategory(tools, types.CategoryRequired)
 	if err != nil {
 		return nil, err
 	}
+
 	opt, err := ProjectToolsByCategory(tools, types.CategoryOptional)
 	if err != nil {
 		return nil, err
 	}
+
 	return &Catalog{prerequisites: pre, required: req, optional: opt}, nil
 }
 
@@ -60,7 +65,9 @@ func (c *Catalog) Optional() []types.ToolDef { return c.optional }
 // required toolchain, then the optional tools (prerequisites are never installed).
 func (c *Catalog) Installable() []types.ToolDef {
 	out := make([]types.ToolDef, 0, len(c.required)+len(c.optional))
+
 	out = append(out, c.required...)
+
 	return append(out, c.optional...)
 }
 
@@ -68,12 +75,15 @@ func (c *Catalog) Installable() []types.ToolDef {
 // order within each category — the set a CI install provisions.
 func (c *Catalog) CI() []types.ToolDef {
 	installable := c.Installable()
+
 	var out []types.ToolDef
+
 	for i := range installable {
 		if installable[i].CI {
 			out = append(out, installable[i])
 		}
 	}
+
 	return out
 }
 
@@ -85,9 +95,11 @@ func (c *Catalog) All() []types.ToolDef {
 		0,
 		len(c.prerequisites)+len(c.required)+len(c.optional),
 	)
+
 	all = append(all, c.prerequisites...)
 	all = append(all, c.required...)
 	all = append(all, c.optional...)
+
 	return all
 }
 
@@ -101,5 +113,6 @@ func (c *Catalog) Find(binary string) (types.ToolDef, bool) {
 			}
 		}
 	}
-	return types.ToolDef{}, false
+
+	return stdx.Zero[types.ToolDef](), false
 }

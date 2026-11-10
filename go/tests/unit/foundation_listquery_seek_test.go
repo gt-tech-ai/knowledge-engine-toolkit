@@ -9,6 +9,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestSeekFilter_Expansion tests the keyset seek's lexicographic OR-expansion.
@@ -31,61 +32,88 @@ func TestSeekFilter_Expansion(t *testing.T) {
 
 	t.Run("single ascending column is a strict greater-than", func(t *testing.T) {
 		t.Parallel()
-		f := listquery.SeekFilter(
-			[]listquery.KeysetColumn{{Column: "created_at", Desc: false}},
+
+		filter := listquery.SeekFilter(
+			[]listquery.KeysetColumn{
+				fixtures.Build(func(row *listquery.KeysetColumn) {
+					row.Column = textCreatedAt
+				}),
+			},
 			[]any{time.UnixMicro(1000).UTC()},
 		)
-		clause, ok := f.(types.FilterClause)
+		clause, ok := filter.(types.FilterClause)
 		require.True(t, ok, "a single column seek is a bare clause")
-		assert.Equal(t, "created_at", clause.Field)
+		assert.Equal(t, textCreatedAt, clause.Field)
 		assert.Equal(t, types.OpGt, clause.Operator)
 	})
 
 	t.Run("single descending column is a strict less-than", func(t *testing.T) {
 		t.Parallel()
-		f := listquery.SeekFilter(
-			[]listquery.KeysetColumn{{Column: "created_at", Desc: true}},
+
+		filterValue := listquery.SeekFilter(
+			[]listquery.KeysetColumn{
+				fixtures.Build(func(row *listquery.KeysetColumn) {
+					row.Column = textCreatedAt
+					row.Desc = true
+				}),
+			},
 			[]any{time.UnixMicro(1000).UTC()},
 		)
-		clause, ok := f.(types.FilterClause)
+		clause, ok := filterValue.(types.FilterClause)
 		require.True(t, ok)
 		assert.Equal(t, types.OpLt, clause.Operator)
 	})
+
+	testSeekFilterExpansionCompositeOr(t)
+}
+
+// testSeekFilterExpansionCompositeOr continues TestSeekFilter_Expansion: composite or.
+func testSeekFilterExpansionCompositeOr(t *testing.T) {
+	t.Helper()
 
 	t.Run(
 		"two descending columns expand to strict OR (eq AND strict)",
 		func(t *testing.T) {
 			t.Parallel()
-			ts := time.UnixMicro(2000).UTC()
-			f := listquery.SeekFilter(
+
+			instant := time.UnixMicro(2000).UTC()
+			filter := listquery.SeekFilter(
 				[]listquery.KeysetColumn{
-					{Column: "created_at", Desc: true},
-					{Column: "id", Desc: true},
+					fixtures.Build(func(row *listquery.KeysetColumn) {
+						row.Column = textCreatedAt
+						row.Desc = true
+					}),
+					fixtures.Build(func(row *listquery.KeysetColumn) {
+						row.Column = textID
+						row.Desc = true
+					}),
 				},
-				[]any{ts, "the-id"},
+				[]any{instant, "the-id"},
 			)
-			top, ok := f.(types.CompositeFilter)
-			require.True(t, ok, "a multi-column seek is a composite OR")
+			top, found := filter.(types.CompositeFilter)
+			require.True(t, found, "a multi-column seek is a composite OR")
 			require.Len(t, top.Or, 2)
 
 			// Arm 1: strict less-than on the leading column.
-			strict, ok := top.Or[0].(types.FilterClause)
-			require.True(t, ok)
-			assert.Equal(t, "created_at", strict.Field)
+			strict, found := top.Or[0].(types.FilterClause)
+			require.True(t, found)
+			assert.Equal(t, textCreatedAt, strict.Field)
 			assert.Equal(t, types.OpLt, strict.Operator)
-			assert.Equal(t, ts, strict.Value)
+			assert.Equal(t, instant, strict.Value)
 
 			// Arm 2: eq on the leading column AND the strict tie on the id column.
-			tail, ok := top.Or[1].(types.CompositeFilter)
-			require.True(t, ok)
+			tail, found := top.Or[1].(types.CompositeFilter)
+			require.True(t, found)
 			require.Len(t, tail.And, 2)
-			eq, ok := tail.And[0].(types.FilterClause)
-			require.True(t, ok)
-			assert.Equal(t, "created_at", eq.Field)
+
+			eq, found := tail.And[0].(types.FilterClause)
+			require.True(t, found)
+			assert.Equal(t, textCreatedAt, eq.Field)
 			assert.Equal(t, types.OpEq, eq.Operator)
-			idClause, ok := tail.And[1].(types.FilterClause)
-			require.True(t, ok)
-			assert.Equal(t, "id", idClause.Field)
+
+			idClause, found := tail.And[1].(types.FilterClause)
+			require.True(t, found)
+			assert.Equal(t, textID, idClause.Field)
 			assert.Equal(t, types.OpLt, idClause.Operator)
 			assert.Equal(t, "the-id", idClause.Value)
 		},

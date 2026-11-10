@@ -10,7 +10,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 )
@@ -44,14 +44,16 @@ type Client struct {
 // adapter's app-wiring entrypoint and does no I/O: the connection is dialed in Start so
 // a composition root can be assembled against an unreachable database without failing
 // at graph-build time.
-func NewFromConfig(cfg Config) (*Client, error) {
+// cfg must not be nil.
+func NewFromConfig(cfg *Config) (*Client, error) {
 	if cfg.Kind != "" && cfg.Kind != KindPostgres {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"gorm: unknown kind \""+cfg.Kind+"\" (want postgres)",
 		)
 	}
-	return &Client{cfg: cfg}, nil
+
+	return &Client{cfg: *cfg, db: nil}, nil
 }
 
 // DB returns the underlying *gorm.DB for repositories to query through. It is nil
@@ -63,6 +65,7 @@ func (c *Client) Close() error {
 	if c.db == nil {
 		return nil
 	}
+
 	return closePool(c.db)
 }
 
@@ -77,21 +80,31 @@ var _ interfaces.Client = (*Client)(nil)
 // is closed here and DB/Liveness keep reporting not started. GORM's own automatic
 // ping is disabled so the reachability check honours ctx.
 func (c *Client) Start(ctx context.Context) error {
-	db, err := gorm.Open(
+	var gormConfig gorm.Config
+
+	gormConfig.DisableAutomaticPing = true
+
+	value, err := gorm.Open(
 		postgres.Open(c.cfg.Database.DSN()),
-		&gorm.Config{DisableAutomaticPing: true},
+		&gormConfig,
 	)
 	if err != nil {
-		if db != nil {
-			_ = closePool(db)
+		if value != nil {
+			_ = closePool(value)
 		}
+
 		return apperr.Wrap(err, apperr.CodeInternal, "open gorm postgres")
 	}
-	if err := ping(ctx, db); err != nil {
-		_ = closePool(db)
+
+	err = ping(ctx, value)
+	if err != nil {
+		_ = closePool(value)
+
 		return err
 	}
-	c.db = db
+
+	c.db = value
+
 	return nil
 }
 
@@ -106,6 +119,7 @@ func (c *Client) Liveness(_ context.Context) error {
 	if c.db == nil {
 		return apperr.Internal("gorm client not started")
 	}
+
 	return nil
 }
 
@@ -116,6 +130,7 @@ func (c *Client) Readiness(ctx context.Context) error {
 	if c.db == nil {
 		return apperr.Internal("gorm client not started")
 	}
+
 	return ping(ctx, c.db)
 }
 
@@ -126,13 +141,16 @@ func ping(ctx context.Context, db *gorm.DB) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "gorm sql.DB")
 	}
-	if err := sqlDB.PingContext(ctx); err != nil {
+
+	err = sqlDB.PingContext(ctx)
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,
 			"gorm postgres ping failed",
 		)
 	}
+
 	return nil
 }
 
@@ -142,8 +160,11 @@ func closePool(db *gorm.DB) error {
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "gorm sql.DB")
 	}
-	if err := sqlDB.Close(); err != nil {
+
+	err = sqlDB.Close()
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "close gorm postgres pool")
 	}
+
 	return nil
 }

@@ -22,3 +22,6 @@ const (
 
 	emptyResponseDesc = "Empty response"
 )
+
+// statusCodeLen is the length of a three-digit HTTP status response key.
+const statusCodeLen = 3

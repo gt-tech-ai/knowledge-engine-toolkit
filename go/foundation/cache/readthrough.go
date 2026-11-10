@@ -8,8 +8,9 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // ReadThroughOption tunes one ReadThrough call.
@@ -60,42 +61,105 @@ func WithCacheable[T any](cacheable func(T) bool) ReadThroughOption[T] {
 // value type (e.g. types.Page[...] or a small count struct), not a pointer.
 func ReadThrough[T any](
 	ctx context.Context,
-	c interfaces.ByteCache,
-	sf *singleflight.Group,
+	byteCache interfaces.ByteCache,
+	group *singleflight.Group,
 	key string,
 	ttl time.Duration,
 	version int,
 	load func() (T, error),
 	opts ...ReadThroughOption[T],
 ) (T, error) {
-	var o readThroughOptions[T]
+	var currentReadThroughOptions readThroughOptions[T]
+
 	for _, opt := range opts {
-		opt(&o)
+		opt(&currentReadThroughOptions)
 	}
+
 	var zero T
-	if err := ctx.Err(); err != nil {
+
+	err := ctx.Err()
+	if err != nil {
 		return zero, contextError(err)
 	}
-	if c != nil {
-		if data, hit := c.Get(ctx, key); hit {
-			if val, ok, decErr := Decode[T](data, version); decErr == nil && ok {
-				return val, nil
-			}
-		}
+
+	if val, ok := cachedValue[T](ctx, byteCache, key, version); ok {
+		return val, nil
 	}
+
 	detached := context.WithoutCancel(ctx)
-	flight := sf.DoChan(key, func() (any, error) {
+	flight := group.DoChan(key, func() (any, error) {
 		result, loadErr := recoverLoad(load)
 		if loadErr != nil {
 			return nil, loadErr
 		}
-		if c != nil && (o.cacheable == nil || o.cacheable(result)) {
-			if encoded, encErr := Encode(result, version); encErr == nil {
-				c.Set(detached, key, encoded, ttl)
-			}
-		}
+
+		storeValue(
+			detached,
+			byteCache,
+			key,
+			ttl,
+			version,
+			result,
+			currentReadThroughOptions.cacheable,
+		)
+
 		return result, nil
 	})
+
+	return awaitFlight[T](ctx, flight)
+}
+
+// cachedValue reads a decodable entry; a nil cache, a miss or a stale entry is false.
+func cachedValue[T any](
+	ctx context.Context, byteCache interfaces.ByteCache, key string, version int,
+) (T, bool) {
+	var zero T
+
+	if byteCache == nil {
+		return zero, false
+	}
+
+	data, hit := byteCache.Get(ctx, key)
+	if !hit {
+		return zero, false
+	}
+
+	val, ok, err := Decode[T](data, version)
+	if err != nil || !ok {
+		return zero, false
+	}
+
+	return val, true
+}
+
+// storeValue encodes and caches the value; a nil cache, a value cacheable rejects or an
+// encode failure stores nothing. A nil cacheable accepts every value.
+func storeValue[T any](
+	ctx context.Context,
+	byteCache interfaces.ByteCache,
+	key string,
+	ttl time.Duration,
+	version int,
+	value T,
+	cacheable func(T) bool,
+) {
+	if byteCache == nil || (cacheable != nil && !cacheable(value)) {
+		return
+	}
+
+	encoded, err := Encode(value, version)
+	if err == nil {
+		byteCache.Set(ctx, key, encoded, ttl)
+	}
+}
+
+// awaitFlight waits for the shared load or the caller's cancellation.
+func awaitFlight[T any](
+	ctx context.Context,
+	flight <-chan singleflight.Result,
+) (T, error) {
+	var zero T
+
 	select {
 	case <-ctx.Done():
 		return zero, contextError(ctx.Err())
@@ -103,9 +167,11 @@ func ReadThrough[T any](
 		if res.Err != nil {
 			return zero, res.Err
 		}
+
 		// The flight returns the exact value our load closure produced (a T), so the
 		// assertion is total.
-		result, _ := res.Val.(T)
+		result := stdx.As[T](res.Val)
+
 		return result, nil
 	}
 }
@@ -126,6 +192,7 @@ func recoverLoad[T any](load func() (T, error)) (result T, err error) {
 			)
 		}
 	}()
+
 	return load()
 }
 
@@ -139,5 +206,6 @@ func contextError(err error) error {
 			"cache: read-through wait timed out",
 		)
 	}
+
 	return apperr.Wrap(err, apperr.CodeCanceled, "cache: read-through wait canceled")
 }

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,10 +15,10 @@ from techai_webutils.clients.model_gateway import (
     RoutedConfig,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.clients.model_gateway.routed.sink import (
     route_decision_sink_from_config,
 )
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.core.interfaces.llm import LLMMessage
@@ -28,6 +28,8 @@ from techai_webutils.core.interfaces.model_gateway import (
     RouteDecision,
     current_route_decision,
 )
+from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
+from tests.json_path import dig, items
 
 _PRICES = PriceTable(
     prices={
@@ -44,12 +46,12 @@ def test_analytics_sink_publishes_a_route_decisions_fact() -> None:
     """Test that the analytics sink turns a decision into one ``route_decisions`` fact.
 
     **Why this test is important:**
-      - Routing quality and savings are analysed from these facts; a missing field blinds the
-        chart that compares routing policies.
+      - Routing quality and savings are analysed from these facts; a missing field blinds
+        the chart that compares routing policies.
 
     **What it tests:**
-      - one fact for cube ``route_decisions``, org ``org-1``, with the route, model, decider and
-        shadow flag as dims and attempts, tokens and cost as measures
+      - one fact for cube ``route_decisions``, org ``org-1``, with the route, model,
+        decider and shadow flag as dims and attempts, tokens and cost as measures
       - the ``noop`` default publishes nothing; an unknown kind is ``INVALID_INPUT``
     """
     facts = MagicMock(spec=FactPublisher)
@@ -66,26 +68,38 @@ def test_analytics_sink_publishes_a_route_decisions_fact() -> None:
     sink.record(decision, _CTX)
     route_decision_sink_from_config({}, facts=facts).record(decision, _CTX)
 
-    (published,) = facts.publish.call_args.args[0]
-    assert (published.cube, published.org_id) == ("route_decisions", "org-1")
-    assert published.dims["model_id"] == "anthropic/sonnet"
-    assert published.dims["shadow"] == "false"
-    assert published.measures["tokens"] == pytest.approx(12.0)
-    facts.publish.assert_called_once()
+    (published,) = items(
+        cast(
+            "list[object]",
+            cast("MagicMock", cast("MagicMock", facts.publish).call_args).args,
+        )[0]
+    )
+    assert (cast("object", published.cube), cast("object", published.org_id)) == (
+        "route_decisions",
+        "org-1",
+    )
+    assert cast("dict[str, object]", published.dims)["model_id"] == "anthropic/sonnet"
+    assert cast("dict[str, object]", published.dims)["shadow"] == "false"
+    assert cast("dict[str, object]", published.measures)["tokens"] == pytest.approx(12.0)
+    cast("MagicMock", cast("MagicMock", facts.publish).assert_called_once)()
     with pytest.raises(AppError) as caught:
-        route_decision_sink_from_config({"kind": "kafka"})
+        _ = route_decision_sink_from_config({"kind": "kafka"})
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
 def test_analytics_sink_attributes_the_decision_to_workspace_team_and_user() -> None:
-    """Test that a ``route_decisions`` fact names the workspace, and the team and user when known.
+    """Test that a ``route_decisions`` fact names the workspace.
+
+    It also names the team and user when known.
 
     **Why this test is important:**
-      - Cost per team and per user is read from these facts, and a dashboard filters every cube
-        by the same ``workspace`` dim; a fact without them can't be charged to anyone.
+      - Cost per team and per user is read from these facts, and a dashboard filters every
+        cube by the same ``workspace`` dim; a fact without them can't be charged to
+        anyone.
 
     **What it tests:**
-      - a context with ``team_id`` and ``user_id`` yields dims ``workspace``, ``team`` and ``user``
+      - a context with ``team_id`` and ``user_id`` yields dims ``workspace``, ``team`` and
+        ``user``
       - a context without them yields ``workspace`` and no ``team`` or ``user`` dim
     """
     facts = MagicMock(spec=FactPublisher)
@@ -102,21 +116,28 @@ def test_analytics_sink_attributes_the_decision_to_workspace_team_and_user() -> 
     sink.record(decision, who)
     sink.record(decision, _CTX)
 
-    named, anonymous = (call.args[0][0] for call in facts.publish.call_args_list)
-    assert (named.dims["workspace"], named.dims["team"], named.dims["user"]) == (
+    named, anonymous = (
+        dig(cast("list[object]", call.args), 0, 0)
+        for call in cast("list[object]", cast("MagicMock", facts.publish).call_args_list)
+    )
+    assert (
+        cast("dict[str, object]", named.dims)["workspace"],
+        cast("dict[str, object]", named.dims)["team"],
+        cast("dict[str, object]", named.dims)["user"],
+    ) == (
         "ws-1",
         "t1",
         "u1",
     )
-    assert anonymous.dims["workspace"] == "ws-1"
-    assert "team" not in anonymous.dims
-    assert "user" not in anonymous.dims
-    assert "workspace_id" not in named.dims
+    assert cast("dict[str, object]", anonymous.dims)["workspace"] == "ws-1"
+    assert "team" not in cast("list[object]", anonymous.dims)
+    assert "user" not in cast("list[object]", anonymous.dims)
+    assert "workspace_id" not in cast("list[object]", named.dims)
 
 
 @pytest.mark.asyncio
 async def test_decision_carries_actual_tokens_and_cost(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a served call's decision carries its estimate, tokens and cost.
 
@@ -124,9 +145,14 @@ async def test_decision_carries_actual_tokens_and_cost(
       - The decision is the routing audit trail: what was expected, what it cost.
 
     **What it tests:**
-      - after a ``complete`` the decision has ``tokens`` = input + output, ``actual_cost`` from
-        the price table and an ``estimated_cost``
+      - after a ``complete`` the decision has ``tokens`` = input + output, ``actual_cost``
+        from the price table and an ``estimated_cost``
       - the decision is handed to the sink with the request's context
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     facts = MagicMock(spec=FactPublisher)
     gateway = new_model_gateway_from_config(
@@ -136,10 +162,12 @@ async def test_decision_carries_actual_tokens_and_cost(
                 catalog=catalog_raw, routes=routes_raw, sink={"kind": "analytics"}
             ),
         ),
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=lambda: _CTX,
-        prices=_PRICES,
-        facts=facts,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=lambda: _CTX,
+            prices=_PRICES,
+            facts=facts,
+        ),
     )
 
     response = await gateway.complete([
@@ -155,13 +183,18 @@ async def test_decision_carries_actual_tokens_and_cost(
     ) / 1000
     assert decision.actual_cost == expected.quantize(Decimal("0.000001"))
     assert decision.estimated_cost is not None
-    (fact,) = facts.publish.call_args.args[0]
-    assert fact.dims["workspace"] == "ws-1"
+    (fact,) = items(
+        cast(
+            "list[object]",
+            cast("MagicMock", cast("MagicMock", facts.publish).call_args).args,
+        )[0]
+    )
+    assert cast("dict[str, object]", fact.dims)["workspace"] == "ws-1"
 
 
 @pytest.mark.asyncio
 async def test_sink_failure_never_fails_the_answer(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a sink that raises is counted, never surfaced.
 
@@ -171,6 +204,11 @@ async def test_sink_failure_never_fails_the_answer(
     **What it tests:**
       - with a publisher that raises, ``complete`` still answers
       - ``route_decision_sink_failures_total`` is incremented
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     facts = MagicMock(spec=FactPublisher)
     facts.publish = MagicMock(side_effect=RuntimeError("kafka down"))
@@ -184,13 +222,15 @@ async def test_sink_failure_never_fails_the_answer(
                 catalog=catalog_raw, routes=routes_raw, sink={"kind": "analytics"}
             ),
         ),
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=lambda: _CTX,
-        facts=facts,
-        metrics=metrics,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=lambda: _CTX,
+            facts=facts,
+            metrics=metrics,
+        ),
     )
 
     response = await gateway.complete([LLMMessage(role="user", content="q")])
 
     assert response.content == "q"
-    failures.inc.assert_called()
+    cast("MagicMock", cast("MagicMock", failures.inc).assert_called)()

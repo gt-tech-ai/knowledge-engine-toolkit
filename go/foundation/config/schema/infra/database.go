@@ -7,8 +7,25 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultDatabaseConfigConnectionMaxLifetime is the default ConnectionMaxLifetime of
+// DatabaseConfig.
+const defaultDatabaseConfigConnectionMaxLifetime = 5 * time.Minute
+
+// defaultDatabaseConfigConnMaxIdleTime is the default ConnMaxIdleTime of DatabaseConfig.
+const defaultDatabaseConfigConnMaxIdleTime = 2 * time.Minute
+
+// defaultDatabaseConfigPort is the default Port of DatabaseConfig.
+const defaultDatabaseConfigPort = 5432
+
+// defaultDatabaseConfigMaxConnections is the default MaxConnections of DatabaseConfig.
+const defaultDatabaseConfigMaxConnections = 25
+
+// defaultDatabaseConfigMaxIdleConnections is the default MaxIdleConnections of
+// DatabaseConfig.
+const defaultDatabaseConfigMaxIdleConnections = 5
 
 // DatabaseConfig holds PostgreSQL connection configuration.
 type DatabaseConfig struct {
@@ -70,11 +87,11 @@ func DefaultDatabaseConfig() DatabaseConfig {
 		Password:              "dev_password",
 		Database:              "knowledge_engine",
 		SSLMode:               "disable",
-		ConnectionMaxLifetime: 5 * time.Minute,
-		ConnMaxIdleTime:       2 * time.Minute,
-		Port:                  5432,
-		MaxConnections:        25,
-		MaxIdleConnections:    5,
+		ConnectionMaxLifetime: defaultDatabaseConfigConnectionMaxLifetime,
+		ConnMaxIdleTime:       defaultDatabaseConfigConnMaxIdleTime,
+		Port:                  defaultDatabaseConfigPort,
+		MaxConnections:        defaultDatabaseConfigMaxConnections,
+		MaxIdleConnections:    defaultDatabaseConfigMaxIdleConnections,
 	}
 }
 
@@ -85,13 +102,21 @@ func DefaultDatabaseConfig() DatabaseConfig {
 // produce a DSN that parses back to the same values.
 func (c *DatabaseConfig) DSN() string {
 	host := strings.TrimSuffix(strings.TrimPrefix(c.Host, "["), "]")
+
 	dsn := url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(c.User, c.Password),
-		Host:     net.JoinHostPort(host, strconv.Itoa(c.Port)),
-		Path:     "/" + c.Database,
-		RawQuery: url.Values{"sslmode": {c.SSLMode}}.Encode(),
+		Scheme:      "postgres",
+		Opaque:      "",
+		User:        url.UserPassword(c.User, c.Password),
+		Host:        net.JoinHostPort(host, strconv.Itoa(c.Port)),
+		Path:        "/" + c.Database,
+		Fragment:    "",
+		RawQuery:    url.Values{"sslmode": {c.SSLMode}}.Encode(),
+		RawPath:     "",
+		RawFragment: "",
+		ForceQuery:  false,
+		OmitHost:    false,
 	}
+
 	return dsn.String()
 }
 
@@ -100,5 +125,6 @@ func (c *DatabaseConfig) Validate() error {
 	if c.Host == "" {
 		return apperr.InvalidInput("database.host is required")
 	}
+
 	return nil
 }

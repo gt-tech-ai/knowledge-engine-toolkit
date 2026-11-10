@@ -5,7 +5,7 @@ package keyed
 import (
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -23,6 +23,7 @@ func (c Config) Validate() error {
 	if c.MaxPerKey <= 0 {
 		return apperr.InvalidInput("keyed limiter: max_per_key must be positive")
 	}
+
 	return nil
 }
 
@@ -39,10 +40,12 @@ type Limiter struct {
 
 // New returns a Limiter for cfg; an invalid cfg is CodeInvalidInput.
 func New(cfg Config) (*Limiter, error) {
-	if err := cfg.Validate(); err != nil {
+	err := cfg.Validate()
+	if err != nil {
 		return nil, err
 	}
-	return &Limiter{held: map[string]int{}, limit: cfg.MaxPerKey}, nil
+
+	return &Limiter{held: map[string]int{}, limit: cfg.MaxPerKey, mu: sync.Mutex{}}, nil
 }
 
 // TryAcquire takes one of key's slots, or reports false when key holds its cap. The
@@ -50,11 +53,15 @@ func New(cfg Config) (*Limiter, error) {
 func (l *Limiter) TryAcquire(key string) (release func(), ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	if l.held[key] >= l.limit {
 		return nil, false
 	}
+
 	l.held[key]++
+
 	var once sync.Once
+
 	return func() { once.Do(func() { l.release(key) }) }, true
 }
 
@@ -62,6 +69,7 @@ func (l *Limiter) TryAcquire(key string) (release func(), ok bool) {
 func (l *Limiter) release(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	l.held[key]--
 	if l.held[key] <= 0 {
 		delete(l.held, key)

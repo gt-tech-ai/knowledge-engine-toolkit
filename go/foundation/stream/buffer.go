@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -47,15 +47,15 @@ func (k Kind) String() string {
 // ParseKind maps a config kind string ("direct" | "bounded") to its Kind, failing
 // loudly on an unknown value. A composition root uses it to select the backend from
 // configuration.
-func ParseKind(s string) (Kind, error) {
-	switch s {
+func ParseKind(text string) (Kind, error) {
+	switch text {
 	case "direct":
 		return KindDirect, nil
 	case "bounded":
 		return KindBounded, nil
 	default:
 		return 0, apperr.New(apperr.CodeInvalidInput,
-			fmt.Sprintf("unknown stream buffer kind: %q", s))
+			fmt.Sprintf("unknown stream buffer kind: %q", text))
 	}
 }
 
@@ -88,6 +88,7 @@ func NewFromConfig[T any](cfg Config, size func(T) int) (Buffer[T], error) {
 					"and a size func, got max_items=%d max_bytes=%d",
 				cfg.MaxItems, cfg.MaxBytes))
 		}
+
 		return bounded[T]{maxItems: cfg.MaxItems, maxBytes: cfg.MaxBytes, size: size}, nil
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput,
@@ -122,18 +123,24 @@ func (b bounded[T]) Wrap(
 	src interfaces.Stream[T],
 ) interfaces.Stream[T] {
 	ctx, cancel := context.WithCancel(ctx)
-	q := &queue[T]{
-		ch:   make(chan entry[T], b.maxItems),
-		sem:  semaphore.NewWeighted(int64(b.maxBytes)),
-		done: make(chan struct{}),
+	currentQueue := &queue[T]{
+		ch:      make(chan entry[T], b.maxItems),
+		sem:     semaphore.NewWeighted(int64(b.maxBytes)),
+		done:    make(chan struct{}),
+		exitErr: nil,
 	}
-	go q.produce(ctx, src, func(item T) int64 {
+
+	go currentQueue.produce(ctx, src, func(item T) int64 {
 		return int64(min(max(b.size(item), 0), b.maxBytes))
 	})
-	return newLatched(q.next, func() error {
+
+	return newLatched(currentQueue.next, func() error {
 		cancel()
+
 		err := src.Close()
-		<-q.done
+
+		<-currentQueue.done
+
 		return err
 	})
 }
@@ -172,22 +179,37 @@ func (q *queue[T]) produce(
 	size func(T) int64,
 ) {
 	defer close(q.done)
+
 	for {
 		item, ok, err := src.Next(ctx)
 		if err != nil || !ok {
-			q.send(ctx, entry[T]{end: true, err: err})
+			q.send(ctx, entry[T]{end: true, err: err, item: *new(T), n: 0})
+
 			return
 		}
-		n := size(item)
-		if err := q.sem.Acquire(ctx, n); err != nil {
-			q.exitErr = canceled(err)
-			return
-		}
-		if !q.send(ctx, entry[T]{item: item, n: n}) {
-			q.sem.Release(n)
+
+		if !q.enqueue(ctx, item, size(item)) {
 			return
 		}
 	}
+}
+
+// enqueue reserves the item's bytes and queues it, reporting whether to keep producing.
+func (q *queue[T]) enqueue(ctx context.Context, item T, count int64) bool {
+	err := q.sem.Acquire(ctx, count)
+	if err != nil {
+		q.exitErr = canceled(err)
+
+		return false
+	}
+
+	if !q.send(ctx, entry[T]{item: item, n: count, err: nil, end: false}) {
+		q.sem.Release(count)
+
+		return false
+	}
+
+	return true
 }
 
 // send enqueues e, reporting false (and recording why) when ctx ends first.
@@ -197,6 +219,7 @@ func (q *queue[T]) send(ctx context.Context, e entry[T]) bool {
 		return true
 	case <-ctx.Done():
 		q.exitErr = canceled(ctx.Err())
+
 		return false
 	}
 }
@@ -204,6 +227,7 @@ func (q *queue[T]) send(ctx context.Context, e entry[T]) bool {
 // next takes the oldest entry, releasing its bytes to the producer.
 func (q *queue[T]) next(ctx context.Context) (item T, ok bool, err error) {
 	var zero T
+
 	select {
 	case e := <-q.ch:
 		return q.take(e)
@@ -220,13 +244,16 @@ func (q *queue[T]) next(ctx context.Context) (item T, ok bool, err error) {
 }
 
 // take turns a dequeued entry into Next's result.
-func (q *queue[T]) take(e entry[T]) (item T, ok bool, err error) {
-	if e.end {
+func (q *queue[T]) take(currentEntry entry[T]) (item T, ok bool, err error) {
+	if currentEntry.end {
 		var zero T
-		return zero, false, e.err
+
+		return zero, false, currentEntry.err
 	}
-	q.sem.Release(e.n)
-	return e.item, true, nil
+
+	q.sem.Release(currentEntry.n)
+
+	return currentEntry.item, true, nil
 }
 
 // canceled codes a context error ending a stream read: a deadline is CodeTimeout, a
@@ -261,28 +288,42 @@ func newLatched[T any](
 	next func(context.Context) (T, bool, error),
 	closeFn func() error,
 ) *latched[T] {
-	return &latched[T]{next: next, close: closeFn}
+	return &latched[T]{
+		next:     next,
+		close:    closeFn,
+		err:      nil,
+		closeErr: nil,
+		once:     sync.Once{},
+		closed:   atomic.Bool{},
+		ended:    false,
+	}
 }
 
 // Next implements interfaces.Stream.
 func (l *latched[T]) Next(ctx context.Context) (item T, ok bool, err error) {
 	var zero T
+
 	if l.ended {
 		return zero, false, l.err
 	}
+
 	if l.closed.Load() {
 		return zero, false, nil
 	}
+
 	item, ok, err = l.next(ctx)
 	if l.closed.Load() {
 		// Close ran during next: whatever next saw (often the cancellation Close
 		// caused), the reader abandoned the stream, so report the end.
 		return zero, false, nil
 	}
+
 	if err != nil || !ok {
 		l.ended, l.err = true, err
+
 		return zero, false, err
 	}
+
 	return item, true, nil
 }
 
@@ -290,5 +331,6 @@ func (l *latched[T]) Next(ctx context.Context) (item T, ok bool, err error) {
 func (l *latched[T]) Close() error {
 	l.closed.Store(true)
 	l.once.Do(func() { l.closeErr = l.close() })
+
 	return l.closeErr
 }

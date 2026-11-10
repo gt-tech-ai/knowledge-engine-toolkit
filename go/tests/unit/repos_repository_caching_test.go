@@ -9,11 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	fcache "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -39,27 +40,29 @@ const cacheVersion = 3
 //   - CacheKey namespaces the id under "repo:<name>:<id>".
 func TestCacheKey(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, "repo:widgets:42", repository.CacheKey("widgets", 42))
+	assert.Equal(t, "repo:widgets:42", repository.CacheKey(textWidgets, cacheKeyInput))
 }
 
-// cachingRepo builds the read-through cache over store, optionally wiring the
-// id-extractor that enables warm-on-create.
+// entityID is the id-extractor that enables warm-on-create.
+func entityID(e *te) string { return e.ID }
+
+// cachingRepo builds the read-through cache over store with idOf as its id-extractor
+// (nil leaves warm-on-create off).
 func cachingRepo(
 	store interfaces.Store[te, tp, string],
 	cache interfaces.ByteCache,
-	withKeyFunc bool,
+	idOf func(*te) string,
 ) interfaces.Store[te, tp, string] {
-	c := repository.Cache[te, string]{
+	currentCache := repository.Cache[te, string]{
 		Store:   cache,
 		TTL:     time.Minute,
 		Version: cacheVersion,
+		IDOf:    idOf,
 	}
-	if withKeyFunc {
-		c.IDOf = func(e *te) string { return e.ID }
-	}
+
 	return fixtures.Must(
 		repository.NewEntity[interfaces.Repository[te, tp, string], te, tp, string](
-			fixtures.Decorations(), "repo", store, &c,
+			fixtures.Decorations(), "repo", store, &currentCache,
 		),
 	)
 }
@@ -82,11 +85,13 @@ func cachingRepo(
 //     backend.
 func TestCached_Get(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
-	stored := te{ID: "id", Name: "cached"}
+	stored := te{ID: textID, Name: textCached}
 
 	t.Run("hit serves from cache", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](
@@ -96,58 +101,73 @@ func TestCached_Get(t *testing.T) {
 		require.NoError(t, err)
 		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(enc, true)
 
-		got, err := cachingRepo(store, cache, true).Get(ctx, "id")
+		got, err := cachingRepo(store, cache, entityID).Get(ctx, textID)
 		require.NoError(t, err)
-		assert.Equal(t, "cached", got.Name)
+		assert.Equal(t, textCached, got.Name)
 	})
 
 	t.Run("miss fetches, caches, and copies", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
-		backend := &te{ID: "id", Name: "fresh"}
+		backend := &te{ID: textID, Name: "fresh"}
+
 		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
-		store.EXPECT().Get(gomock.Any(), "id").Return(backend, nil)
+		store.EXPECT().Get(gomock.Any(), textID).Return(backend, nil)
 		cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), time.Minute)
 
-		got, err := cachingRepo(store, cache, true).Get(ctx, "id")
+		got, err := cachingRepo(store, cache, entityID).Get(ctx, textID)
 		require.NoError(t, err)
 		assert.Equal(t, "fresh", got.Name)
 		assert.NotSame(t, backend, got, "the caller gets an independent copy")
 	})
 
-	for _, tc := range []struct {
+	testCachedGetMisses(ctx, t, stored)
+}
+
+// testCachedGetMisses continues TestCached_Get: misses.
+func testCachedGetMisses(ctx context.Context, t *testing.T, stored te) {
+	t.Helper()
+
+	for _, testCase := range []struct {
 		name string
 		data []byte
 	}{
 		{name: "stale version", data: mustEncode(t, stored, cacheVersion+1)},
 		{name: "corrupt bytes", data: []byte("not json")},
 	} {
-		t.Run("miss on "+tc.name, func(t *testing.T) {
+		t.Run("miss on "+testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			ctrl := gomock.NewController(t)
 			cache := mocks.NewMockByteCache(ctrl)
 			store := mocks.NewMockStore[te, tp, string](ctrl)
-			cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(tc.data, true)
-			store.EXPECT().Get(gomock.Any(), "id").Return(&te{ID: "id"}, nil)
+
+			cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(testCase.data, true)
+			store.EXPECT().
+				Get(gomock.Any(), textID).
+				Return(&te{ID: textID, Name: ""}, nil)
 			cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), gomock.Any())
 
-			_, err := cachingRepo(store, cache, true).Get(ctx, "id")
+			_, err := cachingRepo(store, cache, entityID).Get(ctx, textID)
 			require.NoError(t, err)
 		})
 	}
 
 	t.Run("backend error propagates", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		sentinel := apperr.New(apperr.CodeInternal, "backend down")
-		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
-		store.EXPECT().Get(gomock.Any(), "id").Return(nil, sentinel)
 
-		_, err := cachingRepo(store, cache, true).Get(ctx, "id")
+		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
+		store.EXPECT().Get(gomock.Any(), textID).Return(nil, sentinel)
+
+		_, err := cachingRepo(store, cache, entityID).Get(ctx, textID)
 		assert.ErrorIs(t, err, sentinel)
 	})
 }
@@ -155,8 +175,10 @@ func TestCached_Get(t *testing.T) {
 // mustEncode encodes value at version, failing the test on error.
 func mustEncode(t *testing.T, value te, version int) []byte {
 	t.Helper()
+
 	b, err := fcache.Encode(value, version)
 	require.NoError(t, err)
+
 	return b
 }
 
@@ -175,82 +197,108 @@ func mustEncode(t *testing.T, value te, version int) []byte {
 //   - Update and Delete evict the key on success and skip eviction on failure.
 func TestCached_Writes(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("create warms with key func", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		store.EXPECT().
 			Create(gomock.Any(), gomock.Any()).
-			Return(&te{ID: "id", Name: "new"}, nil)
+			Return(&te{ID: textID, Name: "new"}, nil)
 		cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), time.Minute)
 
-		got, err := cachingRepo(store, cache, true).Create(ctx, &te{ID: "id"})
+		got, err := cachingRepo(
+			store,
+			cache,
+			entityID,
+		).Create(ctx, &te{ID: textID, Name: ""})
 		require.NoError(t, err)
 		assert.Equal(t, "new", got.Name)
 	})
 
 	t.Run("create without key func does not warm", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl) // no Set expectation → must not warm
 		store := mocks.NewMockStore[te, tp, string](ctrl)
-		store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&te{ID: "id"}, nil)
+		store.EXPECT().
+			Create(gomock.Any(), gomock.Any()).
+			Return(&te{ID: textID, Name: ""}, nil)
 
-		_, err := cachingRepo(store, cache, false).Create(ctx, &te{ID: "id"})
+		_, err := cachingRepo(store, cache, nil).Create(ctx, &te{ID: textID, Name: ""})
 		require.NoError(t, err)
 	})
 
 	t.Run("create error is not cached", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl) // no Set expectation
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		sentinel := apperr.New(apperr.CodeConflict, "dup")
 		store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, sentinel)
 
-		_, err := cachingRepo(store, cache, true).Create(ctx, &te{ID: "id"})
+		_, err := cachingRepo(
+			store,
+			cache,
+			entityID,
+		).Create(ctx, &te{ID: textID, Name: ""})
 		assert.ErrorIs(t, err, sentinel)
 	})
 
+	testCachedWritesUpdateAndDelete(ctx, t)
+}
+
+// testCachedWritesUpdateAndDelete continues TestCached_Writes: update and delete.
+func testCachedWritesUpdateAndDelete(ctx context.Context, t *testing.T) {
+	t.Helper()
+
 	t.Run("update evicts on success, not on failure", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
-		sentinel := apperr.New(apperr.CodeInternal, "boom")
+		sentinel := apperr.New(apperr.CodeInternal, textBoom)
 		gomock.InOrder(
 			store.EXPECT().
-				Update(gomock.Any(), "id", gomock.Any()).
-				Return(&te{ID: "id"}, nil),
-			store.EXPECT().Update(gomock.Any(), "id", gomock.Any()).Return(nil, sentinel),
+				Update(gomock.Any(), textID, gomock.Any()).
+				Return(&te{ID: textID, Name: ""}, nil),
+			store.EXPECT().
+				Update(gomock.Any(), textID, gomock.Any()).
+				Return(nil, sentinel),
 		)
 		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id") // exactly once (success only)
 
-		repo := cachingRepo(store, cache, true)
-		_, err := repo.Update(ctx, "id", &te{ID: "id"})
+		repo := cachingRepo(store, cache, entityID)
+		_, err := repo.Update(ctx, textID, &te{ID: textID, Name: ""})
 		require.NoError(t, err)
-		_, err = repo.Update(ctx, "id", &te{ID: "id"})
+
+		_, err = repo.Update(ctx, textID, &te{ID: textID, Name: ""})
 		assert.ErrorIs(t, err, sentinel)
 	})
 
 	t.Run("delete evicts on success, not on failure", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
-		sentinel := apperr.New(apperr.CodeInternal, "boom")
+		sentinel := apperr.New(apperr.CodeInternal, textBoom)
 		gomock.InOrder(
-			store.EXPECT().Delete(gomock.Any(), "id").Return(nil),
-			store.EXPECT().Delete(gomock.Any(), "id").Return(sentinel),
+			store.EXPECT().Delete(gomock.Any(), textID).Return(nil),
+			store.EXPECT().Delete(gomock.Any(), textID).Return(sentinel),
 		)
 		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id") // exactly once (success only)
 
-		repo := cachingRepo(store, cache, true)
-		require.NoError(t, repo.Delete(ctx, "id"))
-		assert.ErrorIs(t, repo.Delete(ctx, "id"), sentinel)
+		repo := cachingRepo(store, cache, entityID)
+		require.NoError(t, repo.Delete(ctx, textID))
+		assert.ErrorIs(t, repo.Delete(ctx, textID), sentinel)
 	})
 }
 
@@ -270,46 +318,54 @@ func TestCached_Writes(t *testing.T) {
 //   - List delegates to the inner repository.
 func TestCached_ExistsAndList(t *testing.T) {
 	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("exists hit skips backend", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl) // no Exists expectation
+
 		cache.EXPECT().
 			Get(gomock.Any(), "repo:repo:id").
-			Return(mustEncode(t, te{ID: "id"}, cacheVersion), true)
+			Return(mustEncode(t, te{ID: textID, Name: ""}, cacheVersion), true)
 
-		ok, err := cachingRepo(store, cache, true).Exists(ctx, "id")
+		ok, err := cachingRepo(store, cache, entityID).Exists(ctx, textID)
 		require.NoError(t, err)
 		assert.True(t, ok)
 	})
 
 	t.Run("exists miss hits backend", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
-		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
-		store.EXPECT().Exists(gomock.Any(), "id").Return(true, nil)
 
-		ok, err := cachingRepo(store, cache, true).Exists(ctx, "id")
+		cache.EXPECT().Get(gomock.Any(), "repo:repo:id").Return(nil, false)
+		store.EXPECT().Exists(gomock.Any(), textID).Return(true, nil)
+
+		ok, err := cachingRepo(store, cache, entityID).Exists(ctx, textID)
 		require.NoError(t, err)
 		assert.True(t, ok)
 	})
 
 	t.Run("list passes through", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl) // never touched
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		store.EXPECT().
 			List(gomock.Any(), gomock.Any(), gomock.Any()).
-			Return(&types.Page[te]{Total: 2}, nil)
+			Return(fixtures.BuildRef(func(row *types.Page[te]) {
+				row.Total = 2
+			}), nil)
 
-		repo := cachingRepo(store, cache, true)
-		page, err := repo.List(ctx, tp{}, types.PageRequest{})
+		repo := cachingRepo(store, cache, entityID)
+		page, err := repo.List(ctx, tp{}, stdx.Zero[types.PageRequest]())
 		require.NoError(t, err)
 		assert.Equal(t, int64(2), page.Total)
 	})
@@ -332,44 +388,62 @@ func TestCached_ExistsAndList(t *testing.T) {
 //   - Update and Delete evict at once and again after the commit.
 func TestCached_InTransaction(t *testing.T) {
 	t.Parallel()
+
 	txCtx := func() context.Context {
 		return interfaces.WithAfterCommit(interfaces.WithInTx(context.Background()))
 	}
-	row := &te{ID: "id", Name: "uncommitted"}
+	row := &te{ID: textID, Name: textUncommitted}
 
 	t.Run("get and exists bypass the cache", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl) // no expectations → must not be called
 		store := mocks.NewMockStore[te, tp, string](ctrl)
-		store.EXPECT().Get(gomock.Any(), "id").Return(row, nil)
-		store.EXPECT().Exists(gomock.Any(), "id").Return(true, nil)
-		repo := cachingRepo(store, cache, true)
+		store.EXPECT().Get(gomock.Any(), textID).Return(row, nil)
+		store.EXPECT().Exists(gomock.Any(), textID).Return(true, nil)
+
+		repo := cachingRepo(store, cache, entityID)
 		ctx := txCtx()
 
-		got, err := repo.Get(ctx, "id")
+		got, err := repo.Get(ctx, textID)
 		require.NoError(t, err)
-		assert.Equal(t, "uncommitted", got.Name)
-		ok, err := repo.Exists(ctx, "id")
+		assert.Equal(t, textUncommitted, got.Name)
+
+		ok, err := repo.Exists(ctx, textID)
 		require.NoError(t, err)
 		assert.True(t, ok)
 		interfaces.RunAfterCommit(ctx)
 	})
 
+	testCachedInTransactionAfterCommit(t, txCtx, row)
+}
+
+// testCachedInTransactionAfterCommit continues TestCached_InTransaction: after commit.
+func testCachedInTransactionAfterCommit(
+	t *testing.T,
+	txCtx func() context.Context,
+	row *te,
+) {
+	t.Helper()
+
 	t.Run("create primes only after commit", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
 		store.EXPECT().Create(gomock.Any(), gomock.Any()).Return(row, nil).Times(2)
-		repo := cachingRepo(store, cache, true)
+
+		repo := cachingRepo(store, cache, entityID)
 
 		rolledBack := txCtx()
-		_, err := repo.Create(rolledBack, &te{Name: "uncommitted"})
+		_, err := repo.Create(rolledBack, &te{Name: textUncommitted, ID: ""})
 		require.NoError(t, err) // no Set: the hooks never run, as on a rollback
 
 		committed := txCtx()
-		_, err = repo.Create(committed, &te{Name: "uncommitted"})
+
+		_, err = repo.Create(committed, &te{Name: textUncommitted, ID: ""})
 		require.NoError(t, err)
 		cache.EXPECT().Set(gomock.Any(), "repo:repo:id", gomock.Any(), time.Minute)
 		interfaces.RunAfterCommit(committed)
@@ -377,19 +451,32 @@ func TestCached_InTransaction(t *testing.T) {
 
 	t.Run("update and delete evict again after commit", func(t *testing.T) {
 		t.Parallel()
+
 		ctrl := gomock.NewController(t)
 		cache := mocks.NewMockByteCache(ctrl)
 		store := mocks.NewMockStore[te, tp, string](ctrl)
-		store.EXPECT().Update(gomock.Any(), "id", gomock.Any()).Return(row, nil)
-		store.EXPECT().Delete(gomock.Any(), "id").Return(nil)
-		repo := cachingRepo(store, cache, true)
+		store.EXPECT().Update(gomock.Any(), textID, gomock.Any()).Return(row, nil)
+		store.EXPECT().Delete(gomock.Any(), textID).Return(nil)
+
+		repo := cachingRepo(store, cache, entityID)
 		ctx := txCtx()
 
 		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id").Times(2)
-		_, err := repo.Update(ctx, "id", &te{Name: "uncommitted"})
+
+		_, err := repo.Update(ctx, textID, &te{Name: textUncommitted, ID: ""})
 		require.NoError(t, err)
-		require.NoError(t, repo.Delete(ctx, "id"))
+		require.NoError(t, repo.Delete(ctx, textID))
 		cache.EXPECT().Delete(gomock.Any(), "repo:repo:id").Times(2)
 		interfaces.RunAfterCommit(ctx)
 	})
 }
+
+const (
+	// cacheKeyInput is the id passed to CacheKey in TestCacheKey.
+	cacheKeyInput = 42
+)
+
+const (
+	// textUncommitted is the literal "uncommitted".
+	textUncommitted = "uncommitted"
+)

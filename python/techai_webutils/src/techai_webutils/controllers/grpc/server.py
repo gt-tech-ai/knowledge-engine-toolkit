@@ -1,4 +1,6 @@
-"""Async gRPC server factory with health service, graceful shutdown, and interceptor chain.
+"""Async gRPC server factory.
+
+Health service, graceful shutdown and the interceptor chain.
 
 Creates a configured ``grpc.aio`` server with:
 - 16MB max message size (send and receive)
@@ -14,18 +16,26 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import importlib
 import logging
 import signal
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, cast, final
 
 import grpc
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 from grpc_health.v1.health import aio as health_aio
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 _16MB = 16 * 1024 * 1024
 """Default gRPC max send/receive message size, in bytes (16 MiB)."""
 _logger = logging.getLogger(__name__)
+_SERVING = health_pb2.HealthCheckResponse.SERVING
+"""The health status of a server that accepts traffic."""
+_NOT_SERVING = health_pb2.HealthCheckResponse.NOT_SERVING
+"""The health status of a server that does not."""
 
 
 @dataclass
@@ -44,22 +54,32 @@ class ServerConfig:
     """Retained for config compat; grpc.aio uses the event loop, not a thread pool."""
     shutdown_timeout: float = 30.0
     """Grace period, in seconds, to drain in-flight RPCs during shutdown."""
-    interceptors: list[Any] = field(default_factory=list)
+    interceptors: list[grpc.aio.ServerInterceptor] = field(default_factory=list)
     """Server interceptors applied to every RPC (logging, metrics, auth, ...)."""
 
 
-def _options(cfg: ServerConfig) -> list[tuple[str, Any]]:
-    """Build the gRPC channel-arg options (message-size limits) from the config."""
+def _options(cfg: ServerConfig) -> list[tuple[str, int]]:
+    """Build the gRPC channel-arg options (message-size limits) from the config.
+
+    Args:
+        cfg: The server config.
+
+    Returns:
+        The gRPC channel-arg options (message-size limits) from the config.
+
+    """
     return [
         ("grpc.max_send_message_length", cfg.max_send_message_length),
         ("grpc.max_receive_message_length", cfg.max_receive_message_length),
     ]
 
 
+@final
 class GracefulServer:
     """Async gRPC server wrapper with graceful shutdown and health probes.
 
-    Matches Go's ``Server`` struct with ``start()`` and ``shutdown()`` methods (async here).
+    Matches Go's ``Server`` struct with ``start()`` and ``shutdown()`` methods (async
+    here).
 
     Example::
 
@@ -82,9 +102,16 @@ class GracefulServer:
         self._stop_event = asyncio.Event()
 
     def _create_server(self) -> grpc.aio.Server:
-        """Build the async gRPC server with message-size options + the health service registered.
+        """Build the async gRPC server with its message-size options.
 
-        The default service is marked SERVING in ``start()`` (the aio health ``set`` is a coroutine).
+        The health service is registered.
+
+        The default service is marked SERVING in ``start()`` (the aio health ``set`` is a
+        coroutine).
+
+        Returns:
+            The async gRPC server.
+
         """
         server = grpc.aio.server(
             interceptors=self._cfg.interceptors or None,
@@ -106,19 +133,22 @@ class GracefulServer:
             service_names: Fully qualified service names (e.g. ``demo.v1.UserService``).
 
         """
-        from grpc_reflection.v1alpha import reflection as grpc_reflection  # noqa: PLC0415
-
-        all_names = (*service_names, grpc_reflection.SERVICE_NAME)
-        grpc_reflection.enable_server_reflection(all_names, self._server)
+        reflection = importlib.import_module("grpc_reflection.v1alpha.reflection")
+        enable = cast(
+            "Callable[[tuple[str, ...], grpc.aio.Server], None]",
+            reflection.enable_server_reflection,
+        )
+        enable((*service_names, cast("str", reflection.SERVICE_NAME)), self._server)
         _logger.info("gRPC reflection enabled for %d services", len(service_names))
 
     async def set_ready(self, *, ready: bool = True) -> None:
-        """Toggle readiness probe status (matches Go's ``/readyz`` behavior)."""
-        status = (
-            health_pb2.HealthCheckResponse.SERVING
-            if ready
-            else health_pb2.HealthCheckResponse.NOT_SERVING
-        )
+        """Toggle readiness probe status (matches Go's ``/readyz`` behavior).
+
+        Args:
+            ready: Whether the server is ready.
+
+        """
+        status = _SERVING if ready else _NOT_SERVING
         await self._health_servicer.set("readiness", status)
 
     async def start(self, *, block: bool = True) -> None:
@@ -129,28 +159,34 @@ class GracefulServer:
                 signal is received, then performs graceful shutdown.
 
         """
-        await self._health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
-        self._server.add_insecure_port(f"[::]:{self._cfg.port}")
+        await self._health_servicer.set("", _SERVING)
+        _ = self._server.add_insecure_port(f"[::]:{self._cfg.port}")
         await self._server.start()
         _logger.info("gRPC server started on port %d", self._cfg.port)
 
         if block:
             self._install_signal_handlers()
-            await self._stop_event.wait()
+            _ = await self._stop_event.wait()
             await self.shutdown()
 
     async def shutdown(self) -> None:
-        """Perform graceful shutdown: mark not-serving, drain existing connections, then stop."""
+        """Shut down gracefully: mark not-serving, drain, then stop.
+
+        Existing connections drain first.
+        """
         _logger.info(
             "Initiating graceful shutdown (timeout=%.1fs)", self._cfg.shutdown_timeout
         )
-        await self._health_servicer.set("", health_pb2.HealthCheckResponse.NOT_SERVING)
+        await self._health_servicer.set("", _NOT_SERVING)
         await self.set_ready(ready=False)
         await self._server.stop(self._cfg.shutdown_timeout)
         _logger.info("gRPC server stopped")
 
     def _install_signal_handlers(self) -> None:
-        """Install SIGTERM/SIGINT handlers that trip the stop event (no-op where unsupported)."""
+        """Install SIGTERM/SIGINT handlers that trip the stop event.
+
+        A no-op where unsupported.
+        """
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             with contextlib.suppress(NotImplementedError):
@@ -160,14 +196,15 @@ class GracefulServer:
 def create_server(config: ServerConfig | None = None) -> grpc.aio.Server:
     """Create a configured async gRPC server with the health service registered.
 
-    For simple use cases without graceful shutdown. For production use, prefer ``GracefulServer``.
-    The caller starts the server and sets the SERVING health status (the aio health ``set`` is async).
+    For simple use cases without graceful shutdown. For production use, prefer
+    ``GracefulServer``. The caller starts the server and sets the SERVING health status
+    (the aio health ``set`` is async).
 
     Args:
         config: Server configuration. Uses defaults if None.
 
     Returns:
-        Configured but not-yet-started async gRPC server.
+        A configured async gRPC server with the health service registered.
 
     """
     cfg = config or ServerConfig()

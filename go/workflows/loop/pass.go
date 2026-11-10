@@ -20,5 +20,6 @@ func Pass(fn func(ctx context.Context) error) interfaces.Workflow[struct{}, stru
 	if fn == nil {
 		panic("loop: pass fn must not be nil")
 	}
+
 	return pass(fn)
 }

@@ -17,7 +17,7 @@ var _ interfaces.HelmClient = Client{}
 // Template renders an empty manifest.
 func (Client) Template(
 	context.Context,
-	types.RenderSpec,
+	*types.RenderSpec,
 ) ([]byte, error) {
 	return nil, nil
 }
@@ -26,4 +26,4 @@ func (Client) Template(
 func (Client) DependencyBuild(context.Context, string) error { return nil }
 
 // Lint passes.
-func (Client) Lint(context.Context, types.RenderSpec) error { return nil }
+func (Client) Lint(context.Context, *types.RenderSpec) error { return nil }

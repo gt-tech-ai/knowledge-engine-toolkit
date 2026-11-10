@@ -17,6 +17,9 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
 
+// defaultConfigMaxConcurrentBuckets is the default MaxConcurrentBuckets of Config.
+const defaultConfigMaxConcurrentBuckets = 8
+
 const (
 	// KindStub accepts writes and answers empty results (the default).
 	KindStub = client.KindStub
@@ -61,7 +64,9 @@ func DefaultConfig() Config {
 		},
 		Cubes:                map[string][]types.Grain{},
 		TTL:                  map[types.Grain]time.Duration{},
-		MaxConcurrentBuckets: 8,
+		MaxConcurrentBuckets: defaultConfigMaxConcurrentBuckets,
+		Name:                 "",
+		EnsureSchema:         false,
 	}
 }
 
@@ -73,6 +78,7 @@ type Deps struct {
 	// Decorations decorates the client from the decoration config (decoration.clients)
 	// and supplies its observability.
 	decorate.Decorations
+
 	// Dial opens the CQL session at Start; nil dials with cql.NewFromConfig.
 	Dial Dial
 }
@@ -87,8 +93,10 @@ func kinds() client.Kinds[Config, Deps, interfaces.AnalyticsStore] {
 			KindStub: func(context.Context, Config, Deps) (interfaces.AnalyticsStore, error) {
 				return stub.New(), nil
 			},
-			KindCassandra: newCassandra,
+			KindCassandra: client.RefConfig(newCassandra),
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
@@ -96,30 +104,33 @@ func kinds() client.Kinds[Config, Deps, interfaces.AnalyticsStore] {
 // tier, without I/O: the cassandra kind dials its session at Start (and, with
 // EnsureSchema, creates its tables there, awaiting ACTIVE on Keyspaces). An unknown
 // kind is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.AnalyticsStore, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, *cfg, deps, deps.Decorations, cfg.Name)
 }
 
 // newCassandra builds the CQL store, dialing lazily at Start.
 func newCassandra(
 	_ context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.AnalyticsStore, error) {
 	dial := deps.Dial
 	if dial == nil {
 		dial = func(ctx context.Context, c cql.Config) (interfaces.CQLSession, error) {
-			return cql.NewFromConfig(ctx, c, cql.Deps{})
+			return cql.NewFromConfig(ctx, &c, cql.Deps{})
 		}
 	}
+
 	session := cfg.CQL
+
 	return analyticscassandra.NewLazy(
 		func(ctx context.Context) (interfaces.CQLSession, error) { return dial(ctx, session) },
-		analyticscassandra.Config{
+		&analyticscassandra.Config{
 			Keyspace:             cfg.CQL.Keyspace,
 			Cubes:                cfg.Cubes,
 			BucketWidth:          cfg.BucketWidth,
@@ -128,6 +139,8 @@ func newCassandra(
 			MaxConcurrentBuckets: cfg.MaxConcurrentBuckets,
 			EnsureSchema:         cfg.EnsureSchema,
 			AwaitActive:          cfg.CQL.Kind == cql.KindKeyspaces,
+			SchemaPollInterval:   0,
+			SchemaTimeout:        0,
 		},
 	)
 }

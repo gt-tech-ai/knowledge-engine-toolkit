@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final
 
 if TYPE_CHECKING:
     from types import TracebackType
 
 
+@final
 class InMemoryLock:
     """Single-process ``DistributedLock`` (tests / single-replica local dev).
 
-    The check-then-set in ``acquire`` is atomic only under a single asyncio event loop (no ``await``
-    between the read and the write), so this is single-process / single-loop only — it gives no
-    guarantee across threads or pods, which is precisely why stage/prod use ``PostgresAdvisoryLock``.
-    Also an async context manager (a no-op resource) so it composes uniformly with
-    ``AsyncExitStack.enter_async_context`` alongside the connection-owning ``PostgresAdvisoryLock``.
+    The check-then-set in ``acquire`` is atomic only under a single asyncio event loop (no
+    ``await`` between the read and the write), so this is single-process / single-loop
+    only — it gives no guarantee across threads or pods, which is precisely why stage/prod
+    use ``PostgresAdvisoryLock``. Also an async context manager (a no-op resource) so it
+    composes uniformly with ``AsyncExitStack.enter_async_context`` alongside the
+    connection-owning ``PostgresAdvisoryLock``.
     """
 
     def __init__(self) -> None:
@@ -23,7 +25,12 @@ class InMemoryLock:
         self._held = False
 
     async def acquire(self) -> bool:
-        """Acquire the lock unless already held in this process."""
+        """Acquire the lock unless already held in this process.
+
+        Returns:
+            Whether the lock was acquired.
+
+        """
         if self._held:
             return False
         self._held = True
@@ -34,7 +41,12 @@ class InMemoryLock:
         self._held = False
 
     async def __aenter__(self) -> Self:
-        """Enter the async context (no resource to open); return self."""
+        """Enter the async context (no resource to open); return self.
+
+        Returns:
+            This instance.
+
+        """
         return self
 
     async def __aexit__(
@@ -43,4 +55,11 @@ class InMemoryLock:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Exit the async context (nothing to release)."""
+        """Exit the async context (nothing to release).
+
+        Args:
+            exc_type: The exception's type, if any.
+            exc_val: The exception, if any.
+            exc_tb: Its traceback, if any.
+
+        """

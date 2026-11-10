@@ -11,9 +11,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from techai_webutils.clients.decorators.token_accounting import TokenAccountingProxy
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable
-from techai_webutils.clients.token_ledger.policy import BudgetPolicy, Enforcement
+from techai_webutils.clients.decorators.token_accounting import (
+    TokenAccountingOptions,
+    TokenAccountingProxy,
+)
 from techai_webutils.core.errors import ErrorCode, QuotaExceededError
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
 from techai_webutils.core.interfaces.llm import (
@@ -29,6 +30,8 @@ from techai_webutils.core.interfaces.token_ledger import (
     UsageRecord,
     UsageScope,
 )
+from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
+from techai_webutils.foundation.tokens.policy import BudgetPolicy, Enforcement
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -52,7 +55,15 @@ _SPENT = BudgetDecision(
 
 
 def _ledger(decision: BudgetDecision | Exception = _OK) -> MagicMock:
-    """Return a ledger whose ``check_budget`` answers ``decision`` (or raises it)."""
+    """Return a ledger whose ``check_budget`` answers ``decision`` (or raises it).
+
+    Args:
+        decision: The budget decision, or what the ledger raises.
+
+    Returns:
+        A ledger whose ``check_budget`` answers ``decision`` (or raises it).
+
+    """
     ledger = MagicMock(spec=TokenLedger)
     if isinstance(decision, Exception):
         ledger.check_budget = AsyncMock(side_effect=decision)
@@ -63,7 +74,12 @@ def _ledger(decision: BudgetDecision | Exception = _OK) -> MagicMock:
 
 
 def _llm() -> MagicMock:
-    """Return a provider answering 10 in / 20 out on ``sonnet``."""
+    """Return a provider answering 10 in / 20 out on ``sonnet``.
+
+    Returns:
+        A provider answering 10 in / 20 out on ``sonnet``.
+
+    """
     llm = MagicMock(spec=LLMProvider)
     llm.complete = AsyncMock(
         return_value=LLMResponse(
@@ -84,23 +100,49 @@ def _proxy(
     enforcement: Enforcement = Enforcement.HARD,
     scope: UsageScope | None = _SCOPE,
 ) -> LLMProvider:
-    """Wrap ``inner`` for the ``generate`` step with a fixed clock (typed as the wrapped port)."""
+    """Wrap ``inner`` for the ``generate`` step with a fixed clock.
+
+    Typed as the wrapped port.
+
+    Args:
+        inner: The wrapped client.
+        ledger: The token ledger.
+        enforcement: What an over-budget call does.
+        scope: Who the usage is charged to.
+
+    Returns:
+        The provider proxy.
+
+    """
     proxy = TokenAccountingProxy(
         inner,
-        ledger=ledger,
-        scope=lambda: scope,
-        prices=_PRICES,
-        policy=BudgetPolicy(enforcement=enforcement),
-        step="generate",
-        clock=lambda: _NOW,
+        options=TokenAccountingOptions(
+            ledger=ledger,
+            scope=lambda: scope,
+            prices=_PRICES,
+            policy=BudgetPolicy(enforcement=enforcement),
+            step="generate",
+            clock=lambda: _NOW,
+        ),
     )
-    return cast("LLMProvider", proxy)
+    return cast("LLMProvider", cast("object", proxy))
 
 
 def _recorded(ledger: MagicMock) -> UsageRecord:
-    """Return the one usage ``ledger`` recorded."""
-    ledger.record.assert_awaited_once()
-    return ledger.record.await_args.args[0]
+    """Return the one usage ``ledger`` recorded.
+
+    Args:
+        ledger: The token ledger.
+
+    Returns:
+        The one usage ``ledger`` recorded.
+
+    """
+    cast("MagicMock", cast("AsyncMock", ledger.record).assert_awaited_once)()
+    return cast(
+        "UsageRecord",
+        cast("MagicMock", cast("AsyncMock", ledger.record).await_args).args[0],
+    )
 
 
 @pytest.mark.asyncio
@@ -117,12 +159,12 @@ async def test_rejects_before_calling_inner_when_over_budget_and_enforced() -> N
     inner, ledger = _llm(), _ledger(_SPENT)
 
     with pytest.raises(QuotaExceededError) as caught:
-        await _proxy(inner, ledger).complete(_MESSAGES)
+        _ = await _proxy(inner, ledger).complete(_MESSAGES)
 
     assert caught.value.code is ErrorCode.RESOURCE_EXHAUSTED
     assert caught.value.details == {"org_id": "org-1", "reason": "budget_exhausted"}
-    inner.complete.assert_not_awaited()
-    ledger.record.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()
+    cast("MagicMock", cast("AsyncMock", ledger.record).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -130,11 +172,13 @@ async def test_records_usage_after_success_from_llm_response() -> None:
     """Test that a served call records its usage and cost against the scope.
 
     **Why this test is important:**
-      - The ledger is the source of budgets and chargeback; a wrong field mis-bills a tenant.
+      - The ledger is the source of budgets and chargeback; a wrong field mis-bills a
+        tenant.
 
     **What it tests:**
       - the response is returned unchanged
-      - exactly one ``UsageRecord`` with the scope, model, step, tokens, cost and pricing version
+      - exactly one ``UsageRecord`` with the scope, model, step, tokens, cost and pricing
+        version
     """
     inner, ledger = _llm(), _ledger()
 
@@ -155,7 +199,15 @@ async def test_records_usage_after_success_from_llm_response() -> None:
 
 
 async def _items(*items: str | StreamUsage) -> AsyncIterator[str | StreamUsage]:
-    """Yield ``items``."""
+    """Yield ``items``.
+
+    Args:
+        *items: The chunks and usage to stream.
+
+    Yields:
+        ``items``.
+
+    """
     for item in items:
         await asyncio.sleep(0)
         yield item
@@ -183,7 +235,7 @@ async def test_records_stream_usage_from_terminal_stream_usage() -> None:
 
     text = [item async for item in await proxy.stream(_MESSAGES)]
     record = _recorded(ledger)
-    ledger.record.reset_mock()
+    cast("MagicMock", cast("MagicMock", ledger.record).reset_mock)()
     full = [item async for item in await proxy.stream_with_usage(_MESSAGES)]
 
     assert text == ["he", "llo"]
@@ -211,24 +263,34 @@ async def test_shadow_mode_serves_and_records_but_never_rejects() -> None:
     )
     proxy = cast(
         "LLMProvider",
-        TokenAccountingProxy(
-            inner,
-            ledger=ledger,
-            scope=lambda: _SCOPE,
-            prices=_PRICES,
-            policy=BudgetPolicy(enforcement=Enforcement.SHADOW),
-            step="generate",
-            metrics=metrics,
-            clock=lambda: _NOW,
+        cast(
+            "object",
+            TokenAccountingProxy(
+                inner,
+                options=TokenAccountingOptions(
+                    ledger=ledger,
+                    scope=lambda: _SCOPE,
+                    prices=_PRICES,
+                    policy=BudgetPolicy(enforcement=Enforcement.SHADOW),
+                    step="generate",
+                    metrics=metrics,
+                    clock=lambda: _NOW,
+                ),
+            ),
         ),
     )
 
-    await proxy.complete(_MESSAGES)
+    _ = await proxy.complete(_MESSAGES)
 
-    inner.complete.assert_awaited_once()
-    _recorded(ledger)
-    counters["ai_budget_would_exceed_total"].inc.assert_called_once_with(1.0, org="org-1")
-    counters["ai_tokens_total"].inc.assert_any_call(
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_awaited_once)()
+    _ = _recorded(ledger)
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", counters["ai_budget_would_exceed_total"].inc
+        ).assert_called_once_with,
+    )(1.0, org="org-1")
+    cast("MagicMock", cast("MagicMock", counters["ai_tokens_total"].inc).assert_any_call)(
         10, org="org-1", workspace="ws-1", model="sonnet", type="input"
     )
 
@@ -241,7 +303,8 @@ async def test_fail_open_ledger_error_still_serves() -> None:
       - The ledger guards spend; its outage must not become a product outage.
 
     **What it tests:**
-      - ``check_budget`` raising under ``soft`` → the call is served and its usage still recorded
+      - ``check_budget`` raising under ``soft`` → the call is served and its usage still
+        recorded
       - ``record`` raising → the response is still returned
     """
     inner, ledger = _llm(), _ledger(RuntimeError("redis down"))
@@ -252,7 +315,7 @@ async def test_fail_open_ledger_error_still_serves() -> None:
     )
 
     assert response.model == "sonnet"
-    inner.complete.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_awaited_once)()
 
 
 @pytest.mark.asyncio
@@ -270,11 +333,11 @@ async def test_no_scope_is_passthrough() -> None:
     inner.model_name = MagicMock(return_value="sonnet")
     proxy = _proxy(inner, ledger, scope=None)
 
-    await proxy.complete(_MESSAGES)
+    _ = await proxy.complete(_MESSAGES)
 
     assert proxy.model_name() == "sonnet"
-    ledger.check_budget.assert_not_awaited()
-    ledger.record.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", ledger.check_budget).assert_not_awaited)()
+    cast("MagicMock", cast("AsyncMock", ledger.record).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -282,24 +345,34 @@ async def test_cache_hit_records_one_zero_token_usage() -> None:
     """Test that an answer served from the semantic cache records one zero-cost usage.
 
     **Why this test is important:**
-      - A cache hit must be visible in usage (hit rate per tenant) without billing the tokens
-        of the answer it replayed.
+      - A cache hit must be visible in usage (hit rate per tenant) without billing the
+        tokens of the answer it replayed.
 
     **What it tests:**
       - when the inner marks the call ``served_from_cache``, one usage is recorded with
         ``operation="generate.cache_hit"``, zero tokens and zero cost
     """
     inner, ledger = _llm(), _ledger()
-    response = inner.complete.return_value
+    response = cast("object", cast("MagicMock", inner.complete).return_value)
 
     async def cached(*_args: object, **_kwargs: object) -> LLMResponse:
+        """Answer as a cache hit: mark the call served from cache.
+
+        Args:
+            *_args: Unused.
+            **_kwargs: Unused.
+
+        Returns:
+            The cached response.
+
+        """
         await asyncio.sleep(0)
         set_served_from_cache(value=True)
-        return response
+        return cast("LLMResponse", response)
 
     inner.complete = AsyncMock(side_effect=cached)
 
-    await _proxy(inner, ledger).complete(_MESSAGES)
+    _ = await _proxy(inner, ledger).complete(_MESSAGES)
 
     record = _recorded(ledger)
     assert (
@@ -319,7 +392,9 @@ async def test_cache_hit_records_one_zero_token_usage() -> None:
 async def test_embedding_calls_record_embed_tokens_and_unpriced_models_record_zero() -> (
     None
 ):
-    """Test that embeddings are charged by embedding tokens, and an unpriced model costs zero.
+    """Test that embeddings are charged by embedding tokens.
+
+    An unpriced model costs zero.
 
     **Why this test is important:**
       - Embeddings are part of a tenant's spend; an unpriced model must be recorded (and
@@ -337,7 +412,9 @@ async def test_embedding_calls_record_embed_tokens_and_unpriced_models_record_ze
         ]
     )
 
-    await cast("EmbeddingProvider", _proxy(inner, ledger)).embed_batch(["a", "b"])
+    _ = await cast(
+        "EmbeddingProvider", cast("object", _proxy(inner, ledger))
+    ).embed_batch(["a", "b"])
 
     record = _recorded(ledger)
     assert (
@@ -361,21 +438,21 @@ async def test_hard_ledger_error_rejects_before_inner() -> None:
       - Under a hard cap a ledger outage must not become free, unlimited spend.
 
     **What it tests:**
-      - a raising ``check_budget`` under ``HARD`` raises ``QuotaExceededError`` with reason
-        ``ledger_error_fail_closed``; the inner is never called
+      - a raising ``check_budget`` under ``HARD`` raises ``QuotaExceededError`` with
+        reason ``ledger_error_fail_closed``; the inner is never called
       - the same failure under ``SOFT`` serves
     """
     inner = _llm()
 
     with pytest.raises(QuotaExceededError) as caught:
-        await _proxy(inner, _ledger(RuntimeError("down"))).complete(_MESSAGES)
-    inner.complete.assert_not_awaited()
-    await _proxy(
+        _ = await _proxy(inner, _ledger(RuntimeError("down"))).complete(_MESSAGES)
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()
+    _ = await _proxy(
         inner, _ledger(RuntimeError("down")), enforcement=Enforcement.SOFT
     ).complete(_MESSAGES)
 
     assert caught.value.details["reason"] == "ledger_error_fail_closed"
-    inner.complete.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_awaited_once)()
 
 
 @pytest.mark.asyncio
@@ -394,24 +471,37 @@ async def test_per_budget_enforces_the_budget_level_under_a_shadow_policy() -> N
     soft_spent = dataclasses.replace(_SPENT, enforcement=Enforcement.SOFT)
 
     def wrap(inner: MagicMock, ledger: MagicMock, *, per_budget: bool) -> LLMProvider:
+        """Build the accounting proxy under a shadow policy.
+
+        Args:
+            inner: The wrapped client.
+            ledger: The token ledger.
+            per_budget: Whether each budget sets its own level.
+
+        Returns:
+            The proxy.
+
+        """
         policy = BudgetPolicy(enforcement=Enforcement.SHADOW, per_budget=per_budget)
         proxy = TokenAccountingProxy(
             inner,
-            ledger=ledger,
-            scope=lambda: _SCOPE,
-            prices=_PRICES,
-            policy=policy,
-            step="generate",
-            clock=lambda: _NOW,
+            options=TokenAccountingOptions(
+                ledger=ledger,
+                scope=lambda: _SCOPE,
+                prices=_PRICES,
+                policy=policy,
+                step="generate",
+                clock=lambda: _NOW,
+            ),
         )
-        return cast("LLMProvider", proxy)
+        return cast("LLMProvider", cast("object", proxy))
 
     served_inner, served_ledger = _llm(), _ledger(soft_spent)
-    await wrap(served_inner, served_ledger, per_budget=False).complete(_MESSAGES)
+    _ = await wrap(served_inner, served_ledger, per_budget=False).complete(_MESSAGES)
     refused_inner, refused_ledger = _llm(), _ledger(soft_spent)
     with pytest.raises(QuotaExceededError):
-        await wrap(refused_inner, refused_ledger, per_budget=True).complete(_MESSAGES)
+        _ = await wrap(refused_inner, refused_ledger, per_budget=True).complete(_MESSAGES)
 
-    served_inner.complete.assert_awaited_once()
-    refused_inner.complete.assert_not_awaited()
-    refused_ledger.record.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", served_inner.complete).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", refused_inner.complete).assert_not_awaited)()
+    cast("MagicMock", cast("AsyncMock", refused_ledger.record).assert_not_awaited)()

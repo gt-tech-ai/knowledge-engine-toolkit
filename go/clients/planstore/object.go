@@ -12,10 +12,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// privateFileMode is the mode of a file only its owner reads.
+const privateFileMode = 0o600
+
+// privateDirMode is the mode of a directory only its owner enters.
+const privateDirMode = 0o700
 
 // objectStore keeps each unit's plan in an object store and hands the applying job
 // only a manifest of object keys and SHA-256 digests; Load refuses a plan whose digest
@@ -57,48 +63,43 @@ func newObject(_ context.Context, _ Config, deps Deps) (interfaces.PlanStore, er
 			"planstore object: no storage client",
 		)
 	}
+
 	return objectStore{storage: deps.Storage, log: deps.Log}, nil
 }
 
 // Save uploads every unit's plan to <Prefix><RunID>/<unit>/<File> and writes the
 // manifest listing each key and SHA-256 into Dir (0o600). An upload failure is
 // CodeUpstream naming the unit and object.
-func (st objectStore) Save(ctx context.Context, set types.PlanSet) error {
+// set must not be nil.
+func (st objectStore) Save(ctx context.Context, set *types.PlanSet) error {
 	files, err := FindPlans(set.Dir, set.File)
 	if err != nil {
 		return err
 	}
-	m := manifest{Owner: set.Owner}
+
+	currentManifest := manifest{Owner: set.Owner, Units: nil}
+
 	for _, f := range files {
-		rel, err := filepath.Rel(set.Dir, filepath.Dir(f))
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "locate the unit of "+f)
+		unit, opErr := st.saveUnit(ctx, set, f)
+		if opErr != nil {
+			return opErr
 		}
-		unit := filepath.ToSlash(rel)
-		data, err := os.ReadFile(f)
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "read "+f)
-		}
-		sum := sha256.Sum256(data)
-		key := set.Prefix + set.RunID + "/" + unit + "/" + set.File
-		if err := st.storage.Upload(ctx, set.Bucket, key, bytes.NewReader(data),
-			"application/octet-stream"); err != nil {
-			return apperr.Wrap(err, apperr.CodeUpstream, fmt.Sprintf(
-				"store the saved plan of %s in %s/%s", unit, set.Bucket, key))
-		}
-		st.logf("saved plan stored", "unit", unit, "bucket", set.Bucket, "key", key)
-		m.Units = append(m.Units, manifestUnit{
-			Unit: unit, Key: key, SHA256: hex.EncodeToString(sum[:]),
-		})
+
+		currentManifest.Units = append(currentManifest.Units, unit)
 	}
-	data, err := json.MarshalIndent(m, "", "  ")
+
+	data, err := json.MarshalIndent(currentManifest, "", "  ")
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "encode the plan manifest")
 	}
+
 	path := filepath.Join(set.Dir, set.Manifest)
-	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+
+	err = os.WriteFile(path, append(data, '\n'), privateFileMode)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "write "+path)
 	}
+
 	return nil
 }
 
@@ -108,82 +109,175 @@ func (st objectStore) Save(ctx context.Context, set types.PlanSet) error {
 // holds a plan; an expired (missing) object is CodeNotFound; a digest that differs
 // from the manifest's is CodeConflict naming every such unit, whose download is
 // removed, so nothing is applied.
-func (st objectStore) Load(ctx context.Context, set types.PlanSet) error {
-	m, err := readManifest(set)
+// set must not be nil.
+func (st objectStore) Load(ctx context.Context, set *types.PlanSet) error {
+	secondManifest, err := readManifest(set)
 	if err != nil {
 		return err
 	}
+
 	present, err := FindPlans(set.Dir, set.File)
 	if err != nil {
 		return err
 	}
+
 	if len(present) > 0 {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"%s already holds saved plans (%s): Load restores only the plans %s lists, "+
 				"into a directory that holds none", set.Dir, strings.Join(present, ", "),
 			set.Manifest))
 	}
-	for _, u := range m.Units {
-		if err := checkEntry(set, u); err != nil {
-			return err
-		}
+
+	err = checkEntries(set, secondManifest.Units)
+	if err != nil {
+		return err
 	}
-	var mismatched []string
-	for _, u := range m.Units {
-		dest := filepath.Join(set.Dir, filepath.FromSlash(u.Unit), set.File)
-		sum, err := st.fetch(ctx, set.Bucket, u.Key, dest)
-		if err != nil {
-			return err
-		}
-		if sum != u.SHA256 {
-			_ = os.Remove(dest)
-			mismatched = append(mismatched, u.Unit)
-			continue
-		}
-		st.logf("saved plan fetched", "unit", u.Unit, "bucket", set.Bucket, "key", u.Key)
+
+	mismatched, err := st.fetchUnits(ctx, set, secondManifest.Units)
+	if err != nil {
+		return err
 	}
+
 	if len(mismatched) > 0 {
 		return apperr.New(apperr.CodeConflict, fmt.Sprintf(
 			"the stored plan of %s does not match the SHA-256 in %s, so nothing was "+
 				"applied: plan again", strings.Join(mismatched, ", "), set.Manifest))
 	}
+
 	return nil
+}
+
+// saveUnit uploads one unit's plan file and returns its manifest entry.
+func (st objectStore) saveUnit(
+	ctx context.Context, set *types.PlanSet, text string,
+) (manifestUnit, error) {
+	rel, err := filepath.Rel(set.Dir, filepath.Dir(text))
+	if err != nil {
+		return manifestUnit{}, apperr.Wrap(
+			err,
+			apperr.CodeInternal,
+			"locate the unit of "+text,
+		)
+	}
+
+	unit := filepath.ToSlash(rel)
+
+	data, err := os.ReadFile(filepath.Clean(text))
+	if err != nil {
+		return manifestUnit{}, apperr.Wrap(err, apperr.CodeInternal, "read "+text)
+	}
+
+	sum := sha256.Sum256(data)
+	key := set.Prefix + set.RunID + "/" + unit + "/" + set.File
+
+	err = st.storage.Upload(ctx, set.Bucket, key, bytes.NewReader(data),
+		"application/octet-stream")
+	if err != nil {
+		return manifestUnit{}, apperr.Wrap(err, apperr.CodeUpstream, fmt.Sprintf(
+			"store the saved plan of %s in %s/%s", unit, set.Bucket, key))
+	}
+
+	st.logf("saved plan stored", "unit", unit, "bucket", set.Bucket, "key", key)
+
+	return manifestUnit{Unit: unit, Key: key, SHA256: hex.EncodeToString(sum[:])}, nil
+}
+
+// checkEntries validates every manifest entry before anything is fetched.
+func checkEntries(set *types.PlanSet, units []manifestUnit) error {
+	for _, u := range units {
+		err := checkEntry(set, u)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// fetchUnits downloads each unit's plan, removing and naming any whose digest differs.
+func (st objectStore) fetchUnits(
+	ctx context.Context, set *types.PlanSet, units []manifestUnit,
+) ([]string, error) {
+	var mismatched []string
+
+	for _, currentManifestUnit := range units {
+		dest := filepath.Join(
+			set.Dir,
+			filepath.FromSlash(currentManifestUnit.Unit),
+			set.File,
+		)
+
+		sum, err := st.fetch(ctx, set.Bucket, currentManifestUnit.Key, dest)
+		if err != nil {
+			return nil, err
+		}
+
+		if sum != currentManifestUnit.SHA256 {
+			_ = os.Remove(dest)
+
+			mismatched = append(mismatched, currentManifestUnit.Unit)
+
+			continue
+		}
+
+		st.logf(
+			"saved plan fetched",
+			"unit",
+			currentManifestUnit.Unit,
+			"bucket",
+			set.Bucket,
+			"key",
+			currentManifestUnit.Key,
+		)
+	}
+
+	return mismatched, nil
 }
 
 // readManifest reads and checks set's manifest: it must exist, parse, name set.Owner
 // and list at least one unit.
-func readManifest(set types.PlanSet) (manifest, error) {
+func readManifest(set *types.PlanSet) (manifest, error) {
 	path := filepath.Join(set.Dir, set.Manifest)
-	data, err := os.ReadFile(path)
+
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return manifest{}, apperr.Wrap(err, apperr.CodeInvalidInput, "read "+path+
 			": Load restores the plans a Save listed there")
 	}
-	var m manifest
-	if err := json.Unmarshal(data, &m); err != nil {
+
+	var currentManifest manifest
+
+	err = json.Unmarshal(data, &currentManifest)
+	if err != nil {
 		return manifest{}, apperr.Wrap(err, apperr.CodeInvalidInput, "parse "+path)
 	}
+
 	switch {
-	case m.Owner != set.Owner:
+	case currentManifest.Owner != set.Owner:
 		return manifest{}, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"%s lists plans for %q, not %q", path, m.Owner, set.Owner))
-	case len(m.Units) == 0:
+			"%s lists plans for %q, not %q", path, currentManifest.Owner, set.Owner))
+	case len(currentManifest.Units) == 0:
 		return manifest{}, apperr.New(apperr.CodeInvalidInput, path+" lists no plan")
 	}
-	return m, nil
+
+	return currentManifest, nil
 }
 
 // checkEntry refuses (CodeInvalidInput) an entry whose unit is not a local relative
 // path or whose key is not <Prefix>…/<unit>/<File>, so a manifest can neither write
 // outside Dir nor fetch another owner's object.
-func checkEntry(set types.PlanSet, u manifestUnit) error {
-	if !filepath.IsLocal(filepath.FromSlash(u.Unit)) ||
-		!strings.HasPrefix(u.Key, set.Prefix) ||
-		!strings.HasSuffix(u.Key, "/"+u.Unit+"/"+set.File) {
+func checkEntry(set *types.PlanSet, currentManifestUnit manifestUnit) error {
+	if !filepath.IsLocal(filepath.FromSlash(currentManifestUnit.Unit)) ||
+		!strings.HasPrefix(currentManifestUnit.Key, set.Prefix) ||
+		!strings.HasSuffix(
+			currentManifestUnit.Key,
+			"/"+currentManifestUnit.Unit+"/"+set.File,
+		) {
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"the plan manifest entry %q (key %q) is not a plan of %s under %s",
-			u.Unit, u.Key, set.Owner, set.Prefix))
+			currentManifestUnit.Unit, currentManifestUnit.Key, set.Owner, set.Prefix))
 	}
+
 	return nil
 }
 
@@ -206,24 +300,36 @@ func (st objectStore) fetch(
 		return "", apperr.Wrap(err, apperr.CodeUpstream,
 			fmt.Sprintf("fetch the saved plan %s/%s", bucket, key))
 	}
+
 	defer func() { _ = body.Close() }()
-	if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
+
+	err = os.MkdirAll(filepath.Dir(dest), privateDirMode)
+	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create "+filepath.Dir(dest))
 	}
-	f, err := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+
+	file, err := os.OpenFile(
+		filepath.Clean(dest),
+		os.O_CREATE|os.O_EXCL|os.O_WRONLY,
+		privateFileMode,
+	)
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "create "+dest)
 	}
-	h := sha256.New()
-	_, cerr := io.Copy(io.MultiWriter(f, h), body)
-	if err := f.Close(); cerr == nil {
+
+	hash := sha256.New()
+	_, cerr := io.Copy(io.MultiWriter(file, hash), body)
+
+	if err := file.Close(); cerr == nil {
 		cerr = err
 	}
+
 	if cerr != nil {
 		return "", apperr.Wrap(cerr, apperr.CodeUpstream,
 			fmt.Sprintf("download the saved plan %s/%s", bucket, key))
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // logf records msg when the store has a logger.

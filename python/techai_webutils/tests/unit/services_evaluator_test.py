@@ -8,8 +8,7 @@ import pytest
 
 from techai_webutils.clients.grader.stub import StubGrader
 from techai_webutils.core.interfaces.dataset import EvalCase
-from techai_webutils.core.interfaces.evaluator import EvalOutput
-from techai_webutils.core.interfaces.grader import Grader, GradeResult
+from techai_webutils.core.interfaces.grader import EvalOutput, Grader, GradeResult
 from techai_webutils.services.evaluator import ThresholdEvaluator
 
 _CASE = EvalCase(id="c1", inputs={"query": "q"}, expected={"answer": "a"}, metadata={})
@@ -17,7 +16,17 @@ _OUTPUT = EvalOutput(answer="a", citations=("doc-1",), trace_id="trace-1")
 
 
 def _grader(name: str, score: float, *, passed: bool) -> Grader:
-    """Return a mocked grader that answers one fixed verdict."""
+    """Return a mocked grader that answers one fixed verdict.
+
+    Args:
+        name: The grader's name.
+        score: Its score.
+        passed: Whether the case passed.
+
+    Returns:
+        A mocked grader that answers one fixed verdict.
+
+    """
     grader = MagicMock(spec=Grader)
     grader.grade = AsyncMock(
         return_value=GradeResult(grader=name, score=score, passed=passed, rationale="r")
@@ -27,14 +36,18 @@ def _grader(name: str, score: float, *, passed: bool) -> Grader:
 
 @pytest.mark.asyncio
 async def test_threshold_evaluator_passes_on_and_of_grades() -> None:
-    """Test that a case passes only when every grade passes and the mean clears the threshold.
+    """Test that a case passes only when every grade passes.
+
+    The mean must clear the threshold.
 
     **Why this test is important:**
-      - The evaluator's verdict gates promotion; a single failing grader must fail the case even
-        when the mean score is high, and a low mean must fail it even when every grader passed.
+      - The evaluator's verdict gates promotion; a single failing grader must fail the
+        case even when the mean score is high, and a low mean must fail it even when every
+        grader passed.
 
     **What it tests:**
-      - grades 0.9 and 0.7 (both passed) at threshold 0.8 → ``score == 0.8``, ``passed is True``
+      - grades 0.9 and 0.7 (both passed) at threshold 0.8 → ``score == 0.8``, ``passed is
+        True``
       - the same scores with one grade failed → ``passed is False``
       - both passed but the mean (0.7) below 0.8 → ``passed is False``
       - no graders → ``passed is False``, ``score == 0.0``
@@ -68,8 +81,8 @@ async def test_stub_grader_always_passes() -> None:
     """Test that the stub grader passes every case with a perfect score.
 
     **Why this test is important:**
-      - The stub grader lets an eval run work end to end before real graders exist; it must be
-        deterministic so a stub run never flakes.
+      - The stub grader lets an eval run work end to end before real graders exist; it
+        must be deterministic so a stub run never flakes.
 
     **What it tests:**
       - ``grade`` returns ``GradeResult("stub", 1.0, True, "stub grader")``

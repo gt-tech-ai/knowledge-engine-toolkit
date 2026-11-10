@@ -23,7 +23,7 @@ func (NopObserver) OnPhaseStart(_ string, _ []string) {}
 func (NopObserver) OnStepStart(_, _ string) {}
 
 // OnStepComplete discards the step-complete event.
-func (NopObserver) OnStepComplete(_ types.StepResult) {}
+func (NopObserver) OnStepComplete(_ *types.StepResult) {}
 
 // OnPhaseComplete discards the phase-complete event.
 func (NopObserver) OnPhaseComplete(_ string, _ types.StepResults, _ time.Duration) {}

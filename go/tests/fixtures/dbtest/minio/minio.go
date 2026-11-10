@@ -6,14 +6,17 @@ package minio
 
 import (
 	"context"
-	"fmt"
+	"net"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// startupTimeout bounds the container's start.
+const startupTimeout = 60 * time.Second
 
 const (
 	// DefaultImage is the MinIO image NewTestMinIO starts unless WithImage overrides it:
@@ -59,45 +62,52 @@ func WithImage(image string) Option {
 // NewTestMinIO starts a MinIO container (DefaultImage unless WithImage overrides
 // it) and waits up to 60 seconds for its readiness endpoint to report healthy.
 func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
-	o := options{image: DefaultImage}
+	currentOptions := options{image: DefaultImage}
 	for _, opt := range opts {
-		opt(&o)
+		opt(&currentOptions)
 	}
 
-	req := testcontainers.ContainerRequest{
-		Image:        o.image,
-		ExposedPorts: []string{minioAPIPort},
-		Env: map[string]string{
-			"MINIO_ROOT_USER":     RootUser,
-			"MINIO_ROOT_PASSWORD": RootPassword,
-		},
-		Cmd: []string{"server", "/data"},
-		WaitingFor: wait.ForHTTP("/minio/health/ready").
-			WithPort(minioAPIPort).
-			WithStartupTimeout(60 * time.Second),
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = currentOptions.image
+	containerRequest.ExposedPorts = []string{minioAPIPort}
+	containerRequest.Env = map[string]string{
+		"MINIO_ROOT_USER":     RootUser,
+		"MINIO_ROOT_PASSWORD": RootPassword,
 	}
+	containerRequest.Cmd = []string{"server", "/data"}
+	containerRequest.WaitingFor = wait.ForHTTP("/minio/health/ready").
+		WithPort(minioAPIPort).
+		WithStartupTimeout(startupTimeout)
+
+	req := containerRequest
 
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {
 		// A failed start (e.g. a readiness timeout) can still leave a container behind;
 		// TerminateContainer is nil-safe.
 		_ = testcontainers.TerminateContainer(container)
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
-			"failed to start MinIO container from "+o.image,
+			"failed to start MinIO container from "+currentOptions.image,
 		)
 	}
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -107,13 +117,14 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 
 	port, err := container.MappedPort(ctx, minioAPIPort)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
 
 	return &TestMinIO{
 		container: container,
-		endpoint:  fmt.Sprintf("http://%s:%s", host, port.Port()),
+		endpoint:  "http://" + net.JoinHostPort(host, port.Port()),
 	}, nil
 }
 
@@ -125,6 +136,6 @@ func (m *TestMinIO) Endpoint() string {
 // Close terminates the MinIO container. Safe to call on a nil receiver.
 func (m *TestMinIO) Close(ctx context.Context) {
 	if m != nil && m.container != nil {
-		m.container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on teardown
+		_ = m.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // Cluster checks that the operator's kubeconfig reaches the target's cluster, by
@@ -16,27 +17,33 @@ type Cluster struct {
 }
 
 // Compile-time assertion that Cluster is a readiness probe.
-var _ interfaces.Probe[Target] = Cluster{}
+var _ interfaces.Probe[Target] = stdx.Zero[Cluster]()
 
 // Name is "cluster-access".
 func (Cluster) Name() string { return "cluster-access" }
 
 // Run passes on a "yes"; a non-zero exit, a transport error or a "no" fails.
-func (p Cluster) Run(ctx context.Context, t Target) types.Verdict {
+func (p Cluster) Run(ctx context.Context, target Target) types.Verdict {
 	res := p.Runner.RunBuffered(ctx, "", "kubectl",
-		"--context", t.KubeContext, "auth", "can-i", "get", "pods")
+		"--context", target.KubeContext, "auth", "can-i", "get", "pods")
 	answer := strings.TrimSpace(string(res.Stdout))
+
 	if res.Err == nil && answer == "yes" {
 		return pass(
-			"cluster context " + t.KubeContext + " is reachable (auth can-i: yes)",
+			"cluster context " + target.KubeContext + " is reachable (auth can-i: yes)",
 		)
 	}
-	detail := "kubectl --context " + t.KubeContext + " auth can-i get pods"
+
+	detail := "kubectl --context " + target.KubeContext + " auth can-i get pods"
+
 	switch {
 	case answer != "" && answer != "yes":
 		detail += " returned " + answer
 	case res.Err != nil:
 		detail += " failed: " + res.Err.Error()
+	default:
+		// No other value changes the outcome.
 	}
+
 	return fail(p.Name(), detail)
 }

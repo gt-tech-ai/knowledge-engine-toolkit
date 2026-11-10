@@ -14,15 +14,29 @@ type pythonProjects struct{}
 func (pythonProjects) Select(
 	ctx context.Context,
 	cb interfaces.Codebase,
-	_ types.TargetSpec,
+	_ *types.TargetSpec,
 ) ([]string, error) {
-	found, err := cb.Files(ctx, types.FileSelector{Globs: []string{"**/pyproject.toml"}})
+	found, err := cb.Files(
+		ctx,
+		&types.FileSelector{
+			Globs:            []string{"**/pyproject.toml"},
+			Roots:            nil,
+			Paths:            nil,
+			Exts:             nil,
+			Exclude:          nil,
+			TrackedOnly:      false,
+			IncludeGenerated: false,
+			IncludeIgnored:   false,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	paths := make([]string, 0, len(found))
 	for _, f := range found {
 		paths = append(paths, f.Path)
 	}
+
 	return dirsOf(paths), nil
 }

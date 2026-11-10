@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // pollUntilInterval is how often PollUntil re-checks an async effect.
@@ -34,28 +34,46 @@ func pollEvery(
 	check func(context.Context) (bool, error),
 ) error {
 	deadline := time.Now().Add(timeout)
+
 	for {
 		ok, err := check(ctx)
 		if ok {
 			return nil
 		}
+
 		if time.Now().After(deadline) {
-			if err != nil {
-				return apperr.Wrap(err, apperr.CodeUnavailable, "e2ekit: "+what)
-			}
-			return apperr.New(
-				apperr.CodeUnavailable,
-				"e2ekit: "+what+" did not materialize within "+timeout.String(),
-			)
+			return pollExpired(err, what, timeout)
 		}
-		select {
-		case <-ctx.Done():
-			return apperr.Wrap(
-				ctx.Err(),
-				apperr.ContextCode(ctx.Err(), apperr.CodeCanceled),
-				"e2ekit: poll canceled",
-			)
-		case <-time.After(interval):
+
+		err = pollWait(ctx, interval)
+		if err != nil {
+			return err
 		}
+	}
+}
+
+// pollExpired is the deadline failure, carrying the last check error when there is one.
+func pollExpired(err error, what string, timeout time.Duration) error {
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "e2ekit: "+what)
+	}
+
+	return apperr.New(
+		apperr.CodeUnavailable,
+		"e2ekit: "+what+" did not materialize within "+timeout.String(),
+	)
+}
+
+// pollWait sleeps one interval, failing if ctx ends first.
+func pollWait(ctx context.Context, interval time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return apperr.Wrap(
+			ctx.Err(),
+			apperr.ContextCode(ctx.Err(), apperr.CodeCanceled),
+			"e2ekit: poll canceled",
+		)
+	case <-time.After(interval):
+		return nil
 	}
 }

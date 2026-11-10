@@ -3,6 +3,7 @@
 // AppError, the wrapped-cause branches of the Zap marshallers, and the
 // transaction-context and span-kind option helpers in core/interfaces. Every
 // test is black-box (external package) and asserts observable behaviour only.
+
 package unit_test
 
 import (
@@ -16,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -49,7 +50,12 @@ func TestToHTTPStatusUpstream(t *testing.T) {
 func TestStackTraceNoStack(t *testing.T) {
 	t.Parallel()
 
-	err := &apperr.AppError{Code: apperr.CodeInternal, Message: "no stack"}
+	err := &apperr.AppError{
+		Code:    apperr.CodeInternal,
+		Message: "no stack",
+		Err:     nil,
+		Details: nil,
+	}
 
 	assert.Empty(t, err.StackTrace())
 }
@@ -67,13 +73,14 @@ func TestStackTraceNoStack(t *testing.T) {
 func TestWrapPreservesOriginStack(t *testing.T) {
 	t.Parallel()
 
-	origin := apperr.New(apperr.CodeInternal, "origin")
+	origin := apperr.New(apperr.CodeInternal, textOrigin)
 	originStack := origin.StackTrace()
 	require.NotEmpty(t, originStack, "origin error should capture a stack")
 
 	wrapped := apperr.Wrap(origin, apperr.CodeUnavailable, "wrapped")
 
 	var wrappedErr *apperr.AppError
+
 	require.ErrorAs(t, wrapped, &wrappedErr)
 	assert.Equal(t, originStack, wrappedErr.StackTrace(),
 		"wrapping an AppError should preserve the origin stack")
@@ -94,22 +101,24 @@ func TestStackTraceStartsAtCaller(t *testing.T) {
 	t.Parallel()
 
 	for name, err := range map[string]*apperr.AppError{
-		"New":          apperr.New(apperr.CodeInternal, "origin"),
-		"InvalidInput": apperr.InvalidInput("origin"),
-		"Unavailable":  apperr.Unavailable("origin"),
+		textNew:          apperr.New(apperr.CodeInternal, textOrigin),
+		textInvalidinput: apperr.InvalidInput(textOrigin),
+		"Unavailable":    apperr.Unavailable(textOrigin),
 	} {
-		first, _, _ := strings.Cut(err.StackTrace(), "\n")
+		first, _, _ := strings.Cut(err.StackTrace(), textNewline)
 		assert.True(t, strings.HasSuffix(first, ".TestStackTraceStartsAtCaller"),
 			"%s: first frame = %q, want the calling test function", name, first)
 	}
 
 	var wrapped *apperr.AppError
+
 	require.ErrorAs(
 		t,
-		apperr.Wrap(apperr.Sentinel("cause"), apperr.CodeInternal, "origin"),
+		apperr.Wrap(apperr.Sentinel("cause"), apperr.CodeInternal, textOrigin),
 		&wrapped,
 	)
-	first, _, _ := strings.Cut(wrapped.StackTrace(), "\n")
+
+	first, _, _ := strings.Cut(wrapped.StackTrace(), textNewline)
 	assert.True(t, strings.HasSuffix(first, ".TestStackTraceStartsAtCaller"),
 		"Wrap: first frame = %q, want the calling test function", first)
 }
@@ -132,7 +141,7 @@ func TestMarshalLogObjectWithCause(t *testing.T) {
 		apperr.CodeUnavailable,
 		"db down",
 	)
-	appErr := &apperr.AppError{}
+	appErr := new(apperr.AppError)
 	ok := errors.As(wrapped, &appErr)
 	require.True(t, ok)
 
@@ -155,8 +164,8 @@ func TestMarshalLogObjectWithCause(t *testing.T) {
 func TestZapFieldsWithCause(t *testing.T) {
 	t.Parallel()
 
-	wrapped := apperr.Wrap(apperr.Sentinel("boom"), apperr.CodeInternal, "op failed")
-	appErr := &apperr.AppError{}
+	wrapped := apperr.Wrap(apperr.Sentinel(textBoom), apperr.CodeInternal, "op failed")
+	appErr := new(apperr.AppError)
 	ok := errors.As(wrapped, &appErr)
 	require.True(t, ok)
 
@@ -199,6 +208,7 @@ func TestWithSpanKind(t *testing.T) {
 	t.Parallel()
 
 	var cfg interfaces.SpanConfig
+
 	interfaces.WithSpanKind(interfaces.SpanKindClient)(&cfg)
 
 	assert.Equal(t, interfaces.SpanKindClient, cfg.Kind)

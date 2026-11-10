@@ -48,9 +48,9 @@ func TestRedactPII_Phone(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"call 555-123-4567", "call [REDACTED]"},
-		{"call (555) 123-4567", "call [REDACTED]"},
-		{"call +1-555-123-4567", "call [REDACTED]"},
+		{"call 555-123-4567", textCallRedacted},
+		{"call (555) 123-4567", textCallRedacted},
+		{"call +1-555-123-4567", textCallRedacted},
 	}
 	for _, tc := range tests {
 		got := logger.RedactPII(tc.input)
@@ -117,8 +117,8 @@ func TestRedactPII_AuthToken(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"Bearer eyJhbGciOiJIUzI1NiJ9.abc", "[REDACTED]"},
-		{"token=abc123xyz", "[REDACTED]"},
+		{"Bearer eyJhbGciOiJIUzI1NiJ9.abc", textRedacted},
+		{"token=abc123xyz", textRedacted},
 		{
 			// Fake 3-segment JWT — test fixture only, never a real credential. The
 			// trailing gitleaks:allow marks it as an intentional false positive so the
@@ -178,7 +178,9 @@ func TestRedactPII_CombinedSinglePass(t *testing.T) {
 // implementation (no small-input regression).
 func BenchmarkRedactPII(b *testing.B) {
 	input := "user john@example.com called 555-123-4567 from 192.168.1.1 token=abc123xyz"
+
 	b.ReportAllocs()
+
 	for range b.N {
 		_ = logger.RedactPII(input)
 	}
@@ -220,14 +222,16 @@ func TestNewLogger_CreatesValidLogger(t *testing.T) {
 	t.Parallel()
 
 	cfg := logger.DefaultConfig()
-	l, err := logger.NewFromConfig(cfg)
+	currentLogger, err := logger.NewFromConfig(cfg)
 	require.NoError(t, err, "unexpected error from NewFromConfig")
-	require.NotNil(t, l, "logger must not be nil")
+	require.NotNil(t, currentLogger, "logger must not be nil")
 
 	// Verify it can log without panicking
 	var buf bytes.Buffer
+
 	_ = buf // logger writes to stdout, but shouldn't panic
-	l.Info("test message", "key", "value")
+
+	currentLogger.Info("test message", textKey, textValue)
 }
 
 // TestNewLogger_TextFormat tests that the text output format initializes correctly.
@@ -245,14 +249,33 @@ func TestNewLogger_TextFormat(t *testing.T) {
 
 	cfg := logger.Config{
 		Kind:      logger.KindZap,
-		Level:     "debug",
-		Format:    "text",
+		Level:     textDebug,
+		Format:    textText,
 		RedactPII: false,
+		AddSource: false,
 	}
 	l, err := logger.NewFromConfig(cfg)
 	require.NoError(t, err, "unexpected error from NewFromConfig with text format")
 	require.NotNil(t, l, "logger must not be nil")
 	l.Debug("debug message")
+}
+
+// loggerSpanContext returns a context carrying the valid, sampled span the trace
+// field tests read back.
+func loggerSpanContext() context.Context {
+	traceID, _ := trace.TraceIDFromHex(text4bf92f3577b34da6a3ce929d0e)
+	spanID, _ := trace.SpanIDFromHex(text00f067aa0ba902b7)
+
+	return trace.ContextWithSpanContext(
+		context.Background(),
+		trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID:    traceID,
+			SpanID:     spanID,
+			TraceFlags: trace.FlagsSampled,
+			TraceState: trace.TraceState{},
+			Remote:     false,
+		}),
+	)
 }
 
 // TestTraceID_ExtractsFromContext tests that TraceID extracts the OTel trace ID from
@@ -276,16 +299,9 @@ func TestTraceID_ExtractsFromContext(t *testing.T) {
 	assert.Empty(t, logger.TraceID(ctx), "expected empty trace ID for empty context")
 
 	// Test case 2: Context with valid span returns trace ID
-	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
-	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID:    traceID,
-		SpanID:     spanID,
-		TraceFlags: trace.FlagsSampled,
-	})
-	ctx = trace.ContextWithSpanContext(context.Background(), spanCtx)
+	ctx = loggerSpanContext()
 
-	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", logger.TraceID(ctx))
+	assert.Equal(t, text4bf92f3577b34da6a3ce929d0e, logger.TraceID(ctx))
 }
 
 // TestSpanID_ExtractsFromContext tests that SpanID extracts the OTel span ID from
@@ -308,16 +324,9 @@ func TestSpanID_ExtractsFromContext(t *testing.T) {
 	assert.Empty(t, logger.SpanID(ctx), "expected empty span ID for empty context")
 
 	// Test case 2: Context with valid span returns span ID
-	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
-	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID:    traceID,
-		SpanID:     spanID,
-		TraceFlags: trace.FlagsSampled,
-	})
-	ctx = trace.ContextWithSpanContext(context.Background(), spanCtx)
+	ctx = loggerSpanContext()
 
-	assert.Equal(t, "00f067aa0ba902b7", logger.SpanID(ctx))
+	assert.Equal(t, text00f067aa0ba902b7, logger.SpanID(ctx))
 }
 
 // TestWithContext_IncludesTraceFields tests that WithContext adds trace_id and span_id
@@ -337,24 +346,26 @@ func TestWithContext_IncludesTraceFields(t *testing.T) {
 	t.Parallel()
 
 	cfg := logger.DefaultConfig()
-	l, err := logger.NewFromConfig(cfg)
+	currentLogger, err := logger.NewFromConfig(cfg)
 	require.NoError(t, err, "unexpected error from NewFromConfig")
 
 	// Test case 1: Context with span but NO correlation ID should still add trace fields
-	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
-	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
+	traceID, _ := trace.TraceIDFromHex(text4bf92f3577b34da6a3ce929d0e)
+	spanID, _ := trace.SpanIDFromHex(text00f067aa0ba902b7)
 	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    traceID,
 		SpanID:     spanID,
 		TraceFlags: trace.FlagsSampled,
+		TraceState: trace.TraceState{},
+		Remote:     false,
 	})
 	ctx := trace.ContextWithSpanContext(context.Background(), spanCtx)
 
 	// The logger should include trace_id and span_id even without correlation_id
-	enrichedLogger := l.WithContext(ctx)
+	enrichedLogger := currentLogger.WithContext(ctx)
 	assert.NotSame(
 		t,
-		l,
+		currentLogger,
 		enrichedLogger,
 		"WithContext must return new logger with trace fields, not the same logger (early "+
 			"return)",
@@ -367,7 +378,12 @@ func TestWithContext_IncludesTraceFields(t *testing.T) {
 
 	// Test case 2: Empty context should return unchanged logger
 	emptyCtx := context.Background()
-	unchangedLogger := l.WithContext(emptyCtx)
-	assert.Same(t, l, unchangedLogger,
+	unchangedLogger := currentLogger.WithContext(emptyCtx)
+	assert.Same(t, currentLogger, unchangedLogger,
 		"WithContext must return same logger for empty context")
 }
+
+const (
+	// textCallRedacted is the literal "call [REDACTED]".
+	textCallRedacted = "call [REDACTED]"
+)

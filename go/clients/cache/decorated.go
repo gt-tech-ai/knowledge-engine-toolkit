@@ -24,15 +24,22 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	d := &decorated{base: base, Base: b}
+
+	currentDecorated := &decorated{base: base, Base: &b, hits: nil, misses: nil}
 	if m := decs.Observability().Metrics; m != nil {
-		d.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
-		d.misses = m.Counter("cache_misses_total", "Total cache misses", "cache")
+		currentDecorated.hits = m.Counter("cache_hits_total", "Total cache hits", "cache")
+		currentDecorated.misses = m.Counter(
+			"cache_misses_total",
+			"Total cache misses",
+			"cache",
+		)
 	}
+
 	if inv, ok := base.(interfaces.CacheInvalidator); ok {
-		return &invalidating{decorated: d, inv: inv}, nil
+		return &invalidating{decorated: currentDecorated, inv: inv}, nil
 	}
-	return d, nil
+
+	return currentDecorated, nil
 }
 
 // cacheOps is the decorated cache's contract: the cache and its invalidation surface.
@@ -43,14 +50,14 @@ type cacheOps interface {
 
 // decorated runs a ByteCache's operations through the client tier.
 type decorated struct {
+	// Base runs each operation through the client tier.
+	*client.Base
+
 	// base is the wrapped cache.
 	base interfaces.ByteCache
 
 	// hits and misses count Get outcomes; nil without a metrics collaborator.
 	hits, misses interfaces.Counter
-
-	// Base runs each operation through the client tier.
-	client.Base
 }
 
 var _ interfaces.ByteCache = (*decorated)(nil)
@@ -58,17 +65,23 @@ var _ interfaces.ByteCache = (*decorated)(nil)
 // Get returns the cached value, or a miss when the key is absent or the tier refused.
 func (d *decorated) Get(ctx context.Context, key string) ([]byte, bool) {
 	var hit bool
-	v, err := d.ExecOnce(ctx, "get", func(c context.Context) ([]byte, error) {
+
+	data, err := d.ExecOnce(ctx, "get", func(c context.Context) ([]byte, error) {
 		v, ok := d.base.Get(c, key)
+
 		hit = ok
+
 		return v, nil
 	})
+
 	hit = hit && err == nil
 	d.count(hit)
+
 	if !hit {
 		return nil, false
 	}
-	return v, true
+
+	return data, true
 }
 
 // Set stores value under key; a refused write is dropped (the cache is fail-open).
@@ -80,6 +93,7 @@ func (d *decorated) Set(
 ) {
 	_ = d.DoOnce(ctx, "set", func(c context.Context) error {
 		d.base.Set(c, key, value, ttl)
+
 		return nil
 	})
 }
@@ -88,6 +102,7 @@ func (d *decorated) Set(
 func (d *decorated) Delete(ctx context.Context, key string) {
 	_ = d.DoOnce(ctx, "delete", func(c context.Context) error {
 		d.base.Delete(c, key)
+
 		return nil
 	})
 }
@@ -99,6 +114,8 @@ func (d *decorated) count(hit bool) {
 		d.hits.Inc(d.Name())
 	case !hit && d.misses != nil:
 		d.misses.Inc(d.Name())
+	default:
+		// No other value changes the outcome.
 	}
 }
 

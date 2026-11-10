@@ -8,9 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/dataset"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
+
+// decodedDataPaths is the Paths element of decodedData.
+type decodedDataPaths struct {
+	// Root is the repository root.
+	Root string `yaml:"root"`
+}
 
 // decodedData is the whole-dataset target of the Decode tests.
 type decodedData struct {
@@ -18,10 +26,7 @@ type decodedData struct {
 	Tools []datasetTool `yaml:"tools"`
 
 	// Paths is the paths section.
-	Paths struct {
-		// Root is the repository root.
-		Root string `yaml:"root"`
-	} `yaml:"paths"`
+	Paths decodedDataPaths `yaml:"paths"`
 
 	// Limits is the untagged limits section, matched by its lower-cased name.
 	Limits map[string]int
@@ -43,41 +48,79 @@ type decodedData struct {
 //     INVALID_INPUT.
 func TestDataset_Decode(t *testing.T) {
 	t.Parallel()
+
 	good := fstest.MapFS{
-		"data/tools.yaml": {Data: []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")},
-		"data/paths.yaml": {Data: []byte("paths:\n  root: .\nlimits: {max: 3}\n")},
+		"data/tools.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("tools:\n  - name: buf\n    pin: v1.73.0\n")
+		}),
+		textDataPathsYaml: fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("paths:\n  root: .\nlimits: {max: 3}\n")
+		}),
 	}
-	d, err := dataset.Load(good, "data")
+	currentDataset, err := dataset.Load(good, textData)
 	require.NoError(t, err)
 
 	var out decodedData
-	require.NoError(t, d.Decode(&out))
-	assert.Equal(t, []datasetTool{{Name: "buf", Pin: "v1.73.0"}}, out.Tools)
+
+	require.NoError(t, currentDataset.Decode(&out))
+	assert.Equal(t, []datasetTool{{Name: textBuf, Pin: "v1.73.0"}}, out.Tools)
 	assert.Equal(t, ".", out.Paths.Root)
-	assert.Equal(t, map[string]int{"max": 3}, out.Limits)
+	assert.Equal(t, map[string]int{textMax: 3}, out.Limits)
 	assert.Nil(t, out.Absent)
 
 	unknownKey, err := dataset.Load(fstest.MapFS{
-		"data/extra.yaml": {Data: []byte("mystery: 1\n")},
-	}, "data")
+		"data/extra.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("mystery: 1\n")
+		}),
+	}, textData)
 	require.NoError(t, err)
-	err = unknownKey.Decode(&decodedData{})
+
+	err = unknownKey.Decode(new(decodedData))
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "mystery")
+
+	testDatasetDecodeChecksErrors(t, currentDataset, err)
+}
+
+// testDatasetDecodeChecksErrors continues TestDataset_Decode.
+func testDatasetDecodeChecksErrors(
+	t *testing.T,
+	currentDataset *dataset.Dataset,
+	err error,
+) {
+	t.Helper()
+
 	require.ErrorContains(t, err, "data/extra.yaml")
 
 	unknownField, err := dataset.Load(fstest.MapFS{
-		"data/paths.yaml": {Data: []byte("paths:\n  rooot: .\n")},
-	}, "data")
+		textDataPathsYaml: fixtures.BuildRef(func(row *fstest.MapFile) {
+			row.Data = []byte("paths:\n  rooot: .\n")
+		}),
+	}, textData)
 	require.NoError(t, err)
-	err = unknownField.Decode(&decodedData{})
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	require.ErrorContains(t, err, "data/paths.yaml")
 
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode(decodedData{})))
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode((*decodedData)(nil))))
+	err = unknownField.Decode(new(decodedData))
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	require.ErrorContains(t, err, textDataPathsYaml)
+
+	assert.Equal(
+		t,
+		apperr.CodeInvalidInput,
+		apperr.Code(currentDataset.Decode(stdx.Zero[decodedData]())),
+	)
+	assert.Equal(
+		t,
+		apperr.CodeInvalidInput,
+		apperr.Code(currentDataset.Decode((*decodedData)(nil))),
+	)
+
 	var notStruct map[string]any
-	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(d.Decode(&notStruct)))
+
+	assert.Equal(
+		t,
+		apperr.CodeInvalidInput,
+		apperr.Code(currentDataset.Decode(&notStruct)),
+	)
 }
 
 // TestDataset_DecodeKeepsBlockScalars tests that a section decodes to the same values a
@@ -93,31 +136,44 @@ func TestDataset_Decode(t *testing.T) {
 //     Section and Decode exactly as yaml.Unmarshal decodes them.
 func TestDataset_DecodeKeepsBlockScalars(t *testing.T) {
 	t.Parallel()
+
 	src := "q:\n" +
 		"  folded: >-\n    (\n      sum(rate(x[2m]))\n      >= 0\n    ) or vector(0)\n" +
 		"  literal: |\n    a\n      b\n" +
 		"  quoted: \"123\"\n" +
 		"  plain: 7\n"
+
 	type queries struct {
 		Folded  string `yaml:"folded"`
 		Literal string `yaml:"literal"`
 		Quoted  string `yaml:"quoted"`
 		Plain   int    `yaml:"plain"`
 	}
+
 	var want struct {
 		Q queries `yaml:"q"`
 	}
+
 	require.NoError(t, yaml.Unmarshal([]byte(src), &want))
 
-	ds, err := dataset.Load(fstest.MapFS{"data/q.yaml": {Data: []byte(src)}}, "data")
+	currentDataset, err := dataset.Load(
+		fstest.MapFS{
+			"data/q.yaml": fixtures.BuildRef(func(row *fstest.MapFile) {
+				row.Data = []byte(src)
+			}),
+		},
+		textData,
+	)
 	require.NoError(t, err)
-	got, err := ds.Section[queries]("q")
+
+	got, err := currentDataset.Section[queries](textQ)
 	require.NoError(t, err)
 	assert.Equal(t, want.Q, got)
 
 	var all struct {
 		Q queries `yaml:"q"`
 	}
-	require.NoError(t, ds.Decode(&all))
+
+	require.NoError(t, currentDataset.Decode(&all))
 	assert.Equal(t, want.Q, all.Q)
 }

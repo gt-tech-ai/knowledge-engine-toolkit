@@ -7,6 +7,7 @@
 //go:generate mockgen -destination=mock_analytics.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces AnalyticsStore,AnalyticsCompactor,RowStream
 //go:generate mockgen -destination=mock_auth0.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Auth0Management
 //go:generate mockgen -destination=mock_aws_bedrock.go -package=mocks -mock_names=API=MockAWSBedrockAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/bedrock API
+//go:generate mockgen -destination=mock_aws_bedrockagent.go -package=mocks -mock_names=API=MockAWSBedrockAgentAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/bedrockagent API
 //go:generate mockgen -destination=mock_aws_iam.go -package=mocks -mock_names=API=MockAWSIAMAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/iam API
 //go:generate mockgen -destination=mock_aws_route53.go -package=mocks -mock_names=API=MockAWSRoute53API github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/route53 API
 //go:generate mockgen -destination=mock_aws_secretsmanager.go -package=mocks -mock_names=API=MockAWSSecretsManagerAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/secretsmanager API
@@ -43,7 +44,7 @@
 //go:generate mockgen -destination=mock_lifecycle.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Lifecycle
 //go:generate mockgen -destination=mock_lock.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DistributedLock,Locker
 //go:generate mockgen -destination=mock_logger.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Logger
-//go:generate mockgen -destination=mock_messaging.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces MessagePublisher,CountingPublisher,MessageConsumer,DynamicConsumer,PatternConsumer
+//go:generate mockgen -destination=mock_messaging.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces MessagePublisher,CountingPublisher,KeyedPublisher,MessageConsumer,DynamicConsumer,PatternConsumer
 //go:generate mockgen -destination=mock_metrics.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Metrics,Counter,Histogram,Gauge
 
 // MetricsQuerier — the PromQL query seam a consumer (a steady-state check, the AI-ops
@@ -58,7 +59,7 @@
 //go:generate mockgen -destination=mock_probe.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Probe,ProbeSet,Guard
 //go:generate mockgen -destination=mock_procedure.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ProcedureRunner
 //go:generate mockgen -destination=mock_process.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Supervisor,ProcessHandle
-//go:generate mockgen -destination=mock_prometheus_http_doer.go -package=mocks -mock_names=HTTPDoer=MockPrometheusHTTPDoer github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/http HTTPDoer
+//go:generate mockgen -destination=mock_prometheus_http_doer.go -package=mocks -mock_names=Doer=MockPrometheusHTTPDoer github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/prometheus/httpapi Doer
 //go:generate mockgen -destination=mock_prompter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Prompter
 //go:generate mockgen -destination=mock_rate_limiter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces RateLimiter
 //go:generate mockgen -destination=mock_reader.go -package=mocks io ReadCloser
@@ -67,7 +68,7 @@
 //go:generate mockgen -destination=mock_roles.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Reader,Lister,Creator,Updater,Writer,Inserter,Upserter,Purger,Deleter,Exister,Suggester,Resource,ReadListExistStore,CRUDNoListStore,CRUDNoListRepository,InsertOnlyStore
 //go:generate mockgen -destination=mock_retrier.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Retrier
 //go:generate mockgen -destination=mock_round_tripper.go -package=mocks net/http RoundTripper
-//go:generate mockgen -destination=mock_s3_api.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3 S3API
+//go:generate mockgen -destination=mock_s3_api.go -package=mocks -mock_names=API=MockS3API github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3 API
 //go:generate mockgen -destination=mock_secretsmanager_api.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets/awssm SecretsManagerAPI
 //go:generate mockgen -destination=mock_secret_source.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Source
 //go:generate mockgen -destination=mock_service.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Service

@@ -43,7 +43,7 @@ func (m *MockSupervisor) EXPECT() *MockSupervisorMockRecorder {
 }
 
 // Detach mocks base method.
-func (m *MockSupervisor) Detach(spec types.ProcessSpec) error {
+func (m *MockSupervisor) Detach(spec *types.ProcessSpec) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Detach", spec)
 	ret0, _ := ret[0].(error)
@@ -57,7 +57,7 @@ func (mr *MockSupervisorMockRecorder) Detach(spec any) *gomock.Call {
 }
 
 // Start mocks base method.
-func (m *MockSupervisor) Start(ctx context.Context, spec types.ProcessSpec, ready interfaces.Probe[interfaces.ProcessHandle]) (interfaces.ProcessHandle, error) {
+func (m *MockSupervisor) Start(ctx context.Context, spec *types.ProcessSpec, ready interfaces.Probe[interfaces.ProcessHandle]) (interfaces.ProcessHandle, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Start", ctx, spec, ready)
 	ret0, _ := ret[0].(interfaces.ProcessHandle)

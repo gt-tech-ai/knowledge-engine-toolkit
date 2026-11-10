@@ -11,9 +11,24 @@ import (
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/singleflight"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
+
+// poolSizePerProc is the connections pooled for each GOMAXPROCS unit.
+const poolSizePerProc = 10
+
+// fallbackEntryTTL is the entry lifetime used when none is configured.
+const fallbackEntryTTL = 5 * time.Minute
+
+// defaultConfigMinIdleConns is the default MinIdleConns of Config.
+const defaultConfigMinIdleConns = 5
+
+// defaultConfigDefaultTTL is the default DefaultTTL of Config.
+const defaultConfigDefaultTTL = 5 * time.Minute
+
+// defaultConfigOpTimeout is the default OpTimeout of Config.
+const defaultConfigOpTimeout = 500 * time.Millisecond
 
 // Compile-time interface assertions.
 var (
@@ -28,14 +43,14 @@ var (
 // literally by SCAN's MATCH pattern. Without this, a prefix segment containing
 // "*"/"?"/"["/"]"/"\" (e.g. an unusual or hostile org id) would silently widen
 // the match and delete unrelated keys. Backslash must be escaped first.
-func escapeGlob(s string) string {
+func escapeGlob(text string) string {
 	return strings.NewReplacer(
 		`\`, `\\`,
 		`*`, `\*`,
 		`?`, `\?`,
 		`[`, `\[`,
 		`]`, `\]`,
-	).Replace(s)
+	).Replace(text)
 }
 
 // scanCount is the modest SCAN batch size used by InvalidatePrefix so a sweep
@@ -107,11 +122,15 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Addr:         "localhost:6379",
-		PoolSize:     10 * runtime.GOMAXPROCS(0),
-		MinIdleConns: 5,
-		DefaultTTL:   5 * time.Minute,
-		OpTimeout:    500 * time.Millisecond,
+		PoolSize:     poolSizePerProc * runtime.GOMAXPROCS(0),
+		MinIdleConns: defaultConfigMinIdleConns,
+		DefaultTTL:   defaultConfigDefaultTTL,
+		OpTimeout:    defaultConfigOpTimeout,
 		FailureMode:  FailureModeBypass,
+		Logger:       nil,
+		Password:     "",
+		DB:           0,
+		TLS:          false,
 	}
 }
 
@@ -145,22 +164,30 @@ type Cache struct {
 // Redis operations are absorbed internally per FailureMode.
 func New(cfg *Config) *Cache {
 	if cfg.DefaultTTL == 0 {
-		cfg.DefaultTTL = 5 * time.Minute
+		cfg.DefaultTTL = fallbackEntryTTL
 	}
 
-	opts := &redis.Options{
-		Addr:         cfg.Addr,
-		Password:     cfg.Password,
-		DB:           cfg.DB,
-		PoolSize:     cfg.PoolSize,
-		MinIdleConns: cfg.MinIdleConns,
-	}
+	var redisOptions redis.Options
+
+	redisOptions.Addr = cfg.Addr
+	redisOptions.Password = cfg.Password
+	redisOptions.DB = cfg.DB
+	redisOptions.PoolSize = cfg.PoolSize
+	redisOptions.MinIdleConns = cfg.MinIdleConns
+
+	opts := &redisOptions
+
 	if cfg.TLS {
 		// The TLS dialer fills ServerName from Addr's host, and ElastiCache's
 		// certificate chains to a public CA, so a zero-value config verifies
 		// correctly without a custom root or InsecureSkipVerify.
-		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		var tlsConfig tls.Config
+
+		tlsConfig.MinVersion = tls.VersionTLS12
+
+		opts.TLSConfig = &tlsConfig
 	}
+
 	client := redis.NewClient(opts)
 
 	return &Cache{
@@ -169,17 +196,8 @@ func New(cfg *Config) *Cache {
 		opTimeout:   cfg.OpTimeout,
 		failureMode: cfg.FailureMode,
 		logger:      cfg.Logger,
+		group:       singleflight.Group{},
 	}
-}
-
-// opCtx returns a context with the per-operation timeout applied. If opTimeout
-// is zero, the parent context is returned unchanged. The caller must call the
-// returned cancel function when the operation completes.
-func (c *Cache) opCtx(parent context.Context) (context.Context, context.CancelFunc) {
-	if c.opTimeout > 0 {
-		return context.WithTimeout(parent, c.opTimeout)
-	}
-	return parent, func() {}
 }
 
 // Get retrieves a value from Redis. Returns (value, true) on hit, (nil, false)
@@ -195,12 +213,15 @@ func (c *Cache) Get(ctx context.Context, key string) ([]byte, bool) {
 			// Cache miss (key doesn't exist) - not an error
 			return nil, false
 		}
+
 		// Connection error or other Redis error - absorb it
 		if c.failureMode == FailureModeError && c.logger != nil {
-			c.logger.Error("redis cache get failed", "key", key, "error", err)
+			c.logger.Error("redis cache get failed", textKey, key, textError, err)
 		}
+
 		return nil, false
 	}
+
 	return val, true
 }
 
@@ -213,9 +234,10 @@ func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl time.Dura
 	if ttl == 0 {
 		ttl = c.defaultTTL
 	}
+
 	err := c.client.Set(ctx, key, value, ttl).Err()
 	if err != nil && c.failureMode == FailureModeError && c.logger != nil {
-		c.logger.Error("redis cache set failed", "key", key, "error", err)
+		c.logger.Error("redis cache set failed", textKey, key, textError, err)
 	}
 }
 
@@ -227,7 +249,7 @@ func (c *Cache) Delete(ctx context.Context, key string) {
 
 	err := c.client.Del(ctx, key).Err()
 	if err != nil && c.failureMode == FailureModeError && c.logger != nil {
-		c.logger.Error("redis cache delete failed", "key", key, "error", err)
+		c.logger.Error("redis cache delete failed", textKey, key, textError, err)
 	}
 }
 
@@ -244,25 +266,15 @@ func (c *Cache) InvalidatePrefix(ctx context.Context, prefix string) error {
 	}
 
 	pattern := escapeGlob(prefix) + "*"
+
 	var cursor uint64
+
 	for {
-		keys, next, err := c.client.Scan(ctx, cursor, pattern, scanCount).Result()
+		next, err := c.invalidatePage(ctx, cursor, pattern)
 		if err != nil {
-			return apperr.Wrap(
-				err,
-				apperr.CodeUnavailable,
-				"redis scan for prefix invalidation",
-			)
+			return err
 		}
-		if len(keys) > 0 {
-			if err := c.client.Unlink(ctx, keys...).Err(); err != nil {
-				return apperr.Wrap(
-					err,
-					apperr.CodeUnavailable,
-					"redis unlink for prefix invalidation",
-				)
-			}
-		}
+
 		cursor = next
 		if cursor == 0 {
 			return nil
@@ -274,13 +286,15 @@ func (c *Cache) InvalidatePrefix(ctx context.Context, prefix string) error {
 // CacheInvalidator contract; the user-context invalidation feature never calls
 // it (it would clear unrelated keys on a shared Redis).
 func (c *Cache) InvalidateAll(ctx context.Context) error {
-	if err := c.client.FlushDB(ctx).Err(); err != nil {
+	err := c.client.FlushDB(ctx).Err()
+	if err != nil {
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,
 			"redis flushdb for full invalidation",
 		)
 	}
+
 	return nil
 }
 
@@ -301,23 +315,35 @@ func (c *Cache) GetOrLoad(
 	}
 
 	// Singleflight: only one goroutine calls loader for a given key
-	v, err, _ := c.group.Do(key, func() (any, error) {
+	value, err, _ := c.group.Do(key, func() (any, error) {
 		data, err := loader()
 		if err != nil {
 			return nil, err
 		}
+
 		// Best-effort cache population — errors are swallowed because the
 		// caller asked for data, not cache success.
 		c.Set(ctx, key, data, ttl)
+
 		return data, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	if v == nil {
+
+	if value == nil {
 		return nil, nil
 	}
-	return v.([]byte), nil
+
+	data, ok := value.([]byte)
+	if !ok {
+		return nil, apperr.New(
+			apperr.CodeInternal,
+			"redis cache: loaded value is not bytes",
+		)
+	}
+
+	return data, nil
 }
 
 // Ping checks the Redis connection. This is an extended method available only
@@ -336,4 +362,50 @@ func (c *Cache) Close() error {
 // is an extended method available only on the concrete *Cache type.
 func (c *Cache) Client() *redis.Client {
 	return c.client
+}
+
+// unlink removes the scanned keys, if any.
+func (c *Cache) unlink(ctx context.Context, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	err := c.client.Unlink(ctx, keys...).Err()
+	if err != nil {
+		return apperr.Wrap(
+			err,
+			apperr.CodeUnavailable,
+			"redis unlink for prefix invalidation",
+		)
+	}
+
+	return nil
+}
+
+// invalidatePage scans one page of matching keys, unlinks them and returns the next
+// cursor.
+func (c *Cache) invalidatePage(
+	ctx context.Context, cursor uint64, pattern string,
+) (uint64, error) {
+	keys, next, err := c.client.Scan(ctx, cursor, pattern, scanCount).Result()
+	if err != nil {
+		return 0, apperr.Wrap(
+			err,
+			apperr.CodeUnavailable,
+			"redis scan for prefix invalidation",
+		)
+	}
+
+	return next, c.unlink(ctx, keys)
+}
+
+// opCtx returns a context with the per-operation timeout applied. If opTimeout
+// is zero, the parent context is returned unchanged. The caller must call the
+// returned cancel function when the operation completes.
+func (c *Cache) opCtx(parent context.Context) (context.Context, context.CancelFunc) {
+	if c.opTimeout > 0 {
+		return context.WithTimeout(parent, c.opTimeout)
+	}
+
+	return parent, func() {}
 }

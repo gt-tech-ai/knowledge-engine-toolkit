@@ -27,13 +27,16 @@ import (
 //     verbatim with the inner status, not wrapped in a JSON:API envelope.
 func TestMiddleware_LargeBodyPassthrough(t *testing.T) {
 	t.Parallel()
+
 	big := make([]byte, (1<<20)+64) // just over the 1 MiB limit
 	for i := range big {
 		big[i] = 'a'
 	}
+
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(textContentType, textMediaApplication)
 		w.WriteHeader(http.StatusOK)
+
 		_, _ = w.Write(big)
 	})
 	handler := jsonapi.Middleware(inner, docRoutes())
@@ -42,10 +45,10 @@ func TestMiddleware_LargeBodyPassthrough(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodGet,
-		"/api/v1/documents",
+		textAPIV1Documents,
 		http.NoBody,
 	)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", textMediaApplication)
 	handler.ServeHTTP(rec, req)
 
 	res := rec.Result()
@@ -73,20 +76,29 @@ func TestMiddleware_LargeBodyPassthrough(t *testing.T) {
 //   - inner 500 + {"code":13} → the middleware responds 500 (unchanged).
 func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		name string
 		code int
 		want int
 	}{
-		{"vanguard binding error (code 2) is a 400", 2, http.StatusBadRequest},
-		{"real handler 500 (code 13) stays 500", 13, http.StatusInternalServerError},
+		{"vanguard binding error (code 2) is a 400", casesError, http.StatusBadRequest},
+		{
+			"real handler 500 (code 13) stays 500",
+			casesBindingError,
+			http.StatusInternalServerError,
+		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				_, _ = w.Write(fmt.Appendf(nil, `{"code":%d,"message":"boom"}`, tc.code))
+
+				_, _ = w.Write(
+					fmt.Appendf(nil, `{"code":%d,"message":"boom"}`, testCase.code),
+				)
 			})
 			handler := jsonapi.Middleware(inner, docRoutes())
 
@@ -94,12 +106,12 @@ func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 			req := httptest.NewRequestWithContext(
 				t.Context(),
 				http.MethodGet,
-				"/api/v1/documents",
+				textAPIV1Documents,
 				http.NoBody,
 			)
 			handler.ServeHTTP(rec, req)
 
-			assert.Equal(t, tc.want, rec.Result().StatusCode)
+			assert.Equal(t, testCase.want, rec.Result().StatusCode)
 		})
 	}
 }
@@ -116,10 +128,12 @@ func TestMiddleware_ReclassifiesVanguardBindingError(t *testing.T) {
 //     verbatim with the inner status.
 func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 	t.Parallel()
+
 	raw := []byte("[this is not json")
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(textContentType, textMediaApplication)
 		w.WriteHeader(http.StatusOK)
+
 		_, _ = w.Write(raw)
 	})
 	handler := jsonapi.Middleware(inner, docRoutes())
@@ -128,10 +142,10 @@ func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 	req := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodGet,
-		"/api/v1/documents",
+		textAPIV1Documents,
 		http.NoBody,
 	)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", textMediaApplication)
 	handler.ServeHTTP(rec, req)
 
 	res := rec.Result()
@@ -154,22 +168,42 @@ func TestMiddleware_UnparseableBodyPassthrough(t *testing.T) {
 //     object elements into resource objects.
 func TestTransformCollection_PreservesNonObjectItems(t *testing.T) {
 	t.Parallel()
-	cfg := codec.ResourceConfig{Type: "users", CollectionKey: "users"}
+
+	cfg := codec.ResourceConfig{
+		Type:          textUsers,
+		CollectionKey: textUsers,
+		SingleKey:     "",
+		PaginationKey: "",
+	}
 	body := map[string]any{
-		"users": []any{
+		textUsers: []any{
 			"scalar-item",
-			map[string]any{"id": "1", "email": "a@b.test"},
+			map[string]any{textID: "1", textEmail: "a@b.test"},
 		},
 	}
 
 	result := codec.TransformCollection(body, cfg, "/api/v1/demo/users")
 
-	data, ok := result["data"].([]any)
-	require.True(t, ok)
-	require.Len(t, data, 2)
+	data, found := result[textData].([]any)
+	require.True(t, found)
+	require.Len(t, data, wantDataLen)
 	assert.Equal(t, "scalar-item", data[0], "a non-object item is preserved verbatim")
-	obj, ok := data[1].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "users", obj["type"])
-	assert.Equal(t, "1", obj["id"])
+
+	obj, found := data[1].(map[string]any)
+	require.True(t, found)
+	assert.Equal(t, textUsers, obj[textType])
+	assert.Equal(t, "1", obj[textID])
 }
+
+const (
+	// casesBindingError is an element of a literal in
+	// TestMiddleware_ReclassifiesVanguardBindingError.
+	casesBindingError = 13
+
+	// casesError is an element of a literal in
+	// TestMiddleware_ReclassifiesVanguardBindingError.
+	casesError = 2
+
+	// wantDataLen is the expected data len.
+	wantDataLen = 2
+)

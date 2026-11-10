@@ -8,11 +8,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport"
 )
@@ -66,32 +68,39 @@ func TestControllerTier_OrdersObservabilityOutermost(t *testing.T) {
 //   - Auth sees the action "<controller>.<op>".
 func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 	t.Parallel()
-	var actions []string
-	base := fixtures.Must(transport.NewBase[usersController](decorate.Fixed(decorate.Deps{
-		Observability: decorate.Observability{
-			Logger:  fixtures.NopLogger(),
-			Metrics: fixtures.NopMetrics(),
-			Tracer:  fixtures.NopTracer(),
-		},
-		Auth: func(_ context.Context, action string) error {
-			actions = append(actions, action)
-			return nil
-		},
-	}), "users"))
 
-	got, err := base.Handler("get", echo)(t.Context(), "a")
+	var actions []string
+
+	base := fixtures.Must(
+		transport.NewBase[usersController](
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.Logger = fixtures.NopLogger()
+				row.Metrics = fixtures.NopMetrics()
+				row.Tracer = fixtures.NopTracer()
+				row.Auth = func(_ context.Context, action string) error {
+					actions = append(actions, action)
+
+					return nil
+				}
+			})),
+			textUsers,
+		),
+	)
+
+	got, err := base.Handler(textGet, echo)(t.Context(), textA)
 	require.NoError(t, err)
 	assert.Equal(t, "echo-a", got)
 	assert.Equal(t, []string{"users.get"}, actions)
 
-	got, err = transport.Base{}.Handler("get", echo)(t.Context(), "b")
+	got, err = new(transport.Base).Handler(textGet, echo)(t.Context(), textB)
 	require.NoError(t, err)
 	assert.Equal(t, "echo-b", got)
 
 	failing := func(context.Context, string) (string, error) {
 		return "", apperr.New(apperr.CodeNotFound, "no such user")
 	}
-	_, err = base.Handler("get", failing)(t.Context(), "c")
+
+	_, err = base.Handler(textGet, failing)(t.Context(), textC)
 	assert.Equal(t, apperr.CodeNotFound, apperr.Code(err))
 }
 
@@ -108,44 +117,79 @@ func TestControllerBase_HandlerRunsThroughTheTier(t *testing.T) {
 //   - A handler that outlives the timeout returns CodeTimeout.
 func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 	t.Parallel()
+
 	ran := false
 	handler := func(context.Context, string) (string, error) {
 		ran = true
+
 		return "", nil
 	}
 
-	limited := fixtures.Must(transport.NewBase[opController](decorate.Fixed(decorate.Deps{
-		RateLimiter: fixtures.StubRateLimiter(false),
-	}), "c"))
-	_, err := limited.Handler("op", handler)(t.Context(), "")
+	limited := fixtures.Must(
+		transport.NewBase[opController](
+			decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+				row.RateLimiter = fixtures.DenyingRateLimiter()
+			})),
+			textC,
+		),
+	)
+	_, err := limited.Handler(textOp, handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
-	bh, err := bulkhead.New(bulkhead.KindChannel, bulkhead.WithMaxConcurrent(1))
+	currentBulkhead, err := bulkhead.New(
+		bulkhead.KindChannel,
+		bulkhead.WithMaxConcurrent(1),
+	)
 	require.NoError(t, err)
+
 	held, release := make(chan struct{}), make(chan struct{})
+
 	go func() {
-		_ = bh.Execute(context.Background(), func() error {
+		_ = currentBulkhead.Execute(context.Background(), func() error {
 			close(held)
 			<-release
+
 			return nil
 		})
 	}()
+
 	<-held
+
 	defer close(release)
+
 	shedding := fixtures.Must(
 		transport.NewBase[opController](
-			decorate.Fixed(decorate.Deps{Bulkhead: bh, ShedLoad: true}),
-			"c",
+			decorate.Fixed(
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Bulkhead = currentBulkhead
+					row.ShedLoad = true
+				}),
+			),
+			textC,
 		),
 	)
-	_, err = shedding.Handler("op", handler)(t.Context(), "")
+
+	_, err = shedding.Handler(textOp, handler)(t.Context(), "")
 	assert.Equal(t, apperr.CodeResourceExhausted, apperr.Code(err))
 	assert.False(t, ran)
 
-	panicking := func(context.Context, string) (string, error) { panic("boom") }
-	_, err = fixtures.Must(transport.NewBase[opController](fixtures.Decorations(), "c")).
-		Handler("op", panicking)(
+	testControllerBaseRejectsBeforeTheHandlerInternalAndTimeout(t)
+}
+
+// testControllerBaseRejectsBeforeTheHandlerInternalAndTimeout continues
+// TestControllerBase_RejectsBeforeTheHandler: internal and timeout.
+func testControllerBaseRejectsBeforeTheHandlerInternalAndTimeout(t *testing.T) {
+	t.Helper()
+
+	var err error
+
+	panicking := func(context.Context, string) (string, error) { panic(textBoom) }
+
+	_, err = new(
+		fixtures.Must(transport.NewBase[opController](fixtures.Decorations(), textC)),
+	).
+		Handler(textOp, panicking)(
 		t.Context(),
 		"",
 	)
@@ -153,15 +197,21 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 
 	slow := func(ctx context.Context, _ string) (string, error) {
 		<-ctx.Done()
+
 		return "", ctx.Err()
 	}
 	bounded := fixtures.Must(
 		transport.NewBase[opController](
-			decorate.Fixed(decorate.Deps{Timeout: 10 * time.Millisecond}),
-			"c",
+			decorate.Fixed(
+				fixtures.BuildRef(func(row *decorate.Deps) {
+					row.Timeout = 10 * time.Millisecond
+				}),
+			),
+			textC,
 		),
 	)
-	_, err = bounded.Handler("op", slow)(t.Context(), "")
+
+	_, err = bounded.Handler(textOp, slow)(t.Context(), "")
 	assert.Equal(t, apperr.CodeTimeout, apperr.Code(err))
 }
 
@@ -178,28 +228,43 @@ func TestControllerBase_RejectsBeforeTheHandler(t *testing.T) {
 //   - An override turns on the rate limit and a shedding bulkhead for one controller.
 func TestDecorations_ControllerTierFromConfig(t *testing.T) {
 	t.Parallel()
+
 	cfg := decoration.DefaultConfig()
-	on := true
-	cfg.Controllers.Overrides = map[string]decoration.Layers{"upload": {
-		RateLimit: decoration.RateLimit{Enabled: &on},
-		Bulkhead:  decoration.Bulkhead{Enabled: &on, Shed: &on},
-	}}
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{
-		Observability: decorate.Observability{Logger: fixtures.NopLogger()},
-	})
+	enabled := true
 
-	d, err := decs.Deps(transport.Tier(), "search")
-	require.NoError(t, err)
-	assert.Nil(t, d.RateLimiter)
-	assert.Nil(t, d.Bulkhead)
-	assert.False(t, d.SkipRecovery)
-	assert.NotNil(t, d.Logger)
+	cfg.Controllers.Overrides = map[string]decoration.Layers{
+		"upload": fixtures.Build(func(row *decoration.Layers) {
+			row.RateLimit = decoration.RateLimit{
+				Enabled:         &enabled,
+				RateLimitConfig: stdx.Zero[resilience.RateLimitConfig](),
+			}
+			row.Bulkhead = decoration.Bulkhead{
+				Enabled:        &enabled,
+				Shed:           &enabled,
+				BulkheadConfig: stdx.Zero[resilience.BulkheadConfig](),
+			}
+		}),
+	}
 
-	d, err = decs.Deps(transport.Tier(), "upload")
+	decs := decorate.NewDecorations(
+		&cfg,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Logger = fixtures.NopLogger()
+		}),
+	)
+
+	deps, err := decs.Deps(transport.Tier(), "search")
 	require.NoError(t, err)
-	assert.NotNil(t, d.RateLimiter)
-	assert.NotNil(t, d.Bulkhead)
-	assert.True(t, d.ShedLoad)
+	assert.Nil(t, deps.RateLimiter)
+	assert.Nil(t, deps.Bulkhead)
+	assert.False(t, deps.SkipRecovery)
+	assert.NotNil(t, deps.Logger)
+
+	deps, err = decs.Deps(transport.Tier(), "upload")
+	require.NoError(t, err)
+	assert.NotNil(t, deps.RateLimiter)
+	assert.NotNil(t, deps.Bulkhead)
+	assert.True(t, deps.ShedLoad)
 }
 
 // usersController is the test controller's contract: one operation, get.

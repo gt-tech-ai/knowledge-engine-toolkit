@@ -8,7 +8,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -35,12 +35,18 @@ func TestGuardDomain(t *testing.T) {
 
 	for _, got := range []string{"", "other.auth0.com"} {
 		err := secrets.GuardDomain(`credentials for "stg"`, "acme.auth0.com", got)
-		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 		assert.Contains(t, err.Error(), `"stg"`)
 		assert.Contains(t, err.Error(), `"acme.auth0.com"`)
 		assert.Contains(t, err.Error(), `"`+got+`"`)
 	}
 }
+
+// The field names of the management secret that TestProjectEnv projects.
+const (
+	projectFieldSecret = "client_secret"
+	projectFieldPass   = "password"
+)
 
 // TestProjectEnv tests projecting a secret's fields into a child environment.
 //
@@ -54,19 +60,28 @@ func TestGuardDomain(t *testing.T) {
 //     skipped; any other error is returned.
 func TestProjectEnv(t *testing.T) {
 	t.Parallel()
-	ref := types.Ref{Env: "stg", Class: "mgmt"}
-	fields := map[string]string{
-		"client_secret": "AUTH0_CLIENT_SECRET",
-		"client_id":     "AUTH0_CLIENT_ID",
-		"password":      "E2E_PASSWORD",
-	}
+
+	ref := types.Ref{Env: textStg, Class: "mgmt", Field: ""}
+	fields := map[string]string{"client_id": "AUTH0_CLIENT_ID"}
+
+	fields[projectFieldSecret] = "AUTH0_CLIENT_SECRET"
+	fields[projectFieldPass] = "E2E_PASSWORD"
+
 	src := mocks.NewMockSource(gomock.NewController(t))
-	at := func(field string) types.Ref { r := ref; r.Field = field; return r }
-	src.EXPECT().Get(gomock.Any(), at("client_id")).Return(types.NewSecret("id"), nil)
+	callback := func(field string) types.Ref {
+		r := ref
+
+		r.Field = field
+
+		return r
+	}
 	src.EXPECT().
-		Get(gomock.Any(), at("client_secret")).
+		Get(gomock.Any(), callback("client_id")).
+		Return(types.NewSecret(textID), nil)
+	src.EXPECT().
+		Get(gomock.Any(), callback(projectFieldSecret)).
 		Return(types.NewSecret("sec"), nil)
-	src.EXPECT().Get(gomock.Any(), at("password")).
+	src.EXPECT().Get(gomock.Any(), callback(projectFieldPass)).
 		Return(types.Secret{}, apperr.New(apperr.CodeNotFound, "no password"))
 
 	got, err := secrets.ProjectEnv(t.Context(), src, ref, fields)
@@ -75,7 +90,8 @@ func TestProjectEnv(t *testing.T) {
 
 	hard := mocks.NewMockSource(gomock.NewController(t))
 	hard.EXPECT().Get(gomock.Any(), gomock.Any()).
-		Return(types.Secret{}, apperr.New(apperr.CodeUnavailable, "down")).AnyTimes()
+		Return(types.Secret{}, apperr.New(apperr.CodeUnavailable, textDown)).AnyTimes()
+
 	_, err = secrets.ProjectEnv(t.Context(), hard, ref, fields)
-	assert.True(t, apperr.Is(err, apperr.CodeUnavailable), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeUnavailable), textGotV, err)
 }

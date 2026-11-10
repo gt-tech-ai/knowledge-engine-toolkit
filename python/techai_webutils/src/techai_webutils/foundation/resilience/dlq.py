@@ -5,19 +5,22 @@
 loop, but ``send`` returns ``False`` so the caller can leave the source message for SQS
 redrive instead of deleting it (avoiding silent data loss on a DLQ outage).
 
-The real SQS backend lives in ``sqs_dlq.py`` (thin aiobotocore wrapper, integration-tested);
-``StubDeadLetterBackend`` here is the in-memory backend for tests/local.
+The real SQS backend lives in ``sqs_dlq.py`` (thin aiobotocore wrapper,
+integration-tested); ``StubDeadLetterBackend`` here is the in-memory backend for
+tests/local.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import final, override
 
 from techai_webutils.core.interfaces.dlq import DeadLetter, DeadLetterBackend
 
 logger = logging.getLogger(__name__)
 
 
+@final
 class DeadLetterQueue:
     """Facade over a ``DeadLetterBackend`` that swallows+logs backend failures.
 
@@ -27,11 +30,24 @@ class DeadLetterQueue:
     """
 
     def __init__(self, backend: DeadLetterBackend) -> None:
-        """Wrap the given backend."""
+        """Wrap the given backend.
+
+        Args:
+            backend: Where dead letters go.
+
+        """
         self._backend = backend
 
     async def send(self, letter: DeadLetter) -> bool:
-        """Send a dead letter; return True on success, False if the backend failed."""
+        """Send a dead letter; return True on success, False if the backend failed.
+
+        Args:
+            letter: The failed message with its error and attempt count.
+
+        Returns:
+            Whether the letter was sent.
+
+        """
         try:
             await self._backend.send(letter)
         except Exception:
@@ -51,17 +67,32 @@ class StubDeadLetterBackend(DeadLetterBackend):
         """Start with an empty list of recorded letters."""
         self.letters: list[DeadLetter] = []
 
+    @override
     async def send(self, letter: DeadLetter) -> None:
-        """Record the letter in memory."""
+        """Record the letter in memory.
+
+        Args:
+            letter: The failed message with its error and attempt count.
+
+        """
         self.letters.append(letter)
 
 
 class NoopDeadLetterBackend(DeadLetterBackend):
-    """Dead-letter backend that DROPS letters — for local/test runs without a real DLQ queue.
+    """Dead-letter backend that DROPS letters.
 
-    Distinct from ``StubDeadLetterBackend`` (which accumulates letters for inspection): this one
-    discards them, matching the ``noop`` DLQ kind a worker selects on the local path.
+    For local and test runs without a real DLQ queue.
+
+    Distinct from ``StubDeadLetterBackend`` (which accumulates letters for inspection):
+    this one discards them, matching the ``noop`` DLQ kind a worker selects on the local
+    path.
     """
 
+    @override
     async def send(self, letter: DeadLetter) -> None:
-        """Discard the dead letter."""
+        """Discard the dead letter.
+
+        Args:
+            letter: The failed message with its error and attempt count.
+
+        """

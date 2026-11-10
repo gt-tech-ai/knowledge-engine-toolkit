@@ -1,9 +1,13 @@
-"""Unit tests for the ``AuditSink`` contract, its config-selected factory and the stub sink."""
+"""Unit tests for the ``AuditSink`` contract and its factory.
+
+Also the stub sink.
+"""
 
 from __future__ import annotations
 
 import dataclasses
 from datetime import UTC, datetime
+from typing import Literal, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,9 +21,17 @@ from techai_webutils.clients.audit.stub import StubAuditSink
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.audit import AuditedSource, AuditRecord, AuditSink
 
+_Enforcement = Literal["shadow", "enforced"]
+"""The enforcement modes ``AuditSinkConfig`` accepts."""
+
 
 def _record() -> AuditRecord:
-    """One audited answer with one cited source."""
+    """One audited answer with one cited source.
+
+    Returns:
+        The audit record.
+
+    """
     return AuditRecord(
         request_id="req-1",
         trace_id="4bf92f3577b34da6a3ce929d0e0e4736",
@@ -55,25 +67,28 @@ def test_audit_record_is_frozen() -> None:
     """Test that audit records and their sources are immutable.
 
     **Why this test is important:**
-      - An audit record is evidence; it must not be editable between the call that produced it
-        and the append-only store.
+      - An audit record is evidence; it must not be editable between the call that
+        produced it and the append-only store.
 
     **What it tests:**
-      - assigning a field on ``AuditRecord`` or ``AuditedSource`` raises ``FrozenInstanceError``
+      - assigning a field on ``AuditRecord`` or ``AuditedSource`` raises
+        ``FrozenInstanceError``
       - ``sources`` and the flag collections are tuples (no in-place append)
     """
     record = _record()
 
     with pytest.raises(dataclasses.FrozenInstanceError):
-        record.answer = "edited"  # type: ignore[misc]
+        record.answer = "edited"
     with pytest.raises(dataclasses.FrozenInstanceError):
-        record.sources[0].score = 1.0  # type: ignore[misc]
+        record.sources[0].score = 1.0
     assert isinstance(record.sources, tuple)
     assert isinstance(record.pii_flags, tuple)
 
 
 def test_factory_returns_stub_by_default() -> None:
-    """Test that the default config builds the stub sink in shadow mode with zero infrastructure.
+    """Test that the default config builds the stub sink in shadow mode.
+
+    It needs zero infrastructure.
 
     **Why this test is important:**
       - Audit must never stop the graph from booting in dev or CI.
@@ -81,7 +96,8 @@ def test_factory_returns_stub_by_default() -> None:
     **What it tests:**
       - the default config is ``kind="stub"``, ``enforcement="shadow"``, a 2 s timeout
       - the factory returns a ``StubAuditSink`` satisfying ``AuditSink``
-      - an enforcement value other than ``shadow`` / ``enforced`` raises ``AppError(INVALID_INPUT)``
+      - an enforcement value other than ``shadow`` / ``enforced`` raises
+        ``AppError(INVALID_INPUT)``
     """
     config = AuditSinkConfig()
 
@@ -96,7 +112,7 @@ def test_factory_returns_stub_by_default() -> None:
     assert isinstance(sink, StubAuditSink)
     assert isinstance(sink, AuditSink)
     with pytest.raises(AppError) as caught:
-        AuditSinkConfig(enforcement="strict")  # type: ignore[arg-type]
+        _ = AuditSinkConfig(enforcement=cast("_Enforcement", cast("object", "strict")))
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
@@ -104,11 +120,12 @@ def test_factory_uses_injected_backend_for_grpc() -> None:
     """Test that a consumer-supplied ``grpc`` kind is built by its injected factory.
 
     **Why this test is important:**
-      - The durable audit store is behind a product service the KE must not import; the kind
-        stays a config value while the backend is injected.
+      - The durable audit store is behind a product service the KE must not import; the
+        kind stays a config value while the backend is injected.
 
     **What it tests:**
-      - ``kind="grpc"`` returns exactly what ``backends["grpc"]`` builds, called with the config
+      - ``kind="grpc"`` returns exactly what ``backends["grpc"]`` builds, called with the
+        config
     """
     built = MagicMock(spec=AuditSink)
     factory = MagicMock(return_value=built)
@@ -121,18 +138,21 @@ def test_factory_uses_injected_backend_for_grpc() -> None:
 
 
 def test_factory_unknown_kind_raises_coded_error() -> None:
-    """Test that an unknown kind (including ``grpc`` with no injected backend) fails loudly.
+    """Test that an unknown kind fails loudly.
+
+    Including ``grpc`` with no injected backend.
 
     **Why this test is important:**
       - A misconfigured audit sink silently falling back to the stub would drop compliance
         evidence without anyone noticing.
 
     **What it tests:**
-      - ``kind="kafka"`` and an un-injected ``kind="grpc"`` raise ``AppError(INVALID_INPUT)``
+      - ``kind="kafka"`` and an un-injected ``kind="grpc"`` raise
+        ``AppError(INVALID_INPUT)``
     """
     for kind in ("kafka", "grpc"):
         with pytest.raises(AppError) as caught:
-            new_audit_sink_from_config(AuditSinkConfig(kind=kind))
+            _ = new_audit_sink_from_config(AuditSinkConfig(kind=kind))
         assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
@@ -141,10 +161,12 @@ async def test_stub_audit_sink_records_without_infra() -> None:
     """Test that the stub sink keeps each record in order, in memory.
 
     **Why this test is important:**
-      - Tests and local runs need to observe what would have been audited without Postgres or S3.
+      - Tests and local runs need to observe what would have been audited without Postgres
+        or S3.
 
     **What it tests:**
-      - two ``record`` calls return ``None`` and ``records`` holds exactly those two, in order
+      - two ``record`` calls return ``None`` and ``records`` holds exactly those two, in
+        order
     """
     sink = StubAuditSink()
     first = _record()

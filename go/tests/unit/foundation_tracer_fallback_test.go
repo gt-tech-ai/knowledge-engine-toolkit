@@ -8,6 +8,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/nooptracer"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestNewFromTracing_DisabledIsNoop tests the tracing-section tracer factory.
@@ -20,8 +21,9 @@ import (
 //   - A disabled section yields the noop tracer without reporting a fallback.
 func TestNewFromTracing_DisabledIsNoop(t *testing.T) {
 	t.Parallel()
+
 	warned := false
-	tr := tracer.NewFromTracing(t.Context(), "svc", infra.TracingConfig{Enabled: false},
+	tr := tracer.NewFromTracing(t.Context(), textSvc, stdx.Zero[infra.TracingConfig](),
 		func(string, ...any) { warned = true })
 	require.IsType(t, &nooptracer.Tracer{}, tr)
 	require.False(t, warned)

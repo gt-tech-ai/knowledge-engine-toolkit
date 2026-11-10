@@ -14,44 +14,64 @@ type goModules struct{}
 
 // Select returns the codebase's Go modules; with spec.WithPackages, only those that own
 // a Go file (one whose nearest enclosing module is that module).
+// spec must not be nil.
 func (goModules) Select(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	codebase interfaces.Codebase,
+	spec *types.TargetSpec,
 ) ([]string, error) {
-	mods, err := cb.Go().Modules(ctx)
+	mods, err := codebase.Go().Modules(ctx)
 	if err != nil || !spec.WithPackages {
 		return mods, err
 	}
-	gofiles, err := cb.Files(ctx, types.FileSelector{
+
+	gofiles, err := codebase.Files(ctx, &types.FileSelector{
 		Exts: []string{".go"}, IncludeGenerated: true,
+		Roots:          nil,
+		Paths:          nil,
+		Globs:          nil,
+		Exclude:        nil,
+		TrackedOnly:    false,
+		IncludeIgnored: false,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	return modulesWithFiles(mods, gofiles), nil
+}
+
+// modulesWithFiles keeps the modules that own at least one of the Go files.
+func modulesWithFiles(mods []string, gofiles []types.File) []string {
 	owns := map[string]bool{}
+
 	for _, f := range gofiles {
 		if m, ok := owner(mods, f.Path); ok {
 			owns[m] = true
 		}
 	}
+
 	out := make([]string, 0, len(mods))
+
 	for _, m := range mods {
 		if owns[m] {
 			out = append(out, m)
 		}
 	}
-	return out, nil
+
+	return out
 }
 
 // owner returns the deepest module in mods that contains p.
 func owner(mods []string, p string) (string, bool) {
 	best, found := "", false
+
 	for _, m := range mods {
 		m = path.Clean(m)
 		if (m == "." || strings.HasPrefix(p, m+"/")) && (!found || len(m) > len(best)) {
 			best, found = m, true
 		}
 	}
+
 	return best, found
 }

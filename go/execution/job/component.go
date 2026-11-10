@@ -14,18 +14,25 @@ func Component(prefix, group, name string) string {
 
 // snake lowercases s and joins its runs of letters and digits with underscores.
 func snake(s string) string {
-	var b strings.Builder
+	var builder strings.Builder
+
 	sep := false
-	for _, r := range strings.ToLower(s) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			if sep && b.Len() > 0 {
-				b.WriteByte('_')
-			}
-			b.WriteRune(r)
-			sep = false
+
+	for _, count := range strings.ToLower(s) {
+		if !unicode.IsLetter(count) && !unicode.IsDigit(count) {
+			sep = true
+
 			continue
 		}
-		sep = true
+
+		if sep && builder.Len() > 0 {
+			_ = builder.WriteByte('_')
+		}
+
+		_, _ = builder.WriteRune(count)
+
+		sep = false
 	}
-	return b.String()
+
+	return builder.String()
 }

@@ -12,18 +12,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/report"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // consoleGolden reads one console golden from testdata/report. The goldens were
 // captured from the console this package replaces, so they pin its exact bytes.
 func consoleGolden(t *testing.T, name string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "report", name))
+
+	data, err := os.ReadFile(
+		filepath.Clean(
+			filepath.Join(textDotDot, textDotDot, textDotDot, "testdata", "report", name),
+		),
+	)
 	require.NoError(t, err)
+
 	return string(data)
 }
 
@@ -31,13 +39,13 @@ func consoleGolden(t *testing.T, name string) string {
 func consoleHints() []report.Hint {
 	return []report.Hint{
 		{
-			Group:  "Lint",
+			Group:  textLintTitle,
 			Substr: "golangci",
 			Text:   "Run: search lint --go --fix  (to auto-fix)",
 		},
 		{
-			Group:  "Lint",
-			Substr: "ruff",
+			Group:  textLintTitle,
+			Substr: textRuff,
 			Text:   "Run: search lint --python --fix  (to auto-fix)",
 		},
 	}
@@ -49,77 +57,96 @@ func consoleRun() (lint, unit types.StepResults) {
 	noisy := []byte("=== RUN   TestX\n--- PASS: TestX (0.00s)\n{\"level\":\"info\"}\n" +
 		"apps/python/server/x.py:12:5: F401 `os` imported but unused\n" +
 		"apps/python/server/y.py:3:1: E501 line too long\nFound 2 errors.\n")
+
 	lint = types.StepResults{
-		{
-			Name:     "golangci (Go)",
-			Group:    "Lint",
-			Status:   types.StatusPass,
-			Duration: 1200 * time.Millisecond,
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "golangci (Go)"
+			row.Group = textLintTitle
+			row.Status = types.StatusPass
+			row.Duration = durationRun * time.Millisecond
+		}),
 		{
 			Name:     "ruff (Python)",
-			Group:    "Lint",
+			Group:    textLintTitle,
 			Status:   types.StatusFail,
-			Duration: 800 * time.Millisecond,
+			Duration: durationConsoleRun * time.Millisecond,
 			Error:    "INTERNAL: ruff found 2 issues",
 			Detail:   noisy,
+			Children: nil,
+			Tests:    0,
 		},
 	}
 	unit = types.StepResults{
 		{
 			Name:     "Go",
-			Group:    "Unit Tests",
+			Group:    textUnitTests,
 			Status:   types.StatusPass,
-			Duration: 4 * time.Second,
-			Tests:    42,
+			Duration: consoleRunSeconds * time.Second,
+			Tests:    tests,
 			Children: types.StepResults{
-				{
-					Name:     "Go/apps/go/cli",
-					Status:   types.StatusPass,
-					Duration: 3 * time.Second,
-					Tests:    30,
-				},
-				{
-					Name:     "Go/pkg/go",
-					Status:   types.StatusPass,
-					Duration: time.Second,
-					Tests:    12,
-				},
+				fixtures.Build(func(row *types.StepResult) {
+					row.Name = "Go/apps/go/cli"
+					row.Status = types.StatusPass
+					row.Duration = consoleStepSeconds * time.Second
+					row.Tests = testsRun
+				}),
+				fixtures.Build(func(row *types.StepResult) {
+					row.Name = "Go/pkg/go"
+					row.Status = types.StatusPass
+					row.Duration = time.Second
+					row.Tests = testsConsoleRun
+				}),
 			},
+			Error:  "",
+			Detail: nil,
 		},
-		{Name: "TypeScript", Group: "Unit Tests", Status: types.StatusSkip},
-		{
-			Name:   "docs",
-			Group:  "Unit Tests",
-			Status: types.StatusWarn,
-			Error:  "2 stale links",
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "TypeScript"
+			row.Group = textUnitTests
+			row.Status = types.StatusSkip
+		}),
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = textDocsLower
+			row.Group = textUnitTests
+			row.Status = types.StatusWarn
+			row.Error = "2 stale links"
+		}),
 	}
+
 	return lint, unit
 }
 
 // replayConsoleRun drives obs through the fixed run.
 func replayConsoleRun(obs interfaces.ExecutionObserver) {
 	lint, unit := consoleRun()
-	obs.OnGateStart("preflight", []string{"Lint", "Unit Tests"})
+
+	obs.OnGateStart(textPreflight, []string{textLintTitle, textUnitTests})
+
 	for _, phase := range []struct {
 		name    string
 		results types.StepResults
 		elapsed time.Duration
-	}{{"Lint", lint, 2 * time.Second}, {"Unit Tests", unit, 4 * time.Second}} {
+	}{{textLintTitle, lint, seconds * time.Second}, {
+		textUnitTests, unit,
+		secondsRun * time.Second,
+	}} {
 		names := make([]string, 0, len(phase.results))
 		for _, r := range phase.results {
 			names = append(names, r.Name)
 		}
+
 		obs.OnPhaseStart(phase.name, names)
+
 		for _, r := range phase.results {
 			obs.OnStepStart(r.Name, r.Group)
-			obs.OnStepComplete(r)
+			obs.OnStepComplete(&r)
 		}
+
 		obs.OnPhaseComplete(phase.name, phase.results, phase.elapsed)
 	}
+
 	all := append(append(types.StepResults{}, lint...), unit...)
-	obs.OnGateComplete("preflight", all, 6*time.Second)
+	obs.OnGateComplete(textPreflight, all, 6*time.Second)
 }
 
 // newTestConsole returns a console at level over a fresh error buffer.
@@ -129,11 +156,15 @@ func newTestConsole(
 	level report.Level,
 ) (*report.Console, *bytes.Buffer) {
 	t.Helper()
+
 	var out, errOut bytes.Buffer
+
 	cfg.Hints = consoleHints()
+
 	c, err := report.NewConsole(types.Streams{Out: &out, Err: &errOut}, cfg)
 	require.NoError(t, err)
 	c.SetLevel(level)
+
 	return c, &errOut
 }
 
@@ -157,62 +188,81 @@ func TestConsole_Golden(t *testing.T) {
 		"registry unreachable",
 	)
 	observe := func(c *report.Console) { replayConsoleRun(c.Observer()) }
-	cases := []struct { //nolint:govet // fieldalignment: rows read in field order
-		golden string
-		cfg    report.ConsoleConfig
-		level  report.Level
-		run    func(c *report.Console)
-	}{
-		{"line_ci.txt", report.ConsoleConfig{CI: true}, report.LevelNormal, observe},
-		{"line_tty.txt", report.ConsoleConfig{}, report.LevelNormal, observe},
-		{
-			"line_tty_color.txt",
-			report.ConsoleConfig{Color: true},
-			report.LevelNormal,
-			observe,
-		},
-		{"line_quiet.txt", report.ConsoleConfig{}, report.LevelQuiet, observe},
-		{"table_verbose.txt", report.ConsoleConfig{}, report.LevelVerbose, observe},
-		{
-			"format_error.txt",
-			report.ConsoleConfig{},
-			report.LevelNormal,
-			func(c *report.Console) {
-				assert.Equal(t, 1, c.FormatError(failure))
-			},
-		},
-		{
-			"format_error_verbose.txt",
-			report.ConsoleConfig{},
-			report.LevelVerbose,
-			func(c *report.Console) {
-				c.FormatError(failure)
-			},
-		},
-		{
-			"hook_logger_verbose.txt",
-			report.ConsoleConfig{Color: true},
-			report.LevelVerbose,
-			func(c *report.Console) {
-				hook := c.CommandHook()
-				hook.OnStart("go vet ./...")
-				hook.OnSuccess("go vet ./...")
-				hook.OnFailure("ruff check .")
-				log := c.Logger().With("module", "cli")
-				log.Debug("resolved", "tools", 3)
-				log.Info("installing")
-				log.Warn("slow mirror")
-				log.Error("install failed", "tool", "ruff")
-			},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.golden, func(t *testing.T) {
+
+	cases := testConsoleGoldenTable(t, failure, observe)
+
+	for _, testCase := range cases {
+		t.Run(testCase.golden, func(t *testing.T) {
 			t.Parallel()
-			c, errOut := newTestConsole(t, tc.cfg, tc.level)
-			tc.run(c)
-			assert.Equal(t, consoleGolden(t, tc.golden), errOut.String())
+
+			c, errOut := newTestConsole(t, testCase.cfg, testCase.level)
+			testCase.run(c)
+			assert.Equal(t, consoleGolden(t, testCase.golden), errOut.String())
 		})
+	}
+}
+
+// testConsoleGoldenRow is one row of testConsoleGoldenTable.
+type testConsoleGoldenRow struct {
+	run    func(c *report.Console)
+	golden string
+	cfg    report.ConsoleConfig
+	level  report.Level
+}
+
+// testConsoleGoldenTable builds the table TestConsole_Golden runs.
+func testConsoleGoldenTable(
+	t *testing.T,
+	failure error,
+	observe func(c *report.Console),
+) []testConsoleGoldenRow {
+	t.Helper()
+
+	return []testConsoleGoldenRow{
+		{
+			observe,
+			"line_ci.txt",
+			fixtures.Build(func(row *report.ConsoleConfig) {
+				row.CI = true
+			}),
+			report.LevelNormal,
+		},
+		{observe, "line_tty.txt", stdx.Zero[report.ConsoleConfig](), report.LevelNormal},
+		{
+			observe,
+			"line_tty_color.txt",
+			fixtures.Build(func(row *report.ConsoleConfig) {
+				row.Color = true
+			}),
+			report.LevelNormal,
+		},
+		{observe, "line_quiet.txt", stdx.Zero[report.ConsoleConfig](), report.LevelQuiet},
+		{
+			observe,
+			"table_verbose.txt",
+			stdx.Zero[report.ConsoleConfig](),
+			report.LevelVerbose,
+		},
+		{func(c *report.Console) {
+			assert.Equal(t, 1, c.FormatError(failure))
+		}, "format_error.txt", stdx.Zero[report.ConsoleConfig](), report.LevelNormal},
+		{func(c *report.Console) {
+			c.FormatError(failure)
+		}, "format_error_verbose.txt", stdx.Zero[report.ConsoleConfig](), report.LevelVerbose},
+		{func(console *report.Console) {
+			hook := console.CommandHook()
+			hook.OnStart("go vet ./...")
+			hook.OnSuccess("go vet ./...")
+			hook.OnFailure("ruff check .")
+
+			log := console.Logger().With("module", "cli")
+			log.Debug(textResolved, textTools, debugInput)
+			log.Info("installing")
+			log.Warn("slow mirror")
+			log.Error("install failed", textTool, textRuff)
+		}, "hook_logger_verbose.txt", fixtures.Build(func(row *report.ConsoleConfig) {
+			row.Color = true
+		}), report.LevelVerbose},
 	}
 }
 
@@ -232,36 +282,45 @@ func TestConsole_Golden(t *testing.T) {
 func TestConsole_LevelsAndCodes(t *testing.T) {
 	t.Parallel()
 
-	c, errOut := newTestConsole(t, report.ConsoleConfig{}, report.LevelQuiet)
-	c.Logger().Info("hidden")
-	c.CommandHook().OnStart("hidden")
-	c.Successf("hidden")
-	c.Warnf("hidden")
-	c.Infof("hidden")
-	c.Logger().Error("shown")
-	c.Errorf("also %s", "shown")
+	console, errOut := newTestConsole(
+		t,
+		stdx.Zero[report.ConsoleConfig](),
+		report.LevelQuiet,
+	)
+	console.Logger().Info(textHidden)
+	console.CommandHook().OnStart(textHidden)
+	console.Successf(textHidden)
+	console.Warnf(textHidden)
+	console.Infof(textHidden)
+	console.Logger().Error("shown")
+	console.Errorf("also %s", "shown")
 	assert.Equal(t, "shown\nalso shown\n", errOut.String())
 
-	c.SetLevel(report.LevelNormal)
+	console.SetLevel(report.LevelNormal)
 	errOut.Reset()
-	c.Successf("done %d", 1)
-	c.Warnf("careful")
+	console.Successf("done %d", 1)
+	console.Warnf("careful")
 	assert.Equal(t, "done 1\ncareful\n", errOut.String())
-	c.SetLevel(report.LevelQuiet)
-	assert.Equal(t, report.LevelQuiet, c.Level())
+	console.SetLevel(report.LevelQuiet)
+	assert.Equal(t, report.LevelQuiet, console.Level())
 
 	errOut.Reset()
-	assert.Equal(t, 1, c.FormatError(apperr.Sentinel("boom")))
+	assert.Equal(t, 1, console.FormatError(apperr.Sentinel(textBoom)))
 	assert.Equal(t, "Error: boom\n", errOut.String())
 
 	for code, want := range map[apperr.ErrorCode]int{
-		apperr.CodeInvalidInput: 2, apperr.CodeNotFound: 2, apperr.CodeQualityFailed: 2,
-		apperr.CodeUnavailable: 3, apperr.CodeUpstream: 1, apperr.CodeInternal: 1,
+		apperr.CodeInvalidInput: codeInvalidInput, apperr.CodeNotFound: codeNotFound,
+		apperr.CodeQualityFailed: codeQualityFailed,
+		apperr.CodeUnavailable:   codeUnavailable, apperr.CodeUpstream: 1,
+		apperr.CodeInternal: 1,
 	} {
 		assert.Equal(t, want, report.ExitCode(code), code)
 	}
 
-	_, err := report.NewConsole(types.Streams{}, report.ConsoleConfig{})
+	_, err := report.NewConsole(
+		stdx.Zero[types.Streams](),
+		stdx.Zero[report.ConsoleConfig](),
+	)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
 
@@ -279,7 +338,9 @@ func TestConsole_StepSummary(t *testing.T) {
 	t.Parallel()
 
 	lint, unit := consoleRun()
+
 	var buf bytes.Buffer
+
 	require.NoError(
 		t,
 		report.WriteStepSummary(&buf, append(lint, unit...), 6*time.Second),
@@ -291,13 +352,17 @@ func TestConsole_StepSummary(t *testing.T) {
 	assert.Equal(t, "&#x2705; **Lint**: All 1 checks passed (1s)\n\n", buf.String())
 
 	path := filepath.Join(t.TempDir(), "summary.md")
-	c, _ := newTestConsole(
+	console, _ := newTestConsole(
 		t,
-		report.ConsoleConfig{CI: true, StepSummaryPath: path},
+		fixtures.Build(func(row *report.ConsoleConfig) {
+			row.CI = true
+			row.StepSummaryPath = path
+		}),
 		report.LevelNormal,
 	)
-	replayConsoleRun(c.Observer())
-	got, err := os.ReadFile(path)
+	replayConsoleRun(console.Observer())
+
+	got, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, consoleGolden(t, "step_summary.md"), string(got))
 }
@@ -317,20 +382,22 @@ func TestConsole_Groups(t *testing.T) {
 
 	gha, out := newTestConsole(
 		t,
-		report.ConsoleConfig{GitHubActions: true},
+		fixtures.Build(func(row *report.ConsoleConfig) {
+			row.GitHubActions = true
+		}),
 		report.LevelQuiet,
 	)
 	gha.Groupf("Unit %s", "Tests")
 	gha.EndGroup()
 	assert.Equal(t, "::group::Unit Tests\n::endgroup::\n", out.String())
 
-	plain, out := newTestConsole(t, report.ConsoleConfig{}, report.LevelNormal)
-	plain.Groupf("Unit Tests")
+	plain, out := newTestConsole(t, stdx.Zero[report.ConsoleConfig](), report.LevelNormal)
+	plain.Groupf(textUnitTests)
 	plain.EndGroup()
 	assert.Empty(t, out.String())
 
 	plain.SetLevel(report.LevelVerbose)
-	plain.Groupf("Unit Tests")
+	plain.Groupf(textUnitTests)
 	assert.Equal(t, "\n-- Unit Tests --\n\n", out.String())
 }
 
@@ -347,22 +414,89 @@ func TestConsole_Groups(t *testing.T) {
 //     with no race reported.
 func TestFoundationReport_ConsoleConcurrentWrites(t *testing.T) {
 	t.Parallel()
+
 	var out, errOut bytes.Buffer
-	c, err := report.NewConsole(types.Streams{Out: &out, Err: &errOut},
-		report.ConsoleConfig{CI: true})
+
+	console, err := report.NewConsole(
+		types.Streams{Out: &out, Err: &errOut},
+		fixtures.Build(func(row *report.ConsoleConfig) {
+			row.CI = true
+		}),
+	)
 	require.NoError(t, err)
-	var wg sync.WaitGroup
-	for range 50 {
-		wg.Go(func() {
+
+	var group sync.WaitGroup
+
+	for range iterationsWrites {
+		group.Go(func() {
 			for range 20 {
-				c.Infof("line %s", "x")
+				console.Infof("line %s", textX)
 			}
 		})
 	}
-	wg.Wait()
-	lines := strings.Split(strings.TrimSuffix(errOut.String(), "\n"), "\n")
-	require.Len(t, lines, 1000)
+
+	group.Wait()
+
+	lines := strings.Split(strings.TrimSuffix(errOut.String(), textNewline), textNewline)
+	require.Len(t, lines, wantLinesLen)
+
 	for _, l := range lines {
 		assert.Equal(t, "line x", l)
 	}
 }
+
+const (
+	// codeInvalidInput is the value for apperr.CodeInvalidInput in
+	// TestConsole_LevelsAndCodes.
+	codeInvalidInput = 2
+
+	// codeNotFound is the value for apperr.CodeNotFound in TestConsole_LevelsAndCodes.
+	codeNotFound = 2
+
+	// codeQualityFailed is the value for apperr.CodeQualityFailed in
+	// TestConsole_LevelsAndCodes.
+	codeQualityFailed = 2
+
+	// codeUnavailable is the value for apperr.CodeUnavailable in
+	// TestConsole_LevelsAndCodes.
+	codeUnavailable = 3
+
+	// debugInput is the keysAndValues passed to Debug in testConsoleGoldenTable.
+	debugInput = 3
+
+	// durationConsoleRun is the factor multiplying time.Millisecond in consoleRun.
+	durationConsoleRun = 800
+
+	// consoleRunSeconds is the factor multiplying time.Second in consoleRun.
+	consoleRunSeconds = 4
+
+	// consoleStepSeconds is the factor multiplying time.Second in consoleRun.
+	consoleStepSeconds = 3
+
+	// durationRun is the factor multiplying time.Millisecond in consoleRun.
+	durationRun = 1200
+
+	// iterationsWrites is the iteration count in
+	// TestFoundationReport_ConsoleConcurrentWrites.
+	iterationsWrites = 50
+
+	// secondsRun is the factor multiplying time.Second in replayConsoleRun.
+	secondsRun = 4
+
+	// tests is the Tests field in consoleRun.
+	tests = 42
+
+	// testsConsoleRun is the value assigned to row.Tests in consoleRun.
+	testsConsoleRun = 12
+
+	// testsRun is the value assigned to row.Tests in consoleRun.
+	testsRun = 30
+
+	// wantLinesLen is the expected lines len.
+	wantLinesLen = 1000
+)
+
+const (
+	// textHidden is the literal "hidden".
+	textHidden = "hidden"
+)

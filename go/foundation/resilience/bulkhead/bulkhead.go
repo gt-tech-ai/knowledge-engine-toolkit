@@ -14,12 +14,24 @@ import (
 	"fmt"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead/adaptive"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead/channel"
 )
+
+// defaultConfigMaxConcurrent is the default MaxConcurrent of Config.
+const defaultConfigMaxConcurrent = 10
+
+// defaultConfigInitialConcurrent is the default InitialConcurrent of Config.
+const defaultConfigInitialConcurrent = 5
+
+// defaultConfigRTTThreshold is the default RTTThreshold of Config.
+const defaultConfigRTTThreshold = 100 * time.Millisecond
+
+// defaultConfigBackoffRatio is the default BackoffRatio of Config.
+const defaultConfigBackoffRatio = 0.9
 
 // ErrBulkheadFull is re-exported from the channel implementation for convenience.
 var ErrBulkheadFull = channel.ErrBulkheadFull
@@ -80,11 +92,11 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Kind:              KindChannel,
-		MaxConcurrent:     10,
+		MaxConcurrent:     defaultConfigMaxConcurrent,
 		MinConcurrent:     1,
-		InitialConcurrent: 5,
-		RTTThreshold:      100 * time.Millisecond,
-		BackoffRatio:      0.9,
+		InitialConcurrent: defaultConfigInitialConcurrent,
+		RTTThreshold:      defaultConfigRTTThreshold,
+		BackoffRatio:      defaultConfigBackoffRatio,
 	}
 }
 
@@ -107,8 +119,10 @@ func WithMaxConcurrent(n int) options.Option[Config] {
 // Returns an error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.Bulkhead, error) {
 	cfg := DefaultConfig()
+
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
+
 	return NewFromConfig(cfg)
 }
 
@@ -120,6 +134,7 @@ func NewFromConfig(cfg Config) (interfaces.Bulkhead, error) {
 		chCfg := channel.Config{
 			MaxConcurrent: cfg.MaxConcurrent,
 		}
+
 		return channel.New(chCfg), nil
 
 	case KindAdaptive:
@@ -130,6 +145,7 @@ func NewFromConfig(cfg Config) (interfaces.Bulkhead, error) {
 			RTTThreshold:      cfg.RTTThreshold,
 			BackoffRatio:      cfg.BackoffRatio,
 		}
+
 		return adaptive.New(adCfg), nil
 
 	default:

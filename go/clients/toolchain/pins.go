@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -28,6 +28,7 @@ func (execPathResolver) LookPath(
 	file string,
 ) (string, error) {
 	wrapRes0, wrapErr := exec.LookPath(file)
+
 	return wrapRes0, apperr.Wrap(wrapErr, apperr.CodeInternal, "exec.LookPath")
 }
 
@@ -59,18 +60,23 @@ func (i *Installer) CheckPins(
 	tools []types.ToolDef,
 ) types.StepResults {
 	var out types.StepResults
+
 	for j := range tools {
 		tool := &tools[j]
 		method, ok := i.resolveMethod(tool)
+
 		if !ok || !isGoInstall(method) {
 			continue
 		}
-		pkg, want, pinned := strings.Cut(method.Args[len(method.Args)-1], "@")
+
+		pkg, want, pinned := strings.Cut(method.Args[len(method.Args)-1], textAt)
 		if !pinned {
 			continue
 		}
+
 		out = append(out, i.checkPin(ctx, root, tool, pkg, want))
 	}
+
 	return out
 }
 
@@ -82,44 +88,38 @@ func (i *Installer) checkPin(
 	pkg, want string,
 ) types.StepResult {
 	name := tool.Name + " is the pinned " + want
+
 	path, err := i.paths.LookPath(tool.Binary)
 	if err != nil {
-		return types.StepResult{
-			Name:   name,
-			Status: types.StatusSkip,
-			Error:  "not on PATH",
-		}
+		return pinStep(name, types.StatusSkip, "not on PATH")
 	}
+
 	res := i.runner.RunBuffered(ctx, root, "go", "version", "-m", path)
 	gotPkg, got := buildInfo(string(res.Stdout))
+
 	if res.Err != nil || got == "" {
-		return types.StepResult{
-			Name:   name,
-			Status: types.StatusSkip,
-			Error:  path + " carries no Go build info to check",
-		}
+		return pinStep(name, types.StatusSkip, path+" carries no Go build info to check")
 	}
+
 	if gotPkg == pkg && got == want {
-		return types.StepResult{Name: name, Status: types.StatusPass}
+		return pinStep(name, types.StatusPass, "")
 	}
-	fix := "go install " + pkg + "@" + want
+
+	fix := "go install " + pkg + textAt + want
 	if i.reinstallHint != nil {
-		fix = i.reinstallHint(tool.Binary, pkg+"@"+want)
+		fix = i.reinstallHint(tool.Binary, pkg+textAt+want)
 	}
-	return types.StepResult{
-		Name:   name,
-		Status: types.StatusFail,
-		Error: fmt.Sprintf(
-			"%s is %s@%s but the catalog pins %s@%s "+
-				"(CI runs the pin, so its output differs): run %#q",
-			path,
-			gotPkg,
-			got,
-			pkg,
-			want,
-			fix,
-		),
-	}
+
+	return pinStep(name, types.StatusFail, fmt.Sprintf(
+		"%s is %s@%s but the catalog pins %s@%s "+
+			"(CI runs the pin, so its output differs): run %#q",
+		path,
+		gotPkg,
+		got,
+		pkg,
+		want,
+		fix,
+	))
 }
 
 // buildInfo extracts the main package path and its module version from `go version -m`
@@ -129,12 +129,15 @@ func buildInfo(out string) (pkg, version string) {
 	for line := range strings.SplitSeq(out, "\n") {
 		fields := strings.Fields(line)
 		switch {
-		case len(fields) >= 2 && fields[0] == "path":
+		case len(fields) >= pathLineFields && fields[0] == "path":
 			pkg = fields[1]
-		case len(fields) >= 3 && fields[0] == "mod":
-			version = fields[2]
+		case len(fields) >= modLineFields && fields[0] == "mod":
+			version = fields[goVersionDigitIndex]
+		default:
+			// No other value changes the outcome.
 		}
 	}
+
 	return pkg, version
 }
 
@@ -152,16 +155,34 @@ func (i *Installer) InstalledVersion(
 	if err != nil {
 		return ""
 	}
+
 	res := i.runner.RunBuffered(ctx, root, "go", "version", "-m", path)
 	if pkg, ver := buildInfo(string(res.Stdout)); res.Err == nil && ver != "" {
-		return pkg + "@" + ver
+		return pkg + textAt + ver
 	}
+
 	if len(tool.VersionCmd) == 0 {
 		return ""
 	}
+
 	out := i.runner.RunBuffered(ctx, root, tool.VersionCmd[0], tool.VersionCmd[1:]...)
 	if out.Err != nil {
 		return ""
 	}
+
 	return strings.TrimSpace(string(out.Stdout))
+}
+
+// pinStep is the result of one pin check.
+func pinStep(name string, status types.StepStatus, errText string) types.StepResult {
+	return types.StepResult{
+		Name:     name,
+		Status:   status,
+		Error:    errText,
+		Group:    "",
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+	}
 }

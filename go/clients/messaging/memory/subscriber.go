@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 )
@@ -29,8 +29,14 @@ type Subscriber struct {
 // NewSubscriber consumes from broker, running each handler call through handlers (the
 // zero Base runs them undecorated); a Publisher built from the same broker feeds this
 // subscriber.
-func NewSubscriber(broker *Broker, handlers client.Base) *Subscriber {
-	return &Subscriber{broker: broker, handlers: handlers, done: make(chan struct{})}
+// handlers must not be nil.
+func NewSubscriber(broker *Broker, handlers *client.Base) *Subscriber {
+	return &Subscriber{
+		broker:   broker,
+		handlers: *handlers,
+		done:     make(chan struct{}),
+		once:     sync.Once{},
+	}
 }
 
 // Subscribe delivers each message on topic to handler until Close is called or ctx is
@@ -43,10 +49,12 @@ func (s *Subscriber) Subscribe(
 	handler interfaces.MessageHandler,
 ) error {
 	ch := s.broker.topic(topic)
+
 	for {
 		select {
 		case msg := <-ch:
 			hctx := tracer.Extract(ctx, msg.Metadata)
+
 			_ = s.handlers.DoOnce(hctx, topic, func(ctx context.Context) error {
 				return handler(ctx, msg)
 			})
@@ -65,5 +73,6 @@ func (s *Subscriber) Subscribe(
 // Close stops the receive loop (idempotent).
 func (s *Subscriber) Close() error {
 	s.once.Do(func() { close(s.done) })
+
 	return nil
 }

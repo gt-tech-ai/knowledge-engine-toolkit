@@ -35,12 +35,13 @@ func TestInjectConversation_SetsBaggageKeys(t *testing.T) {
 
 	prev, ok := tracer.ParseTraceparent(prevTraceparent)
 	require.True(t, ok)
+
 	_, bad := tracer.ParseTraceparent("not-a-traceparent")
 	assert.False(t, bad)
 
 	ctx := tracer.InjectConversation(
 		context.Background(),
-		tracer.Conversation{ID: "conv_42", TurnIndex: 3, Prev: prev},
+		&tracer.Conversation{ID: "conv_42", TurnIndex: 3, Prev: prev},
 	)
 	bag := baggage.FromContext(ctx)
 
@@ -50,7 +51,7 @@ func TestInjectConversation_SetsBaggageKeys(t *testing.T) {
 
 	untouched := tracer.InjectConversation(
 		context.Background(),
-		tracer.Conversation{ID: "a@b.com", TurnIndex: 1},
+		&tracer.Conversation{ID: textABCom, TurnIndex: 1, Prev: trace.SpanContext{}},
 	)
 	assert.Equal(t, 0, baggage.FromContext(untouched).Len())
 }
@@ -73,7 +74,7 @@ func TestConversationStartOptions_LinksPrevTurn(t *testing.T) {
 
 	cfg := trace.NewSpanStartConfig(
 		tracer.ConversationStartOptions(
-			tracer.Conversation{ID: "c1", TurnIndex: 2, Prev: prev},
+			&tracer.Conversation{ID: "c1", TurnIndex: 2, Prev: prev},
 		)...)
 
 	assert.Equal(t, []attribute.KeyValue{
@@ -97,9 +98,11 @@ func TestConversationStartOptions_FirstTurnHasNoLink(t *testing.T) {
 	t.Parallel()
 
 	cfg := trace.NewSpanStartConfig(
-		tracer.ConversationStartOptions(tracer.Conversation{ID: "c1", TurnIndex: 0})...)
+		tracer.ConversationStartOptions(
+			&tracer.Conversation{ID: "c1", TurnIndex: 0, Prev: trace.SpanContext{}},
+		)...)
 
-	assert.Len(t, cfg.Attributes(), 2)
+	assert.Len(t, cfg.Attributes(), wantAttributesLen)
 	assert.Empty(t, cfg.Links())
 }
 
@@ -116,15 +119,31 @@ func TestConversationStartOptions_FirstTurnHasNoLink(t *testing.T) {
 //     no options: zero attributes and zero links, even with a valid Prev
 func TestConversationStartOptions_RejectsInvalidConversation(t *testing.T) {
 	t.Parallel()
+
 	prev, ok := tracer.ParseTraceparent(prevTraceparent)
 	require.True(t, ok)
 
-	for _, c := range []tracer.Conversation{
+	for _, conversation := range []tracer.Conversation{
 		{ID: "user@example.com", TurnIndex: 1, Prev: prev},
-		{ID: strings.Repeat("a", 65), TurnIndex: 1, Prev: prev},
+		{ID: strings.Repeat(textA, repeatInputConversation), TurnIndex: 1, Prev: prev},
 		{ID: "c1", TurnIndex: -1, Prev: prev},
 	} {
-		opts := tracer.ConversationStartOptions(c)
-		assert.Empty(t, opts, "conversation %q turn %d", c.ID, c.TurnIndex)
+		opts := tracer.ConversationStartOptions(&conversation)
+		assert.Empty(
+			t,
+			opts,
+			"conversation %q turn %d",
+			conversation.ID,
+			conversation.TurnIndex,
+		)
 	}
 }
+
+const (
+	// repeatInputConversation is the count passed to Repeat in
+	// TestConversationStartOptions_RejectsInvalidConversation.
+	repeatInputConversation = 65
+
+	// wantAttributesLen is the expected attributes len.
+	wantAttributesLen = 2
+)

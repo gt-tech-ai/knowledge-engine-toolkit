@@ -10,6 +10,7 @@ from techai_webutils.foundation.metrics.builder import (
     default_config,
     new_metrics_from_config,
 )
+from techai_webutils.foundation.metrics.exposition import render_metrics
 from techai_webutils.foundation.metrics.metrics import (
     PrometheusMetricsProvider,
     ServiceMetrics,
@@ -28,4 +29,5 @@ __all__ = [
     "default_config",
     "new_metrics",
     "new_metrics_from_config",
+    "render_metrics",
 ]

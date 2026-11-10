@@ -14,7 +14,7 @@ import (
 	"slices"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/engine"
@@ -81,104 +81,144 @@ type runner struct {
 
 // NewFromConfig returns the ToolRunner decorated from deps as a service. A missing
 // Runner or Tools is CodeInvalidInput. It does no I/O.
-func NewFromConfig(cfg Config, deps Deps) (interfaces.ToolRunner, error) {
+// deps must not be nil.
+func NewFromConfig(cfg Config, depsRef *Deps) (interfaces.ToolRunner, error) {
+	deps := *depsRef
+
 	if deps.Runner == nil || deps.Tools == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"toolrun: needs a command runner and a tool resolver")
 	}
+
 	keyed := !stepcache.IsOff(deps.Cache)
 	if deps.Cache == nil {
-		off, err := stepcache.NewFromConfig(stepcache.Config{})
+		off, err := stepcache.NewFromConfig(new(stepcache.Config))
 		if err != nil {
 			return nil, err
 		}
+
 		deps.Cache = off
 	}
+
 	name := cfg.Name
 	if name == "" {
 		name = "toolrun"
 	}
+
 	base, err := service.NewBase[interfaces.ToolRunner](deps.Decorations, name)
 	if err != nil {
 		return nil, err
 	}
+
 	return &runner{Base: base, deps: deps, keyed: keyed}, nil
 }
 
 // Run executes run over cb under opts.
+// run must not be nil.
 func (r *runner) Run(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	run types.ToolRun,
+	codebase interfaces.Codebase,
+	runRef *types.ToolRun,
 	opts types.RunOptions,
 ) (types.StepResults, error) {
+	run := *runRef
+
 	return r.Exec(ctx, "run", func(ctx context.Context) (types.StepResults, error) {
-		return r.run(ctx, cb, run, opts)
+		return r.runTool(ctx, codebase, &run, opts)
 	})
 }
 
-// run resolves the run's tool, targets and parser, then executes it. A selector that
-// picks nothing is one skipped step; a run with no selector under each: run runs once.
-func (r *runner) run(
+// runTool resolves the step's tool, targets and parser, then executes it. A selector
+// that picks nothing is one skipped step; a step with no selector under each: runs once.
+func (r *runner) runTool(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	run types.ToolRun,
+	codebase interfaces.Codebase,
+	runRef *types.ToolRun,
 	opts types.RunOptions,
 ) (types.StepResults, error) {
+	run := *runRef
+
 	spec, ok := r.deps.Tools(run.Tool)
 	if !ok {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"tool run "+run.Name+": unknown tool "+run.Tool)
 	}
-	if err := validate(run); err != nil {
-		return nil, err
-	}
-	run, err := substitute(run, opts.Vars)
+
+	err := validate(&run)
 	if err != nil {
 		return nil, err
 	}
+
+	run, err = substitute(&run, opts.Vars)
+	if err != nil {
+		return nil, err
+	}
+
 	parser, err := parsers.NewFromConfig(run.Parse)
 	if err != nil {
 		return nil, err
 	}
+
 	// A prefixed tool (`uv run ruff`) runs through its prefix, so the prefix is what
 	// must be installed.
 	if exe, _ := spec.Cmd(); !r.deps.Runner.Exists(exe) {
-		return types.StepResults{missing(run, spec, opts.Strict)}, nil
+		return types.StepResults{missing(&run, spec, &opts)}, nil
 	}
-	targets, err := r.targets(ctx, cb, run.Targets)
+
+	targets, err := r.targets(ctx, codebase, &run.Targets)
 	if err != nil {
 		return nil, err
 	}
+
 	inv := &invocation{run: run, spec: spec, parser: parser, fix: opts.Fix}
+
+	return r.dispatch(ctx, codebase, inv, targets), nil
+}
+
+// dispatch runs the tool once over all targets, or once per target when asked.
+func (r *runner) dispatch(
+	ctx context.Context,
+	codebase interfaces.Codebase,
+	inv *invocation,
+	targets []string,
+) types.StepResults {
+	run := inv.run
+
 	if len(targets) == 0 && (run.Targets.Kind != "" || run.Each == types.EachTarget) {
 		return types.StepResults{{
-			Name: run.Name, Group: group(run), Status: types.StatusSkip,
-			Detail: []byte("no targets"),
-		}}, nil
+			Name: run.Name, Group: group(&run), Status: types.StatusSkip,
+			Detail:   []byte("no targets"),
+			Error:    "",
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
+		}}
 	}
+
 	if run.Each != types.EachTarget {
-		return types.StepResults{r.invoke(ctx, cb, inv, "", targets)}, nil
+		return types.StepResults{r.invoke(ctx, codebase, inv, "", targets)}
 	}
+
 	return engine.Pool(r.deps.Pool).FanOut(ctx, targets,
 		func(ctx context.Context, target string) types.StepResult {
-			return r.invoke(ctx, cb, inv, target, []string{target})
-		}), nil
+			return r.invoke(ctx, codebase, inv, target, []string{target})
+		})
 }
 
 // validate rejects a run whose Each or Missing names no known value, or whose Cwd is
 // neither root, target nor a directory inside the codebase root.
-func validate(run types.ToolRun) error {
-	ok := slices.Contains([]string{"", types.EachTarget, types.EachRun}, run.Each) &&
+func validate(run *types.ToolRun) error {
+	found := slices.Contains([]string{"", types.EachTarget, types.EachRun}, run.Each) &&
 		validCwd(run.Cwd) &&
 		slices.Contains(
 			[]string{"", types.MissingSkip, types.MissingFail},
 			run.Missing,
 		) &&
 		(run.Cwd != types.CwdTarget || run.Each == types.EachTarget)
-	if ok {
+	if found {
 		return nil
 	}
+
 	return apperr.New(
 		apperr.CodeInvalidInput,
 		"tool run "+run.Name+": bad each, cwd or missing "+
@@ -192,76 +232,119 @@ func validCwd(cwd string) bool {
 	case "", types.CwdRoot, types.CwdTarget:
 		return true
 	}
+
 	clean := path.Clean(cwd)
+
 	return !path.IsAbs(clean) && clean != ".." && !strings.HasPrefix(clean, "../")
 }
 
 // substitute replaces each `{name}` in run's arguments and fix arguments with
 // vars[name]; a placeholder with no value is CodeInvalidInput naming the run and the
 // variable. `{target}` is left for the invocation.
-func substitute(run types.ToolRun, vars map[string]string) (types.ToolRun, error) {
-	var missingVar string
-	sub := func(args []string) []string {
-		out := make([]string, len(args))
-		for i, a := range args {
-			out[i] = placeholder.ReplaceAllStringFunc(a, func(m string) string {
-				name := m[1 : len(m)-1]
-				if m == targetPlaceholder {
-					return m
-				}
-				v, ok := vars[name]
-				if !ok && missingVar == "" {
-					missingVar = name
-				}
-				return v
-			})
-		}
-		return out
-	}
-	run.Args, run.FixArgs, run.Env = sub(run.Args), sub(run.FixArgs), sub(run.Env)
-	if missingVar != "" {
+func substitute(runRef *types.ToolRun, vars map[string]string) (types.ToolRun, error) {
+	run := *runRef
+
+	currentSubstitution := &substitution{vars: vars, missing: ""}
+
+	run.Args, run.FixArgs, run.Env = currentSubstitution.args(
+		run.Args,
+	), currentSubstitution.args(
+		run.FixArgs,
+	), currentSubstitution.args(
+		run.Env,
+	)
+
+	if currentSubstitution.missing != "" {
 		return run, apperr.New(apperr.CodeInvalidInput,
-			"tool run "+run.Name+": no value for {"+missingVar+"}")
+			"tool run "+run.Name+": no value for {"+currentSubstitution.missing+"}")
 	}
+
 	return run, nil
 }
 
+// substitution expands {name} placeholders, remembering the first with no value.
+type substitution struct {
+	// vars holds the placeholder values.
+	vars map[string]string
+
+	// missing names the first placeholder with no value.
+	missing string
+}
+
+// args expands each argument.
+func (s *substitution) args(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = placeholder.ReplaceAllStringFunc(a, s.replace)
+	}
+
+	return out
+}
+
+// replace expands one placeholder; the target placeholder is left for later.
+func (s *substitution) replace(m string) string {
+	if m == targetPlaceholder {
+		return m
+	}
+
+	name := m[1 : len(m)-1]
+
+	v, ok := s.vars[name]
+	if !ok && s.missing == "" {
+		s.missing = name
+	}
+
+	return v
+}
+
 // group is the gate phase run's steps report under.
-func group(run types.ToolRun) string {
+func group(run *types.ToolRun) string {
 	if run.Group != "" {
 		return run.Group
 	}
+
 	return run.Verb
 }
 
 // missing is the one step of a run whose tool is not installed; strict fails it.
-func missing(run types.ToolRun, spec interfaces.ToolSpec, strict bool) types.StepResult {
+func missing(
+	run *types.ToolRun,
+	spec interfaces.ToolSpec,
+	opts *types.RunOptions,
+) types.StepResult {
 	status := types.StatusSkip
-	if strict || run.Missing == types.MissingFail {
+	if opts.Strict || run.Missing == types.MissingFail {
 		status = types.StatusFail
 	}
+
 	return types.StepResult{
 		Name: run.Name, Group: group(run), Status: status,
-		Error: spec.Binary() + " is not installed: " + spec.InstallHint(),
+		Error:    spec.Binary() + " is not installed: " + spec.InstallHint(),
+		Detail:   nil,
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
 	}
 }
 
 // targets selects the run's targets; a run with no selector has none.
 func (r *runner) targets(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	spec types.TargetSpec,
+	codebase interfaces.Codebase,
+	spec *types.TargetSpec,
 ) ([]string, error) {
 	if spec.Kind == "" {
 		return nil, nil
 	}
+
 	sel, err := selectors.NewFromConfig(spec.Kind, selectors.Deps{
 		Git: r.deps.Git, Root: r.deps.Root,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return sel.Select(ctx, cb, spec)
+
+	return sel.Select(ctx, codebase, spec)
 }
 
 // invocation is what every step of one run shares.
@@ -283,62 +366,118 @@ type invocation struct {
 // every target under each: run (target empty). A cached pass skips the tool.
 func (r *runner) invoke(
 	ctx context.Context,
-	cb interfaces.Codebase,
+	codebase interfaces.Codebase,
 	inv *invocation,
 	target string,
 	targets []string,
 ) types.StepResult {
 	run := inv.run
 	name := strings.TrimSpace(run.Name + " " + target)
-	dir, argTargets := r.deps.Root, targets
-	switch run.Cwd {
-	case "", types.CwdRoot:
-	case types.CwdTarget:
-		dir, argTargets = r.cwdOf(ctx, cb, target)
-	default:
-		dir = filepath.Join(r.deps.Root, filepath.FromSlash(run.Cwd))
-	}
+	dir, argTargets := r.workDir(ctx, codebase, &run, target, targets)
+
 	args := expand(run.Args, argTargets)
 	if inv.fix {
 		args = append(args, run.FixArgs...)
 	}
-	key, err := r.key(ctx, cb, run, target, args)
+
+	key, err := r.key(ctx, codebase, &run, target, args)
 	if err != nil {
 		return types.StepResult{
-			Name: name, Group: group(run), Status: types.StatusFail,
-			Error: err.Error(),
+			Name: name, Group: group(&run), Status: types.StatusFail,
+			Error:    err.Error(),
+			Detail:   nil,
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
 		}
 	}
-	if key != "" {
-		if hit, err := r.deps.Cache.Hit(ctx, key); err == nil && hit {
-			return types.StepResult{
-				Name: name, Group: group(run), Status: types.StatusSkip,
-				Detail: []byte(types.CachedDetail),
-			}
+
+	if r.cached(ctx, key) {
+		return types.StepResult{
+			Name: name, Group: group(&run), Status: types.StatusSkip,
+			Detail:   []byte(types.CachedDetail),
+			Error:    "",
+			Children: nil,
+			Duration: 0,
+			Tests:    0,
 		}
 	}
-	exe, cmdArgs := inv.spec.Cmd(args...)
-	var res interfaces.CmdResult
-	if len(run.Env) > 0 {
-		res = r.deps.Runner.RunBufferedWithEnv(ctx, dir, run.Env, exe, cmdArgs...)
-	} else {
-		res = r.deps.Runner.RunBuffered(ctx, dir, exe, cmdArgs...)
-	}
-	v := inv.parser.Parse(res)
-	for i := range v.Findings {
-		v.Findings[i].Check = run.Name
-	}
-	if run.Advisory && v.Status == types.StatusFail {
-		v.Status = types.StatusWarn
-	}
-	step := v.Step(name, group(run))
+
+	res := r.execute(ctx, inv, dir, args)
+
+	v := judged(inv.parser.Parse(&res), &run)
+	step := v.Step(name, group(&run))
+
 	step.Duration = res.Duration
+
 	if key != "" && v.Status == types.StatusPass {
-		if err := r.deps.Cache.Record(ctx, key); err != nil {
-			step.Status, step.Error = types.StatusWarn, "passed; not cached: "+err.Error()
-		}
+		r.recordPass(ctx, key, &step)
 	}
+
 	return step
+}
+
+// workDir resolves where the tool runs and the targets to pass it.
+func (r *runner) workDir(
+	ctx context.Context,
+	codebase interfaces.Codebase,
+	run *types.ToolRun,
+	target string,
+	targets []string,
+) (dir string, resolved []string) {
+	switch run.Cwd {
+	case "", types.CwdRoot:
+		return r.deps.Root, targets
+	case types.CwdTarget:
+		return r.cwdOf(ctx, codebase, target)
+	default:
+		return filepath.Join(r.deps.Root, filepath.FromSlash(run.Cwd)), targets
+	}
+}
+
+// cached reports a recorded pass for key; a cache error counts as a miss.
+func (r *runner) cached(ctx context.Context, key string) bool {
+	if key == "" {
+		return false
+	}
+
+	hit, err := r.deps.Cache.Hit(ctx, key)
+
+	return err == nil && hit
+}
+
+// execute runs the tool, passing the run's environment when it has one.
+func (r *runner) execute(
+	ctx context.Context, inv *invocation, dir string, args []string,
+) interfaces.CmdResult {
+	exe, cmdArgs := inv.spec.Cmd(args...)
+
+	if len(inv.run.Env) > 0 {
+		return r.deps.Runner.RunBufferedWithEnv(ctx, dir, inv.run.Env, exe, cmdArgs...)
+	}
+
+	return r.deps.Runner.RunBuffered(ctx, dir, exe, cmdArgs...)
+}
+
+// judged names the check on each finding and softens an advisory run's failure.
+func judged(verdict types.Verdict, run *types.ToolRun) types.Verdict {
+	for i := range verdict.Findings {
+		verdict.Findings[i].Check = run.Name
+	}
+
+	if run.Advisory && verdict.Status == types.StatusFail {
+		verdict.Status = types.StatusWarn
+	}
+
+	return verdict
+}
+
+// recordPass caches a pass, downgrading the step to a warning when that fails.
+func (r *runner) recordPass(ctx context.Context, key string, step *types.StepResult) {
+	err := r.deps.Cache.Record(ctx, key)
+	if err != nil {
+		step.Status, step.Error = types.StatusWarn, "passed; not cached: "+err.Error()
+	}
 }
 
 // cwdOf is where a cwd: target invocation runs and what `{target}` means there: the
@@ -349,10 +488,12 @@ func (r *runner) cwdOf(
 	cb interfaces.Codebase,
 	target string,
 ) (dir string, argTargets []string) {
-	if _, err := cb.Text(ctx, target); err == nil {
+	_, err := cb.Text(ctx, target)
+	if err == nil {
 		return filepath.Join(r.deps.Root, filepath.FromSlash(path.Dir(target))),
 			[]string{path.Base(target)}
 	}
+
 	return filepath.Join(r.deps.Root, filepath.FromSlash(target)), []string{"."}
 }
 
@@ -360,17 +501,18 @@ func (r *runner) cwdOf(
 // argument with the targets joined by spaces.
 func expand(args, targets []string) []string {
 	out := make([]string, 0, len(args)+len(targets))
-	for _, a := range args {
+	for _, text := range args {
 		switch {
-		case a == targetPlaceholder:
+		case text == targetPlaceholder:
 			out = append(out, targets...)
-		case strings.Contains(a, targetPlaceholder):
-			out = append(out, strings.ReplaceAll(a, targetPlaceholder,
+		case strings.Contains(text, targetPlaceholder):
+			out = append(out, strings.ReplaceAll(text, targetPlaceholder,
 				strings.Join(targets, " ")))
 		default:
-			out = append(out, a)
+			out = append(out, text)
 		}
 	}
+
 	return out
 }
 
@@ -379,23 +521,26 @@ func expand(args, targets []string) []string {
 // arguments; empty when the run has no inputs.
 func (r *runner) key(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	run types.ToolRun,
+	codebase interfaces.Codebase,
+	run *types.ToolRun,
 	target string,
 	args []string,
 ) (string, error) {
 	if !r.keyed || run.Inputs.IsZero() {
 		return "", nil
 	}
-	digest, err := stepcache.Digest(ctx, cb, withTarget(run.Inputs, target))
+
+	digest, err := stepcache.Digest(ctx, codebase, new(withTarget(&run.Inputs, target)))
 	if err != nil {
 		return "", err
 	}
+
 	version := ""
 	if r.deps.Versions != nil {
 		version = r.deps.Versions(run.Tool)
 	}
-	def, err := json.Marshal(run)
+
+	def, err := json.Marshal(*run)
 	if err != nil {
 		return "", apperr.Wrap(
 			err,
@@ -403,20 +548,26 @@ func (r *runner) key(
 			"tool run "+run.Name+": cache key",
 		)
 	}
+
 	return stepcache.Key(digest, version,
 		append([]string{string(def), target}, args...)), nil
 }
 
 // withTarget returns sel with `{target}` replaced by target in its roots, paths and
 // globs.
-func withTarget(sel types.FileSelector, target string) types.FileSelector {
+func withTarget(selRef *types.FileSelector, target string) types.FileSelector {
+	sel := *selRef
+
 	sub := func(in []string) []string {
 		out := make([]string, len(in))
 		for i, s := range in {
 			out[i] = strings.ReplaceAll(s, targetPlaceholder, target)
 		}
+
 		return out
 	}
+
 	sel.Roots, sel.Paths, sel.Globs = sub(sel.Roots), sub(sel.Paths), sub(sel.Globs)
+
 	return sel
 }

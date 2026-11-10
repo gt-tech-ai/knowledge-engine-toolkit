@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+// maxStackDepth is the most frames a captured stack holds.
+const maxStackDepth = 64
+
+// captureStackSkip is the frames dropped: runtime.Callers and captureStack.
+const captureStackSkip = 2
+
 // StacktraceKey is the attribute key under which the captured stack is logged.
 const StacktraceKey = "stacktrace"
 
@@ -41,24 +47,27 @@ func (h *stacktraceHandler) Enabled(ctx context.Context, level slog.Level) bool 
 // Handle attaches a stack trace to records at or above the configured level
 // before forwarding them to the wrapped handler. It prefers an origin stack
 // carried by a logged error and falls back to capturing the current stack.
-func (h *stacktraceHandler) Handle(ctx context.Context, r slog.Record) error {
-	if r.Level < h.level {
-		return h.inner.Handle(ctx, r)
+func (h *stacktraceHandler) Handle(ctx context.Context, record slog.Record) error {
+	if record.Level < h.level {
+		return h.inner.Handle(ctx, record)
 	}
+
 	// Prefer an origin stack carried by a logged error (e.g. an AppError) so the
 	// trace points at where the error was created, not this logging call site.
 	// Fall back to capturing the current stack when no error supplies one.
-	stack := originStack(r)
+	stack := originStack(&record)
 	if stack == "" {
 		stack = captureStack()
 	}
-	r2 := r.Clone()
-	r2.AddAttrs(slog.String(StacktraceKey, stack))
-	return h.inner.Handle(ctx, r2)
+
+	secondR := record.Clone()
+	secondR.AddAttrs(slog.String(StacktraceKey, stack))
+
+	return h.inner.Handle(ctx, secondR)
 }
 
 // stackTracer is implemented by errors that carry an origin stack trace
-// (notably core/errors.AppError). It is matched structurally so this package
+// (notably core/apperr.AppError). It is matched structurally so this package
 // stays free of a dependency on the errors package.
 //
 // SDK seam — mirrors pkg/errors' unexported stackTracer interface (StackTrace() string),
@@ -70,17 +79,21 @@ type stackTracer interface {
 
 // originStack returns the first non-empty StackTrace() from a logged error
 // attribute, or "" when no attribute supplies one.
-func originStack(r slog.Record) string {
+func originStack(r *slog.Record) string {
 	var stack string
+
 	r.Attrs(func(a slog.Attr) bool {
 		if st, ok := a.Value.Resolve().Any().(stackTracer); ok {
 			if s := st.StackTrace(); s != "" {
 				stack = s
+
 				return false
 			}
 		}
+
 		return true
 	})
+
 	return stack
 }
 
@@ -100,29 +113,32 @@ func (h *stacktraceHandler) WithGroup(name string) slog.Handler {
 // "func\n\tfile:line" trace, skipping runtime, log/slog, and logger-internal
 // frames so the trace starts at the caller's own code.
 func captureStack() string {
-	pcs := make([]uintptr, 64)
+	pcs := make([]uintptr, maxStackDepth)
 	// Skip runtime.Callers + captureStack itself.
-	n := runtime.Callers(2, pcs)
+	n := runtime.Callers(captureStackSkip, pcs)
 	frames := runtime.CallersFrames(pcs[:n])
 
-	var b strings.Builder
+	var builder strings.Builder
+
 	for {
 		frame, more := frames.Next()
 		// Drop logging plumbing frames wherever they appear so the trace shows
 		// only application code.
 		if !isInternalFrame(frame.Function, frame.File) {
-			b.WriteString(frame.Function)
-			b.WriteString("\n\t")
-			b.WriteString(frame.File)
-			b.WriteByte(':')
-			b.WriteString(strconv.Itoa(frame.Line))
-			b.WriteByte('\n')
+			_, _ = builder.WriteString(frame.Function)
+			_, _ = builder.WriteString("\n\t")
+			_, _ = builder.WriteString(frame.File)
+			_ = builder.WriteByte(':')
+			_, _ = builder.WriteString(strconv.Itoa(frame.Line))
+			_ = builder.WriteByte('\n')
 		}
+
 		if !more {
 			break
 		}
 	}
-	return b.String()
+
+	return builder.String()
 }
 
 // isInternalFrame reports whether a frame belongs to the logging plumbing and

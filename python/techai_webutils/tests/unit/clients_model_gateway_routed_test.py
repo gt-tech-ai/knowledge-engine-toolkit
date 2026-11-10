@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,36 +15,56 @@ from techai_webutils.clients.model_gateway import (
     RoutedConfig,
     new_model_gateway_from_config,
 )
+from techai_webutils.clients.model_gateway.builder import ModelGatewayDependencies
 from techai_webutils.clients.model_gateway.routed import RoutedGateway
 from techai_webutils.clients.model_gateway.routed.catalog import (
     ModelCatalog,
     parse_routes,
 )
+from techai_webutils.clients.model_gateway.routed.gateway import RoutedGatewayDependencies
 from techai_webutils.clients.model_gateway.routed.policy_store import (
     routing_policy_store_from_config,
 )
 from techai_webutils.core.errors import AppError, ErrorCode, UnavailableError
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
-from techai_webutils.core.interfaces.llm import LLMMessage
+from techai_webutils.core.interfaces.llm import LLMMessage, LLMProvider
 from techai_webutils.core.interfaces.model_gateway import (
+    ModelGateway,
     RouteContext,
     current_route_decision,
 )
 from techai_webutils.core.interfaces.routing import RoutePlanner, RoutingPolicyStore
 from techai_webutils.core.types.routing import RoutingPolicy
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from techai_webutils.core.types.llm import LlmConfig
+
 _MESSAGES = [LLMMessage(role="user", content="what is the refund window")]
 
 
 def _gateway(
-    catalog_raw: dict[str, Any],
-    routes_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
+    routes_raw: dict[str, object],
     ctx: RouteContext,
     *,
-    policies: dict[str, Any] | None = None,
-    factory: Any = None,  # noqa: ANN401 - the provider factory under test
+    policies: dict[str, object] | None = None,
+    factory: Callable[[LlmConfig], LLMProvider] | None = None,
 ) -> RoutedGateway:
-    """Build a routed gateway over the fixture catalog whose context is always ``ctx``."""
+    """Build a routed gateway over the fixture catalog whose context is always ``ctx``.
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+        ctx: The routing context.
+        policies: The routing policies.
+        factory: Builds each provider.
+
+    Returns:
+        A routed gateway over the fixture catalog whose context is always ``ctx``.
+
+    """
     config = GatewayConfig(
         kind=GatewayKind.ROUTED,
         routed=RoutedConfig(
@@ -55,9 +75,11 @@ def _gateway(
     )
     gateway = new_model_gateway_from_config(
         config,
-        provider_factory=factory or (lambda llm: StubLlmProvider(llm.model)),
-        context_provider=lambda: ctx,
-        priced_ids=None,
+        options=ModelGatewayDependencies(
+            provider_factory=factory or (lambda llm: StubLlmProvider(llm.model)),
+            context_provider=lambda: ctx,
+            priced_ids=None,
+        ),
     )
     assert isinstance(gateway, RoutedGateway)
     return gateway
@@ -65,7 +87,7 @@ def _gateway(
 
 @pytest.mark.asyncio
 async def test_routed_default_stages_match_passthrough(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that routed with default stages and no pins serves each step's model as today.
 
@@ -73,9 +95,15 @@ async def test_routed_default_stages_match_passthrough(
       - ``routed`` ships dark: selecting it with the defaults must change no step's model.
 
     **What it tests:**
-      - ``resolve`` gives ``haiku-use1`` for ``rewrite`` and ``sonnet-use1`` for ``generate``
+      - ``resolve`` gives ``haiku-use1`` for ``rewrite`` and ``sonnet-use1`` for
+        ``generate``
       - a served ``complete`` answers from Sonnet and records route ``generate``, decider
         ``local``, mode ``user``, one ``ok`` attempt and the token count
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     gateway = _gateway(
         catalog_raw, routes_raw, RouteContext(tenant_id="org-1", step="generate")
@@ -107,36 +135,44 @@ async def test_routed_default_stages_match_passthrough(
 
 @pytest.mark.asyncio
 async def test_pin_resolves_model_and_skips_classify_and_rank(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a tenant pin serves its model without consulting the planner.
 
     **Why this test is important:**
-      - A pin is the old static table: an admin's word, decided before any classifier cost.
+      - A pin is the old static table: an admin's word, decided before any classifier
+        cost.
 
     **What it tests:**
-      - with ``generate`` pinned to Haiku, the call is served by Haiku, decider ``admin_pin``,
-        reason ``pinned``, and the planner's ``plan`` is never awaited
+      - with ``generate`` pinned to Haiku, the call is served by Haiku, decider
+        ``admin_pin``, reason ``pinned``, and the planner's ``plan`` is never awaited
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     catalog = ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
     planner = MagicMock(spec=RoutePlanner)
     planner.plan = AsyncMock()
     gateway = RoutedGateway(
-        catalog=catalog,
-        routes=parse_routes(routes_raw, catalog),
-        default_route="",
-        policy_store=routing_policy_store_from_config({
-            "policies": {"org-1": {"pins": {"generate": "anthropic/haiku"}}}
-        }),
-        planner=planner,
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=lambda: RouteContext(tenant_id="org-1", step="generate"),
+        options=RoutedGatewayDependencies(
+            catalog=catalog,
+            routes=parse_routes(routes_raw, catalog),
+            default_route="",
+            policy_store=routing_policy_store_from_config({
+                "policies": {"org-1": {"pins": {"generate": "anthropic/haiku"}}}
+            }),
+            planner=planner,
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=lambda: RouteContext(tenant_id="org-1", step="generate"),
+        )
     )
 
     response = await gateway.complete(_MESSAGES)
     decision = current_route_decision()
 
-    planner.plan.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", planner.plan).assert_not_awaited)()
     assert response.model == "haiku-use1"
     assert decision is not None
     assert (decision.decider, decision.reason) == ("admin_pin", "pinned")
@@ -144,7 +180,7 @@ async def test_pin_resolves_model_and_skips_classify_and_rank(
 
 @pytest.mark.asyncio
 async def test_routed_reuses_endpoint_instances(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that each endpoint's provider is built once and reused.
 
@@ -155,12 +191,26 @@ async def test_routed_reuses_endpoint_instances(
       - two resolves of the same step return the same instance; the factory runs once per
         distinct endpoint; streaming a call records its decision once the stream ends
       - closing the gateway closes each built provider
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     built: list[StubLlmProvider] = []
 
-    def factory(llm: Any) -> StubLlmProvider:  # noqa: ANN401 - LlmConfig
+    def factory(llm: LlmConfig) -> StubLlmProvider:
+        """Build a stub provider and keep it.
+
+        Args:
+            llm: The endpoint's settings.
+
+        Returns:
+            The provider.
+
+        """
         provider = StubLlmProvider(llm.model)
-        provider.__aexit__ = AsyncMock(return_value=None)  # type: ignore[method-assign]
+        provider.__aexit__ = AsyncMock(return_value=None)
         built.append(provider)
         return provider
 
@@ -170,9 +220,15 @@ async def test_routed_reuses_endpoint_instances(
 
     first = await gateway.resolve(RouteContext(step="rewrite"))
     second = await gateway.resolve(RouteContext(step="rewrite"))
-    await gateway.resolve(RouteContext(step="generate"))
+    _ = await gateway.resolve(RouteContext(step="generate"))
 
     async def consume() -> object:
+        """Drain one routed stream.
+
+        Returns:
+            The route decision it left.
+
+        """
         _ = [c async for c in await gateway.stream(_MESSAGES)]
         return current_route_decision()
 
@@ -184,12 +240,12 @@ async def test_routed_reuses_endpoint_instances(
     assert [p.model_name() for p in built] == ["haiku-use1", "sonnet-use1"]
     assert decision is not None
     for provider in built:
-        provider.__aexit__.assert_awaited_once()  # type: ignore[attr-defined]
+        provider.__aexit__.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_route_context_defaults_when_provider_returns_empty_context(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that an empty request context still routes, to the default route.
 
@@ -197,9 +253,15 @@ async def test_route_context_defaults_when_provider_returns_empty_context(
       - Background calls (an eval run, a warm-up) carry no tenant; they must not fail.
 
     **What it tests:**
-      - with ``RouteContext()`` and ``default_route=generate``, the call is served by Sonnet
-        under the default policy
-      - the gateway's ``wrapped_provider`` is a built catalog provider (for span attributes)
+      - with ``RouteContext()`` and ``default_route=generate``, the call is served by
+        Sonnet under the default policy
+      - the gateway's ``wrapped_provider`` is a built catalog provider (for span
+        attributes)
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     config = GatewayConfig(
         kind=GatewayKind.ROUTED,
@@ -209,33 +271,45 @@ async def test_route_context_defaults_when_provider_returns_empty_context(
     )
     gateway = new_model_gateway_from_config(
         config,
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=RouteContext,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=RouteContext,
+        ),
     )
 
     response = await gateway.complete(_MESSAGES)
 
     assert response.model == "sonnet-use1"
-    assert isinstance(gateway.wrapped_provider, StubLlmProvider)  # type: ignore[attr-defined]
+    assert isinstance(gateway.wrapped_provider, StubLlmProvider)
 
 
 @pytest.mark.asyncio
 async def test_gateway_warms_embedding_classifier_on_enter(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
-    """Test that entering the gateway embeds the route exemplars, and fails the boot if it can't.
+    """Test that entering the gateway embeds the route exemplars.
+
+    The boot fails if it can't.
 
     **Why this test is important:**
-      - Embedding exemplars per request would add a batch call to every answer; an embedder
-        that is down at boot must surface then, not as silently degraded routing.
+      - Embedding exemplars per request would add a batch call to every answer; an
+        embedder that is down at boot must surface then, not as silently degraded routing.
 
     **What it tests:**
-      - ``async with`` embeds the exemplars once, in one ``embed_batch``
+      - ``async with`` embeds the exemplars once, as queries, in one ``embed_batch``
       - an ``embed_batch`` that raises makes entering the gateway raise ``UNAVAILABLE``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     routes = {
         **routes_raw,
-        "generate": {**routes_raw["generate"], "exemplars": ["summarize"]},
+        "generate": {
+            **cast("dict[str, object]", routes_raw["generate"]),
+            "exemplars": ["summarize"],
+        },
     }
     embedding = MagicMock(spec=EmbeddingProvider)
     embedding.embed_batch = AsyncMock(
@@ -244,7 +318,16 @@ async def test_gateway_warms_embedding_classifier_on_enter(
     broken = MagicMock(spec=EmbeddingProvider)
     broken.embed_batch = AsyncMock(side_effect=RuntimeError("embedder down"))
 
-    def build(embedder: MagicMock) -> Any:  # noqa: ANN401 - the gateway under test
+    def build(embedder: MagicMock) -> ModelGateway:
+        """Build a routed gateway on the embedding classifier.
+
+        Args:
+            embedder: The classifier's embedder.
+
+        Returns:
+            The gateway.
+
+        """
         return new_model_gateway_from_config(
             GatewayConfig(
                 kind=GatewayKind.ROUTED,
@@ -252,8 +335,10 @@ async def test_gateway_warms_embedding_classifier_on_enter(
                     catalog=catalog_raw, routes=routes, classifier={"kind": "embedding"}
                 ),
             ),
-            provider_factory=lambda llm: StubLlmProvider(llm.model),
-            embedding=embedder,
+            options=ModelGatewayDependencies(
+                provider_factory=lambda llm: StubLlmProvider(llm.model),
+                embedding=embedder,
+            ),
         )
 
     async with build(embedding):
@@ -262,13 +347,15 @@ async def test_gateway_warms_embedding_classifier_on_enter(
         async with build(broken):
             pass
 
-    embedding.embed_batch.assert_awaited_once_with(["summarize"])
+    cast("MagicMock", cast("AsyncMock", embedding.embed_batch).assert_awaited_once_with)(
+        ["summarize"], input_type="query"
+    )
     assert caught.value.code is ErrorCode.UNAVAILABLE
 
 
 @pytest.mark.asyncio
 async def test_transient_failure_fails_over_and_records_reason(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a throttled primary fails over and the decision says so.
 
@@ -279,12 +366,26 @@ async def test_transient_failure_fails_over_and_records_reason(
     **What it tests:**
       - Sonnet ``use1`` raising ``UNAVAILABLE`` is served by Sonnet ``usw2``
       - the decision's reason is ``failover`` with attempts ``failed`` then ``ok``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
 
-    def factory(llm: Any) -> StubLlmProvider:  # noqa: ANN401 - LlmConfig
+    def factory(llm: LlmConfig) -> StubLlmProvider:
+        """Build a stub provider; the primary endpoint is throttled.
+
+        Args:
+            llm: The endpoint's settings.
+
+        Returns:
+            The provider.
+
+        """
         provider = StubLlmProvider(llm.model)
         if llm.model == "sonnet-use1":
-            provider.complete = AsyncMock(side_effect=UnavailableError("throttled"))  # type: ignore[method-assign]
+            provider.complete = AsyncMock(side_effect=UnavailableError("throttled"))
         return provider
 
     gateway = _gateway(
@@ -305,32 +406,41 @@ async def test_transient_failure_fails_over_and_records_reason(
 
 @pytest.mark.asyncio
 async def test_injected_policy_store_replaces_the_configured_one(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a caller-supplied policy store is the one the routed gateway consults.
 
     **Why this test is important:**
       - A service that keeps policies in a database hands the gateway a refreshing store;
-        if the gateway kept reading ``config.policy_store`` the stored policies would never
-        apply, while a gateway built without one must still read its configuration.
+        if the gateway kept reading ``config.policy_store`` the stored policies would
+        never apply, while a gateway built without one must still read its configuration.
 
     **What it tests:**
       - with an injected store pinning ``generate`` to Haiku, the call is served by Haiku
         even though the configured store pins nothing
       - without one, the configured store's pin applies
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     ctx = RouteContext(tenant_id="org-1", step="generate")
     store = MagicMock(spec=RoutingPolicyStore)
-    store.policy.return_value = RoutingPolicy(pins={"generate": "anthropic/haiku"})
+    cast("MagicMock", store.policy).return_value = RoutingPolicy(
+        pins={"generate": "anthropic/haiku"}
+    )
     config = GatewayConfig(
         kind=GatewayKind.ROUTED,
         routed=RoutedConfig(catalog=catalog_raw, routes=routes_raw),
     )
     injected = new_model_gateway_from_config(
         config,
-        provider_factory=lambda llm: StubLlmProvider(llm.model),
-        context_provider=lambda: ctx,
-        policy_store=store,
+        options=ModelGatewayDependencies(
+            provider_factory=lambda llm: StubLlmProvider(llm.model),
+            context_provider=lambda: ctx,
+            policy_store=store,
+        ),
     )
     configured = _gateway(
         catalog_raw,
@@ -340,12 +450,12 @@ async def test_injected_policy_store_replaces_the_configured_one(
     )
 
     assert (await injected.complete(_MESSAGES)).model == "haiku-use1"
-    store.policy.assert_called_with("org-1", "")
+    cast("MagicMock", cast("MagicMock", store.policy).assert_called_with)("org-1", "")
     assert (await configured.complete(_MESSAGES)).model == "haiku-use1"
 
 
 def test_cost_aware_gateway_without_prices_fails_at_boot(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a routed gateway ranking by cost refuses to boot with no price table.
 
@@ -355,6 +465,11 @@ def test_cost_aware_gateway_without_prices_fails_at_boot(
 
     **What it tests:**
       - ``ranker.kind: cost_aware`` with no ``prices`` raises ``AppError(INVALID_INPUT)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     config = GatewayConfig(
         kind=GatewayKind.ROUTED,
@@ -366,8 +481,9 @@ def test_cost_aware_gateway_without_prices_fails_at_boot(
     with pytest.raises(AppError) as excinfo:
         _ = new_model_gateway_from_config(
             config,
-            provider_factory=lambda llm: StubLlmProvider(llm.model),
-            priced_ids=None,
+            options=ModelGatewayDependencies(
+                provider_factory=lambda llm: StubLlmProvider(llm.model), priced_ids=None
+            ),
         )
 
     assert excinfo.value.code == ErrorCode.INVALID_INPUT

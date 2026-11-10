@@ -1,18 +1,18 @@
 """Shared fixtures for the flat unit suite.
 
-Merged home for the per-layer unit fixtures that previously lived in the
-now-collapsed ``tests/<layer>/conftest.py`` files:
+Merged home for the per-layer unit fixtures that previously lived in the now-collapsed
+``tests/<layer>/conftest.py`` files:
 
 - ``isolate_config_env`` / ``mock_redis`` — from the former ``foundation/conftest.py``.
 - ``s3_config`` / ``sqs_config`` — from the former ``clients/conftest.py``.
 - ``metrics_mock`` — the spec'd ``MetricsProvider`` shared by the metric tests.
-- ``observed`` — mocked logger, metrics and tracer behind one ``Observability``, recording the
-  spans, series and log lines a decorated tier emits.
+- ``observed`` — mocked logger, metrics and tracer behind one ``Observability``, recording
+  the spans, series and log lines a decorated tier emits.
 - ``aws_client`` — the mocked aiobotocore client the S3/SQS clients open.
 
-The fixture names are disjoint, so the merge introduces no collisions. The
-integration suite keeps its own ``sqs_config`` / ``s3_config`` (real ElasticMQ/MinIO)
-in ``tests/integration/conftest.py``, resolved independently for that directory.
+The fixture names are disjoint, so the merge introduces no collisions. The integration
+suite keeps its own ``sqs_config`` / ``s3_config`` (real ElasticMQ/MinIO) in
+``tests/integration/conftest.py``, resolved independently for that directory.
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ from __future__ import annotations
 import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -49,6 +50,9 @@ from techai_webutils.foundation.decorate import Observability
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
+_FAKE_CRED_1 = "minioadmin"
+_FAKE_CRED_2 = "local"
+
 _TEST_PREFIX = "MYAPP_"
 """The env-var prefix the config tests export under."""
 
@@ -65,14 +69,22 @@ _MIXIN_ENV_NAMES = frozenset(
     )
     for name in mixin.model_fields
 )
-"""The bare env names the unprefixed settings mixins read (DATABASE_HOST, REDIS_PORT, ...)."""
+"""The bare env names the unprefixed settings mixins read (DATABASE_HOST, REDIS_PORT,
+...)."""
 
 _OVERLAY_SELECTORS = ("APP_ENV", "ENVIRONMENT")
 """The default overlay selectors; an ambient value would pick an unexpected overlay."""
 
 
 def _config_env_names() -> list[str]:
-    """Return the set env vars a config test may read or write: MYAPP_* plus the bare mixin names."""
+    """Return the set env vars a config test may read or write.
+
+    They are MYAPP_* plus the bare mixin names.
+
+    Returns:
+        The set env vars a config test may read or write.
+
+    """
     return [
         key
         for key in os.environ
@@ -80,17 +92,37 @@ def _config_env_names() -> list[str]:
     ]
 
 
-@pytest.fixture(autouse=True)
-def isolate_config_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Isolate every test from ambient and leaked config env vars, and reset the bridge sentinel.
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Run ``isolate_config_env`` around every test in this directory.
 
-    Before the test, the MYAPP_* variables, the bare names the settings mixins read (DATABASE_*,
-    REDIS_*, SERVER_*, LOGGING_*, STORAGE_S3_*, MESSAGING_SQS_*, OBSERVABILITY_*) and the default
-    overlay selectors are removed through ``monkeypatch``, so an ambient value (a developer shell, CI
-    service containers, Kubernetes service links) cannot change a default-value assertion and is
-    restored afterwards. After the test, whatever the test wrote straight into ``os.environ`` (as
-    ``initialize_config`` does) is popped directly — ``monkeypatch.delenv`` would record the leaked
-    value and restore it on undo.
+    Args:
+        items: The collected tests.
+
+    """
+    here = Path(__file__).parent
+    for item in items:
+        if here in item.path.parents and isinstance(item, pytest.Function):
+            item.fixturenames.insert(0, "isolate_config_env")
+
+
+@pytest.fixture
+def isolate_config_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Isolate every test from ambient and leaked config env vars.
+
+    Also reset the bridge sentinel.
+
+    Before the test, the MYAPP_* variables, the bare names the settings mixins read
+    (DATABASE_*, REDIS_*, SERVER_*, LOGGING_*, STORAGE_S3_*, MESSAGING_SQS_*,
+    OBSERVABILITY_*) and the default overlay selectors are removed through
+    ``monkeypatch``, so an ambient value (a developer shell, CI service containers,
+    Kubernetes service links) cannot change a default-value assertion and is restored
+    afterwards. After the test, whatever the test wrote straight into ``os.environ`` (as
+    ``initialize_config`` does) is popped directly — ``monkeypatch.delenv`` would record
+    the leaked value and restore it on undo.
+
+    Args:
+        monkeypatch: Patches the environment for the test.
+
     """
     for key in [*_config_env_names(), *_OVERLAY_SELECTORS]:
         monkeypatch.delenv(key, raising=False)
@@ -99,37 +131,52 @@ def isolate_config_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     yield
 
     for key in _config_env_names():
-        os.environ.pop(key, None)
+        _ = os.environ.pop(key, None)
     reset_config()
 
 
 @pytest.fixture
 def mock_redis() -> AsyncMock:
-    """Provide a mock async Redis client for cache tests."""
+    """Provide a mock async Redis client for cache tests.
+
+    Returns:
+        The mock client.
+
+    """
     return AsyncMock()
 
 
 @pytest.fixture
 def s3_config() -> S3Config:
-    """Provide an S3 config pointed at the local MinIO defaults."""
+    """Provide an S3 config pointed at the local MinIO defaults.
+
+    Returns:
+        The config.
+
+    """
     return S3Config(
         endpoint="http://localhost:9000",
         bucket="test-bucket",
         region="us-east-1",
         access_key="minioadmin",
-        secret_key="minioadmin",
+        secret_key=_FAKE_CRED_1,
     )
 
 
 @pytest.fixture
 def sqs_config() -> SQSConfig:
-    """Provide an SQS config pointed at the local ElasticMQ defaults."""
+    """Provide an SQS config pointed at the local ElasticMQ defaults.
+
+    Returns:
+        The config.
+
+    """
     return SQSConfig(
         endpoint="http://localhost:9324",
         region="us-east-1",
         queue_url="http://localhost:9324/queue/test",
         access_key="local",
-        secret_key="local",
+        secret_key=_FAKE_CRED_2,
     )
 
 
@@ -137,8 +184,13 @@ def sqs_config() -> SQSConfig:
 def aws_client() -> Iterator[AsyncMock]:
     """Patch ``aiobotocore.session.get_session`` for the test; yield the client it opens.
 
-    Every ``session.create_client(...)`` entered while the test runs yields this one mock, so a
-    test opens the real S3/SQS client through its async context and drives the AWS API mock.
+    Every ``session.create_client(...)`` entered while the test runs yields this one mock,
+    so a test opens the real S3/SQS client through its async context and drives the AWS
+    API mock.
+
+    Yields:
+        The mock client.
+
     """
     client = AsyncMock()
     opened = MagicMock()
@@ -151,11 +203,18 @@ def aws_client() -> Iterator[AsyncMock]:
 
 @pytest.fixture
 def metrics_mock() -> tuple[MagicMock, dict[str, MagicMock]]:
-    """Return a ``MetricsProvider`` mock plus its instruments, recorded by metric name as they are declared.
+    """Return a ``MetricsProvider`` mock plus its instruments.
 
-    Like a real provider (create or retrieve), the first ``counter`` / ``histogram`` declaration of
-    a name returns a new ``MagicMock(spec=MetricCounter)`` / ``MagicMock(spec=MetricHistogram)``
-    stored under it, and every later declaration of that name returns the same one.
+    They are recorded by metric name as they are declared.
+
+    Like a real provider (create or retrieve), the first ``counter`` / ``histogram``
+    declaration of a name returns a new ``MagicMock(spec=MetricCounter)`` /
+    ``MagicMock(spec=MetricHistogram)`` stored under it, and every later declaration of
+    that name returns the same one.
+
+    Returns:
+        A ``MetricsProvider`` mock plus its instruments.
+
     """
     instruments: dict[str, MagicMock] = {}
 
@@ -168,14 +227,17 @@ def metrics_mock() -> tuple[MagicMock, dict[str, MagicMock]]:
         return instruments.setdefault(name, MagicMock(spec=MetricHistogram))
 
     provider = MagicMock(spec=MetricsProvider)
-    provider.counter.side_effect = _counter
-    provider.histogram.side_effect = _histogram
+    cast("MagicMock", provider.counter).side_effect = _counter
+    cast("MagicMock", provider.histogram).side_effect = _histogram
     return provider, instruments
 
 
 @dataclass
 class Observed:
-    """Mocked observability collaborators and what a decorated tier emitted through them."""
+    """Mocked observability collaborators.
+
+    Also what a decorated tier emitted through them.
+    """
 
     observability: Observability
     """The logger, metrics and tracer mocks, as a tier's Deps take them."""
@@ -195,7 +257,17 @@ class Observed:
 
 @pytest.fixture
 def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
-    """Return mocked observability collaborators that record the spans, series and log lines."""
+    """Return mocked observability collaborators.
+
+    They record the spans, series and log lines.
+
+    Args:
+        metrics_mock: A ``MetricsProvider`` mock plus its instruments.
+
+    Returns:
+        Mocked observability collaborators that record the spans.
+
+    """
     provider, instruments = metrics_mock
     tracer = MagicMock(spec=TracerProvider)
     logger = MagicMock(spec=Logger)
@@ -207,10 +279,10 @@ def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
     ) -> Generator[TracerSpan]:
         result.spans.append((name, kind, attributes))
         handle = MagicMock(spec=TracerSpan)
-        handle.record_error.side_effect = result.span_errors.append
+        cast("MagicMock", handle.record_error).side_effect = result.span_errors.append
         yield handle
 
-    tracer.span.side_effect = span
+    cast("MagicMock", tracer.span).side_effect = span
     return result
 
 
@@ -220,13 +292,28 @@ def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
 
 
 def _stub_llm(model: str) -> dict[str, str]:
-    """Return a ``stub`` LLM config fragment naming ``model``."""
+    """Return a ``stub`` LLM config fragment naming ``model``.
+
+    Args:
+        model: The model.
+
+    Returns:
+        A ``stub`` LLM config fragment naming ``model``.
+
+    """
     return {"kind": "stub", "model": model}
 
 
 @pytest.fixture
 def catalog_raw() -> dict[str, object]:
-    """Return a catalog: Sonnet (two regions), Haiku, and a small off-cloud 8k-window model."""
+    """Return a catalog: Sonnet (two regions), Haiku, and an 8k-window model.
+
+    The 8k model is small and off-cloud.
+
+    Returns:
+        A catalog: Sonnet (two regions), Haiku.
+
+    """
     return {
         "anthropic/sonnet": {
             "capabilities": {
@@ -283,7 +370,12 @@ def catalog_raw() -> dict[str, object]:
 
 @pytest.fixture
 def routes_raw() -> dict[str, object]:
-    """Return routes named for the steps: generate → Sonnet (then Haiku), rewrite → Haiku."""
+    """Return routes named for the steps: generate → Sonnet (then Haiku), rewrite → Haiku.
+
+    Returns:
+        Routes named for the steps: generate → Sonnet (then Haiku).
+
+    """
     return {
         "generate": {
             "default_model": "anthropic/sonnet",

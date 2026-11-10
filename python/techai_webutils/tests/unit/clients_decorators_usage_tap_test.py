@@ -1,4 +1,7 @@
-"""Unit tests for the usage-recording LLM decorator (``clients/decorators/usage_tap.py``)."""
+"""Unit tests for the usage-recording LLM decorator.
+
+The module is ``clients/decorators/usage_tap.py``.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +24,15 @@ if TYPE_CHECKING:
 
 
 def _recorded(record: MagicMock) -> list[StreamUsage]:
-    """Return every usage handed to the ``record`` callback, in order."""
+    """Return every usage handed to the ``record`` callback, in order.
+
+    Args:
+        record: The tap's callback.
+
+    Returns:
+        Every usage handed to the ``record`` callback, in order.
+
+    """
     return [call.args[0] for call in record.call_args_list]
 
 
@@ -181,8 +192,9 @@ async def test_the_tap_is_the_provider_it_wraps() -> None:
 
     Why this test is important:
       - Every caller and decorator outside the tap speaks to it as the provider: a caller
-        of ``stream_with_usage`` must still get the usage item (and the consumer its record), ``model_name`` must name the wrapped model, and entering or
-        leaving the tap must open and release the provider's client.
+        of ``stream_with_usage`` must still get the usage item (and the consumer its
+        record), ``model_name`` must name the wrapped model, and entering or leaving the
+        tap must open and release the provider's client.
 
     What it tests:
       - the tap is an ``LLMProvider``; ``stream_with_usage`` yields every item, the usage

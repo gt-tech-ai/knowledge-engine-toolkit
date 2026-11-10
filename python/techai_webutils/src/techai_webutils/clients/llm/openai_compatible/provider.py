@@ -1,0 +1,371 @@
+"""OpenAI-compatible LLM provider — any server speaking ``POST /v1/chat/completions``.
+
+vLLM, LiteLLM, llama.cpp's server and OpenAI accept ``{"model", "messages", "temperature",
+"max_tokens", "top_p", "stop", "stream"}``. A non-streaming call returns ``{"choices":
+[{"message": {"content"}, "finish_reason"}], "usage": {"prompt_tokens",
+"completion_tokens"}}``; a streaming one returns server-sent events (``data: {"choices":
+[{"delta": {"content"}}]}`` …, then ``data: [DONE]``), with the usage on a last chunk when
+``stream_options.include_usage`` is set.
+
+A stream that stops sending for ``stall_timeout_seconds`` raises ``TIMEOUT``: the client's
+read timeout bounds one socket read, but a server that keeps the connection open and sends
+nothing must not hold a user's answer forever. Takes an injected ``httpx.AsyncClient``
+(base_url, timeout and any bearer key already set); the factory owns its lifetime.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from contextlib import AsyncExitStack
+from typing import TYPE_CHECKING, TypedDict, cast, final, override
+
+import httpx
+
+from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.interfaces.llm import (
+    LLMConfig,
+    LLMProvider,
+    LLMResponse,
+    StreamUsage,
+    text_only,
+)
+from techai_webutils.foundation.lifecycle import NoOpAsyncResource
+from techai_webutils.foundation.resilience.http_boundary import httpx_error_to_app_error
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from techai_webutils.core.interfaces.llm import LLMMessage
+
+CHAT_PATH = "/v1/chat/completions"
+"""The OpenAI chat endpoint, relative to the server's base URL."""
+
+_OPERATION = "openai-compatible chat"
+"""The call named in coded error messages."""
+
+_DATA = "data:"
+"""The server-sent-event field that carries a chunk."""
+
+_DONE = "[DONE]"
+"""The payload of the last server-sent event."""
+
+
+def _finish_reason(reason: object) -> str:
+    """Map OpenAI's ``finish_reason`` to the ``LLMResponse`` vocabulary.
+
+    The result is ``length`` or ``stop``.
+
+    Args:
+        reason: OpenAI's ``finish_reason``.
+
+    Returns:
+        The ``LLMResponse`` finish reason.
+
+    """
+    return "length" if reason == "length" else "stop"
+
+
+class _WireUsage(TypedDict, total=False):
+    """A response or last chunk's token counts."""
+
+    prompt_tokens: int
+    """Input tokens."""
+
+    completion_tokens: int
+    """Output tokens."""
+
+
+class _WireText(TypedDict, total=False):
+    """A ``message`` or ``delta`` object."""
+
+    content: str | None
+    """The text."""
+
+
+class _WireChoice(TypedDict, total=False):
+    """One entry of ``choices``."""
+
+    message: _WireText
+    """The whole answer."""
+
+    delta: _WireText
+    """One streamed piece."""
+
+    finish_reason: str | None
+    """Why generation stopped."""
+
+
+class _WireBody(TypedDict, total=False):
+    """A chat response or stream chunk."""
+
+    model: str
+    """The model that served it."""
+
+    usage: _WireUsage | None
+    """The token counts."""
+
+    choices: list[_WireChoice]
+    """The choices."""
+
+
+@final
+class _Usage:
+    """The usage and finish reason a stream accumulates until its end."""
+
+    def __init__(self, model: str) -> None:
+        """Start with the requested model and no counts.
+
+        Args:
+            model: The requested model.
+
+        """
+        self.model = model
+        self.input_tokens = 0
+        self.output_tokens = 0
+        self.finish_reason = "stop"
+
+    def observe(self, chunk: _WireBody) -> None:
+        """Record a chunk's model, usage and finish reason, when it carries them.
+
+        Args:
+            chunk: One decoded stream chunk.
+
+        """
+        self.model = str(chunk.get("model") or self.model)
+        usage = chunk.get("usage") or _WireUsage()
+        if usage:
+            self.input_tokens = int(usage.get("prompt_tokens", 0))
+            self.output_tokens = int(usage.get("completion_tokens", 0))
+        for choice in chunk.get("choices") or []:
+            if reason := choice.get("finish_reason"):
+                self.finish_reason = _finish_reason(reason)
+
+    def report(self) -> StreamUsage:
+        """Return the accumulated ``StreamUsage``.
+
+        Returns:
+            The accumulated ``StreamUsage``.
+
+        """
+        return StreamUsage(
+            model=self.model,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            finish_reason=self.finish_reason,
+        )
+
+
+@final
+class OpenAICompatibleLlmProvider(NoOpAsyncResource, LLMProvider):
+    """``LLMProvider`` over an OpenAI-compatible ``/v1/chat/completions`` server."""
+
+    def __init__(
+        self, client: httpx.AsyncClient, model: str, *, stall_timeout_seconds: float
+    ) -> None:
+        """Bind the client, the default model and the longest silence a stream may keep.
+
+        Args:
+            client: An httpx client whose base URL is the server.
+            model: The default model.
+            stall_timeout_seconds: How long a stream may go without a chunk.
+
+        """
+        self._client = client
+        self._model = model
+        self._stall_timeout = stall_timeout_seconds
+
+    def _payload(
+        self, messages: list[LLMMessage], config: LLMConfig | None, *, stream: bool
+    ) -> dict[str, object]:
+        """Build the chat request body from the messages and the ``LLMConfig``.
+
+        Args:
+            messages: The conversation.
+            config: Per-call settings; ``None`` uses the defaults.
+            stream: Whether to ask for a streamed answer.
+
+        Returns:
+            The chat request body from the messages and the ``LLMConfig``.
+
+        """
+        cfg = config or LLMConfig()
+        payload: dict[str, object] = {
+            "model": cfg.model or self._model,
+            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "temperature": cfg.temperature,
+            "max_tokens": cfg.max_tokens,
+            "top_p": cfg.top_p,
+            "stream": stream,
+        }
+        if cfg.stop_sequences:
+            payload["stop"] = cfg.stop_sequences
+        if stream:
+            payload["stream_options"] = {"include_usage": True}
+        return payload
+
+    @override
+    async def complete(
+        self, messages: list[LLMMessage], config: LLMConfig | None = None
+    ) -> LLMResponse:
+        """Generate one completion (a non-streaming chat call).
+
+        A callee raises ``AppError``: ``TIMEOUT``, ``UNAVAILABLE`` (unreachable, 429, 5xx)
+        or ``INTERNAL`` (another status, an undecodable body).
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
+
+        Returns:
+            The completion.
+
+        Raises:
+            httpx_error_to_app_error: The coded error for a transport failure.
+
+        """
+        payload = self._payload(messages, config, stream=False)
+        try:
+            response = await self._client.post(CHAT_PATH, json=payload)
+            _ = response.raise_for_status()
+            body = cast("_WireBody", response.json())
+        except (httpx.HTTPError, ValueError) as exc:
+            raise httpx_error_to_app_error(exc, _OPERATION) from exc
+        choices = body.get("choices") or [_WireChoice()]
+        message = choices[0].get("message") or _WireText()
+        usage = body.get("usage") or _WireUsage()
+        return LLMResponse(
+            content=str(message.get("content") or ""),
+            model=str(body.get("model") or payload["model"]),
+            input_tokens=int(usage.get("prompt_tokens", 0)),
+            output_tokens=int(usage.get("completion_tokens", 0)),
+            finish_reason=_finish_reason(choices[0].get("finish_reason")),
+        )
+
+    @override
+    async def stream(
+        self, messages: list[LLMMessage], config: LLMConfig | None = None
+    ) -> AsyncIterator[str]:
+        """Stream a completion's text deltas.
+
+        Await it to obtain the iterator, then ``async for``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            The stream of text deltas.
+
+        """
+        return text_only(await self.stream_with_usage(messages, config))
+
+    @override
+    async def stream_with_usage(
+        self, messages: list[LLMMessage], config: LLMConfig | None = None
+    ) -> AsyncIterator[str | StreamUsage]:
+        """Stream the text deltas in order, then the usage as a ``StreamUsage``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            The stream of text deltas, ending with the usage when the provider reports it.
+
+        """
+        return self._stream(self._payload(messages, config, stream=True))
+
+    async def _stream(
+        self, payload: dict[str, object]
+    ) -> AsyncIterator[str | StreamUsage]:
+        """Yield each chunk's delta, then the usage.
+
+        It stops at ``[DONE]`` or the stream's end.
+
+        The response stays open across the yields; the ``finally`` releases it when the
+        stream ends, fails, or the consumer closes this generator.
+
+        Args:
+            payload: The chat request body.
+
+        Yields:
+            Each chunk's delta until ``[DONE]`` (or the stream's end).
+
+        A callee raises ``AppError``: As ``complete``; ``TIMEOUT`` when no line arrives
+        within the stall timeout.
+
+        Raises:
+            httpx_error_to_app_error: The coded error for a transport failure.
+
+        """
+        stack = AsyncExitStack()
+        try:
+            response = await stack.enter_async_context(
+                self._client.stream("POST", CHAT_PATH, json=payload)
+            )
+            _ = response.raise_for_status()
+        except httpx.HTTPError as exc:
+            await stack.aclose()
+            raise httpx_error_to_app_error(exc, _OPERATION) from exc
+        usage = _Usage(str(payload["model"]))
+        try:
+            async for chunk in self._chunks(response):
+                usage.observe(chunk)
+                for choice in chunk.get("choices") or []:
+                    delta = choice.get("delta") or _WireText()
+                    if text := delta.get("content"):
+                        yield str(text)
+            yield usage.report()
+        finally:
+            await stack.aclose()
+
+    async def _chunks(self, response: httpx.Response) -> AsyncIterator[_WireBody]:
+        """Decode each ``data:`` event until ``[DONE]``.
+
+        It waits at most the stall timeout per line.
+
+        Args:
+            response: The streamed response.
+
+        Yields:
+            Each decoded event.
+
+        Raises:
+            httpx_error_to_app_error: The coded error for a transport failure.
+            AppError: ``_OPERATION`` stream stalled for ``self._stall_timeout``s.
+
+        """
+        lines = response.aiter_lines()
+        while True:
+            try:
+                async with asyncio.timeout(self._stall_timeout):
+                    line = await anext(lines)
+            except StopAsyncIteration:
+                return
+            except TimeoutError as exc:
+                msg = f"{_OPERATION} stream stalled for {self._stall_timeout:g}s"
+                raise AppError(ErrorCode.TIMEOUT, msg, cause=exc) from exc
+            except httpx.HTTPError as exc:
+                raise httpx_error_to_app_error(exc, _OPERATION) from exc
+            if not line.startswith(_DATA):
+                continue
+            data = line[len(_DATA) :].strip()
+            if data == _DONE:
+                return
+            try:
+                chunk = cast("_WireBody", json.loads(data))
+            except ValueError as exc:
+                raise httpx_error_to_app_error(exc, _OPERATION) from exc
+            yield chunk
+
+    @override
+    def model_name(self) -> str:
+        """Return the default served model.
+
+        Returns:
+            The default served model.
+
+        """
+        return self._model

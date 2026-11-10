@@ -14,7 +14,7 @@ import (
 
 	"cel.dev/cel-go/cel"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -121,161 +121,237 @@ type compiled struct {
 // does not run exactly one thing, an unknown tool, step or called procedure, a bad
 // capture mode or a CEL expression that does not compile is CodeInvalidInput naming the
 // procedure and step; the Finally steps are checked the same way. Building does no I/O.
-func NewFromConfig(cfg Config, deps Deps) (interfaces.ProcedureRunner, error) {
-	e := &engine{deps: deps, procs: map[string]*compiled{}}
+// deps must not be nil.
+func NewFromConfig(cfg Config, deps *Deps) (interfaces.ProcedureRunner, error) {
+	currentEngine := &engine{deps: *deps, procs: map[string]*compiled{}}
+
 	for i := range cfg.Procedures {
-		p := cfg.Procedures[i]
-		if _, dup := e.procs[p.Name]; dup {
-			return nil, apperr.New(apperr.CodeInvalidInput, "duplicate procedure "+p.Name)
+		procedure := cfg.Procedures[i]
+		if _, dup := currentEngine.procs[procedure.Name]; dup {
+			return nil, apperr.New(
+				apperr.CodeInvalidInput,
+				"duplicate procedure "+procedure.Name,
+			)
 		}
-		e.procs[p.Name] = &compiled{proc: p, group: cmp(p.Group, p.Name)}
+
+		currentEngine.procs[procedure.Name] = &compiled{
+			proc:  procedure,
+			group: cmp(procedure.Group, procedure.Name),
+			progs: nil,
+		}
 	}
-	for _, c := range e.procs {
-		if err := e.compile(c); err != nil {
+
+	for _, currentCompiled := range currentEngine.procs {
+		err := currentEngine.compile(currentCompiled)
+		if err != nil {
 			return nil, apperr.Wrap(
 				err,
 				apperr.CodeInvalidInput,
-				"procedure "+c.proc.Name,
+				"procedure "+currentCompiled.proc.Name,
 			)
 		}
 	}
-	return e, nil
+
+	return currentEngine, nil
 }
 
 // compile validates c's steps and compiles its expressions over the variables it can
 // see: its inputs, vars, captures, the variables its Go steps declare, loop items, the
 // platform variables and, for the Finally steps, the outcome variables.
-func (e *engine) compile(c *compiled) error {
-	names := slices.Clone(c.proc.Inputs)
-	for _, v := range c.proc.Vars {
+func (e *engine) compile(currentCompiled *compiled) error {
+	names := slices.Clone(currentCompiled.proc.Inputs)
+	for _, v := range currentCompiled.proc.Vars {
 		names = append(names, v.Name)
 	}
-	names = append(names, stepNames(c.proc.Steps)...)
-	names = append(names, stepNames(c.proc.Finally)...)
+
+	names = append(names, stepNames(currentCompiled.proc.Steps)...)
+	names = append(names, stepNames(currentCompiled.proc.Finally)...)
 	names = append(names, VarOS, VarArch, VarFailed, VarCanceled)
+
 	opts := make([]cel.EnvOption, 0, len(names)+1)
+
 	opts = append(opts, celLibs())
+
 	for _, n := range slices.Compact(slices.Sorted(slices.Values(names))) {
 		opts = append(opts, cel.Variable(n, cel.DynType))
 	}
+
 	env, err := cel.NewEnv(opts...)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "cel environment")
 	}
-	c.progs = map[string]cel.Program{}
-	for _, v := range c.proc.Vars {
-		if err := c.program(env, v.Expr); err != nil {
-			return apperr.Wrap(err, apperr.CodeInvalidInput, "var "+v.Name)
+
+	currentCompiled.progs = map[string]cel.Program{}
+	for _, v := range currentCompiled.proc.Vars {
+		opErr := currentCompiled.program(env, v.Expr)
+		if opErr != nil {
+			return apperr.Wrap(opErr, apperr.CodeInvalidInput, "var "+v.Name)
 		}
 	}
-	if err := e.compileSteps(env, c, c.proc.Steps); err != nil {
+
+	err = e.compileSteps(env, currentCompiled, currentCompiled.proc.Steps)
+	if err != nil {
 		return err
 	}
-	return e.compileSteps(env, c, c.proc.Finally)
+
+	return e.compileSteps(env, currentCompiled, currentCompiled.proc.Finally)
 }
 
 // compileSteps validates steps and compiles their expressions.
-func (e *engine) compileSteps(env *cel.Env, c *compiled, steps []types.ProcStep) error {
+func (e *engine) compileSteps(
+	env *cel.Env,
+	currentCompiled *compiled,
+	steps []types.ProcStep,
+) error {
 	for i := range steps {
-		st := &steps[i]
-		if err := e.validate(st); err != nil {
-			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
+		procStep := &steps[i]
+
+		err := e.validate(procStep)
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+procStep.Name)
 		}
-		exprs := []string{st.When, st.Each}
-		var probeExec []string
-		if st.Probe != nil {
-			probeExec = st.Probe.Exec
+
+		err = compileStepExprs(env, currentCompiled, procStep)
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+procStep.Name)
 		}
-		for _, a := range slices.Concat(st.Args, st.Exec, st.Env, probeExec) {
-			if x, ok := exprArg(a); ok {
-				exprs = append(exprs, x)
-			}
-		}
-		for _, x := range exprs {
-			if err := c.program(env, x); err != nil {
-				return apperr.Wrap(err, apperr.CodeInvalidInput, "step "+st.Name)
-			}
-		}
-		if err := e.compileSteps(env, c, st.Parallel); err != nil {
+
+		err = e.compileSteps(env, currentCompiled, procStep.Parallel)
+		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
+// compileStepExprs compiles every expression the step carries.
+func compileStepExprs(env *cel.Env, c *compiled, st *types.ProcStep) error {
+	for _, x := range stepExprs(st) {
+		err := c.program(env, x)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// stepExprs lists the step's when and each, plus its expression arguments.
+func stepExprs(procStep *types.ProcStep) []string {
+	exprs := []string{procStep.When, procStep.Each}
+
+	var probeExec []string
+
+	if procStep.Probe != nil {
+		probeExec = procStep.Probe.Exec
+	}
+
+	for _, a := range slices.Concat(procStep.Args, procStep.Exec, procStep.Env, probeExec) {
+		if x, ok := exprArg(a); ok {
+			exprs = append(exprs, x)
+		}
+	}
+
+	return exprs
+}
+
 // validate checks that st runs exactly one known thing and captures validly.
-func (e *engine) validate(st *types.ProcStep) error {
-	if err := validShape(st); err != nil {
+func (e *engine) validate(procStep *types.ProcStep) error {
+	err := validShape(procStep)
+	if err != nil {
 		return err
 	}
+
 	switch {
-	case st.Step != "" && e.deps.Steps[st.Step] == nil:
+	case procStep.Step != "" && e.deps.Steps[procStep.Step] == nil:
 		return apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
-			"no registered step %q (registered: %s)", st.Step,
+			"no registered step %q (registered: %s)", procStep.Step,
 			strings.Join(slices.Sorted(maps.Keys(e.deps.Steps)), ", ")))
-	case st.Call != "" && e.procs[st.Call] == nil:
-		return apperr.New(apperr.CodeInvalidInput, "no procedure "+st.Call)
-	case st.Tool != "":
-		if e.deps.Tools == nil {
-			return apperr.New(apperr.CodeInvalidInput, "no toolchain for tool "+st.Tool)
+	case procStep.Call != "" && e.procs[procStep.Call] == nil:
+		return apperr.New(apperr.CodeInvalidInput, "no procedure "+procStep.Call)
+	case procStep.Tool != "":
+		err := e.validateTool(procStep.Tool)
+		if err != nil {
+			return err
 		}
-		if _, ok := e.deps.Tools(st.Tool); !ok {
-			return apperr.New(apperr.CodeInvalidInput, "unknown tool "+st.Tool)
-		}
+	default:
+		// No other value changes the outcome.
 	}
-	return validCapture(st)
+
+	return validCapture(procStep)
+}
+
+// validateTool checks a toolchain is wired and knows the tool.
+func (e *engine) validateTool(tool string) error {
+	if e.deps.Tools == nil {
+		return apperr.New(apperr.CodeInvalidInput, "no toolchain for tool "+tool)
+	}
+
+	if _, ok := e.deps.Tools(tool); !ok {
+		return apperr.New(apperr.CodeInvalidInput, "unknown tool "+tool)
+	}
+
+	return nil
 }
 
 // validShape checks that st runs exactly one thing, that a probe names its kind, that
 // a file step's operation is valid and that only an Each step is concurrent.
-func validShape(st *types.ProcStep) error {
+func validShape(procStep *types.ProcStep) error {
 	switch {
-	case kinds(st) != 1:
+	case kinds(procStep) != 1:
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			"a step runs exactly one of tool, exec, step, call, parallel, fail, probe, file",
 		)
-	case st.Probe != nil && st.Probe.HTTP == "" && st.Probe.TCP == "" &&
-		len(st.Probe.Exec) == 0:
+	case procStep.Probe != nil && procStep.Probe.HTTP == "" && procStep.Probe.TCP == "" &&
+		len(procStep.Probe.Exec) == 0:
 		return apperr.New(apperr.CodeInvalidInput, "a probe names http, tcp or exec")
-	case st.Concurrent && st.Each == "":
+	case procStep.Concurrent && procStep.Each == "":
 		return apperr.New(apperr.CodeInvalidInput, "concurrent needs each")
-	case st.File != nil:
-		return validFile(st.File)
+	case procStep.File != nil:
+		return validFile(procStep.File)
 	}
+
 	return nil
 }
 
 // kinds counts what st runs: a valid step runs exactly one thing.
 func kinds(st *types.ProcStep) int {
-	n := 0
+	count := 0
+
 	for _, set := range []bool{
 		st.Tool != "", len(st.Exec) > 0, st.Step != "", st.Call != "", len(st.Parallel) > 0,
 		st.Fail != "", st.Probe != nil, st.File != nil,
 	} {
 		if set {
-			n++
+			count++
 		}
 	}
-	return n
+
+	return count
 }
 
 // validCapture checks that only a tool step captures, in a known mode, and that a
 // streamed step captures only its exit status.
-func validCapture(st *types.ProcStep) error {
+func validCapture(procStep *types.ProcStep) error {
 	switch {
-	case st.Capture == nil:
+	case procStep.Capture == nil:
 		return nil
-	case st.Tool == "" && len(st.Exec) == 0:
+	case procStep.Tool == "" && len(procStep.Exec) == 0:
 		return apperr.New(apperr.CodeInvalidInput, "only a tool or exec step captures")
-	case st.Stream && st.Capture.As != types.CaptureExit:
+	case procStep.Stream && procStep.Capture.As != types.CaptureExit:
 		return apperr.New(apperr.CodeInvalidInput, "a stream step captures only exit")
 	case !slices.Contains([]string{
 		"", types.CaptureText, types.CaptureLines,
 		types.CaptureJSON, types.CaptureExit,
-	}, st.Capture.As):
-		return apperr.New(apperr.CodeInvalidInput, "unknown capture mode "+st.Capture.As)
+	}, procStep.Capture.As):
+		return apperr.New(
+			apperr.CodeInvalidInput,
+			"unknown capture mode "+procStep.Capture.As,
+		)
 	}
+
 	return nil
 }
 
@@ -284,15 +360,19 @@ func (c *compiled) program(env *cel.Env, src string) error {
 	if src == "" || c.progs[src] != nil {
 		return nil
 	}
+
 	ast, iss := env.Compile(src)
 	if iss.Err() != nil {
 		return apperr.Wrap(iss.Err(), apperr.CodeInvalidInput, src)
 	}
+
 	prg, err := env.Program(ast)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, src)
 	}
+
 	c.progs[src] = prg
+
 	return nil
 }
 
@@ -300,17 +380,21 @@ func (c *compiled) program(env *cel.Env, src string) error {
 // and loop items.
 func stepNames(steps []types.ProcStep) []string {
 	var out []string
+
 	for i := range steps {
-		st := &steps[i]
-		if st.Capture != nil {
-			out = append(out, st.Capture.Var)
+		procStep := &steps[i]
+		if procStep.Capture != nil {
+			out = append(out, procStep.Capture.Var)
 		}
-		out = append(out, st.Sets...)
-		if st.Each != "" {
-			out = append(out, cmp(st.As, "item"))
+
+		out = append(out, procStep.Sets...)
+		if procStep.Each != "" {
+			out = append(out, cmp(procStep.As, "item"))
 		}
-		out = append(out, stepNames(st.Parallel)...)
+
+		out = append(out, stepNames(procStep.Parallel)...)
 	}
+
 	return out
 }
 
@@ -319,5 +403,6 @@ func cmp(s, def string) string {
 	if s == "" {
 		return def
 	}
+
 	return s
 }

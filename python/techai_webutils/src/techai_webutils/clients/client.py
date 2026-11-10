@@ -1,9 +1,9 @@
 """The client tier (mirrors Go ``clients/client``).
 
-``tier()`` orders the tier's layers; ``ClientBase``, built from the client's contract, runs its
-calls through it, switched and tuned per client and per operation by the decoration config's
-``clients`` tier. A client family's decorated wrapper embeds a ClientBase and runs each method
-through ``exec`` or ``exec_once``.
+``tier()`` orders the tier's layers; ``ClientBase``, built from the client's contract,
+runs its calls through it, switched and tuned per client and per operation by the
+decoration config's ``clients`` tier. A client family's decorated wrapper embeds a
+ClientBase and runs each method through ``exec`` or ``exec_once``.
 """
 
 from __future__ import annotations
@@ -17,15 +17,21 @@ from techai_webutils.foundation.decorate import Deps, Layer, Tier
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from typing import ClassVar, Literal
 
     from techai_webutils.foundation.decorate import Decorations
+    from techai_webutils.foundation.decorate.tier import Subject
 
 
 def tier() -> Tier:
     """Return the client tier, outermost first.
 
-    The bulkhead bounds calls before a retry multiplies them; each retry attempt passes the
-    breaker and gets its own deadline, client span, metrics and log line.
+    The bulkhead bounds calls before a retry multiplies them; each retry attempt passes
+    the breaker and gets its own deadline, client span, metrics and log line.
+
+    Returns:
+        The client tier, outermost first.
+
     """
     return Tier(
         "client",
@@ -54,14 +60,25 @@ class Option:
 
 
 def producer() -> Option:
-    """Decorate a message publisher: PRODUCER spans, since each call sends a message."""
+    """Decorate a message publisher: PRODUCER spans, since each call sends a message.
+
+    Returns:
+        The option to pass to the client base.
+
+    """
     return Option(span_kind=SpanKind.PRODUCER)
 
 
 def handler() -> Option:
-    """Decorate a consumer's message handlers: CONSUMER spans, never retried, broken or bulkheaded.
+    """Decorate a consumer's message handlers with CONSUMER spans.
+
+    A handler is never retried, broken or bulkheaded.
 
     The broker's redelivery is the retry, and one poison message must not trip the others.
+
+    Returns:
+        The option to pass to the client base.
+
     """
     return Option(
         span_kind=SpanKind.CONSUMER,
@@ -72,29 +89,45 @@ def handler() -> Option:
 
 
 def at_most_once() -> Option:
-    """Never retry the client's calls, whatever the config says (a Redis PUBLISH)."""
+    """Never retry the client's calls, whatever the config says (a Redis PUBLISH).
+
+    Returns:
+        The option to pass to the client base.
+
+    """
     return Option(adjust=Deps.without_retry)
 
 
 class ClientBase:
     """Runs one client's calls through the client tier (Go ``client.Base``).
 
-    Each operation is one method of the client's contract, decorated as ``<name>.<method>``.
-    ``exec`` retries a transient failure (an idempotent call); ``exec_once`` never retries (a
-    call that must not run twice, or whose input is consumed).
+    Each operation is one method of the client's contract, decorated as
+    ``<name>.<method>``. ``exec`` retries a transient failure (an idempotent call);
+    ``exec_once`` never retries (a call that must not run twice, or whose input is
+    consumed).
     """
 
-    __slots__ = ("_subject",)
+    __slots__: ClassVar[tuple[Literal["_subject"]]] = ("_subject",)
 
     def __init__(
         self, contract: type | None, decorations: Decorations, name: str, *options: Option
     ) -> None:
-        """Bind the client ``name``: one chain per method of ``contract`` (Go ``NewBase[C]``).
+        """Bind the client ``name``: one chain per method of ``contract``.
+
+        Go's ``NewBase[C]``.
 
         ``contract=None`` is the wire form (``wire``).
+
+        Args:
+            contract: The interface whose methods are the client's operations; ``None``
+                for wire-level names.
+            decorations: Resolves the client tier's layers from config.
+            name: The client's name in the decoration config.
+            *options: Adjust the tier or its Deps.
+
         """
         client_tier, adjust = _shape(options)
-        self._subject = (
+        self._subject: Subject = (
             decorations.new_subject(client_tier, name, None, adjust)
             if contract is None
             else decorations.subject_of(client_tier, name, contract, adjust)
@@ -102,10 +135,21 @@ class ClientBase:
 
     @classmethod
     def wire(cls, decorations: Decorations, name: str, *options: Option) -> ClientBase:
-        """Return the base of a client whose operations are wire-level names (Go ``NewWireBase``).
+        """Return the base of a client whose operations are wire-level names.
 
-        An RPC procedure, an HTTP route: every operation runs on the client's own chain, labeled
-        by its name, so the config tunes the client as a whole.
+        Go's ``NewWireBase``.
+
+        An RPC procedure, an HTTP route: every operation runs on the client's own chain,
+        labeled by its name, so the config tunes the client as a whole.
+
+        Args:
+            decorations: Resolves the client tier's layers from config.
+            name: The client's name in the decoration config.
+            *options: Adjust the tier or its Deps.
+
+        Returns:
+            The base of a client whose operations are wire-level names.
+
         """
         return cls(None, decorations, name, *options)
 
@@ -115,18 +159,44 @@ class ClientBase:
         return self._subject.name
 
     async def exec[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run the idempotent call ``fn`` as ``op``, retried when the tier retries."""
+        """Run the idempotent call ``fn`` as ``op``, retried when the tier retries.
+
+        Args:
+            op: The operation's name.
+            fn: The call.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self._subject.exec(op, fn)
 
     async def exec_once[R](self, op: str, fn: Callable[[], Awaitable[R]]) -> R:
-        """Run the call ``fn`` as ``op`` exactly once, never retried."""
+        """Run the call ``fn`` as ``op`` exactly once, never retried.
+
+        Args:
+            op: The operation's name.
+            fn: The call.
+
+        Returns:
+            What ``fn`` returns.
+
+        """
         return await self._subject.exec_once(op, fn)
 
 
 def _shape(
     options: tuple[Option, ...],
 ) -> tuple[Tier, tuple[Callable[[Deps], Deps], ...]]:
-    """Return the client tier and the Deps adjustments ``options`` select."""
+    """Return the client tier and the Deps adjustments ``options`` select.
+
+    Args:
+        options: The client's options.
+
+    Returns:
+        The client tier and the Deps adjustments ``options`` select.
+
+    """
     client_tier = tier()
     adjust: list[Callable[[Deps], Deps]] = []
     for o in options:

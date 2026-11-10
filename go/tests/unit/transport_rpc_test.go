@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -10,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/rpc"
 )
 
@@ -41,39 +42,65 @@ import (
 func TestToConnectError_AllCodes(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		appErr   error
-		name     string
-		wantCode connect.Code
-	}{
+	tests := testToConnectErrorAllCodes()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := rpc.ToConnectError(context.Background(), tt.appErr)
+			assert.Equal(t, tt.wantCode, connect.CodeOf(result))
+		})
+	}
+}
+
+// testToConnectErrorAllCodesRow is one row of testToConnectErrorAllCodesTable.
+type testToConnectErrorAllCodesRow struct {
+	appErr   error
+	name     string
+	wantCode connect.Code
+}
+
+// testToConnectErrorAllCodes builds the table testToConnectErrorAllCodes
+// runs.
+func testToConnectErrorAllCodes() []testToConnectErrorAllCodesRow {
+	return slices.Concat(
+		testToConnectErrorClientCodes(),
+		testToConnectErrorServerCodes(),
+	)
+}
+
+// testToConnectErrorClientCodes lists part of the testToConnectErrorAllCodes rows.
+func testToConnectErrorClientCodes() []testToConnectErrorAllCodesRow {
+	return []testToConnectErrorAllCodesRow{
 		{
-			appErr:   apperr.NotFound("not found"),
-			name:     "NotFound",
+			appErr:   apperr.NotFound(textNotFound),
+			name:     textNotfound,
 			wantCode: connect.CodeNotFound,
 		},
 		{
 			appErr:   apperr.InvalidInput("bad input"),
-			name:     "InvalidInput",
+			name:     textInvalidinput,
 			wantCode: connect.CodeInvalidArgument,
 		},
 		{
 			appErr:   apperr.Conflict("duplicate"),
-			name:     "Conflict",
+			name:     textConflict,
 			wantCode: connect.CodeAlreadyExists,
 		},
 		{
 			appErr:   apperr.Unauthorized("no token"),
-			name:     "Unauthorized",
+			name:     textUnauthorized,
 			wantCode: connect.CodeUnauthenticated,
 		},
 		{
 			appErr:   apperr.Forbidden("not allowed"),
-			name:     "Forbidden",
+			name:     textForbidden,
 			wantCode: connect.CodePermissionDenied,
 		},
 		{
 			appErr:   apperr.Upstream("dependency down"),
-			name:     "Upstream",
+			name:     textUpstream,
 			wantCode: connect.CodeUnavailable,
 		},
 		{
@@ -83,9 +110,15 @@ func TestToConnectError_AllCodes(t *testing.T) {
 		},
 		{
 			appErr:   apperr.New(apperr.CodeCanceled, "request canceled"),
-			name:     "Canceled",
+			name:     textCanceled,
 			wantCode: connect.CodeCanceled,
 		},
+	}
+}
+
+// testToConnectErrorServerCodes lists part of the testToConnectErrorAllCodes rows.
+func testToConnectErrorServerCodes() []testToConnectErrorAllCodesRow {
+	return []testToConnectErrorAllCodesRow{
 		{
 			appErr:   apperr.New(apperr.CodeResourceExhausted, "budget spent"),
 			name:     "ResourceExhausted",
@@ -93,7 +126,7 @@ func TestToConnectError_AllCodes(t *testing.T) {
 		},
 		{
 			appErr:   apperr.Timeout("deadline exceeded"),
-			name:     "Timeout",
+			name:     textTimeoutTitle,
 			wantCode: connect.CodeDeadlineExceeded,
 		},
 		{
@@ -106,14 +139,6 @@ func TestToConnectError_AllCodes(t *testing.T) {
 			name:     "Unknown code (default)",
 			wantCode: connect.CodeInternal,
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := rpc.ToConnectError(context.Background(), tt.appErr)
-			assert.Equal(t, tt.wantCode, connect.CodeOf(result))
-		})
 	}
 }
 
@@ -142,16 +167,18 @@ func TestToConnectError_CapturesRealError(t *testing.T) {
 		appErr error
 		name   string
 	}{
-		{appErr: apperr.Internal("db connection failed"), name: "Internal"},
-		{appErr: apperr.Conflict("team member already exists"), name: "Conflict"},
+		{appErr: apperr.Internal("db connection failed"), name: textInternalTitle},
+		{appErr: apperr.Conflict("team member already exists"), name: textConflict},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			ctx := apperr.WithSink(context.Background())
-			_ = rpc.ToConnectError(ctx, tt.appErr)
-			assert.Equal(t, tt.appErr, apperr.Captured(ctx),
+
+			_ = rpc.ToConnectError(ctx, testCase.appErr)
+			assert.Equal(t, testCase.appErr, apperr.Captured(ctx),
 				"the real error must be captured for the request logger")
 		})
 	}
@@ -180,19 +207,20 @@ func TestToConnectError_ClientSafeMessages(t *testing.T) {
 		appErr error
 		name   string
 	}{
-		{appErr: apperr.NotFound(sensitiveMsg), name: "NotFound"},
-		{appErr: apperr.InvalidInput(sensitiveMsg), name: "InvalidInput"},
-		{appErr: apperr.Conflict(sensitiveMsg), name: "Conflict"},
-		{appErr: apperr.Unauthorized(sensitiveMsg), name: "Unauthorized"},
-		{appErr: apperr.Forbidden(sensitiveMsg), name: "Forbidden"},
-		{appErr: apperr.Upstream(sensitiveMsg), name: "Upstream"},
-		{appErr: apperr.Internal(sensitiveMsg), name: "Internal"},
+		{appErr: apperr.NotFound(sensitiveMsg), name: textNotfound},
+		{appErr: apperr.InvalidInput(sensitiveMsg), name: textInvalidinput},
+		{appErr: apperr.Conflict(sensitiveMsg), name: textConflict},
+		{appErr: apperr.Unauthorized(sensitiveMsg), name: textUnauthorized},
+		{appErr: apperr.Forbidden(sensitiveMsg), name: textForbidden},
+		{appErr: apperr.Upstream(sensitiveMsg), name: textUpstream},
+		{appErr: apperr.Internal(sensitiveMsg), name: textInternalTitle},
 		{appErr: apperr.Sentinel(sensitiveMsg), name: "Unknown"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			result := rpc.ToConnectError(context.Background(), tt.appErr)
 			assert.NotContains(t, result.Error(), sensitiveMsg,
 				"Connect error message should not contain original error text")
@@ -218,74 +246,90 @@ type fromRPCCase struct {
 
 // fromRPCCases returns the shared code table for Connect and gRPC FromRPCError tests.
 func fromRPCCases() []fromRPCCase {
+	return slices.Concat(fromRPCClientFaultCases(), fromRPCServerFaultCases())
+}
+
+// fromRPCClientFaultCases builds the table fromRPCCases runs.
+func fromRPCClientFaultCases() []fromRPCCase {
 	return []fromRPCCase{
-		{
-			name:     "NotFound",
-			connect:  connect.CodeNotFound,
-			grpc:     codes.NotFound,
-			wantCode: apperr.CodeNotFound,
-		},
-		{
-			name:     "InvalidArgument",
-			connect:  connect.CodeInvalidArgument,
-			grpc:     codes.InvalidArgument,
-			wantCode: apperr.CodeInvalidInput,
-		},
-		{
-			name:     "AlreadyExists",
-			connect:  connect.CodeAlreadyExists,
-			grpc:     codes.AlreadyExists,
-			wantCode: apperr.CodeConflict,
-		},
-		{
-			name:     "Unauthenticated",
-			connect:  connect.CodeUnauthenticated,
-			grpc:     codes.Unauthenticated,
-			wantCode: apperr.CodeUnauthorized,
-		},
-		{
-			name:     "PermissionDenied",
-			connect:  connect.CodePermissionDenied,
-			grpc:     codes.PermissionDenied,
-			wantCode: apperr.CodeForbidden,
-		},
-		{
-			name:     "Unavailable",
-			connect:  connect.CodeUnavailable,
-			grpc:     codes.Unavailable,
-			wantCode: apperr.CodeUpstream,
-		},
-		{
-			name:     "DeadlineExceeded",
-			connect:  connect.CodeDeadlineExceeded,
-			grpc:     codes.DeadlineExceeded,
-			wantCode: apperr.CodeTimeout,
-		},
-		{
-			name:     "Canceled",
-			connect:  connect.CodeCanceled,
-			grpc:     codes.Canceled,
-			wantCode: apperr.CodeCanceled,
-		},
-		{
-			name:     "Internal",
-			connect:  connect.CodeInternal,
-			grpc:     codes.Internal,
-			wantCode: apperr.CodeInternal,
-		},
-		{
-			name:     "Unimplemented",
-			connect:  connect.CodeUnimplemented,
-			grpc:     codes.Unimplemented,
-			wantCode: apperr.CodeInvalidInput,
-		},
-		{
-			name:     "DataLoss",
-			connect:  connect.CodeDataLoss,
-			grpc:     codes.DataLoss,
-			wantCode: apperr.CodeUnknown,
-		},
+		fromRPCRow(
+			textNotfound,
+			connect.CodeNotFound,
+			codes.NotFound,
+			apperr.CodeNotFound,
+		),
+		fromRPCRow(
+			"InvalidArgument",
+			connect.CodeInvalidArgument,
+			codes.InvalidArgument,
+			apperr.CodeInvalidInput,
+		),
+		fromRPCRow(
+			"AlreadyExists",
+			connect.CodeAlreadyExists,
+			codes.AlreadyExists,
+			apperr.CodeConflict,
+		),
+		fromRPCRow(
+			"Unauthenticated",
+			connect.CodeUnauthenticated,
+			codes.Unauthenticated,
+			apperr.CodeUnauthorized,
+		),
+		fromRPCRow(
+			"PermissionDenied",
+			connect.CodePermissionDenied,
+			codes.PermissionDenied,
+			apperr.CodeForbidden,
+		),
 	}
+}
+
+// fromRPCServerFaultCases holds the remaining fromRPCCase rows.
+func fromRPCServerFaultCases() []fromRPCCase {
+	return []fromRPCCase{
+		fromRPCRow(
+			"Unavailable",
+			connect.CodeUnavailable,
+			codes.Unavailable,
+			apperr.CodeUpstream,
+		),
+		fromRPCRow(
+			"DeadlineExceeded",
+			connect.CodeDeadlineExceeded,
+			codes.DeadlineExceeded,
+			apperr.CodeTimeout,
+		),
+		fromRPCRow(
+			textCanceled,
+			connect.CodeCanceled,
+			codes.Canceled,
+			apperr.CodeCanceled,
+		),
+		fromRPCRow(
+			textInternalTitle,
+			connect.CodeInternal,
+			codes.Internal,
+			apperr.CodeInternal,
+		),
+		fromRPCRow(
+			"Unimplemented",
+			connect.CodeUnimplemented,
+			codes.Unimplemented,
+			apperr.CodeInvalidInput,
+		),
+		fromRPCRow("DataLoss", connect.CodeDataLoss, codes.DataLoss, apperr.CodeUnknown),
+	}
+}
+
+// fromRPCRow is one wire-code row of the fromRPC table.
+func fromRPCRow(
+	name string,
+	c connect.Code,
+	g codes.Code,
+	want apperr.ErrorCode,
+) fromRPCCase {
+	return fromRPCCase{name: name, connect: c, grpc: g, wantCode: want}
 }
 
 // TestFromRPCError_ConnectCodes tests that Connect wire codes map to the
@@ -302,16 +346,20 @@ func fromRPCCases() []fromRPCCase {
 func TestFromRPCError_ConnectCodes(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range fromRPCCases() {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range fromRPCCases() {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			wire := connect.NewError(tt.connect, apperr.Sentinel("peer: "+tt.name))
+
+			wire := connect.NewError(
+				testCase.connect,
+				apperr.Sentinel("peer: "+testCase.name),
+			)
 			got := rpc.FromRPCError(wire)
 			assert.True(
 				t,
-				apperr.Is(got, tt.wantCode),
+				apperr.Is(got, testCase.wantCode),
 				"want %s, got %v",
-				tt.wantCode,
+				testCase.wantCode,
 				got,
 			)
 			assert.ErrorIs(t, got, wire, "original wire error must remain in the chain")
@@ -333,16 +381,17 @@ func TestFromRPCError_ConnectCodes(t *testing.T) {
 func TestFromRPCError_GRPCStatusCodes(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range fromRPCCases() {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range fromRPCCases() {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			wire := status.Error(tt.grpc, "peer: "+tt.name)
+
+			wire := status.Error(testCase.grpc, "peer: "+testCase.name)
 			got := rpc.FromRPCError(wire)
 			assert.True(
 				t,
-				apperr.Is(got, tt.wantCode),
+				apperr.Is(got, testCase.wantCode),
 				"want %s, got %v",
-				tt.wantCode,
+				testCase.wantCode,
 				got,
 			)
 			assert.ErrorIs(t, got, wire, "original wire error must remain in the chain")
@@ -391,20 +440,21 @@ func TestFromRPCError_RoundTrip(t *testing.T) {
 		appErr error
 		name   string
 	}{
-		{name: "NotFound", appErr: apperr.NotFound("x")},
-		{name: "InvalidInput", appErr: apperr.InvalidInput("x")},
-		{name: "Conflict", appErr: apperr.Conflict("x")},
-		{name: "Unauthorized", appErr: apperr.Unauthorized("x")},
-		{name: "Forbidden", appErr: apperr.Forbidden("x")},
-		{name: "Upstream", appErr: apperr.Upstream("x")},
-		{name: "Canceled", appErr: apperr.New(apperr.CodeCanceled, "x")},
-		{name: "Timeout", appErr: apperr.Timeout("x")},
-		{name: "Internal", appErr: apperr.Internal("x")},
+		{name: textNotfound, appErr: apperr.NotFound(textX)},
+		{name: textInvalidinput, appErr: apperr.InvalidInput(textX)},
+		{name: textConflict, appErr: apperr.Conflict(textX)},
+		{name: textUnauthorized, appErr: apperr.Unauthorized(textX)},
+		{name: textForbidden, appErr: apperr.Forbidden(textX)},
+		{name: textUpstream, appErr: apperr.Upstream(textX)},
+		{name: textCanceled, appErr: apperr.New(apperr.CodeCanceled, textX)},
+		{name: textTimeoutTitle, appErr: apperr.Timeout(textX)},
+		{name: textInternalTitle, appErr: apperr.Internal(textX)},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			want := apperr.Code(tt.appErr)
 			wire := rpc.ToConnectError(context.Background(), tt.appErr)
 			got := rpc.FromRPCError(wire)
@@ -412,3 +462,26 @@ func TestFromRPCError_RoundTrip(t *testing.T) {
 		})
 	}
 }
+
+const (
+	// textCanceled is the literal "Canceled".
+	textCanceled = "Canceled"
+
+	// textConflict is the literal "Conflict".
+	textConflict = "Conflict"
+
+	// textForbidden is the literal "Forbidden".
+	textForbidden = "Forbidden"
+
+	// textInternalTitle is the literal "Internal".
+	textInternalTitle = "Internal"
+
+	// textNotfound is the literal "NotFound".
+	textNotfound = "NotFound"
+
+	// textUnauthorized is the literal "Unauthorized".
+	textUnauthorized = "Unauthorized"
+
+	// textUpstream is the literal "Upstream".
+	textUpstream = "Upstream"
+)

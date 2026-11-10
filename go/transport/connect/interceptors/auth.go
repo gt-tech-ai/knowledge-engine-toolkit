@@ -78,6 +78,7 @@ func WithAuthClaims(
 // does once it has resolved them), so ok=true always means non-nil claims.
 func GetAuthClaims(ctx context.Context) (*AuthClaims, bool) {
 	claims, ok := ctx.Value(authContextKey{}).(*AuthClaims)
+
 	return claims, ok && claims != nil
 }
 
@@ -118,28 +119,30 @@ type authInterceptor struct {
 //
 // It panics if headers.Sub is empty: no request could ever be authenticated, and in
 // stub mode every real caller would silently get the synthetic claims.
-func NewAuthInterceptor(stub bool, headers HeaderMap) connect.Interceptor {
+// headers must not be nil.
+func NewAuthInterceptor(stub bool, headers *HeaderMap) connect.Interceptor {
 	mustHaveSubHeader(headers)
-	return authInterceptor{headers: headers, stub: stub}
+
+	return &authInterceptor{headers: *headers, stub: stub}
 }
 
 // mustHaveSubHeader panics when headers names no subject header, failing a wiring
 // mistake at startup rather than treating every request as unauthenticated.
-func mustHaveSubHeader(headers HeaderMap) {
+func mustHaveSubHeader(headers *HeaderMap) {
 	if headers.Sub == "" {
 		panic("interceptors: HeaderMap.Sub must name the gateway's subject header")
 	}
 }
 
 // WrapUnary extracts identity headers from the unary request.
-func (a authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		return next(a.withClaims(ctx, req.Header()), req)
 	}
 }
 
 // WrapStreamingClient is a no-op — this is a server-side header-extraction interceptor.
-func (a authInterceptor) WrapStreamingClient(
+func (*authInterceptor) WrapStreamingClient(
 	next connect.StreamingClientFunc,
 ) connect.StreamingClientFunc {
 	return next
@@ -147,7 +150,7 @@ func (a authInterceptor) WrapStreamingClient(
 
 // WrapStreamingHandler extracts identity headers from the streaming request so
 // streaming handlers see the same AuthClaims as unary handlers.
-func (a authInterceptor) WrapStreamingHandler(
+func (a *authInterceptor) WrapStreamingHandler(
 	next connect.StreamingHandlerFunc,
 ) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
@@ -158,27 +161,34 @@ func (a authInterceptor) WrapStreamingHandler(
 // withClaims parses the identity headers into AuthClaims and stores them on the
 // returned context. With no subject header it either injects stub dev claims (stub
 // mode) or leaves the context unauthenticated.
-func (a authInterceptor) withClaims(ctx context.Context, h http.Header) context.Context {
-	sub := h.Get(a.headers.Sub)
+func (a *authInterceptor) withClaims(
+	ctx context.Context,
+	header http.Header,
+) context.Context {
+	sub := header.Get(a.headers.Sub)
 
 	if sub == "" && a.stub {
 		// Dev shortcut: no gateway, synthesize dev claims.
 		return WithAuthClaims(ctx, newStubDevClaims())
 	}
+
 	if sub == "" {
 		return ctx
 	}
 
 	claims := &AuthClaims{
-		Sub:      sub,
-		Email:    h.Get(a.headers.Email),
-		Name:     h.Get(a.headers.Name),
-		NickName: h.Get(a.headers.NickName),
-		TenantID: h.Get(a.headers.Tenant),
+		Sub:       sub,
+		Email:     header.Get(a.headers.Email),
+		Name:      header.Get(a.headers.Name),
+		NickName:  header.Get(a.headers.NickName),
+		TenantID:  header.Get(a.headers.Tenant),
+		Roles:     nil,
+		Synthetic: false,
 	}
-	if roles := h.Get(a.headers.Roles); roles != "" {
+	if roles := header.Get(a.headers.Roles); roles != "" {
 		claims.Roles = splitRoles(roles)
 	}
+
 	return WithAuthClaims(ctx, claims)
 }
 
@@ -187,10 +197,12 @@ func (a authInterceptor) withClaims(ctx context.Context, h http.Header) context.
 // discarded.
 func splitRoles(s string) []string {
 	var roles []string
+
 	for role := range strings.SplitSeq(s, ",") {
 		if role = strings.TrimSpace(role); role != "" {
 			roles = append(roles, role)
 		}
 	}
+
 	return roles
 }

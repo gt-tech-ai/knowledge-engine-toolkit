@@ -1,9 +1,9 @@
 """``Fact`` — one analytics fact on the ``analytics.fact`` wire (JSON).
 
 A fact is one observation of a cube: who (``org_id`` + ``dims``), when (``ts``), how much
-(``measures``) and an ``idempotency_key`` the consumer upserts on, so a redelivered fact is a no-op.
-``to_json`` is byte-identical to the Go ``types.Fact`` encoding; both suites assert the shared
-``testdata/analytics_fact.golden.json``.
+(``measures``) and an ``idempotency_key`` the consumer upserts on, so a redelivered fact
+is a no-op. ``to_json`` is byte-identical to the Go ``types.Fact`` encoding; both suites
+assert the shared ``testdata/analytics_fact.golden.json``.
 """
 
 from __future__ import annotations
@@ -31,11 +31,25 @@ _GO_ESCAPES = (
 """Characters Go's ``encoding/json`` escapes by default, with the escape it writes."""
 
 _MAX_INTEGRAL_FLOAT = 1e21
-"""Below this, an integral float renders as an integer — where Go's ``encoding/json`` switches to exponent form."""
+"""Below this, an integral float renders as an integer — where Go's ``encoding/json``
+switches to exponent form."""
 
 
 def _rfc3339_nano(ts: datetime) -> str:
-    """Render ``ts`` in UTC as Go's ``time.RFC3339Nano``: fractional zeros trimmed, ``Z`` suffix."""
+    """Render ``ts`` in UTC as Go's ``time.RFC3339Nano``.
+
+    Fractional zeros are trimmed, with a ``Z`` suffix.
+
+    Args:
+        ts: A timezone-aware timestamp.
+
+    Returns:
+        The formatted timestamp.
+
+    Raises:
+        AppValueError: Fact ts must be timezone-aware.
+
+    """
     if ts.tzinfo is None:
         msg = "fact ts must be timezone-aware"
         raise AppValueError(msg)
@@ -47,8 +61,16 @@ def _rfc3339_nano(ts: datetime) -> str:
 def _number(value: float) -> float | int:
     """Render a measure as a JSON number the Go ``float64`` decoder accepts.
 
-    An integral float renders as an int (``42`` not ``42.0``, matching Go's encoding), and a ``bool``
-    (which Python accepts wherever a ``float`` is typed) renders as ``1`` / ``0``, never ``true``.
+    An integral float renders as an int (``42`` not ``42.0``, matching Go's encoding), and
+    a ``bool`` (which Python accepts wherever a ``float`` is typed) renders as ``1`` /
+    ``0``, never ``true``.
+
+    Args:
+        value: A fact's measure.
+
+    Returns:
+        A measure as a JSON number the Go ``float64`` decoder accepts.
+
     """
     if isinstance(value, bool):
         return int(value)
@@ -74,14 +96,21 @@ class Fact:
     dims: Mapping[str, str]
     """Dimension values the fact is grouped by (``model``, ``step``, ``team``, …)."""
     measures: Mapping[str, float]
-    """Numeric measures the fact contributes (``tokens_in``, ``duration_s``, …); a ``bool`` is sent as 1/0."""
+    """Numeric measures the fact contributes (``tokens_in``, ``duration_s``, …); a
+    ``bool`` is sent as 1/0."""
     idempotency_key: str
-    """Unique per observation; a redelivered fact with the same key overwrites, never double-counts."""
+    """Unique per observation; a redelivered fact with the same key overwrites, never
+    double-counts."""
     schema: int = field(default=FACT_SCHEMA_VERSION)
     """Wire-shape version (``FACT_SCHEMA_VERSION``)."""
 
     def to_json(self) -> bytes:
-        """Serialize to the compact, key-sorted UTF-8 JSON the Go consumer decodes."""
+        """Serialize to the compact, key-sorted UTF-8 JSON the Go consumer decodes.
+
+        Returns:
+            The JSON bytes.
+
+        """
         body = {
             "cube": self.cube,
             "dims": dict(self.dims),
@@ -92,7 +121,8 @@ class Fact:
             "ts": _rfc3339_nano(self.ts),
         }
         text = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        # Match Go's default HTML-safe escaping; these characters can only occur inside JSON strings.
+        # Match Go's default HTML-safe escaping; these characters can only occur inside
+        # JSON strings.
         for char, escape in _GO_ESCAPES:
             text = text.replace(char, escape)
         return text.encode("utf-8")

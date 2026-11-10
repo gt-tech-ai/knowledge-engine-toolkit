@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // FactSchemaVersion is the analytics-fact wire version; a consumer rejects a
@@ -14,8 +14,9 @@ const FactSchemaVersion = 1
 
 // Fact is one analytics observation of a cube: who (OrgID + Dims), when (TS), how
 // much (Measures), and the IdempotencyKey a consumer upserts on so a redelivered
-// fact is a no-op. Its JSON is the analytics.fact wire form, byte-identical to the
-// Python techai_webutils Fact.to_json (keys sorted, TS in UTC RFC 3339).
+// fact is a no-op. Wire renders the analytics.fact wire form, byte-identical to the
+// Python techai_webutils Fact.to_json (keys sorted, TS in UTC RFC 3339); plain
+// json.Marshal of a Fact is not that form.
 type Fact struct {
 	// TS is when the observation happened; it is serialized in UTC.
 	TS time.Time
@@ -52,16 +53,19 @@ type factWire struct {
 	Schema int `json:"schema"`
 }
 
-// MarshalJSON renders the analytics.fact wire form: sorted keys, TS in UTC as
-// RFC 3339 with the fractional seconds trimmed.
-func (f Fact) MarshalJSON() ([]byte, error) {
+// Wire renders the analytics.fact wire form: sorted keys, TS in UTC as RFC 3339 with
+// the fractional seconds trimmed. It is the only encoder: plain json.Marshal of a Fact
+// does not produce the wire form.
+func (f *Fact) Wire() ([]byte, error) {
 	dims, measures := f.Dims, f.Measures
 	if dims == nil {
 		dims = map[string]string{} // Python renders an empty mapping as {}, never null.
 	}
+
 	if measures == nil {
 		measures = map[string]float64{}
 	}
+
 	// A map marshals with its keys sorted (cube, dims, idempotency_key, measures,
 	// org_id, schema, ts), the order the Python encoder emits.
 	out, err := json.Marshal(map[string]any{
@@ -76,34 +80,41 @@ func (f Fact) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "fact: encode")
 	}
+
 	return out, nil
 }
 
 // UnmarshalJSON decodes the analytics.fact wire form; a malformed body or
 // timestamp, or a schema other than FactSchemaVersion, is CodeInvalidInput.
 func (f *Fact) UnmarshalJSON(b []byte) error {
-	var w factWire
-	if err := json.Unmarshal(b, &w); err != nil {
+	var currentFactWire factWire
+
+	err := json.Unmarshal(b, &currentFactWire)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "fact: decode")
 	}
-	if w.Schema != FactSchemaVersion {
+
+	if currentFactWire.Schema != FactSchemaVersion {
 		return apperr.New(
 			apperr.CodeInvalidInput,
-			"fact: unknown schema version "+strconv.Itoa(w.Schema),
+			"fact: unknown schema version "+strconv.Itoa(currentFactWire.Schema),
 		)
 	}
-	ts, err := time.Parse(time.RFC3339Nano, w.TS)
+
+	instant, err := time.Parse(time.RFC3339Nano, currentFactWire.TS)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "fact: invalid ts")
 	}
+
 	*f = Fact{
-		TS:             ts,
-		Dims:           w.Dims,
-		Measures:       w.Measures,
-		Cube:           w.Cube,
-		OrgID:          w.OrgID,
-		IdempotencyKey: w.IdempotencyKey,
-		Schema:         w.Schema,
+		TS:             instant,
+		Dims:           currentFactWire.Dims,
+		Measures:       currentFactWire.Measures,
+		Cube:           currentFactWire.Cube,
+		OrgID:          currentFactWire.OrgID,
+		IdempotencyKey: currentFactWire.IdempotencyKey,
+		Schema:         currentFactWire.Schema,
 	}
+
 	return nil
 }

@@ -29,8 +29,9 @@ func (*ghActions) OnPhaseStart(string, []string) {}
 func (*ghActions) OnStepStart(string, string) {}
 
 // OnStepComplete buffers the step for its phase.
-func (g *ghActions) OnStepComplete(r types.StepResult) {
-	g.pending = append(g.pending, r)
+// r must not be nil.
+func (g *ghActions) OnStepComplete(r *types.StepResult) {
+	g.pending = append(g.pending, *r)
 }
 
 // OnPhaseComplete writes the phase's steps in a log group, then an annotation per
@@ -40,17 +41,19 @@ func (g *ghActions) OnPhaseComplete(name string, _ types.StepResults, _ time.Dur
 	for _, r := range g.pending {
 		_, _ = fmt.Fprintf(g.w, "  %-4s  %s\n", r.Status, r.Name)
 	}
+
 	_, _ = fmt.Fprintln(g.w, "::endgroup::")
-	for _, r := range g.pending {
-		if r.Status == types.StatusFail && r.Error != "" {
+	for _, stepResult := range g.pending {
+		if stepResult.Status == types.StatusFail && stepResult.Error != "" {
 			_, _ = fmt.Fprintf(
 				g.w,
 				"::error title=%s::%s\n",
-				escapeProperty(r.Name),
-				escape(r.Error),
+				escapeProperty(stepResult.Name),
+				escape(stepResult.Error),
 			)
 		}
 	}
+
 	g.pending = g.pending[:0]
 }
 
@@ -58,8 +61,10 @@ func (g *ghActions) OnPhaseComplete(name string, _ types.StepResults, _ time.Dur
 func (g *ghActions) OnGateComplete(_ string, results types.StepResults, _ time.Duration) {
 	if n := results.CountByStatus()[types.StatusFail]; n > 0 {
 		_, _ = fmt.Fprintf(g.w, "::error title=Gate::%d step(s) failed\n", n)
+
 		return
 	}
+
 	_, _ = fmt.Fprintln(g.w, "::notice title=Gate::all steps passed")
 }
 

@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/workflows/loop"
 )
@@ -25,36 +25,39 @@ import (
 //   - A nil decorator runs the passes undecorated.
 func TestNewGroupFromSpecs_DecoratesAndRunsEverySpec(t *testing.T) {
 	t.Parallel()
-	for _, decorated := range []bool{true, false} {
-		synctest.Test(t, func(t *testing.T) {
-			var a, b atomic.Int64
-			var ops []string
-			var decorate loop.Decorator
-			if decorated {
-				decorate = func(op string, pass passWorkflow) passWorkflow {
-					ops = append(ops, op)
-					return pass
-				}
-			}
-			schedule := loop.Config{Interval: time.Minute, RunAtStart: true}
-			group, err := loop.NewGroupFromSpecs([]loop.Spec{
-				{Run: countPass(&a), Name: "a", Op: "loop.a", Schedule: schedule},
-				{Run: countPass(&b), Name: "b", Op: "loop.b", Schedule: schedule},
-			}, decorate, quietLogger(t))
-			require.NoError(t, err)
 
-			require.NoError(t, group.Start(t.Context()))
-			synctest.Wait()
-			require.Equal(t, int64(1), a.Load())
-			require.Equal(t, int64(1), b.Load())
-			require.NoError(t, group.Stop(t.Context()))
-			if decorated {
-				require.Equal(t, []string{"loop.a", "loop.b"}, ops)
-			} else {
-				require.Empty(t, ops)
-			}
+	synctest.Test(t, func(t *testing.T) {
+		var ops []string
+
+		testGroupRunsBothSpecs(t, func(op string, pass passWorkflow) passWorkflow {
+			ops = append(ops, op)
+
+			return pass
 		})
-	}
+		require.Equal(t, []string{"loop.a", "loop.b"}, ops)
+	})
+	synctest.Test(t, func(t *testing.T) { testGroupRunsBothSpecs(t, nil) })
+}
+
+// testGroupRunsBothSpecs starts a group of two specs under decorate and checks each
+// runs once.
+func testGroupRunsBothSpecs(t *testing.T, decorate loop.Decorator) {
+	t.Helper()
+
+	var int643, secondCount atomic.Int64
+
+	schedule := loop.Config{Interval: time.Minute, RunAtStart: true, ErrorBackoff: 0}
+	group, err := loop.NewGroupFromSpecs([]loop.Spec{
+		{Run: countPass(&int643), Name: textA, Op: "loop.a", Schedule: schedule},
+		{Run: countPass(&secondCount), Name: textB, Op: "loop.b", Schedule: schedule},
+	}, decorate, quietLogger(t))
+	require.NoError(t, err)
+
+	require.NoError(t, group.Start(t.Context()))
+	synctest.Wait()
+	require.Equal(t, int64(1), int643.Load())
+	require.Equal(t, int64(1), secondCount.Load())
+	require.NoError(t, group.Stop(t.Context()))
 }
 
 // TestNewGroupFromSpecs_RejectsAnInvalidSchedule tests schedule validation.
@@ -67,12 +70,17 @@ func TestNewGroupFromSpecs_DecoratesAndRunsEverySpec(t *testing.T) {
 //   - A spec with a negative Interval is CodeInvalidInput.
 func TestNewGroupFromSpecs_RejectsAnInvalidSchedule(t *testing.T) {
 	t.Parallel()
+
 	_, err := loop.NewGroupFromSpecs([]loop.Spec{
 		{
-			Run:      okPass,
-			Name:     "bad",
-			Op:       "loop.bad",
-			Schedule: loop.Config{Interval: -time.Second},
+			Run:  okPass,
+			Name: textBad,
+			Op:   "loop.bad",
+			Schedule: loop.Config{
+				Interval:     -time.Second,
+				ErrorBackoff: 0,
+				RunAtStart:   false,
+			},
 		},
 	}, nil, quietLogger(t))
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -85,6 +93,7 @@ type passWorkflow = interfaces.Workflow[struct{}, struct{}]
 func countPass(n *atomic.Int64) func(context.Context) error {
 	return func(context.Context) error {
 		n.Add(1)
+
 		return nil
 	}
 }

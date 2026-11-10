@@ -1,10 +1,13 @@
-"""Unit tests for the managed safety kinds (Comprehend, Bedrock guardrails) over a mocked AWS SDK."""
+"""Unit tests for the managed safety kinds (Comprehend, Bedrock guardrails).
+
+The AWS SDK is mocked.
+"""
 
 from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -27,11 +30,19 @@ if TYPE_CHECKING:
 _TEXT = "SSN 123-45-6789 and jane@example.com"
 
 
-def _session(client: Any) -> MagicMock:  # noqa: ANN401 - the mocked SDK client
-    """Return a mocked aiobotocore session whose ``create_client`` yields ``client``."""
+def _session(client: object) -> MagicMock:
+    """Return a mocked aiobotocore session whose ``create_client`` yields ``client``.
+
+    Args:
+        client: The client the session opens.
+
+    Returns:
+        A mocked aiobotocore session whose ``create_client`` yields ``client``.
+
+    """
 
     @asynccontextmanager
-    async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[Any]:
+    async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[object]:
         yield client
 
     session = MagicMock()
@@ -50,7 +61,8 @@ async def test_comprehend_maps_entities_to_flags() -> None:
     **What it tests:**
       - SSN and EMAIL entities (EMAIL twice) yield ``("pii.ssn", "pii.email")``
       - ``on_detect=redact`` replaces each entity span with ``[REDACTED:<type>]``
-      - the client opens once across two scans, from the configured region, and closes on exit
+      - the client opens once across two scans, from the configured region, and closes on
+        exit
     """
     client = MagicMock()
     client.detect_pii_entities = AsyncMock(
@@ -70,14 +82,18 @@ async def test_comprehend_maps_entities_to_flags() -> None:
 
     async with check:
         first = await check.scan(_TEXT, kind=ScanKind.PROMPT)
-        await check.scan(_TEXT, kind=ScanKind.ANSWER)
+        _ = await check.scan(_TEXT, kind=ScanKind.ANSWER)
 
     assert isinstance(check, ComprehendSafetyCheck)
     assert first.flags == ("pii.ssn", "pii.email")
     assert first.decision is SafetyDecision.REDACT
     assert first.redacted == "SSN [REDACTED:ssn] and [REDACTED:email]"
-    session.create_client.assert_called_once_with("comprehend", region_name="eu-west-1")
-    client.detect_pii_entities.assert_awaited_with(Text=_TEXT, LanguageCode="en")
+    cast("MagicMock", cast("MagicMock", session.create_client).assert_called_once_with)(
+        "comprehend", region_name="eu-west-1"
+    )
+    cast("MagicMock", cast("AsyncMock", client.detect_pii_entities).assert_awaited_with)(
+        Text=_TEXT, LanguageCode="en"
+    )
 
 
 @pytest.mark.asyncio
@@ -85,15 +101,17 @@ async def test_guardrails_intervened_maps_to_decision() -> None:
     """Test that a guardrail intervention becomes flags and the configured decision.
 
     **Why this test is important:**
-      - Only ``GUARDRAIL_INTERVENED`` is a detection; a pass-through must never block, and an
-        intervention must carry why it fired into the audit trail.
+      - Only ``GUARDRAIL_INTERVENED`` is a detection; a pass-through must never block, and
+        an intervention must carry why it fired into the audit trail.
 
     **What it tests:**
-      - an intervention with content and PII assessments under ``block`` → decision ``block``
-        with ``("content.violence", "pii.email")``, assessed as guardrail ``INPUT``
+      - an intervention with content and PII assessments under ``block`` → decision
+        ``block`` with ``("content.violence", "pii.email")``, assessed as guardrail
+        ``INPUT``
       - ``action: NONE`` → ``allow`` with no flags
       - an intervention with no itemised assessment under ``redact`` → the
-        ``guardrail.intervened`` flag and the guardrail's masked output, assessed as ``OUTPUT``
+        ``guardrail.intervened`` flag and the guardrail's masked output, assessed as
+        ``OUTPUT``
     """
     client = MagicMock()
     client.apply_guardrail = AsyncMock(
@@ -152,10 +170,21 @@ async def test_guardrails_intervened_maps_to_decision() -> None:
         ("guardrail.intervened",),
         "masked",
     )
-    sources = [call.kwargs["source"] for call in client.apply_guardrail.await_args_list]
+    sources = [
+        cast("dict[str, object]", call.kwargs)["source"]
+        for call in cast(
+            "list[object]", cast("AsyncMock", client.apply_guardrail).await_args_list
+        )
+    ]
     assert sources == ["INPUT", "INPUT", "OUTPUT"]
     assert (
-        client.apply_guardrail.await_args_list[0].kwargs["guardrailIdentifier"] == "gr-1"
+        cast(
+            "dict[str, object]",
+            cast(
+                "list[object]", cast("AsyncMock", client.apply_guardrail).await_args_list
+            )[0].kwargs,
+        )["guardrailIdentifier"]
+        == "gr-1"
     )
 
 
@@ -164,8 +193,8 @@ async def test_managed_client_error_is_coded() -> None:
     """Test that an AWS failure crosses the safety boundary as a coded error.
 
     **Why this test is important:**
-      - A raw botocore error must never reach the audit proxy; its enforcement mode decides
-        what an outage means, and that decision reads the ``ErrorCode``.
+      - A raw botocore error must never reach the audit proxy; its enforcement mode
+        decides what an outage means, and that decision reads the ``ErrorCode``.
 
     **What it tests:**
       - a throttled Comprehend call raises ``AppError(UNAVAILABLE)``
@@ -191,7 +220,7 @@ async def test_managed_client_error_is_coded() -> None:
     )
 
     with pytest.raises(AppError) as caught:
-        await check.scan(_TEXT, kind=ScanKind.PROMPT)
+        _ = await check.scan(_TEXT, kind=ScanKind.PROMPT)
 
     assert caught.value.code is ErrorCode.UNAVAILABLE
 
@@ -202,23 +231,25 @@ async def test_managed_client_opens_once_and_bounds_each_call() -> None:
 
     **Why this test is important:**
       - Two cold-start scans that each open a client leak one per replica; a call with no
-        deadline lets a hung AWS endpoint hold the request forever, past every retry and breaker.
+        deadline lets a hung AWS endpoint hold the request forever, past every retry and
+        breaker.
 
     **What it tests:**
       - two concurrent first scans open the client once
-      - a call that never returns raises ``AppError(UNAVAILABLE)`` after ``timeout_seconds``
+      - a call that never returns raises ``AppError(UNAVAILABLE)`` after
+        ``timeout_seconds``
     """
     opened = 0
 
     @asynccontextmanager
-    async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[Any]:
+    async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[object]:
         nonlocal opened
         opened += 1
         await asyncio.sleep(0)
         yield client
 
-    async def _hang(**_kwargs: object) -> dict[str, Any]:
-        await asyncio.Event().wait()
+    async def _hang(**_kwargs: object) -> dict[str, object]:
+        _ = await asyncio.Event().wait()
         return {}
 
     client = MagicMock()
@@ -229,12 +260,12 @@ async def test_managed_client_opens_once_and_bounds_each_call() -> None:
         SafetyConfig(kind=SafetyKind.COMPREHEND, timeout_seconds=0.05), session=session
     )
 
-    await asyncio.gather(
+    _ = await asyncio.gather(
         check.scan(_TEXT, kind=ScanKind.PROMPT), check.scan(_TEXT, kind=ScanKind.PROMPT)
     )
     client.detect_pii_entities = AsyncMock(side_effect=_hang)
     with pytest.raises(AppError) as caught:
-        await check.scan(_TEXT, kind=ScanKind.PROMPT)
+        _ = await check.scan(_TEXT, kind=ScanKind.PROMPT)
 
     assert opened == 1
     assert caught.value.code is ErrorCode.UNAVAILABLE

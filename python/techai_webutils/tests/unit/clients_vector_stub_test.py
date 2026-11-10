@@ -1,7 +1,8 @@
 """Tests for the in-memory stub vector store + factory selection.
 
 The ``stub`` vector store lets the retrieval path build and unit-test with no Qdrant — the
-stub-first property (ARCHITECTURE.md#stub-first-backends) that makes the all-stubs build possible.
+stub-first property (ARCHITECTURE.md#stub-first-backends) that makes the all-stubs build
+possible.
 """
 
 from __future__ import annotations
@@ -16,11 +17,24 @@ from techai_webutils.clients.vector.builder import (
 from techai_webutils.clients.vector.stub import StubVectorStore
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
+_EXPECTED_DIMENSION = 3
+
 
 def _entry(
     entry_id: str, doc_id: str, content: str, embedding: list[float]
 ) -> VectorEntry:
-    """Build a minimal ``VectorEntry`` for the stub-store tests."""
+    """Build a minimal ``VectorEntry`` for the stub-store tests.
+
+    Args:
+        entry_id: The entry.
+        doc_id: The document.
+        content: The chunk's text.
+        embedding: The vector.
+
+    Returns:
+        A minimal ``VectorEntry`` for the stub-store tests.
+
+    """
     return VectorEntry(
         id=entry_id,
         document_id=doc_id,
@@ -32,16 +46,20 @@ def _entry(
 
 @pytest.mark.asyncio
 async def test_vector_stub_upsert_search_roundtrip() -> None:
-    """The stub store upserts entries and ranks search results by cosine similarity, deterministically.
+    """The stub store upserts entries and ranks search results by cosine similarity.
+
+    Ranking is deterministic.
 
     Why this test is important:
-        - A stub vector store is only a useful no-infra stand-in if a query actually returns the
-          nearest stored vector (so retrieval logic exercises a real ranking) and does so
-          deterministically; an empty or random result would not exercise the path.
+        - A stub vector store is only a useful no-infra stand-in if a query actually
+          returns the nearest stored vector (so retrieval logic exercises a real ranking)
+          and does so deterministically; an empty or random result would not exercise the
+          path.
 
     What it tests:
-        - After upserting two entries, a query aligned with the first returns it top-ranked;
-          count/delete-by-document behave; the removed document no longer appears.
+        - After upserting two entries, a query aligned with the first returns it
+          top-ranked; count/delete-by-document behave; the removed document no longer
+          appears.
     """
     store = StubVectorStore(dimension=3)
     await store.upsert(
@@ -69,21 +87,24 @@ async def test_vector_stub_upsert_search_roundtrip() -> None:
 
 
 def test_new_vector_store_from_config_selects_stub() -> None:
-    """The factory returns the stub store for ``VectorStoreKind.STUB`` (config-selects-impl).
+    """The factory returns the stub store for ``VectorStoreKind.STUB``.
+
+    Config selects the implementation.
 
     Why this test is important:
-        - The stub is opted into by a config kind; if the factory silently built the Qdrant client,
-          the configured no-infra behavior would never take effect (and would dial Qdrant).
+        - The stub is opted into by a config kind; if the factory silently built the
+          Qdrant client, the configured no-infra behavior would never take effect (and
+          would dial Qdrant).
 
     What it tests:
-        - ``new_vector_store_from_config`` with ``kind=STUB`` returns a ``StubVectorStore`` of the
-          configured dimension.
+        - ``new_vector_store_from_config`` with ``kind=STUB`` returns a
+          ``StubVectorStore`` of the configured dimension.
     """
     store = new_vector_store_from_config(
         VectorStoreConfig(kind=VectorStoreKind.STUB, dimension=3)
     )
     assert isinstance(store, StubVectorStore)
-    assert store.dimension == 3
+    assert store.dimension == _EXPECTED_DIMENSION
 
 
 @pytest.mark.asyncio
@@ -140,13 +161,14 @@ async def test_stub_stored_metadata_reports_present_ids() -> None:
     """The stub answers the stored-metadata probe from its map, so a redrive can resume.
 
     Why this test is important:
-        - The incremental indexer skips sub-batches whose ids are already stored with the same
-          metadata; a stub that always reported "nothing stored" would hide that resume path
-          from every no-infra test.
+        - The incremental indexer skips sub-batches whose ids are already stored with the
+          same metadata; a stub that always reported "nothing stored" would hide that
+          resume path from every no-infra test.
 
     What it tests:
-        - ``stored_metadata`` returns the upserted metadata for each present id, omits absent ids
-          and unknown collections, and ``existing_ids`` reports the same present subset.
+        - ``stored_metadata`` returns the upserted metadata for each present id, omits
+          absent ids and unknown collections, and ``existing_ids`` reports the same
+          present subset.
     """
     store = StubVectorStore(dimension=3)
     await store.upsert(

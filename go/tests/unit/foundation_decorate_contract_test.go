@@ -9,12 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/decoration"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/resilience"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/repos/repository"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/service"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -41,18 +42,22 @@ func loggedNames(
 	cfg *decoration.Config,
 ) (decs decorate.Decorations, logged *[]string) {
 	t.Helper()
+
 	logger := mocks.NewMockLogger(gomock.NewController(t))
 	logger.EXPECT().WithContext(gomock.Any()).Return(logger).AnyTimes()
+
 	names := []string{}
+
 	logged = &names
 	// The logging layer logs each operation as (tier, name, "operation", op).
 	logger.EXPECT().Debug(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ string, kv ...any) { *logged = append(*logged, kv[3].(string)) }).
+		func(_ string, kv ...any) { *logged = append(*logged, asType[string](t, kv[3])) }).
 		AnyTimes()
 	logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
-	return decorate.NewDecorations(cfg, decorate.Collaborators{
-		Observability: decorate.Observability{Logger: logger},
-	}), logged
+
+	return decorate.NewDecorations(cfg, fixtures.Build(func(row *decorate.Collaborators) {
+		row.Logger = logger
+	})), logged
 }
 
 // TestBases_EachContractMethodTakesItsOwnDecoration tests per-operation decoration.
@@ -69,34 +74,41 @@ func loggedNames(
 //     Verify.
 func TestBases_EachContractMethodTakesItsOwnDecoration(t *testing.T) {
 	t.Parallel()
+
 	on := true
 	cfg := decoration.DefaultConfig()
+
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		"api.docs.count": {Logging: &on},
+		textAPIDocsCount: fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &on
+		}),
 	}
+
 	decs, logged := loggedNames(t, &cfg)
 
-	b, err := repository.NewBase[docsRepository](decs, "api.docs")
+	base, err := repository.NewBase[docsRepository](decs, textAPIDocs)
 	require.NoError(t, err)
-	_, err = b.Exec(
+
+	_, err = base.Exec(
 		t.Context(),
-		"count",
+		textCount,
 		func(context.Context) (int, error) { return 4, nil },
 	)
 	require.NoError(t, err)
-	_, err = b.Exec(
+
+	_, err = base.Exec(
 		t.Context(),
 		"find",
-		func(context.Context) (string, error) { return "d", nil },
+		func(context.Context) (string, error) { return textDLower, nil },
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"count"}, *logged)
+	assert.Equal(t, []string{textCount}, *logged)
 	assert.Contains(t, decs.Components(),
-		decorate.Component{Tier: "repository", Name: "api.docs.count"})
+		decorate.Component{Tier: textRepository, Name: textAPIDocsCount})
 	assert.Contains(t, decs.Components(),
-		decorate.Component{Tier: "repository", Name: "api.docs.find"})
-	require.NoError(t, decs.Verify("api"))
+		decorate.Component{Tier: textRepository, Name: textAPIDocsFind})
+	require.NoError(t, decs.Verify(textAPI))
 }
 
 // TestBases_AnOperationTheContractLacksFails tests the declared-operation guard.
@@ -110,12 +122,15 @@ func TestBases_EachContractMethodTakesItsOwnDecoration(t *testing.T) {
 //     operation, and the body never runs.
 func TestBases_AnOperationTheContractLacksFails(t *testing.T) {
 	t.Parallel()
-	b, err := repository.NewBase[docsRepository](fixtures.Decorations(), "api.docs")
+
+	b, err := repository.NewBase[docsRepository](fixtures.Decorations(), textAPIDocs)
 	require.NoError(t, err)
+
 	ran := false
 
 	_, err = b.Exec(t.Context(), "rename", func(context.Context) (int, error) {
 		ran = true
+
 		return 0, nil
 	})
 
@@ -134,9 +149,11 @@ func TestBases_AnOperationTheContractLacksFails(t *testing.T) {
 //   - NewBase over a struct, or over an interface with no methods, fails INTERNAL.
 func TestBases_AContractMustBeAnInterfaceWithMethods(t *testing.T) {
 	t.Parallel()
-	_, err := service.NewBase[struct{}](fixtures.Decorations(), "api.docs")
+
+	_, err := service.NewBase[struct{}](fixtures.Decorations(), textAPIDocs)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
-	_, err = service.NewBase[any](fixtures.Decorations(), "api.docs")
+
+	_, err = service.NewBase[any](fixtures.Decorations(), textAPIDocs)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
 
@@ -152,26 +169,35 @@ func TestBases_AContractMustBeAnInterfaceWithMethods(t *testing.T) {
 //     and passes for an override of a declared operation.
 func TestDecorationsVerify_FailsAnOperationOverrideNoContractDeclares(t *testing.T) {
 	t.Parallel()
+
 	off := false
 	cfg := decoration.DefaultConfig()
+
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		"api.docs.rename": {Logging: &off},
+		"api.docs.rename": fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &off
+		}),
 	}
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
-	_, err := repository.NewBase[docsRepository](decs, "api.docs")
+
+	decs := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
+	_, err := repository.NewBase[docsRepository](decs, textAPIDocs)
 	require.NoError(t, err)
 
-	err = decs.Verify("api")
+	err = decs.Verify(textAPI)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "api.docs.rename")
 
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		"api.docs.find": {Logging: &off},
+		textAPIDocsFind: fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &off
+		}),
 	}
-	clean := decorate.NewDecorations(&cfg, decorate.Collaborators{})
-	_, err = repository.NewBase[docsRepository](clean, "api.docs")
+
+	clean := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
+
+	_, err = repository.NewBase[docsRepository](clean, textAPIDocs)
 	require.NoError(t, err)
-	require.NoError(t, clean.Verify("api"))
+	require.NoError(t, clean.Verify(textAPI))
 }
 
 // TestDecorations_OperationsShareTheirComponentsBreaker tests stateful-layer sharing.
@@ -188,39 +214,54 @@ func TestDecorationsVerify_FailsAnOperationOverrideNoContractDeclares(t *testing
 //   - When find's own override configures a breaker, find keeps running.
 func TestDecorations_OperationsShareTheirComponentsBreaker(t *testing.T) {
 	t.Parallel()
+
 	on := true
 	breaker := decoration.CircuitBreaker{
 		Enabled: &on,
-		BreakerConfig: resilience.BreakerConfig{
-			ConsecutiveFailures: 1,
-			Timeout:             time.Hour,
-		},
+		BreakerConfig: fixtures.Build(func(row *resilience.BreakerConfig) {
+			row.ConsecutiveFailures = 1
+			row.Timeout = time.Hour
+		}),
 	}
 	run := func(t *testing.T, overrides map[string]decoration.Layers) bool {
 		t.Helper()
+
 		cfg := decoration.DefaultConfig()
+
 		cfg.Repositories.Overrides = overrides
-		decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
-		b, err := repository.NewBase[docsRepository](decs, "api.docs")
+
+		decs := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
+		base, err := repository.NewBase[docsRepository](decs, textAPIDocs)
 		require.NoError(t, err)
-		_, err = b.Exec(t.Context(), "count", func(context.Context) (int, error) {
+
+		_, err = base.Exec(t.Context(), textCount, func(context.Context) (int, error) {
 			return 0, apperr.New(apperr.CodeUnavailable, "db down")
 		})
 		require.Error(t, err)
+
 		ran := false
-		_, _ = b.Exec(t.Context(), "find", func(context.Context) (string, error) {
+
+		_, _ = base.Exec(t.Context(), "find", func(context.Context) (string, error) {
 			ran = true
+
 			return "", nil
 		})
+
 		return ran
 	}
 
 	assert.False(t, run(t, map[string]decoration.Layers{
-		"api.docs": {CircuitBreaker: breaker},
+		textAPIDocs: fixtures.Build(func(row *decoration.Layers) {
+			row.CircuitBreaker = breaker
+		}),
 	}), "a tripped component breaker sheds every operation")
 	assert.True(t, run(t, map[string]decoration.Layers{
-		"api.docs":      {CircuitBreaker: breaker},
-		"api.docs.find": {CircuitBreaker: breaker},
+		textAPIDocs: fixtures.Build(func(row *decoration.Layers) {
+			row.CircuitBreaker = breaker
+		}),
+		textAPIDocsFind: fixtures.Build(func(row *decoration.Layers) {
+			row.CircuitBreaker = breaker
+		}),
 	}), "an operation with its own breaker is not shed by another's failures")
 }
 
@@ -236,14 +277,21 @@ func TestDecorations_OperationsShareTheirComponentsBreaker(t *testing.T) {
 //     run from the defaults through the component's override to its own.
 func TestDecorationsInventory_ListsEachOperationWithItsSources(t *testing.T) {
 	t.Parallel()
+
 	timeout := time.Second
 	cfg := decoration.DefaultConfig()
+
 	cfg.Repositories.Overrides = map[string]decoration.Layers{
-		"api.docs":       {Timeout: &timeout},
-		"api.docs.count": {Timeout: &timeout},
+		textAPIDocs: fixtures.Build(func(row *decoration.Layers) {
+			row.Timeout = &timeout
+		}),
+		textAPIDocsCount: fixtures.Build(func(row *decoration.Layers) {
+			row.Timeout = &timeout
+		}),
 	}
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
-	_, err := repository.NewBase[docsRepository](decs, "api.docs")
+
+	decs := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
+	_, err := repository.NewBase[docsRepository](decs, textAPIDocs)
 	require.NoError(t, err)
 
 	byName := map[string]decorate.Resolved{}
@@ -251,10 +299,11 @@ func TestDecorationsInventory_ListsEachOperationWithItsSources(t *testing.T) {
 		byName[r.Name] = r
 	}
 
-	require.Contains(t, byName, "api.docs")
-	require.Contains(t, byName, "api.docs.find")
-	count := byName["api.docs.count"]
-	assert.Equal(t, "repository", count.Tier)
+	require.Contains(t, byName, textAPIDocs)
+	require.Contains(t, byName, textAPIDocsFind)
+
+	count := byName[textAPIDocsCount]
+	assert.Equal(t, textRepository, count.Tier)
 	assert.Equal(t, []string{
 		"defaults", "overrides.api.docs", "overrides.api.docs.count",
 	}, count.Sources)
@@ -275,29 +324,45 @@ func TestDecorationsInventory_ListsEachOperationWithItsSources(t *testing.T) {
 //   - With an entry for each, it passes.
 func TestDecorationsVerifyExplicit_FailsOnAComponentWithNoEntry(t *testing.T) {
 	t.Parallel()
+
 	off := false
 	cfg := decoration.DefaultConfig()
-	cfg.Repositories.Overrides = map[string]decoration.Layers{"api.docs": {Logging: &off}}
-	decs := decorate.NewDecorations(&cfg, decorate.Collaborators{})
-	_, err := decs.Deps(repository.Tier(), "api.docs")
+
+	cfg.Repositories.Overrides = map[string]decoration.Layers{
+		textAPIDocs: fixtures.Build(func(row *decoration.Layers) {
+			row.Logging = &off
+		}),
+	}
+
+	decs := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
+	_, err := decs.Deps(repository.Tier(), textAPIDocs)
 	require.NoError(t, err)
-	_, err = decs.Deps(repository.Tier(), "api.users")
+
+	_, err = decs.Deps(repository.Tier(), textAPIUsers)
 	require.NoError(t, err)
+
 	_, err = decs.Deps(repository.Tier(), "identity.users")
 	require.NoError(t, err)
 
-	err = decs.VerifyExplicit("api")
+	err = decs.VerifyExplicit(textAPI)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	require.ErrorContains(t, err, "repositories.overrides.api.users")
 	assert.NotContains(t, err.Error(), "identity.users")
 
-	cfg.Repositories.Overrides["api.users"] = decoration.Layers{Logging: &off}
-	clean := decorate.NewDecorations(&cfg, decorate.Collaborators{})
-	_, err = clean.Deps(repository.Tier(), "api.docs")
+	cfg.Repositories.Overrides[textAPIUsers] = fixtures.Build(
+		func(row *decoration.Layers) {
+			row.Logging = &off
+		},
+	)
+
+	clean := decorate.NewDecorations(&cfg, stdx.Zero[decorate.Collaborators]())
+
+	_, err = clean.Deps(repository.Tier(), textAPIDocs)
 	require.NoError(t, err)
-	_, err = clean.Deps(repository.Tier(), "api.users")
+
+	_, err = clean.Deps(repository.Tier(), textAPIUsers)
 	require.NoError(t, err)
-	require.NoError(t, clean.VerifyExplicit("api"))
+	require.NoError(t, clean.VerifyExplicit(textAPI))
 }
 
 // TestDecorations_ObservabilityIsTheCollaboratorsOrNone tests what Observability returns
@@ -315,11 +380,29 @@ func TestDecorations_ObservabilityIsTheCollaboratorsOrNone(t *testing.T) {
 	t.Parallel()
 
 	logger := mocks.NewMockLogger(gomock.NewController(t))
-	built := decorate.NewDecorations(nil, decorate.Collaborators{
-		Observability: decorate.Observability{Logger: logger},
-	})
+	built := decorate.NewDecorations(
+		nil,
+		fixtures.Build(func(row *decorate.Collaborators) {
+			row.Logger = logger
+		}),
+	)
 	assert.Same(t, logger, built.Observability().Logger)
 
 	var zero decorate.Decorations
-	assert.Equal(t, decorate.Observability{}, zero.Observability())
+
+	assert.Equal(t, stdx.Zero[decorate.Observability](), zero.Observability())
 }
+
+const (
+	// textAPIDocs is the literal "api.docs".
+	textAPIDocs = "api.docs"
+
+	// textAPIDocsCount is the literal "api.docs.count".
+	textAPIDocsCount = "api.docs.count"
+
+	// textAPIDocsFind is the literal "api.docs.find".
+	textAPIDocsFind = "api.docs.find"
+
+	// textAPIUsers is the literal "api.users".
+	textAPIUsers = "api.users"
+)

@@ -9,10 +9,11 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/memory"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/storage/s3"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 const (
@@ -48,11 +49,13 @@ type Deps struct {
 
 	// API replaces the S3 SDK client KindS3 builds from Config.S3 (presigning is
 	// unavailable through it).
-	API s3.S3API
+	API s3.API
 }
 
 // DefaultConfig returns the memory kind.
-func DefaultConfig() Config { return Config{} }
+func DefaultConfig() Config {
+	return stdx.Zero[Config]()
+}
 
 // kinds is the storage backend table.
 func kinds() client.Kinds[Config, Deps, interfaces.StorageClient] {
@@ -64,14 +67,20 @@ func kinds() client.Kinds[Config, Deps, interfaces.StorageClient] {
 			KindMemory: func(context.Context, Config, Deps) (interfaces.StorageClient, error) {
 				return memory.New(), nil
 			},
-			KindS3: newS3,
+			KindS3: client.RefConfig(newS3),
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
 // newS3 builds the S3 backend over deps.API, or over the real SDK client cfg.S3
 // configures (validated first).
-func newS3(ctx context.Context, cfg Config, deps Deps) (interfaces.StorageClient, error) {
+func newS3(
+	ctx context.Context,
+	cfg *Config,
+	deps Deps,
+) (interfaces.StorageClient, error) {
 	if deps.API != nil {
 		return s3.NewClientFromAPI(
 			deps.API,
@@ -79,23 +88,28 @@ func newS3(ctx context.Context, cfg Config, deps Deps) (interfaces.StorageClient
 			cfg.S3.SSEKMSKeyID,
 		), nil
 	}
-	if err := cfg.S3.Validate(); err != nil {
+
+	err := cfg.S3.Validate()
+	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "invalid s3 config")
 	}
-	awsClient, err := s3.NewAWSClient(ctx, cfg.S3)
+
+	awsClient, err := s3.NewAWSClient(ctx, &cfg.S3)
 	if err != nil {
 		return nil, err
 	}
+
 	return s3.NewClient(awsClient, cfg.S3.PublicEndpoint, cfg.S3.SSEKMSKeyID), nil
 }
 
 // NewFromConfig builds the storage client cfg.Kind selects and runs it through the
 // client tier. ctx bounds the S3 kind's AWS config load. An unknown kind or an invalid
 // S3 config is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.StorageClient, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, *cfg, deps, deps.Decorations, cfg.Name)
 }

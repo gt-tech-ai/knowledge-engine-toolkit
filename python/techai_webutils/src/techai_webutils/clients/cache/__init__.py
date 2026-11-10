@@ -1,9 +1,10 @@
 """Cache client tier — config-selected backends (redis/local/null) + decorators.
 
-Mirrors Go's ``clients/cache``: ``builder.py`` selects a backend by ``CacheKind`` and returns the
-core ``Cache`` interface; each backend lives in its own subpackage (``redis``/``local``/``null``);
-``decorators.py`` wraps a cache with logging + metrics. Relocated from ``foundation/cache`` so the
-concrete backends sit at the clients tier (L2, external-system integration), matching Go.
+Mirrors Go's ``clients/cache``: ``builder.py`` selects a backend by ``CacheKind`` and
+returns the core ``Cache`` interface; each backend lives in its own subpackage
+(``redis``/``local``/``null``); ``decorators.py`` wraps a cache with logging + metrics.
+Relocated from ``foundation/cache`` so the concrete backends sit at the clients tier (L2,
+external-system integration), matching Go.
 """
 
 from techai_webutils.clients.cache.builder import (

@@ -1,6 +1,9 @@
 package listquery
 
-import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+import (
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+)
 
 // SeekFilter builds the forward keyset SEEK predicate as a plain types.Filter: the
 // lexicographic OR-expansion selecting exactly the rows strictly after the cursor row in
@@ -24,36 +27,49 @@ import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 // NULL terms.
 func SeekFilter(cols []KeysetColumn, values []any) types.Filter {
 	if len(cols) == 0 {
-		return types.CompositeFilter{}
+		return stdx.Zero[types.CompositeFilter]()
 	}
+
 	return seekFrom(cols, values, 0)
 }
 
 // seekFrom builds the OR-expansion for the suffix of the ordered columns starting at
 // index i: `strict(col_i) OR (eq(col_i) AND seekFrom(i+1))`. The last column contributes
 // only its strict term.
-func seekFrom(cols []KeysetColumn, values []any, i int) types.Filter {
-	strict := strictClause(cols[i], values[i])
-	if i == len(cols)-1 {
+func seekFrom(cols []KeysetColumn, values []any, index int) types.Filter {
+	strict := strictClause(cols[index], values[index])
+	if index == len(cols)-1 {
 		return strict
 	}
-	eq := types.FilterClause{
-		Field:    cols[i].Column,
+
+	filterClause := types.FilterClause{
+		Field:    cols[index].Column,
 		Operator: types.OpEq,
-		Value:    values[i],
+		Value:    values[index],
+		Join:     nil,
 	}
-	tail := types.CompositeFilter{And: []types.Filter{eq, seekFrom(cols, values, i+1)}}
-	return types.CompositeFilter{Or: []types.Filter{strict, tail}}
+	tail := types.CompositeFilter{
+		And: []types.Filter{filterClause, seekFrom(cols, values, index+1)},
+		Or:  nil,
+	}
+
+	return types.CompositeFilter{Or: []types.Filter{strict, tail}, And: nil}
 }
 
 // strictClause builds the "strictly after the cursor at this column" comparison: `col >
 // v` for an ascending column, `col < v` for a descending one. The Field is the
 // already-resolved storage column, so a store compiles the seek with an identity
 // resolver.
-func strictClause(c KeysetColumn, v any) types.FilterClause {
-	op := types.OpGt
-	if c.Desc {
-		op = types.OpLt
+func strictClause(keysetColumn KeysetColumn, value any) types.FilterClause {
+	operation := types.OpGt
+	if keysetColumn.Desc {
+		operation = types.OpLt
 	}
-	return types.FilterClause{Field: c.Column, Operator: op, Value: v}
+
+	return types.FilterClause{
+		Field:    keysetColumn.Column,
+		Operator: operation,
+		Value:    value,
+		Join:     nil,
+	}
 }

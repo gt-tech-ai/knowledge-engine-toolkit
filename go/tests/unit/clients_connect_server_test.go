@@ -28,8 +28,8 @@ import (
 func TestConnectServer_DefaultServerConfig(t *testing.T) {
 	t.Parallel()
 
-	cfg := connectpkg.DefaultServerConfig(8090)
-	assert.Equal(t, 8090, cfg.Port)
+	cfg := connectpkg.DefaultServerConfig(defaultServerConfigInput)
+	assert.Equal(t, wantPort, cfg.Port)
 	assert.Equal(t, 30*time.Second, cfg.ReadTimeout)
 	assert.Equal(t, 30*time.Second, cfg.WriteTimeout)
 	assert.Equal(t, 10*time.Second, cfg.ShutdownTimeout)
@@ -134,22 +134,7 @@ func TestConnectServer_ShutdownNilHTTPServer(t *testing.T) {
 func TestConnectServer_HealthzHandler(t *testing.T) {
 	t.Parallel()
 
-	logger := fixtures.NopLogger()
-	cfg := connectpkg.DefaultServerConfig(0)
-	srv := connectpkg.NewServer(cfg, logger)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(
-		t.Context(),
-		http.MethodGet,
-		"/healthz",
-		http.NoBody,
-	)
-	srv.Mux().ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	body, _ := io.ReadAll(rec.Body)
-	assert.Equal(t, "ok", string(body))
+	assertProbeOK(t, "/healthz")
 }
 
 // TestConnectServer_ReadyzHandler tests that the /readyz endpoint registered
@@ -165,22 +150,7 @@ func TestConnectServer_HealthzHandler(t *testing.T) {
 func TestConnectServer_ReadyzHandler(t *testing.T) {
 	t.Parallel()
 
-	logger := fixtures.NopLogger()
-	cfg := connectpkg.DefaultServerConfig(0)
-	srv := connectpkg.NewServer(cfg, logger)
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(
-		t.Context(),
-		http.MethodGet,
-		"/readyz",
-		http.NoBody,
-	)
-	srv.Mux().ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	body, _ := io.ReadAll(rec.Body)
-	assert.Equal(t, "ok", string(body))
+	assertProbeOK(t, "/readyz")
 }
 
 // TestConnectServer_StartAndShutdown tests that Start listens on an
@@ -258,7 +228,7 @@ func TestConnectServer_StartBindError(t *testing.T) {
 
 	// 999999 is outside the valid TCP port range, so net.Listen fails.
 	srv := connectpkg.NewServer(
-		connectpkg.DefaultServerConfig(999999),
+		connectpkg.DefaultServerConfig(defaultServerConfigInputError),
 		fixtures.NopLogger(),
 	)
 	require.Error(t, srv.Start(context.Background()), "an invalid port must fail Start")
@@ -272,3 +242,29 @@ func TestConnectServer_StartBindError(t *testing.T) {
 		"a server that failed to bind must not be ready",
 	)
 }
+
+// assertProbeOK requires the new server's probe endpoint to answer 200 "ok".
+func assertProbeOK(t *testing.T, path string) {
+	t.Helper()
+
+	srv := connectpkg.NewServer(connectpkg.DefaultServerConfig(0), fixtures.NopLogger())
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, http.NoBody)
+	srv.Mux().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	body, _ := io.ReadAll(rec.Body)
+	assert.Equal(t, textOk, string(body))
+}
+
+const (
+	// defaultServerConfigInput is the port passed to DefaultServerConfig in
+	// TestConnectServer_DefaultServerConfig.
+	defaultServerConfigInput = 8090
+
+	// defaultServerConfigInputError is the port passed to DefaultServerConfig in
+	// TestConnectServer_StartBindError.
+	defaultServerConfigInputError = 999999
+)

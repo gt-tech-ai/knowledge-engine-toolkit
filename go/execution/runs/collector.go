@@ -30,10 +30,12 @@ func (*Collector) OnPhaseStart(string, []string) {}
 func (*Collector) OnStepStart(string, string) {}
 
 // OnStepComplete records result, children included.
-func (c *Collector) OnStepComplete(result types.StepResult) {
+// result must not be nil.
+func (c *Collector) OnStepComplete(result *types.StepResult) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.steps = append(c.steps, result)
+
+	c.steps = append(c.steps, *result)
 }
 
 // OnPhaseComplete is a no-op; its results were already reported step by step.
@@ -46,5 +48,6 @@ func (*Collector) OnGateComplete(string, types.StepResults, time.Duration) {}
 func (c *Collector) Steps() []types.StepResult {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	return append([]types.StepResult(nil), c.steps...)
 }

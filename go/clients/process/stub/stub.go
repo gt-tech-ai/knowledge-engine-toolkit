@@ -18,14 +18,14 @@ var _ interfaces.Supervisor = Supervisor{}
 // Start returns a handle without starting anything.
 func (Supervisor) Start(
 	context.Context,
-	types.ProcessSpec,
+	*types.ProcessSpec,
 	interfaces.Probe[interfaces.ProcessHandle],
 ) (interfaces.ProcessHandle, error) {
 	return handle{}, nil
 }
 
 // Detach does nothing.
-func (Supervisor) Detach(types.ProcessSpec) error { return nil }
+func (Supervisor) Detach(*types.ProcessSpec) error { return nil }
 
 // StopAll does nothing.
 func (Supervisor) StopAll(context.Context) error { return nil }

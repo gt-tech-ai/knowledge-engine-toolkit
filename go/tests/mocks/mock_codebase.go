@@ -59,7 +59,7 @@ func (mr *MockCodebaseMockRecorder) Changed(ctx, base any) *gomock.Call {
 }
 
 // Docs mocks base method.
-func (m *MockCodebase) Docs(ctx context.Context, sel types.FileSelector) ([]types.Document, error) {
+func (m *MockCodebase) Docs(ctx context.Context, sel *types.FileSelector) ([]types.Document, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Docs", ctx, sel)
 	ret0, _ := ret[0].([]types.Document)
@@ -74,7 +74,7 @@ func (mr *MockCodebaseMockRecorder) Docs(ctx, sel any) *gomock.Call {
 }
 
 // Files mocks base method.
-func (m *MockCodebase) Files(ctx context.Context, sel types.FileSelector) ([]types.File, error) {
+func (m *MockCodebase) Files(ctx context.Context, sel *types.FileSelector) ([]types.File, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Files", ctx, sel)
 	ret0, _ := ret[0].([]types.File)
@@ -103,7 +103,7 @@ func (mr *MockCodebaseMockRecorder) Go() *gomock.Call {
 }
 
 // Match mocks base method.
-func (m *MockCodebase) Match(ctx context.Context, sel types.FileSelector, patterns []*regexp.Regexp) ([]types.Hit, error) {
+func (m *MockCodebase) Match(ctx context.Context, sel *types.FileSelector, patterns []*regexp.Regexp) ([]types.Hit, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Match", ctx, sel, patterns)
 	ret0, _ := ret[0].([]types.Hit)
@@ -118,7 +118,7 @@ func (mr *MockCodebaseMockRecorder) Match(ctx, sel, patterns any) *gomock.Call {
 }
 
 // Rendered mocks base method.
-func (m *MockCodebase) Rendered(ctx context.Context, spec types.RenderSpec) ([]types.Object, error) {
+func (m *MockCodebase) Rendered(ctx context.Context, spec *types.RenderSpec) ([]types.Object, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Rendered", ctx, spec)
 	ret0, _ := ret[0].([]types.Object)
@@ -201,7 +201,7 @@ func (mr *MockGoViewMockRecorder) Modules(ctx any) *gomock.Call {
 }
 
 // Parse mocks base method.
-func (m *MockGoView) Parse(ctx context.Context, sel types.FileSelector, mode types.ParseMode) ([]types.GoFile, error) {
+func (m *MockGoView) Parse(ctx context.Context, sel *types.FileSelector, mode types.ParseMode) ([]types.GoFile, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Parse", ctx, sel, mode)
 	ret0, _ := ret[0].([]types.GoFile)
@@ -254,7 +254,7 @@ func (mr *MockYAMLViewMockRecorder) Decode(ctx, doc, out any) *gomock.Call {
 }
 
 // Docs mocks base method.
-func (m *MockYAMLView) Docs(ctx context.Context, sel types.FileSelector) ([]types.YAMLDoc, error) {
+func (m *MockYAMLView) Docs(ctx context.Context, sel *types.FileSelector) ([]types.YAMLDoc, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Docs", ctx, sel)
 	ret0, _ := ret[0].([]types.YAMLDoc)
@@ -377,7 +377,7 @@ func (m *MockRenderer) EXPECT() *MockRendererMockRecorder {
 }
 
 // Render mocks base method.
-func (m *MockRenderer) Render(ctx context.Context, spec types.RenderSpec) ([]types.Object, error) {
+func (m *MockRenderer) Render(ctx context.Context, spec *types.RenderSpec) ([]types.Object, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Render", ctx, spec)
 	ret0, _ := ret[0].([]types.Object)

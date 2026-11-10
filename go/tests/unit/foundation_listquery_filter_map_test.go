@@ -7,6 +7,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // TestListQueryFieldBuilders tests the allow-listed field constructors and their
@@ -28,25 +29,26 @@ func TestListQueryFieldBuilders(t *testing.T) {
 		field listquery.Field
 		typ   listquery.FieldType
 	}{
-		{"string", listquery.String("name"), listquery.FieldString},
-		{"int", listquery.Int("count"), listquery.FieldInt},
+		{textString, listquery.String(textName), listquery.FieldString},
+		{textInt, listquery.Int(textCount), listquery.FieldInt},
 		{"float", listquery.Float("score"), listquery.FieldFloat},
-		{"bool", listquery.Bool("active"), listquery.FieldBool},
-		{"time", listquery.Time("created_at"), listquery.FieldTime},
-		{"id", listquery.ID("owner_id"), listquery.FieldID},
+		{"bool", listquery.Bool(textActiveLower), listquery.FieldBool},
+		{"time", listquery.Time(textCreatedAt), listquery.FieldTime},
+		{textID, listquery.ID("owner_id"), listquery.FieldID},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.typ, tc.field.Type)
+			require.Equal(t, testCase.typ, testCase.field.Type)
 			// Column defaults to Name.
-			require.Equal(t, tc.field.Name, tc.field.Column)
-			require.NotEmpty(t, tc.field.Type.String())
+			require.Equal(t, testCase.field.Name, testCase.field.Column)
+			require.NotEmpty(t, testCase.field.Type.String())
 		})
 	}
 
 	t.Run("WithColumn overrides only the storage column", func(t *testing.T) {
 		t.Parallel()
+
 		base := listquery.String("display_name")
 		got := base.WithColumn("full_name")
 		require.Equal(t, "full_name", got.Column)
@@ -57,8 +59,14 @@ func TestListQueryFieldBuilders(t *testing.T) {
 
 	t.Run("WithJoin stamps a correlated-join target as a copy", func(t *testing.T) {
 		t.Parallel()
+
 		base := listquery.String("team_name")
-		got := base.WithJoin(types.JoinTarget{Table: "teams", Columns: []string{"name"}})
+		got := base.WithJoin(
+			fixtures.BuildRef(func(row *types.JoinTarget) {
+				row.Table = "teams"
+				row.Columns = []string{textName}
+			}),
+		)
 		require.NotNil(t, got.Join)
 		require.Equal(t, "teams", got.Join.Table)
 		require.Nil(t, base.Join, "the source field is not mutated")
@@ -66,9 +74,10 @@ func TestListQueryFieldBuilders(t *testing.T) {
 
 	t.Run("WithOrdinal sets the value-ordinal sort order as a copy", func(t *testing.T) {
 		t.Parallel()
-		base := listquery.String("status")
-		got := base.WithOrdinal([]string{"pending", "active", "done"})
-		require.Equal(t, []string{"pending", "active", "done"}, got.Ordinal)
+
+		base := listquery.String(textStatus)
+		got := base.WithOrdinal([]string{textPending, textActiveLower, "done"})
+		require.Equal(t, []string{textPending, textActiveLower, "done"}, got.Ordinal)
 		require.Nil(t, base.Ordinal, "the source field is not mutated")
 	})
 }
@@ -86,23 +95,26 @@ func TestListQueryFieldBuilders(t *testing.T) {
 func TestListQueryMapAccessors(t *testing.T) {
 	t.Parallel()
 
-	m := listquery.NewMap().Add(
-		listquery.String("name"),
-		listquery.String("team_name").
-			WithColumn("t_name").
-			WithJoin(types.JoinTarget{Table: "teams", Columns: []string{"name"}}),
-		listquery.String("status").WithOrdinal([]string{"a", "b"}),
+	fieldMap := listquery.NewMap().Add(
+		listquery.String(textName),
+		new(new(listquery.String("team_name")).WithColumn("t_name")).
+			WithJoin(fixtures.BuildRef(func(row *types.JoinTarget) {
+				row.Table = "teams"
+				row.Columns = []string{textName}
+			})),
+		new(listquery.String(textStatus)).WithOrdinal([]string{textA, textB}),
 	)
 
 	t.Run(
 		"Lookup finds a registered field and misses an unknown one",
 		func(t *testing.T) {
 			t.Parallel()
-			f, ok := m.Lookup("name")
-			require.True(t, ok)
-			require.Equal(t, "name", f.Name)
 
-			_, ok = m.Lookup("nope")
+			f, ok := fieldMap.Lookup(textName)
+			require.True(t, ok)
+			require.Equal(t, textName, f.Name)
+
+			_, ok = fieldMap.Lookup(textNope)
 			require.False(t, ok)
 		},
 	)
@@ -111,29 +123,34 @@ func TestListQueryMapAccessors(t *testing.T) {
 		"Column returns the mapped column, falling back to the field name",
 		func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, "t_name", m.Column("team_name"))
-			require.Equal(t, "name", m.Column("name"))
+			require.Equal(t, "t_name", fieldMap.Column("team_name"))
+			require.Equal(t, textName, fieldMap.Column(textName))
 			// Unknown field: safe fallback to the name itself.
-			require.Equal(t, "unknown", m.Column("unknown"))
+			require.Equal(t, textUnknown, fieldMap.Column(textUnknown))
 		},
 	)
 
 	t.Run("Join returns the joined target only for a joined field", func(t *testing.T) {
 		t.Parallel()
-		jt := m.Join("team_name")
+
+		jt := fieldMap.Join("team_name")
 		require.NotNil(t, jt)
 		require.Equal(t, "teams", jt.Table)
-		require.Nil(t, m.Join("name"), "a same-table field has no join")
-		require.Nil(t, m.Join("unknown"), "an unknown field has no join")
+		require.Nil(t, fieldMap.Join(textName), "a same-table field has no join")
+		require.Nil(t, fieldMap.Join(textUnknown), "an unknown field has no join")
 	})
 
 	t.Run(
 		"Ordinal returns the value ordinal only for an ordinal field",
 		func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, []string{"a", "b"}, m.Ordinal("status"))
-			require.Nil(t, m.Ordinal("name"), "a field with no ordinal returns nil")
-			require.Nil(t, m.Ordinal("unknown"), "an unknown field returns nil")
+			require.Equal(t, []string{textA, textB}, fieldMap.Ordinal(textStatus))
+			require.Nil(
+				t,
+				fieldMap.Ordinal(textName),
+				"a field with no ordinal returns nil",
+			)
+			require.Nil(t, fieldMap.Ordinal(textUnknown), "an unknown field returns nil")
 		},
 	)
 }

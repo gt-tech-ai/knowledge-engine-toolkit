@@ -17,7 +17,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // workFile is the workspace file's name at the repository root.
@@ -33,18 +33,26 @@ func GoWorkModules(fsys fs.FS, filter func(relPath string) bool) ([]string, erro
 	if err != nil {
 		return nil, err
 	}
+
 	var modules []string
+
 	for _, use := range work.Use {
 		mod := strings.TrimPrefix(filepath.ToSlash(use.Path), "./")
-		if mod == "" || mod == "." {
-			continue
+		if wantedModule(mod, filter) {
+			modules = append(modules, mod)
 		}
-		if filter != nil && !filter(mod) {
-			continue
-		}
-		modules = append(modules, mod)
 	}
+
 	return modules, nil
+}
+
+// wantedModule excludes the workspace root and anything filter rejects.
+func wantedModule(mod string, filter func(string) bool) bool {
+	if mod == "" || mod == "." {
+		return false
+	}
+
+	return filter == nil || filter(mod)
 }
 
 // parseWork reads and parses the go.work of the repository fsys: a missing one is
@@ -57,10 +65,12 @@ func parseWork(fsys fs.FS) (*modfile.WorkFile, error) {
 	case err != nil:
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "read go.work")
 	}
+
 	work, err := modfile.ParseWork(workFile, data, nil)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "parse go.work")
 	}
+
 	return work, nil
 }
 
@@ -76,50 +86,80 @@ func ScopedWork(fsys fs.FS, root string, moduleDirs ...string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if work.Go == nil || work.Go.Version == "" {
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
 			"no 'go' directive found in go.work",
 		)
 	}
-	scoped := &modfile.WorkFile{Syntax: &modfile.FileSyntax{}}
-	if err := scopeDirectives(scoped, work, root); err != nil {
+
+	var workFile modfile.WorkFile
+
+	workFile.Syntax = new(modfile.FileSyntax)
+
+	scoped := &workFile
+
+	err = scopeDirectives(scoped, work, root)
+	if err != nil {
 		return nil, err
 	}
+
 	for _, dir := range moduleDirs {
-		if err := scoped.AddUse(filepath.Join(root, dir), ""); err != nil {
+		err := scoped.AddUse(filepath.Join(root, dir), "")
+		if err != nil {
 			return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "use "+dir)
 		}
 	}
+
 	scoped.Cleanup()
+
 	return modfile.Format(scoped.Syntax), nil
 }
 
 // scopeDirectives copies work's go, toolchain, godebug and replace directives into
 // scoped, each local replace target made absolute against root.
 func scopeDirectives(scoped, work *modfile.WorkFile, root string) error {
-	if err := scoped.AddGoStmt(work.Go.Version); err != nil {
+	err := scoped.AddGoStmt(work.Go.Version)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "go directive")
 	}
+
 	if work.Toolchain != nil {
-		if err := scoped.AddToolchainStmt(work.Toolchain.Name); err != nil {
+		err := scoped.AddToolchainStmt(work.Toolchain.Name)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "toolchain directive")
 		}
 	}
+
 	for _, g := range work.Godebug {
-		if err := scoped.AddGodebug(g.Key, g.Value); err != nil {
+		err := scoped.AddGodebug(g.Key, g.Value)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "godebug "+g.Key)
 		}
 	}
-	for _, r := range work.Replace {
-		target := r.New.Path
+
+	return scopeReplaces(scoped, work, root)
+}
+
+// scopeReplaces copies each replace, making a relative directory target absolute.
+func scopeReplaces(scoped, work *modfile.WorkFile, root string) error {
+	for _, replace := range work.Replace {
+		target := replace.New.Path
 		if modfile.IsDirectoryPath(target) && !filepath.IsAbs(target) {
 			target = filepath.Join(root, target)
 		}
-		err := scoped.AddReplace(r.Old.Path, r.Old.Version, target, r.New.Version)
+
+		err := scoped.AddReplace(
+			replace.Old.Path,
+			replace.Old.Version,
+			target,
+			replace.New.Version,
+		)
 		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInvalidInput, "replace "+r.Old.Path)
+			return apperr.Wrap(err, apperr.CodeInvalidInput, "replace "+replace.Old.Path)
 		}
 	}
+
 	return nil
 }

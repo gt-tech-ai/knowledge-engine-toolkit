@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets/env"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -22,7 +22,8 @@ import (
 // What it tests:
 //   - Get on a mapped Ref returns a Secret revealing the mapped variable's value.
 func TestEnvSource_ResolvesMappedVariable(t *testing.T) {
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
+
 	t.Setenv("KE_DEV_BOOTSTRAP_CLIENT_SECRET", "s3cr3t")
 
 	src := env.New(map[types.Ref]string{ref: "KE_DEV_BOOTSTRAP_CLIENT_SECRET"})
@@ -43,7 +44,9 @@ func TestEnvSource_ResolvesMappedVariable(t *testing.T) {
 //   - Get on an unmapped Ref, and on a Ref mapped to an unset variable, both return
 //     CodeNotFound.
 func TestEnvSource_MissingAndUnmappedAreNotFound(t *testing.T) {
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	t.Parallel()
+
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 
 	unmapped := env.New(map[types.Ref]string{})
 	_, err := unmapped.Get(context.Background(), ref)
@@ -54,6 +57,7 @@ func TestEnvSource_MissingAndUnmappedAreNotFound(t *testing.T) {
 	)
 
 	unset := env.New(map[types.Ref]string{ref: "KE_DEFINITELY_UNSET_VAR_XYZ_9137"})
+
 	_, err = unset.Get(context.Background(), ref)
 	require.True(
 		t,
@@ -71,9 +75,11 @@ func TestEnvSource_MissingAndUnmappedAreNotFound(t *testing.T) {
 // What it tests:
 //   - Put returns CodeInvalidInput (unsupported) rather than succeeding silently.
 func TestEnvSource_PutIsUnsupported(t *testing.T) {
-	ref := types.Ref{Env: "dev", Class: "bootstrap", Field: "client_secret"}
+	t.Parallel()
+
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
 	src := env.New(map[types.Ref]string{ref: "KE_X"})
 
-	err := src.Put(context.Background(), ref, types.NewSecret("v"))
+	err := src.Put(context.Background(), ref, types.NewSecret(textV))
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }

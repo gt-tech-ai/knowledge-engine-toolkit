@@ -10,16 +10,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // goldenFactPath returns the analytics-fact wire fixture shared with the Python suite.
 func goldenFactPath() string {
 	return filepath.Join(
-		"..",
-		"..",
-		"..",
+		textDotDot,
+		textDotDot,
+		textDotDot,
 		"testdata",
 		"analytics_fact.golden.json",
 	)
@@ -28,20 +28,29 @@ func goldenFactPath() string {
 // goldenFact is the value the golden fixture encodes.
 func goldenFact() types.Fact {
 	return types.Fact{
-		Cube:  "genai_calls",
-		OrgID: "org-1",
-		TS:    time.Date(2026, 10, 9, 12, 34, 56, 789_000_000, time.UTC),
+		Cube:  textGenaiCalls,
+		OrgID: textOrg1,
+		TS: time.Date(
+			dateInput,
+			dateInputFact,
+			dateInputGoldenFact,
+			goldenFactHour,
+			goldenFactMinute,
+			goldenFactSecond,
+			goldenFactNanosecond,
+			time.UTC,
+		),
 		Dims: map[string]string{
-			"label":    "a<b>&c\u2028",
+			textLabel:  "a<b>&c\u2028",
 			"provider": "aws.bedrock",
-			"model":    "nova-lite",
+			textModel:  "nova-lite",
 			"step":     "generate",
-			"team":     "t-1",
+			textTeam:   textT1,
 		},
 		Measures: map[string]float64{
-			"tokens_in":  42,
-			"tokens_out": 7,
-			"duration_s": 1.25,
+			textTokensIn: textTokensInFact,
+			"tokens_out": tokensOut,
+			"duration_s": factDurationSeconds,
 		},
 		IdempotencyKey: "4bf92f3577b34da6a3ce929d0e0e4736:00f067aa0ba902b7:generate",
 		Schema:         types.FactSchemaVersion,
@@ -57,7 +66,7 @@ func goldenFact() types.Fact {
 //     cannot drift on one side unnoticed
 //
 // What it tests:
-//   - json.Marshal(fact) is byte-identical to testdata/analytics_fact.golden.json
+//   - Fact.Wire is byte-identical to testdata/analytics_fact.golden.json
 //     (sorted keys, integral measures as integers, UTC RFC 3339 with trimmed fraction,
 //     "<", ">", "&" and U+2028 escaped as Python escapes them)
 //   - a non-UTC timestamp still renders in UTC
@@ -68,19 +77,23 @@ func TestFact_MarshalMatchesGoldenFixture(t *testing.T) {
 	want, err := os.ReadFile(goldenFactPath())
 	require.NoError(t, err)
 
-	got, err := json.Marshal(goldenFact())
+	got, err := new(goldenFact()).Wire()
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(got))
 
 	shifted := goldenFact()
+
 	shifted.TS = shifted.TS.In(time.FixedZone("EDT", -4*3600))
-	gotShifted, err := json.Marshal(shifted)
+
+	gotShifted, err := shifted.Wire()
 	require.NoError(t, err)
 	assert.Equal(t, string(want), string(gotShifted))
 
 	var decoded types.Fact
+
 	require.NoError(t, json.Unmarshal(want, &decoded))
 	assert.True(t, decoded.TS.Equal(goldenFact().TS))
+
 	decoded.TS = goldenFact().TS
 	assert.Equal(t, goldenFact(), decoded)
 }
@@ -96,25 +109,36 @@ func TestFact_MarshalMatchesGoldenFixture(t *testing.T) {
 //   - "<", ">", "&", U+2028 and U+2029 are written as the escapes \u003c, \u003e,
 //     \u0026, \u2028 and \u2029; other non-ASCII stays raw UTF-8; empty
 //     measures render as {}
-//   - json.Marshal and a direct MarshalJSON call write the same bytes
+//   - Wire writes these bytes
 func TestFact_MarshalEscapesLikePython(t *testing.T) {
 	t.Parallel()
 
 	fact := types.Fact{
-		Cube: "c", OrgID: "o", IdempotencyKey: "k", Schema: types.FactSchemaVersion,
-		TS:   time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC),
-		Dims: map[string]string{"team": "a<b>&c\u2028\u2029\u00e9"},
+		Cube:           textC,
+		OrgID:          textO,
+		IdempotencyKey: textK,
+		Schema:         types.FactSchemaVersion,
+		TS: time.Date(
+			dateInput,
+			dateInputPython,
+			dateInputLikePython,
+			0,
+			0,
+			0,
+			0,
+			time.UTC,
+		),
+		Dims:     map[string]string{textTeam: "a<b>&c\u2028\u2029\u00e9"},
+		Measures: nil,
 	}
 
-	via, err := json.Marshal(fact)
+	got, err := fact.Wire()
 	require.NoError(t, err)
+
 	want := `{"cube":"c","dims":{"team":"a\u003cb\u003e\u0026c\u2028\u2029é"},` +
 		`"idempotency_key":"k","measures":{},"org_id":"o","schema":1,"ts":"2026-10-09T00:00:` +
 		`00Z"}`
-	assert.Equal(t, want, string(via))
-	direct, err := fact.MarshalJSON()
-	require.NoError(t, err)
-	assert.Equal(t, want, string(direct))
+	assert.Equal(t, want, string(got))
 }
 
 // TestFact_UnmarshalRejectsUnknownSchema tests the wire-version check.
@@ -127,6 +151,7 @@ func TestFact_MarshalEscapesLikePython(t *testing.T) {
 //   - a fact whose schema is 2, or absent (0), is CodeInvalidInput
 func TestFact_UnmarshalRejectsUnknownSchema(t *testing.T) {
 	t.Parallel()
+
 	for _, body := range []string{
 		`{"cube":"c","dims":{},"idempotency_key":"k","measures":{},"org_id":"o","schema":2,"` +
 			`ts":"2026-10-09T00:00:00Z"}`,
@@ -134,6 +159,7 @@ func TestFact_UnmarshalRejectsUnknownSchema(t *testing.T) {
 			`0-09T00:00:00Z"}`,
 	} {
 		var f types.Fact
+
 		assert.Equal(
 			t,
 			apperr.CodeInvalidInput,
@@ -142,3 +168,38 @@ func TestFact_UnmarshalRejectsUnknownSchema(t *testing.T) {
 		)
 	}
 }
+
+const (
+	// dateInputFact is the month passed to Date in goldenFact.
+	dateInputFact = 10
+
+	// dateInputGoldenFact is the day passed to Date in goldenFact.
+	dateInputGoldenFact = 9
+
+	// goldenFactHour is the hour passed to Date in goldenFact.
+	goldenFactHour = 12
+
+	// goldenFactMinute is the min passed to Date in goldenFact.
+	goldenFactMinute = 34
+
+	// goldenFactSecond is the sec passed to Date in goldenFact.
+	goldenFactSecond = 56
+
+	// goldenFactNanosecond is the nsec passed to Date in goldenFact.
+	goldenFactNanosecond = 789000000
+
+	// dateInputLikePython is the day passed to Date in TestFact_MarshalEscapesLikePython.
+	dateInputLikePython = 9
+
+	// dateInputPython is the month passed to Date in TestFact_MarshalEscapesLikePython.
+	dateInputPython = 10
+
+	// factDurationSeconds is the value for "duration_s" in goldenFact.
+	factDurationSeconds = 1.25
+
+	// textTokensInFact is the textTokensIn field in goldenFact.
+	textTokensInFact = 42
+
+	// tokensOut is the value for "tokens_out" in goldenFact.
+	tokensOut = 7
+)

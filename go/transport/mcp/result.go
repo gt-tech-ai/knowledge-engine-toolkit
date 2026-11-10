@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
@@ -46,19 +46,23 @@ func buildResult(
 	logs []string,
 	err error,
 ) ToolResult {
-	res := ToolResult{Steps: summarize(steps, logs)}
-	for _, s := range steps {
-		if s.Status != types.StatusFail {
+	res := ToolResult{Steps: summarize(steps, logs), FailedTails: nil, Error: ""}
+	for _, stepResult := range steps {
+		if stepResult.Status != types.StatusFail {
 			continue
 		}
+
 		if res.FailedTails == nil {
 			res.FailedTails = map[string]string{}
 		}
-		res.FailedTails[s.Name] = failureText(s, tailN)
+
+		res.FailedTails[stepResult.Name] = failureText(&stepResult, tailN)
 	}
+
 	if err != nil {
 		res.Error = codedMessage(err)
 	}
+
 	return res
 }
 
@@ -66,17 +70,20 @@ func buildResult(
 // logs (aligned with steps; nil or short while the run has written none).
 func summarize(steps []types.StepResult, logs []string) []StepSummary {
 	out := make([]StepSummary, 0, len(steps))
-	for i, s := range steps {
+	for index, s := range steps {
 		sum := StepSummary{
 			Step:     s.Name,
 			Status:   s.Status.String(),
 			Duration: s.Duration.String(),
+			Log:      "",
 		}
-		if i < len(logs) {
-			sum.Log = logs[i]
+		if index < len(logs) {
+			sum.Log = logs[index]
 		}
+
 		out = append(out, sum)
 	}
+
 	return out
 }
 
@@ -86,55 +93,80 @@ func summarize(steps []types.StepResult, logs []string) []StepSummary {
 // " #<n>" suffix, so every entry — and so every failed tail and log — is distinct even
 // when several modules report a same-named package.
 func flatten(steps []types.StepResult) []types.StepResult {
-	var out []types.StepResult
-	seen := map[string]int{}
-	var walk func(prefix string, group []types.StepResult)
-	walk = func(prefix string, group []types.StepResult) {
-		for _, s := range group {
-			name := s.Name
-			if prefix != "" {
-				name = prefix + "/" + s.Name
-			}
-			seen[name]++
-			if seen[name] > 1 {
-				name = fmt.Sprintf("%s #%d", name, seen[name])
-			}
-			children := s.Children
-			s.Name, s.Children = name, nil
-			out = append(out, s)
-			walk(name, children)
-		}
+	f := &stepFlattener{seen: map[string]int{}, out: nil}
+
+	f.walk("", steps)
+
+	return f.out
+}
+
+// stepFlattener collects a step tree in pre-order under unique slash-joined names.
+type stepFlattener struct {
+	// seen counts each name so a repeat gets a ` #n` suffix.
+	seen map[string]int
+
+	// out holds the flattened steps.
+	out []types.StepResult
+}
+
+// walk appends each step of group, then its children under the step's name.
+func (f *stepFlattener) walk(prefix string, group []types.StepResult) {
+	for _, s := range group {
+		name := f.uniqueName(prefix, s.Name)
+		children := s.Children
+
+		s.Name, s.Children = name, nil
+		f.out = append(f.out, s)
+
+		f.walk(name, children)
 	}
-	walk("", steps)
-	return out
+}
+
+// uniqueName joins prefix and name, suffixing a repeat.
+func (f *stepFlattener) uniqueName(prefix, name string) string {
+	if prefix != "" {
+		name = prefix + "/" + name
+	}
+
+	f.seen[name]++
+	if f.seen[name] > 1 {
+		return fmt.Sprintf("%s #%d", name, f.seen[name])
+	}
+
+	return name
 }
 
 // failureText is what a failed step contributes to a result: the last n lines of its
 // captured output, or its step error when its runner streamed the output instead of
 // capturing it.
-func failureText(s types.StepResult, n int) string {
+func failureText(s *types.StepResult, n int) string {
 	if len(s.Detail) == 0 {
 		return s.Error
 	}
+
 	return tail(s.Detail, n)
 }
 
 // tail returns the last n lines of out, keeping its trailing newline; "" when n <= 0.
-func tail(out []byte, n int) string {
-	if n <= 0 {
+func tail(out []byte, count int) string {
+	if count <= 0 {
 		return ""
 	}
-	s := string(out)
-	body := strings.TrimSuffix(s, "\n")
+
+	text := string(out)
+	body := strings.TrimSuffix(text, "\n")
 	cut := len(body)
-	for range n {
+
+	for range count {
 		i := strings.LastIndexByte(body[:cut], '\n')
 		if i < 0 {
-			return s
+			return text
 		}
+
 		cut = i
 	}
-	return s[cut+1:]
+
+	return text[cut+1:]
 }
 
 // codedMessage renders err as "CODE: message", adding the code its message lacks; an
@@ -142,8 +174,10 @@ func tail(out []byte, n int) string {
 func codedMessage(err error) string {
 	msg := err.Error()
 	code := string(apperr.Code(err))
+
 	if strings.HasPrefix(msg, code) {
 		return msg
 	}
+
 	return fmt.Sprintf("%s: %s", code, msg)
 }

@@ -1,8 +1,8 @@
 """``Dataset`` — the swappable source of eval cases.
 
-A dataset yields ``EvalCase``s and names its own ``version()``: a content hash, so an eval baseline
-is keyed on exactly the cases it was measured against and a changed dataset can never be compared
-with a stale baseline.
+A dataset yields ``EvalCase``s and names its own ``version()``: a content hash, so an eval
+baseline is keyed on exactly the cases it was measured against and a changed dataset can
+never be compared with a stale baseline.
 """
 
 from __future__ import annotations
@@ -31,7 +31,12 @@ class EvalCase:
     """Free-form labels (slice, source, difficulty) for per-slice reporting."""
 
     def __post_init__(self) -> None:
-        """Reject a case with no id (``INVALID_INPUT``)."""
+        """Reject a case with no id (``INVALID_INPUT``).
+
+        Raises:
+            AppError: Eval case requires an id.
+
+        """
         if not self.id:
             raise AppError(ErrorCode.INVALID_INPUT, "eval case requires an id")
 
@@ -41,8 +46,18 @@ class Dataset(ABC):
 
     @abstractmethod
     def cases(self) -> AsyncIterator[EvalCase]:
-        """Yield every case in the dataset, in a stable order."""
+        """Yield every case in the dataset, in a stable order.
+
+        Returns:
+            An iterator over every case, in a stable order.
+
+        """
 
     @abstractmethod
     def version(self) -> str:
-        """Return the dataset's content hash (equal versions mean identical cases)."""
+        """Return the dataset's content hash (equal versions mean identical cases).
+
+        Returns:
+            The dataset's content hash; equal versions mean identical cases.
+
+        """

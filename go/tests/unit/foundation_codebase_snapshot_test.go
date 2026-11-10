@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
 )
 
@@ -26,31 +26,52 @@ import (
 //     a second key builds separately; Key returns the snapshot's key.
 func TestCodebaseSnapshot_MemoComputesOncePerKey(t *testing.T) {
 	t.Parallel()
-	s := codebase.NewSnapshot("run-1")
-	assert.Equal(t, "run-1", s.Key())
-	var calls atomic.Int32
-	var wg sync.WaitGroup
-	errs := make([]error, 100)
-	for i := range errs {
-		wg.Go(func() {
-			got, err := s.Memo(t.Context(), "k", func(context.Context) (int, error) {
-				calls.Add(1)
-				return 42, nil
-			})
-			errs[i] = err
+
+	snapshot := codebase.NewSnapshot("run-1")
+	assert.Equal(t, "run-1", snapshot.Key())
+
+	var (
+		calls atomic.Int32
+		group sync.WaitGroup
+	)
+
+	errs := make([]error, makeInputKey)
+
+	for index := range errs {
+		group.Go(func() {
+			got, err := snapshot.Memo(
+				t.Context(),
+				textK,
+				func(context.Context) (int, error) {
+					calls.Add(1)
+
+					return 42, nil
+				},
+			)
+
+			errs[index] = err
+
 			assert.Equal(t, 42, got)
 		})
 	}
-	wg.Wait()
+
+	group.Wait()
+
 	for _, err := range errs {
 		require.NoError(t, err)
 	}
+
 	assert.Equal(t, int32(1), calls.Load())
-	other, err := s.Memo(t.Context(), "other", func(context.Context) (string, error) {
-		return "x", nil
-	})
+
+	other, err := snapshot.Memo(
+		t.Context(),
+		textOther,
+		func(context.Context) (string, error) {
+			return textX, nil
+		},
+	)
 	require.NoError(t, err)
-	assert.Equal(t, "x", other)
+	assert.Equal(t, textX, other)
 }
 
 // TestCodebaseSnapshot_MemoErrors tests what Memo caches when a build fails.
@@ -67,34 +88,49 @@ func TestCodebaseSnapshot_MemoComputesOncePerKey(t *testing.T) {
 //     reused key is CodeInternal.
 func TestCodebaseSnapshot_MemoErrors(t *testing.T) {
 	t.Parallel()
-	s := codebase.NewSnapshot("run-2")
+
+	snapshot := codebase.NewSnapshot("run-2")
+
 	var calls atomic.Int32
+
 	fail := func(context.Context) (int, error) {
 		calls.Add(1)
+
 		return 0, apperr.New(apperr.CodeInvalidInput, "bad file")
 	}
-	_, err := s.Memo(t.Context(), "bad", fail)
+	_, err := snapshot.Memo(t.Context(), textBad, fail)
 	require.Error(t, err)
-	_, err = s.Memo(t.Context(), "bad", fail)
+
+	_, err = snapshot.Memo(t.Context(), textBad, fail)
 	require.Error(t, err)
 	assert.Equal(t, int32(1), calls.Load())
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err = s.Memo(ctx, "cancel", func(ctx context.Context) (int, error) {
+
+	_, err = snapshot.Memo(ctx, textCancel, func(ctx context.Context) (int, error) {
 		return 0, ctx.Err()
 	})
 	require.Error(t, err)
-	got, err := s.Memo(t.Context(), "cancel", func(context.Context) (int, error) {
-		return 7, nil
-	})
-	require.NoError(t, err)
-	assert.Equal(t, 7, got)
 
-	_, err = s.Memo(t.Context(), "cancel", func(context.Context) (string, error) {
-		return "", nil
-	})
+	got, err := snapshot.Memo(
+		t.Context(),
+		textCancel,
+		func(context.Context) (int, error) {
+			return 7, nil
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, wantGotErrors, got)
+
+	_, err = snapshot.Memo(
+		t.Context(),
+		textCancel,
+		func(context.Context) (string, error) {
+			return "", nil
+		},
+	)
 	assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 }
 
@@ -112,31 +148,41 @@ func TestCodebaseSnapshot_MemoErrors(t *testing.T) {
 //     the key is not cached, so a later call builds again and gets its value.
 func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 	t.Parallel()
-	s := codebase.NewSnapshot("run-3")
+
+	snapshot := codebase.NewSnapshot("run-3")
 	started, release := make(chan struct{}), make(chan struct{})
+
 	var once sync.Once
+
 	boom := func(context.Context) (int, error) {
 		once.Do(func() { close(started) })
 		<-release
 		panic("parser bug")
 	}
-	errs := make(chan error, 2)
+	errs := make(chan error, makeInput)
+
 	go func() {
-		_, err := s.Memo(t.Context(), "k", boom)
+		_, err := snapshot.Memo(t.Context(), textK, boom)
 		errs <- err
 	}()
+
 	<-started
+
 	go func() {
-		_, err := s.Memo(t.Context(), "k", boom)
+		_, err := snapshot.Memo(t.Context(), textK, boom)
 		errs <- err
 	}()
+
 	close(release)
-	for range 2 {
+
+	for range iterations {
 		err := <-errs
 		assert.Equal(t, apperr.CodeInternal, apperr.Code(err))
 		assert.Contains(t, err.Error(), "parser bug")
 		assert.NotContains(t, err.Error(), "goroutine ", "the message stays one line")
+
 		var appErr *apperr.AppError
+
 		require.ErrorAs(t, err, &appErr)
 		assert.Contains(
 			t,
@@ -146,11 +192,11 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 		)
 	}
 
-	got, err := s.Memo(t.Context(), "k", func(context.Context) (int, error) {
+	got, err := snapshot.Memo(t.Context(), textK, func(context.Context) (int, error) {
 		return 3, nil
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 3, got)
+	assert.Equal(t, wantGotBuild, got)
 }
 
 // TestCodebaseSnapshot_KeysListsWhatWasBuilt tests that Keys reports the memoized keys.
@@ -166,27 +212,61 @@ func TestCodebaseSnapshot_MemoPanickingBuild(t *testing.T) {
 //     caller's context is not.
 func TestCodebaseSnapshot_KeysListsWhatWasBuilt(t *testing.T) {
 	t.Parallel()
-	s := codebase.NewSnapshot("run-4")
-	assert.Empty(t, s.Keys())
 
-	_, err := s.Memo(t.Context(), "go|parse|1|b.go", func(context.Context) (int, error) {
-		return 1, nil
-	})
+	snapshot := codebase.NewSnapshot("run-4")
+	assert.Empty(t, snapshot.Keys())
+
+	_, err := snapshot.Memo(
+		t.Context(),
+		"go|parse|1|b.go",
+		func(context.Context) (int, error) {
+			return 1, nil
+		},
+	)
 	require.NoError(t, err)
-	_, err = s.Memo(t.Context(), "go|parse|1|a.go", func(context.Context) (int, error) {
-		return 2, nil
-	})
+
+	_, err = snapshot.Memo(
+		t.Context(),
+		"go|parse|1|a.go",
+		func(context.Context) (int, error) {
+			return 2, nil
+		},
+	)
 	require.NoError(t, err)
-	_, err = s.Memo(t.Context(), "text|bad", func(context.Context) (int, error) {
-		return 0, apperr.New(apperr.CodeInternal, "boom")
+
+	_, err = snapshot.Memo(t.Context(), "text|bad", func(context.Context) (int, error) {
+		return 0, apperr.New(apperr.CodeInternal, textBoom)
 	})
 	require.Error(t, err)
+
 	ctx, cancel := context.WithCancel(t.Context())
-	_, err = s.Memo(ctx, "text|cancelled", func(ctx context.Context) (int, error) {
+
+	_, err = snapshot.Memo(ctx, "text|cancelled", func(ctx context.Context) (int, error) {
 		cancel()
+
 		return 0, ctx.Err()
 	})
 	require.Error(t, err)
 
-	assert.Equal(t, []string{"go|parse|1|a.go", "go|parse|1|b.go", "text|bad"}, s.Keys())
+	assert.Equal(
+		t,
+		[]string{"go|parse|1|a.go", "go|parse|1|b.go", "text|bad"},
+		snapshot.Keys(),
+	)
 }
+
+const (
+	// makeInputKey is argument 2 of make in TestCodebaseSnapshot_MemoComputesOncePerKey.
+	makeInputKey = 100
+
+	// wantGotBuild is the expected got build.
+	wantGotBuild = 3
+
+	// wantGotErrors is the expected got errors.
+	wantGotErrors = 7
+)
+
+const (
+	// textCancel is the literal "cancel".
+	textCancel = "cancel"
+)

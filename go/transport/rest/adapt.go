@@ -26,25 +26,27 @@ import (
 //	    },
 //	))
 func Adapt[Req, Resp any](
-	bc *BaseController,
+	baseController *BaseController,
 	handler transport.HandlerFunc[Req, Resp],
 	writeStatus int,
 	parse func(r *http.Request) (Req, error),
 ) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		req, err := parse(r)
+	return func(writer http.ResponseWriter, request *http.Request) {
+		req, err := parse(request)
 		if err != nil {
-			bc.WriteError(w, err)
+			baseController.WriteError(writer, err)
+
 			return
 		}
 
-		resp, err := handler(r.Context(), req)
+		resp, err := handler(request.Context(), req)
 		if err != nil {
-			bc.WriteError(w, err)
+			baseController.WriteError(writer, err)
+
 			return
 		}
 
-		bc.WriteJSON(w, writeStatus, resp)
+		baseController.WriteJSON(writer, writeStatus, resp)
 	}
 }
 
@@ -60,23 +62,25 @@ func Adapt[Req, Resp any](
 //	    },
 //	))
 func AdaptNoContent[Req, Resp any](
-	bc *BaseController,
+	baseController *BaseController,
 	handler transport.HandlerFunc[Req, Resp],
 	parse func(r *http.Request) (Req, error),
 ) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		req, err := parse(r)
+	return func(writer http.ResponseWriter, request *http.Request) {
+		req, err := parse(request)
 		if err != nil {
-			bc.WriteError(w, err)
+			baseController.WriteError(writer, err)
+
 			return
 		}
 
-		_, err = handler(r.Context(), req)
+		_, err = handler(request.Context(), req)
 		if err != nil {
-			bc.WriteError(w, err)
+			baseController.WriteError(writer, err)
+
 			return
 		}
 
-		bc.WriteNoContent(w)
+		baseController.WriteNoContent(writer)
 	}
 }

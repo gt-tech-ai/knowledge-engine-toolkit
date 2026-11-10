@@ -7,10 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/cron"
 )
 
@@ -18,30 +19,37 @@ import (
 // a policy that excludes "wipe" (destructive); ran records drift's decoded target.
 func cronRegistry(t *testing.T, ran *string) *ops.Registry {
 	t.Helper()
+
 	run := ops.Func(func(
 		_ context.Context, in *adapterInput, _ opsEnv, _ interfaces.ExecutionObserver,
 	) error {
 		*ran = in.Target
+
 		return nil
 	})
 	descs := []types.OperationDescriptor{
-		opDesc("drift", types.SafetyReadOnly, types.OpLifecycleLongRunning),
-		opDesc("ask", types.SafetyReadOnly, types.OpLifecycleInteractive),
-		opDesc("wipe", types.SafetyDestructive, types.OpLifecycleBounded),
+		opDesc(textDrift, types.SafetyReadOnly, types.OpLifecycleLongRunning),
+		opDesc(textAsk, types.SafetyReadOnly, types.OpLifecycleInteractive),
+		opDesc(textWipe, types.SafetyDestructive, types.OpLifecycleBounded),
 	}
 	reg, err := ops.NewFromConfig(ops.Config[opsEnv]{
 		Policy: types.ExposurePolicy{
 			MaxSafety: types.SafetyCredentialed, Lifecycles: allLifecycles(),
-			Deny: []string{"wipe"},
+			Deny:     []string{textWipe},
+			Prompter: "",
+			Allow:    nil,
 		},
 		Descriptors: descs,
 		Builders: map[string]ops.Builder[opsEnv]{
-			"drift": run,
-			"ask":   run,
-			"wipe":  run,
+			textDrift: run,
+			textAsk:   run,
+			textWipe:  run,
 		},
+		Env: stdx.Zero[opsEnv](),
+		Log: nil,
 	})
 	require.NoError(t, err)
+
 	return reg
 }
 
@@ -58,23 +66,32 @@ func cronRegistry(t *testing.T, ran *string) *ops.Registry {
 //     INVALID_INPUT, and an unknown argument INVALID_INPUT; none of these run.
 func TestTransportCron_Run(t *testing.T) {
 	t.Parallel()
+
 	var ran string
+
 	reg := cronRegistry(t, &ran)
 	require.NoError(
 		t,
-		cron.Run(t.Context(), reg, "drift", []byte(`{"target":"live"}`), nil),
+		cron.Run(t.Context(), reg, textDrift, []byte(`{"target":"live"}`), nil),
 	)
 	assert.Equal(t, "live", ran)
 
 	ran = ""
+
 	for name, want := range map[string]apperr.ErrorCode{
-		"wipe": apperr.CodeForbidden, "nope": apperr.CodeNotFound,
-		"ask": apperr.CodeInvalidInput,
+		textWipe: apperr.CodeForbidden, textNope: apperr.CodeNotFound,
+		textAsk: apperr.CodeInvalidInput,
 	} {
 		err := cron.Run(t.Context(), reg, name, nil, nil)
 		assert.Equal(t, want, apperr.Code(err), name)
 	}
-	err := cron.Run(t.Context(), reg, "drift", []byte(`{"targt":"x"}`), nil)
+
+	err := cron.Run(t.Context(), reg, textDrift, []byte(`{"targt":"x"}`), nil)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.Empty(t, ran)
 }
+
+const (
+	// textWipe is the literal "wipe".
+	textWipe = "wipe"
+)

@@ -1,20 +1,21 @@
 """The routed gateway's model catalog and routes, parsed and validated at boot.
 
-A catalog maps stable ``provider/model`` ids to capabilities, priors and one or more endpoints,
-each with an ``LlmConfig`` fragment, a region and data-policy facts. Price is not in the catalog:
-it comes from the token-economy price table, and ``priced_ids`` makes every model prove it has a
-price (``None`` skips the check while a dev price table is empty). Any defect raises
-``AppError(INVALID_INPUT)`` naming the entry, so a bad catalog stops the boot.
+A catalog maps stable ``provider/model`` ids to capabilities, priors and one or more
+endpoints, each with an ``LlmConfig`` fragment, a region and data-policy facts. Price is
+not in the catalog: it comes from the token-economy price table, and ``priced_ids`` makes
+every model prove it has a price (``None`` skips the check while a dev price table is
+empty). Any defect raises ``AppError(INVALID_INPUT)`` naming the entry, so a bad catalog
+stops the boot.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
-from techai_webutils.clients.llm.builder import LlmConfig, LlmKind
 from techai_webutils.core.errors import AppError, ErrorCode
+from techai_webutils.core.types.llm import LlmConfig, LlmKind
 from techai_webutils.core.types.routing import Capabilities, CatalogEndpointRef, Route
 
 if TYPE_CHECKING:
@@ -25,31 +26,76 @@ _LLM_FIELDS = frozenset(f.name for f in fields(LlmConfig))
 
 
 def invalid(message: str) -> AppError:
-    """Return the coded error every catalog, route and policy defect raises."""
+    """Return the coded error every catalog, route and policy defect raises.
+
+    Args:
+        message: What is wrong with the catalog.
+
+    Returns:
+        The coded error every catalog, route and policy defect raises.
+
+    """
     return AppError(ErrorCode.INVALID_INPUT, message)
 
 
-def as_mapping(raw: object, what: str) -> Mapping[str, Any]:
-    """Return ``raw`` as a mapping, or raise ``INVALID_INPUT`` naming ``what``."""
+def as_mapping(raw: object, what: str) -> Mapping[str, object]:
+    """Return ``raw`` as a mapping, or raise ``INVALID_INPUT`` naming ``what``.
+
+    Args:
+        raw: The value.
+        what: What it is, for the error.
+
+    Returns:
+        ``raw`` as a mapping, or raise ``INVALID_INPUT`` naming ``what``.
+
+    Raises:
+        invalid: ``what`` must be a mapping.
+
+    """
     if not isinstance(raw, Mapping):
         msg = f"{what} must be a mapping"
         raise invalid(msg)
-    return raw  # pyright: ignore[reportUnknownVariableType]
+    return cast("Mapping[str, object]", raw)
 
 
 def as_strings(raw: object, what: str) -> tuple[str, ...]:
-    """Return ``raw`` (a list of strings) as a tuple, or raise ``INVALID_INPUT``."""
+    """Return ``raw`` (a list of strings) as a tuple, or raise ``INVALID_INPUT``.
+
+    Args:
+        raw: The value.
+        what: What it is, for the error.
+
+    Returns:
+        ``raw`` (a list of strings) as a tuple, or raise ``INVALID_INPUT``.
+
+    Raises:
+        invalid: ``what`` must be a list.
+
+    """
     if isinstance(raw, str) or not isinstance(raw, Sequence):
         msg = f"{what} must be a list"
         raise invalid(msg)
-    return tuple(str(item) for item in raw)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
+    items = cast("Sequence[object]", cast("object", raw))
+    return tuple(str(item) for item in items)
 
 
 def _llm_config(raw: object, key: str) -> LlmConfig:
     """Build an endpoint's ``LlmConfig`` from its fragment, stripping ``fallback_model``.
 
-    The routed chain fails over across endpoints itself, so an endpoint never also carries the
-    LLM tier's own fallback (the two would stack).
+    The routed chain fails over across endpoints itself, so an endpoint never also carries
+    the LLM tier's own fallback (the two would stack).
+
+    Args:
+        raw: The endpoint's fragment.
+        key: The endpoint's key, for the error.
+
+    Returns:
+        An endpoint's ``LlmConfig`` from its fragment, stripping ``fallback_model``.
+
+    Raises:
+        invalid: Catalog endpoint ``key`` llm has unknown fields ``sorted(unknown)``;
+            catalog endpoint ``key`` has unknown llm kind ``spec.get('kind')``.
+
     """
     spec = as_mapping(raw, f"catalog endpoint {key} llm")
     unknown = set(spec) - _LLM_FIELDS
@@ -57,17 +103,20 @@ def _llm_config(raw: object, key: str) -> LlmConfig:
         msg = f"catalog endpoint {key} llm has unknown fields {sorted(unknown)}"
         raise invalid(msg)
     try:
-        kind = LlmKind(spec.get("kind", ""))
+        kind = LlmKind(str(spec.get("kind", "")))
     except ValueError:
         msg = f"catalog endpoint {key} has unknown llm kind {spec.get('kind')!r}"
         raise invalid(msg) from None
-    values = cast("dict[str, Any]", {**spec, "kind": kind, "fallback_model": ""})
-    return LlmConfig(**values)
+    values = cast("dict[str, object]", {**spec, "kind": kind, "fallback_model": ""})
+    return cast("Callable[..., LlmConfig]", LlmConfig)(**values)
 
 
 @dataclass(frozen=True, slots=True)
 class ModelCatalog:
-    """The validated catalog: endpoint refs in catalog order plus each one's provider config."""
+    """The validated catalog: endpoint refs in catalog order.
+
+    Each carries its provider config.
+    """
 
     refs: tuple[CatalogEndpointRef, ...]
     """Every endpoint, model by model, in the order the catalog lists them."""
@@ -75,7 +124,15 @@ class ModelCatalog:
     """Endpoint key → the provider config it is built from."""
 
     def llm_config(self, ref: CatalogEndpointRef) -> LlmConfig:
-        """Return the provider config of ``ref``."""
+        """Return the provider config of ``ref``.
+
+        Args:
+            ref: The endpoint.
+
+        Returns:
+            The provider config of ``ref``.
+
+        """
         return self.llm_configs[ref.key]
 
     @property
@@ -85,12 +142,22 @@ class ModelCatalog:
 
     @classmethod
     def from_mapping(
-        cls, raw: Mapping[str, Any], *, priced_ids: frozenset[str] | None
+        cls, raw: Mapping[str, object], *, priced_ids: frozenset[str] | None
     ) -> ModelCatalog:
         """Parse and validate ``raw`` (model id → spec).
 
+        A callee raises ``AppError``: ``INVALID_INPUT`` naming the first defective entry.
+
+        Args:
+            raw: Model id to spec.
+            priced_ids: The ids the price table knows; ``None`` skips the check.
+
+        Returns:
+            The validated catalog.
+
         Raises:
-            AppError: ``INVALID_INPUT`` naming the first defective entry.
+            invalid: Catalog model ``model_id`` has no price in the price table; catalog
+                has no endpoints.
 
         """
         refs: list[CatalogEndpointRef] = []
@@ -107,17 +174,35 @@ class ModelCatalog:
 
 
 def _parse_model(
-    model_id: str, spec: Mapping[str, Any], configs: dict[str, LlmConfig]
+    model_id: str, spec: Mapping[str, object], configs: dict[str, LlmConfig]
 ) -> list[CatalogEndpointRef]:
-    """Parse one model's endpoints into refs, recording each endpoint's config."""
+    """Parse one model's endpoints into refs, recording each endpoint's config.
+
+    Args:
+        model_id: The model's id.
+        spec: Its spec.
+        configs: Collects each endpoint's config.
+
+    Returns:
+        One model's endpoints into refs, recording each endpoint's config.
+
+    Raises:
+        invalid: Catalog model ``model_id`` is malformed: ``exc``; catalog endpoint
+            ``key`` is listed twice; catalog endpoint ``key`` has no llm config; catalog
+            model ``model_id`` has no endpoints.
+
+    """
     try:
-        capabilities = Capabilities(**as_mapping(spec.get("capabilities"), model_id))
-        quality, ttft_ms = float(spec["quality"]), int(spec["ttft_ms"])
+        capabilities = cast("Callable[..., Capabilities]", Capabilities)(
+            **as_mapping(spec.get("capabilities"), model_id)
+        )
+        quality = float(cast("float", spec["quality"]))
+        ttft_ms = int(cast("int", spec["ttft_ms"]))
     except (KeyError, TypeError, ValueError) as exc:
         msg = f"catalog model {model_id} is malformed: {exc}"
         raise invalid(msg) from None
     refs: list[CatalogEndpointRef] = []
-    for endpoint_raw in spec.get("endpoints") or ():
+    for endpoint_raw in cast("Sequence[object]", spec.get("endpoints") or ()):
         endpoint = as_mapping(endpoint_raw, f"catalog model {model_id} endpoint")
         key = f"{model_id}@{endpoint.get('name', '')}"
         if key in configs:
@@ -145,11 +230,21 @@ def _parse_model(
     return refs
 
 
-def parse_routes(raw: Mapping[str, Any], catalog: ModelCatalog) -> dict[str, Route]:
+def parse_routes(raw: Mapping[str, object], catalog: ModelCatalog) -> dict[str, Route]:
     """Parse ``raw`` (route name → spec) into routes whose models are all in ``catalog``.
 
+    A callee raises ``AppError``: ``INVALID_INPUT`` for a malformed route or an unknown
+    model id.
+
+    Args:
+        raw: Route name to spec.
+        catalog: The models the routes may name.
+
+    Returns:
+        The routes by name.
+
     Raises:
-        AppError: ``INVALID_INPUT`` for a malformed route or an unknown model id.
+        invalid: Route ``name`` names models not in the catalog: ``sorted(unknown)``.
 
     """
     routes: dict[str, Route] = {}
@@ -160,8 +255,8 @@ def parse_routes(raw: Mapping[str, Any], catalog: ModelCatalog) -> dict[str, Rou
             default_model=str(spec.get("default_model", "")),
             preferred=as_strings(spec.get("preferred", ()), f"route {name} preferred"),
             exemplars=as_strings(spec.get("exemplars", ()), f"route {name} exemplars"),
-            threshold=float(spec.get("threshold", 0.0)),
-            quality_floor=float(spec.get("quality_floor", 0.0)),
+            threshold=float(cast("float", spec.get("threshold", 0.0))),
+            quality_floor=float(cast("float", spec.get("quality_floor", 0.0))),
         )
         unknown = {route.default_model, *route.preferred} - catalog.model_ids
         if unknown:

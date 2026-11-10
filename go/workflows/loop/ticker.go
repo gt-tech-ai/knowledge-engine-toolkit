@@ -4,14 +4,17 @@ import (
 	"context"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
+
+// none is the input and output type of a pass, which carries no data.
+type none = struct{}
 
 // Ticker runs one workflow pass on a schedule until its context ends.
 type Ticker struct {
 	// pass is the decorated workflow one iteration executes.
-	pass interfaces.Workflow[struct{}, struct{}]
+	pass interfaces.Workflow[none, none]
 	// logger records failed passes.
 	logger interfaces.Logger
 	// name labels the loop in logs.
@@ -25,16 +28,19 @@ type Ticker struct {
 // as a wiring bug.
 func NewTicker(
 	name string,
-	pass interfaces.Workflow[struct{}, struct{}],
+	pass interfaces.Workflow[none, none],
 	cfg Config,
 	logger interfaces.Logger,
 ) (*Ticker, error) {
 	if pass == nil || logger == nil {
 		panic("loop: pass and logger must not be nil")
 	}
-	if err := cfg.Validate(); err != nil {
+
+	err := cfg.Validate()
+	if err != nil {
 		return nil, err
 	}
+
 	return &Ticker{pass: pass, logger: logger, name: name, cfg: cfg}, nil
 }
 
@@ -47,13 +53,18 @@ func (t *Ticker) Run(ctx context.Context) error {
 		for ctx.Err() == nil {
 			t.once(ctx)
 		}
+
 		return nil
 	}
+
 	if t.cfg.RunAtStart {
 		t.once(ctx)
 	}
+
 	tick := time.NewTicker(t.cfg.Interval)
+
 	defer tick.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -71,16 +82,23 @@ func (t *Ticker) once(ctx context.Context) {
 	if err == nil {
 		return
 	}
+
 	if ctx.Err() != nil {
 		logShutdownError(t.logger, "loop pass failed during shutdown", t.name, err)
+
 		return
 	}
+
 	t.logger.Warn("loop pass failed", "loop", t.name, "error", err)
+
 	if t.cfg.ErrorBackoff == 0 {
 		return
 	}
+
 	wait := time.NewTimer(t.cfg.ErrorBackoff)
+
 	defer wait.Stop()
+
 	select {
 	case <-ctx.Done():
 	case <-wait.C:
@@ -95,5 +113,6 @@ func logShutdownError(logger interfaces.Logger, msg, name string, err error) {
 	if code == apperr.CodeCanceled || code == apperr.CodeTimeout {
 		return
 	}
+
 	logger.Debug(msg, "loop", name, "error", err)
 }

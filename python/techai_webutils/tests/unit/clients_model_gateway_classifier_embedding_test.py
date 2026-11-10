@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -18,6 +18,8 @@ from techai_webutils.core.types.routing import Classification, Route
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.routing import RouteClassifier
+
+_EXPECTED_CONFIDENCE = 0.9
 
 _VECTORS = {
     "what is x": [1.0, 0.0],
@@ -40,17 +42,27 @@ _ROUTES = {
 
 
 def _embedding() -> MagicMock:
-    """Return a mocked embedder answering the controlled vectors."""
+    """Return a mocked embedder answering the controlled vectors.
+
+    Queries and exemplars embed as queries.
+
+    Returns:
+        A mocked embedder answering the controlled vectors.
+
+    """
 
     def result(text: str) -> EmbeddingResult:
         return EmbeddingResult(embedding=_VECTORS[text], model="m", token_count=0)
 
-    async def embed(text: str) -> EmbeddingResult:
+    async def embed(text: str, *, input_type: str = "document") -> EmbeddingResult:
+        assert input_type == "query"
         await asyncio.sleep(0)
         return result(text)
 
-    async def embed_batch(texts: list[str]) -> list[EmbeddingResult]:
-        return [await embed(text) for text in texts]
+    async def embed_batch(
+        texts: list[str], *, input_type: str = "document"
+    ) -> list[EmbeddingResult]:
+        return [await embed(text, input_type=input_type) for text in texts]
 
     provider = MagicMock(spec=EmbeddingProvider)
     provider.embed = AsyncMock(side_effect=embed)
@@ -59,7 +71,15 @@ def _embedding() -> MagicMock:
 
 
 async def _classifier(embedding: MagicMock) -> RouteClassifier:
-    """Build and warm an embedding classifier over ``_ROUTES``."""
+    """Build and warm an embedding classifier over ``_ROUTES``.
+
+    Args:
+        embedding: The embedding provider.
+
+    Returns:
+        The classifier.
+
+    """
     classifier = route_classifier_from_config(
         {"kind": "embedding", "top_k": 2},
         route_names=frozenset(_ROUTES),
@@ -67,7 +87,7 @@ async def _classifier(embedding: MagicMock) -> RouteClassifier:
         routes=_ROUTES,
         embedding=embedding,
     )
-    await classifier.warm()  # type: ignore[attr-defined]
+    await classifier.warm()
     return classifier
 
 
@@ -81,7 +101,8 @@ async def test_embedding_classifier_picks_route_with_highest_exemplar_similarity
       - This is what lets a lookup run on a cheap model and a synthesis on a strong one.
 
     **What it tests:**
-      - ``lookup-ish`` on a ``generate`` step goes to ``lookup`` with the top-2 mean cosine
+      - ``lookup-ish`` on a ``generate`` step goes to ``lookup`` with the top-2 mean
+        cosine
       - the exemplars are embedded once, in one batch, at warm-up
     """
     embedding = _embedding()
@@ -92,7 +113,7 @@ async def test_embedding_classifier_picks_route_with_highest_exemplar_similarity
     assert result.route == "lookup"
     assert result.confidence == pytest.approx(0.99, abs=0.01)
     assert result.degraded is False
-    embedding.embed_batch.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", embedding.embed_batch).assert_awaited_once)()
 
 
 @pytest.mark.asyncio
@@ -103,15 +124,15 @@ async def test_embedding_classifier_below_threshold_uses_default_route() -> None
       - A weak match must not move a request off its step's model.
 
     **What it tests:**
-      - ``halfway`` (≈0.76 to either route, below 0.9) on a ``generate`` step returns route
-        ``generate`` carrying the best confidence found
+      - ``halfway`` (≈0.76 to either route, below 0.9) on a ``generate`` step returns
+        route ``generate`` carrying the best confidence found
     """
     classifier = await _classifier(_embedding())
 
     result = await classifier.classify(RouteContext(step="generate"), "halfway")
 
     assert result.route == "generate"
-    assert result.confidence < 0.9
+    assert result.confidence < _EXPECTED_CONFIDENCE
     assert result.degraded is False
 
 
@@ -120,7 +141,8 @@ async def test_embedding_classifier_degrades_when_embedder_fails() -> None:
     """Test that an embedder outage degrades routing instead of failing the answer.
 
     **Why this test is important:**
-      - Routing is an optimisation, not a dependency; an embedder blip must not fail a query.
+      - Routing is an optimisation, not a dependency; an embedder blip must not fail a
+        query.
 
     **What it tests:**
       - a raising ``embed`` returns the step's route with ``degraded=True``
@@ -137,10 +159,10 @@ async def test_embedding_classifier_degrades_when_embedder_fails() -> None:
     broken = _embedding()
     broken.embed_batch = AsyncMock(side_effect=RuntimeError("down"))
     with pytest.raises(AppError) as boot:
-        await _classifier(broken)
+        _ = await _classifier(broken)
     assert boot.value.code is ErrorCode.UNAVAILABLE
     with pytest.raises(AppError) as missing:
-        route_classifier_from_config(
+        _ = route_classifier_from_config(
             {"kind": "embedding"},
             route_names=frozenset(),
             default_route="",

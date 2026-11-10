@@ -12,8 +12,8 @@
 // job) decorates through it: a Tier names the tier and orders its layers, Deps
 // carries the collaborators (built from the decoration config by Decorations), a
 // Subject runs one component's operations through the tier's chain, and the role
-// decorators (Reader, Lister, Writer, …) build the decorated CRUD shapes from a
-// Subject.
+// decorators in the role subpackage (role.Reader, role.Lister, role.Creator, …) build
+// the decorated CRUD shapes from a Subject.
 package decorate
 
 import "context"

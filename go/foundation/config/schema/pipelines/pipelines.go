@@ -1,13 +1,18 @@
-// Package pipelines is the config surface for the pipeline (orchestration) layer:
-// the multipart-upload sizing (a pipeline's timeout is a decoration layer,
-// decoration.pipelines). S3's
-// 10 000-part protocol ceiling is deliberately NOT a knob here — it is a protocol
-// constant, guarded by a test. Pure data.
+// Package pipelines is the config surface for the pipeline (orchestration) layer: the
+// multipart-upload sizing (a pipeline's timeout is a decoration layer,
+// decoration.pipelines). S3's 10 000-part protocol ceiling is deliberately NOT a knob
+// here — it is a protocol constant, guarded by a test. Pure data.
 package pipelines
 
 import (
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultMultipartThresholdBytes is the object size at which an upload turns multipart.
+const defaultMultipartThresholdBytes = 20 << 20
+
+// defaultMultipartPartSizeBytes is the size of one multipart part.
+const defaultMultipartPartSizeBytes = 16 << 20
 
 // UploadConfig tunes the multipart-upload sizing.
 type UploadConfig struct {
@@ -31,8 +36,8 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Upload: UploadConfig{
-			MultipartThresholdBytes: 20 << 20,
-			MultipartPartSizeBytes:  16 << 20,
+			MultipartThresholdBytes: defaultMultipartThresholdBytes,
+			MultipartPartSizeBytes:  defaultMultipartPartSizeBytes,
 		},
 	}
 }
@@ -44,10 +49,12 @@ func (c Config) Validate() error {
 			"pipelines.upload.multipart_threshold_bytes must be >= 1",
 		)
 	}
+
 	if c.Upload.MultipartPartSizeBytes < 1 {
 		return apperr.InvalidInput(
 			"pipelines.upload.multipart_part_size_bytes must be >= 1",
 		)
 	}
+
 	return nil
 }

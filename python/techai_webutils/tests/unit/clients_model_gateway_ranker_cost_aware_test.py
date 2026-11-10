@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,7 +14,6 @@ from techai_webutils.clients.model_gateway.routed.catalog import (
 from techai_webutils.clients.model_gateway.routed.ranker import (
     candidate_ranker_from_config,
 )
-from techai_webutils.clients.token_ledger.cost import ModelPrice, PriceTable
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.model_gateway import RouteContext
 from techai_webutils.core.interfaces.token_ledger import (
@@ -31,6 +29,7 @@ from techai_webutils.core.types.routing import (
     RouteRequirements,
     RoutingPolicy,
 )
+from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
 
 _PRICES = PriceTable(
     prices={
@@ -44,13 +43,30 @@ _REQ = RouteRequirements(prompt_tokens=1000, max_tokens=1000)
 _GEN = Route("generate", "anthropic/sonnet")
 
 
-def _catalog(catalog_raw: dict[str, Any]) -> ModelCatalog:
-    """Return the fixture catalog."""
+def _catalog(catalog_raw: dict[str, object]) -> ModelCatalog:
+    """Return the fixture catalog.
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
+    Returns:
+        The fixture catalog.
+
+    """
     return ModelCatalog.from_mapping(catalog_raw, priced_ids=None)
 
 
 def _ledger(spent: str, remaining: str) -> MagicMock:
-    """Return a ledger mock reporting ``spent`` dollars used and ``remaining`` left."""
+    """Return a ledger mock reporting ``spent`` dollars used and ``remaining`` left.
+
+    Args:
+        spent: The budget spent.
+        remaining: The budget left.
+
+    Returns:
+        A ledger mock reporting ``spent`` dollars used and ``remaining`` left.
+
+    """
     ledger = MagicMock(spec=TokenLedger)
     scope = UsageScope(org_id="org-1")
     ledger.usage = AsyncMock(
@@ -77,7 +93,19 @@ async def _rank(
     route: Route = _GEN,
     ledger: MagicMock | None = None,
 ) -> tuple[list[str], dict[str, str]]:
-    """Rank the catalog and return the ordered keys and the rejections."""
+    """Rank the catalog and return the ordered keys and the rejections.
+
+    Args:
+        catalog: The catalog.
+        slo: The objective.
+        policy: The routing policy.
+        route: The route.
+        ledger: The token ledger.
+
+    Returns:
+        The ordered keys and the rejections.
+
+    """
     ranker = candidate_ranker_from_config(
         {"kind": "cost_aware"}, prices=_PRICES, ledger=ledger
     )
@@ -106,7 +134,7 @@ async def _rank(
     ],
 )
 async def test_cost_aware_orders_by_objective(
-    catalog_raw: dict[str, Any], slo: str, first: str, last: str | None
+    catalog_raw: dict[str, object], slo: str, first: str, last: str | None
 ) -> None:
     """Test that each objective orders endpoints by its own measure.
 
@@ -115,9 +143,16 @@ async def test_cost_aware_orders_by_objective(
 
     **What it tests:**
       - ``cost`` and ``latency`` put the small model first; ``quality`` puts Sonnet first;
-        ``balanced`` (0.5 quality, 0.3 cost, 0.2 latency, each min-max normalised) puts Haiku
-        first (Sonnet and the small model tie behind it)
+        ``balanced`` (0.5 quality, 0.3 cost, 0.2 latency, each min-max normalised) puts
+        Haiku first (Sonnet and the small model tie behind it)
       - ties keep catalog order (``sonnet@use1`` before ``sonnet@usw2``)
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        slo: The objective.
+        first: The endpoint ranked first.
+        last: The endpoint ranked last.
+
     """
     ordered, _ = await _rank(_catalog(catalog_raw), slo=slo)
 
@@ -129,7 +164,7 @@ async def test_cost_aware_orders_by_objective(
 
 @pytest.mark.asyncio
 async def test_cost_aware_drops_candidates_over_hard_caps(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that hard caps drop candidates outright and an empty result is forbidden.
 
@@ -141,6 +176,10 @@ async def test_cost_aware_drops_candidates_over_hard_caps(
       - a $0.01 cost cap drops both Sonnet endpoints (est. $0.018) as ``over_cap``
       - a 300 ms latency cap with the cost cap drops everything but the small model
       - caps that drop every candidate raise ``FORBIDDEN``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
 
@@ -156,7 +195,7 @@ async def test_cost_aware_drops_candidates_over_hard_caps(
     assert rejections["anthropic/sonnet@use1"] == "over_cap"
     assert tight == ["meta/small@local"]
     with pytest.raises(AppError) as caught:
-        await _rank(
+        _ = await _rank(
             catalog, policy=RoutingPolicy(max_cost_per_request=Decimal("0.00001"))
         )
     assert caught.value.code is ErrorCode.FORBIDDEN
@@ -164,7 +203,7 @@ async def test_cost_aware_drops_candidates_over_hard_caps(
 
 @pytest.mark.asyncio
 async def test_cost_aware_biases_cheaper_when_near_budget(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that a tenant near its budget is routed to cheaper endpoints.
 
@@ -175,6 +214,10 @@ async def test_cost_aware_biases_cheaper_when_near_budget(
       - a ``quality`` request at 95% of budget puts the cheapest endpoint first
       - at 50% of budget the same request keeps Sonnet first
       - a failing ledger means no bias (fail-open)
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
     down = MagicMock(spec=TokenLedger)
@@ -192,17 +235,23 @@ async def test_cost_aware_biases_cheaper_when_near_budget(
 
 @pytest.mark.asyncio
 async def test_cost_aware_drops_below_quality_floor_unless_degrade_on_budget(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
-    """Test that a route's quality floor drops weak models unless the tenant allows degrading.
+    """A route's quality floor drops weak models unless the tenant allows.
+
+    Degrading.
 
     **Why this test is important:**
-      - A synthesis route must not land on a model too weak to answer it, unless the tenant
-        chose cost over quality.
+      - A synthesis route must not land on a model too weak to answer it, unless the
+        tenant chose cost over quality.
 
     **What it tests:**
       - with ``quality_floor=0.6`` the small model (0.5) is dropped as ``quality_floor``
       - with ``degrade_on_budget`` it is kept
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
     route = Route("synthesis", "anthropic/sonnet", quality_floor=0.6)
@@ -218,15 +267,22 @@ async def test_cost_aware_drops_below_quality_floor_unless_degrade_on_budget(
 
 
 def test_routes_share_the_catalog(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
-    """Test that the fixture routes parse against the fixture catalog (shared setup check).
+    """Test that the fixture routes parse against the fixture catalog.
+
+    A shared setup check.
 
     **Why this test is important:**
       - The ranker tests reuse the fixture catalog; a drift there would make them vacuous.
 
     **What it tests:**
       - the ``generate`` route's default is Sonnet
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+        routes_raw: Routes named for the steps: generate → Sonnet (then Haiku).
+
     """
     assert parse_routes(routes_raw, _catalog(catalog_raw))["generate"].default_model == (
         "anthropic/sonnet"
@@ -235,19 +291,23 @@ def test_routes_share_the_catalog(
 
 @pytest.mark.asyncio
 async def test_cost_aware_ranks_under_each_requests_own_prices(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that one ranker ranks each request under the price table that request carries.
 
     **Why this test is important:**
-      - A remote planner receives its candidates' prices with every request; building a new
-        ranker per request to bind them re-reads the config on the hot path, and binding one
-        table at boot would rank every tenant under the wrong prices.
+      - A remote planner receives its candidates' prices with every request; building a
+        new ranker per request to bind them re-reads the config on the hot path, and
+        binding one table at boot would rank every tenant under the wrong prices.
 
     **What it tests:**
-      - a ``cost_aware`` ranker built with no table orders by cost under the table passed to
-        ``rank_priced``: the small model first under the fixture prices, Haiku first once a
-        second table makes Haiku the cheapest, from the same ranker instance
+      - a ``cost_aware`` ranker built with no table orders by cost under the table passed
+        to ``rank_priced``: the small model first under the fixture prices, Haiku first
+        once a second table makes Haiku the cheapest, from the same ranker instance
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
     ranker = candidate_ranker_from_config({"kind": "cost_aware"})
@@ -275,9 +335,11 @@ async def test_cost_aware_ranks_under_each_requests_own_prices(
 
 @pytest.mark.asyncio
 async def test_cost_aware_without_a_table_refuses_an_unpriced_rank(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
-    """Test that a ranker built without prices refuses ``rank``, which has none to rank by.
+    """Test that a ranker built without prices refuses ``rank``.
+
+    It has no prices to rank by.
 
     **Why this test is important:**
       - Ranking by cost with no prices would silently treat every model as unpriced and
@@ -286,6 +348,10 @@ async def test_cost_aware_without_a_table_refuses_an_unpriced_rank(
     **What it tests:**
       - ``rank`` on a ``cost_aware`` ranker with no construction table raises
         ``AppError(INVALID_INPUT)``
+
+    Args:
+        catalog_raw: A catalog: Sonnet (two regions), Haiku.
+
     """
     catalog = _catalog(catalog_raw)
     ranker = candidate_ranker_from_config({"kind": "cost_aware"})

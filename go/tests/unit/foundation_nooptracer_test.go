@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/nooptracer"
@@ -26,16 +26,17 @@ import (
 //     Shutdown all run without error or panic.
 func TestNoopTracer_SpanIsInert(t *testing.T) {
 	t.Parallel()
-	tr, err := nooptracer.New()
+
+	currentTracer, err := nooptracer.New()
 	require.NoError(t, err)
 
-	_, span := tr.Start(context.Background(), "op")
-	span.SetAttribute("key", "value")
-	span.RecordError(apperr.Sentinel("boom"))
-	span.SetStatus(interfaces.SpanStatusError, "failed")
+	_, span := currentTracer.Start(context.Background(), textOp)
+	span.SetAttribute(textKey, textValue)
+	span.RecordError(apperr.Sentinel(textBoom))
+	span.SetStatus(interfaces.SpanStatusError, textFailed)
 	span.End()
 
-	require.NoError(t, tr.Shutdown(context.Background()))
+	require.NoError(t, currentTracer.Shutdown(context.Background()))
 }
 
 // TestTraceParentFromContext_EmptyWithoutSpan verifies traceparent extraction

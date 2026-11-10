@@ -24,8 +24,10 @@ async def with_timeout[T](coro: Awaitable[T], seconds: float) -> T:
     Returns:
         The result of the coroutine.
 
+    A callee raises ``TimeoutError``: If the coroutine exceeds the timeout.
+
     Raises:
-        TimeoutError: If the coroutine exceeds the timeout.
+        AppTimeoutError: Operation timed out after ``seconds``s.
 
     """
     try:

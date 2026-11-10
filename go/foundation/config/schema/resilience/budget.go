@@ -1,6 +1,9 @@
 package resilience
 
-import apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+
+// defaultBudgetMaxRetries is the default retry budget.
+const defaultBudgetMaxRetries = 100
 
 // BudgetConfig tunes the retry budget (budget.NewBudget), which caps the total
 // retries a client may spend so a downstream outage cannot amplify load.
@@ -11,7 +14,7 @@ type BudgetConfig struct {
 
 // DefaultBudgetConfig returns a conservative default retry budget.
 func DefaultBudgetConfig() BudgetConfig {
-	return BudgetConfig{MaxRetries: 100}
+	return BudgetConfig{MaxRetries: defaultBudgetMaxRetries}
 }
 
 // Validate rejects a negative budget.
@@ -19,5 +22,6 @@ func (c BudgetConfig) Validate() error {
 	if c.MaxRetries < 0 {
 		return apperr.InvalidInput("resilience.budget.max_retries must be >= 0")
 	}
+
 	return nil
 }

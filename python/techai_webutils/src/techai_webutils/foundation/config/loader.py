@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 import yaml
 
@@ -27,6 +27,13 @@ def _substitute_env_vars(value: object) -> object:
 
     Walks dicts, lists, and strings. Non-string leaves are returned unchanged.
     Environment variables that are not set and have no default are left as-is.
+
+    Args:
+        value: A config value.
+
+    Returns:
+        The value with variables substituted.
+
     """
     if isinstance(value, str):
         return _ENV_VAR_PATTERN.sub(_resolve_var, value)
@@ -46,6 +53,13 @@ def _resolve_var(match: re.Match[str]) -> str:
     If the expression contains ``:-``, the text after it is used as a
     fallback when the environment variable is unset. Without a default,
     an unset variable is left as the original ``${VAR}`` literal.
+
+    Args:
+        match: The ``${VAR}`` match.
+
+    Returns:
+        A single ``${VAR}`` or ``${VAR:-default}`` regex match.
+
     """
     expr = match.group(1)
     if ":-" in expr:
@@ -54,16 +68,45 @@ def _resolve_var(match: re.Match[str]) -> str:
     return os.environ.get(expr, match.group(0))
 
 
-def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+def _read_yaml(path: Path) -> dict[str, object]:
+    """Return the mapping a YAML file holds, empty when it is absent or empty.
+
+    Args:
+        path: The YAML file.
+
+    Returns:
+        The file's top-level mapping.
+
+    """
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8") as f:
+        return cast("dict[str, object] | None", yaml.safe_load(f)) or {}
+
+
+def _deep_merge(
+    base: dict[str, object], override: dict[str, object]
+) -> dict[str, object]:
     """Deep-merge *override* into *base*, returning a new dict.
 
     Nested dicts are merged recursively. For all other types the
     *override* value wins. Neither input dict is mutated.
+
+    Args:
+        base: The lower config.
+        override: The overriding config.
+
+    Returns:
+        The merged dict.
+
     """
     result = base.copy()
     for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _deep_merge(result[key], cast("dict[str, Any]", value))
+        current = result.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            result[key] = _deep_merge(
+                cast("dict[str, object]", current), cast("dict[str, object]", value)
+            )
         else:
             result[key] = value
     return result
@@ -72,7 +115,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 def load_config(
     config_dir: str,
     environment: str | None = None,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Load and merge YAML configuration files.
 
     Args:
@@ -82,8 +125,10 @@ def load_config(
     Returns:
         Merged configuration dictionary with env vars substituted.
 
+    A callee raises ``FileNotFoundError``: If config_dir doesn't exist.
+
     Raises:
-        FileNotFoundError: If config_dir doesn't exist.
+        AppFileNotFoundError: Config directory not found: ``config_dir``.
 
     """
     config_path = Path(config_dir)
@@ -91,31 +136,11 @@ def load_config(
         msg = f"Config directory not found: {config_dir}"
         raise AppFileNotFoundError(msg)
 
-    # Layer 1: base config
-    base_file = config_path / "base.yaml"
-    config: dict[str, Any] = {}
-    if base_file.exists():
-        with base_file.open() as f:
-            loaded = yaml.safe_load(f)
-            if loaded:
-                config = loaded
-
-    # Layer 2: environment overlay
+    # Layer 1: base config, then the environment overlay, then the secrets overlay
+    config = _read_yaml(config_path / "base.yaml")
     if environment:
-        env_file = config_path / f"{environment}.yaml"
-        if env_file.exists():
-            with env_file.open() as f:
-                env_config = yaml.safe_load(f)
-                if env_config:
-                    config = _deep_merge(config, env_config)
-
-    # Layer 3: secrets overlay
-    secrets_file = config_path / "secrets.yaml"
-    if secrets_file.exists():
-        with secrets_file.open() as f:
-            secrets_config = yaml.safe_load(f)
-            if secrets_config:
-                config = _deep_merge(config, secrets_config)
+        config = _deep_merge(config, _read_yaml(config_path / f"{environment}.yaml"))
+    config = _deep_merge(config, _read_yaml(config_path / "secrets.yaml"))
 
     # Layer 4: environment variable substitution
-    return _substitute_env_vars(config)  # type: ignore[assignment]
+    return cast("dict[str, object]", _substitute_env_vars(config))

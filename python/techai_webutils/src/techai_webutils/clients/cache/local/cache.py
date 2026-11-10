@@ -9,17 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import final, override
 
 from techai_webutils.core.interfaces.cache import Cache
 
 
+@final
 class LocalCache(Cache):
-    """Async in-memory cache with per-key TTL expiration.
-
-    Args:
-        default_ttl: Default TTL in seconds for keys stored without an explicit TTL.
-
-    """
+    """Async in-memory cache with per-key TTL expiration."""
 
     def __init__(self, default_ttl: int = 300) -> None:
         """Create an empty in-memory store guarded by an asyncio lock.
@@ -33,8 +30,17 @@ class LocalCache(Cache):
         self._store: dict[str, tuple[bytes, float]] = {}
         self._lock = asyncio.Lock()
 
+    @override
     async def get(self, key: str) -> bytes | None:
-        """Get a value by key. Returns None on miss or if the key has expired."""
+        """Get a value by key. Returns None on miss or if the key has expired.
+
+        Args:
+            key: The cache key.
+
+        Returns:
+            A value by key. Returns None on miss or if the key has expired.
+
+        """
         async with self._lock:
             entry = self._store.get(key)
             if entry is None:
@@ -45,20 +51,43 @@ class LocalCache(Cache):
                 return None
             return value
 
+    @override
     async def set(self, key: str, value: bytes, ttl_seconds: int = 300) -> None:
-        """Set a value with a TTL in seconds. Uses default_ttl if ttl_seconds is 0."""
+        """Set a value with a TTL in seconds. Uses default_ttl if ttl_seconds is 0.
+
+        Args:
+            key: The cache key.
+            value: The bytes to store.
+            ttl_seconds: How long the entry lives.
+
+        """
         ttl = ttl_seconds if ttl_seconds > 0 else self._default_ttl
         expiry = time.monotonic() + ttl
         async with self._lock:
             self._store[key] = (value, expiry)
 
+    @override
     async def delete(self, key: str) -> None:
-        """Delete a key from the cache. No-op if the key does not exist."""
-        async with self._lock:
-            self._store.pop(key, None)
+        """Delete a key from the cache. No-op if the key does not exist.
 
+        Args:
+            key: The cache key.
+
+        """
+        async with self._lock:
+            _ = self._store.pop(key, None)
+
+    @override
     async def exists(self, key: str) -> bool:
-        """Check if a key exists and is not expired."""
+        """Check if a key exists and is not expired.
+
+        Args:
+            key: The cache key.
+
+        Returns:
+            Whether the key exists.
+
+        """
         async with self._lock:
             entry = self._store.get(key)
             if entry is None:

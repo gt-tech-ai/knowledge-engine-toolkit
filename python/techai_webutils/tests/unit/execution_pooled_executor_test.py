@@ -1,14 +1,19 @@
-"""Tests for PooledExecutor: build a per-worker context once, route items across a fixed pool.
+"""Tests for PooledExecutor: build a per-worker context once.
 
-Ray-free by design: PooledExecutor is the driver-side pool (build-once + round-robin routing) that
-the Ray actor pool plugs into via the PooledWorker seam, so these unit tests drive it with a
-pure-Python counting worker — the real Ray-actor behaviour is the integration test. PooledExecutor
-must inherit fan_out's bounded-concurrency + per-item-isolation guarantees while building each
-worker's (expensive) context exactly once and closing every built worker at the end.
+Items route across a fixed pool.
+
+Ray-free by design: PooledExecutor is the driver-side pool (build-once + round-robin
+routing) that the Ray actor pool plugs into via the PooledWorker seam, so these unit tests
+drive it with a pure-Python counting worker — the real Ray-actor behaviour is the
+integration test. PooledExecutor must inherit fan_out's bounded-concurrency +
+per-item-isolation guarantees while building each worker's (expensive) context exactly
+once and closing every built worker at the end.
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import NoReturn, final
 
 import pytest
 
@@ -19,26 +24,59 @@ from techai_webutils.execution.executor.pooled import (
 )
 from techai_webutils.execution.executor.ray_runtime import RayUnavailableError
 
+_EXPECTED_TOTAL = 10
+_EXPECTED_SUCCEEDED = 10
+_EXPECTED_BUILT = 3
+_EXPECTED_CLOSED = 3
+_EXPECTED_SUCCEEDED_8 = 8
+_EXPECTED_ITEM = 2
+_EXPECTED_SUCCEEDED_3 = 3
+_EXPECTED_PEAK = 2
+
 
 @dataclass
 class _Log:
-    """Shared tracker: how many workers were built/closed and every item processed across them."""
+    """Counts the workers built and closed, and records every item they processed."""
 
     built: int = 0
+    """How many workers were built."""
+
     closed: int = 0
+    """How many workers were closed."""
+
     processed: list[int] = field(default_factory=list)
+    """Every item processed, across all workers."""
 
 
+@final
 class _CountingWorker:
-    """PooledWorker that records its own build + every item it processes into a shared log."""
+    """PooledWorker that records its own build and every item it processes.
+
+    They go into a shared log.
+    """
 
     def __init__(self, log: _Log) -> None:
-        """Register this build in the shared log so the test can count workers actually created."""
+        """Register this build in the shared log.
+
+        The test counts the workers actually created.
+
+        Args:
+            log: Counts the workers built and items processed.
+
+        """
         self._log = log
         log.built += 1
 
     async def process(self, item: int) -> StepResult:
-        """Record the item and return a passing StepResult."""
+        """Record the item and return a passing StepResult.
+
+        Args:
+            item: The item.
+
+        Returns:
+            A passing step for the item.
+
+        """
         self._log.processed.append(item)
         return StepResult(name=f"item-{item}")
 
@@ -47,8 +85,16 @@ class _CountingWorker:
         self._log.closed += 1
 
 
-def _counting_factory(log: _Log):  # noqa: ANN202
-    """Return a WorkerFactory that builds counting workers recording into ``log``."""
+def _counting_factory(log: _Log) -> Callable[[], Awaitable[PooledWorker[int]]]:
+    """Return a WorkerFactory that builds counting workers recording into ``log``.
+
+    Args:
+        log: Counts the workers built and items processed.
+
+    Returns:
+        A WorkerFactory that builds counting workers recording into ``log``.
+
+    """
 
     async def build() -> PooledWorker[int]:
         await asyncio.sleep(0)
@@ -60,53 +106,67 @@ def _counting_factory(log: _Log):  # noqa: ANN202
 class TestPooledExecutor:
     """Tests for the pooled executor."""
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_builds_each_worker_once_and_routes_all(self) -> None:
+    async def test_builds_each_worker_once_and_routes_all() -> None:
         """Test that the pool builds one worker per slot, reuses it, and closes them all.
 
         **Why this test is important:**
-          - Building the per-worker context once and reusing it across items is the whole point of
-            the pool (the per-object client rebuild is the cost being removed); a rebuild
-            per item, or a leaked (unclosed) worker, would defeat it.
+          - Building the per-worker context once and reusing it across items is the whole
+            point of the pool (the per-object client rebuild is the cost being removed); a
+            rebuild per item, or a leaked (unclosed) worker, would defeat it.
 
         **What it tests:**
-          - 10 items over a pool of 3 build exactly 3 workers, process all 10 items, and close all 3.
+          - 10 items over a pool of 3 build exactly 3 workers, process all 10 items, and
+            close all 3.
         """
         log = _Log()
         ex = PooledExecutor(_counting_factory(log), pool_size=3)
 
         batch = await ex.run(list(range(10)), concurrency=3)
 
-        assert batch.total == 10
-        assert batch.succeeded == 10
-        assert log.built == 3
-        assert log.closed == 3
+        assert batch.total == _EXPECTED_TOTAL
+        assert batch.succeeded == _EXPECTED_SUCCEEDED
+        assert log.built == _EXPECTED_BUILT
+        assert log.closed == _EXPECTED_CLOSED
         assert sorted(log.processed) == list(range(10))
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_slot_builds_once_under_concurrent_first_calls(self) -> None:
-        """Test that a pool slot builds its worker EXACTLY once even under concurrent first calls.
+    async def test_slot_builds_once_under_concurrent_first_calls() -> None:
+        """Test that a pool slot builds its worker EXACTLY once.
+
+        This holds even under concurrent first calls.
 
         **Why this test is important:**
-          - The slot's build-once primitive is shared by both pool paths; it is load-bearing
-            in the Ray actor (real_ray_pool._WorkerActor), where an async actor runs its methods
-            concurrently on one event loop. Without the lock, concurrent first-item calls each
-            ``await factory()`` (the build yields on the S3-session open) and build a SECOND worker,
-            orphaning the first's un-closed clients and defeating the reuse — the guarantee the Ray
-            actor pool relies on. Ray-free so the guarantee runs in CI.
+          - The slot's build-once primitive is shared by both pool paths; it is
+            load-bearing in the Ray actor (real_ray_pool._WorkerActor), where an async
+            actor runs its methods concurrently on one event loop. Without the lock,
+            concurrent first-item calls each ``await factory()`` (the build yields on the
+            S3-session open) and build a SECOND worker, orphaning the first's un-closed
+            clients and defeating the reuse — the guarantee the Ray actor pool relies on.
+            Ray-free so the guarantee runs in CI.
 
         **What it tests:**
-          - 8 items dispatched concurrently onto a one-slot pool, whose factory yields mid-build,
-            invoke the factory exactly once; that one worker processes all 8 and is closed once.
+          - 8 items dispatched concurrently onto a one-slot pool, whose factory yields
+            mid-build, invoke the factory exactly once; that one worker processes all 8
+            and is closed once.
         """
         log = _Log()
         builds = 0
 
         async def factory() -> PooledWorker[int]:
+            """Count the build, yielding during it.
+
+            Returns:
+                A counting worker.
+
+            """
             nonlocal builds
             builds += 1
-            # Yield DURING the build so concurrent first calls interleave — the exact race window a
-            # missing build-once lock would let through (each would build its own worker).
+            # Yield DURING the build so concurrent first calls interleave — the exact race
+            # window a missing build-once lock would let through (each would build its own
+            # worker).
             await asyncio.sleep(0)
             return _CountingWorker(log)
 
@@ -115,25 +175,30 @@ class TestPooledExecutor:
         )
 
         assert builds == 1  # built exactly once despite 8 concurrent first calls
-        assert batch.succeeded == 8
+        assert batch.succeeded == _EXPECTED_SUCCEEDED_8
         assert sorted(log.processed) == list(range(8))  # the one worker served every item
         assert log.closed == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_isolates_a_failing_item(self) -> None:
-        """Test that one worker.process exception becomes a single FAIL, not a batch abort.
+    async def test_isolates_a_failing_item() -> None:
+        """Test that one worker.process exception becomes a single FAIL.
+
+        It is not a batch abort.
 
         **Why this test is important:**
-          - Per-item isolation is inherited from fan_out; if PooledExecutor's routing swallowed or
-            propagated the error differently, one poison object would abort the whole batch.
+          - Per-item isolation is inherited from fan_out; if PooledExecutor's routing
+            swallowed or propagated the error differently, one poison object would abort
+            the whole batch.
 
         **What it tests:**
           - Given one raising item out of four, the batch is 3 succeeded + 1 failed.
         """
 
         class _Worker:
-            async def process(self, item: object) -> StepResult:
-                if item == 2:
+            @staticmethod
+            async def process(item: object) -> StepResult:
+                if item == _EXPECTED_ITEM:
                     msg = "boom"
                     raise ValueError(msg)
                 return StepResult(name=f"item-{item}")
@@ -141,6 +206,12 @@ class TestPooledExecutor:
             async def aclose(self) -> None: ...
 
         async def factory() -> PooledWorker[int]:
+            """Build a worker.
+
+            Returns:
+                The worker.
+
+            """
             await asyncio.sleep(0)
             return _Worker()
 
@@ -149,26 +220,34 @@ class TestPooledExecutor:
         batch = await ex.run([0, 1, 2, 3], concurrency=2)
 
         assert batch.failed == 1
-        assert batch.succeeded == 3
+        assert batch.succeeded == _EXPECTED_SUCCEEDED_3
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_abort_on_error_raises_for_the_batch_and_stops_dispatch(
-        self,
-    ) -> None:
-        """Test that an ``abort_on`` error from a worker build aborts the batch instead of failing items.
+    async def test_abort_on_error_raises_for_the_batch_and_stops_dispatch() -> None:
+        """Test that an ``abort_on`` error from a worker build aborts the batch.
+
+        It does not fail items.
 
         **Why this test is important:**
-          - On the Ray actor-pool path a cluster that cannot be reached fails every worker build alike;
-            isolating that into one FAIL per item let a queue consumer acknowledge (and so drop) the
-            whole batch instead of redriving it.
+          - On the Ray actor-pool path a cluster that cannot be reached fails every worker
+            build alike; isolating that into one FAIL per item let a queue consumer
+            acknowledge (and so drop) the whole batch instead of redriving it.
 
         **What it tests:**
-          - With ``abort_on=(RayUnavailableError,)`` and a factory that raises it, ``run`` raises
-            ``RayUnavailableError`` after a single build attempt — the other items are not dispatched.
+          - With ``abort_on=(RayUnavailableError,)`` and a factory that raises it, ``run``
+            raises ``RayUnavailableError`` after a single build attempt — the other items
+            are not dispatched.
         """
         builds = 0
 
-        async def unreachable() -> PooledWorker[int]:
+        async def unreachable() -> NoReturn:
+            """Count the build, then fail as an unreachable cluster.
+
+            Raises:
+                RayUnavailableError: Always.
+
+            """
             nonlocal builds
             builds += 1
             await asyncio.sleep(0)
@@ -178,25 +257,28 @@ class TestPooledExecutor:
         ex = PooledExecutor(unreachable, pool_size=1, abort_on=(RayUnavailableError,))
 
         with pytest.raises(RayUnavailableError):
-            await ex.run([0, 1, 2, 3], concurrency=1)
+            _ = await ex.run([0, 1, 2, 3], concurrency=1)
         assert builds == 1
 
+    @staticmethod
     @pytest.mark.asyncio
-    async def test_bounds_concurrency(self) -> None:
+    async def test_bounds_concurrency() -> None:
         """Test that the pool never has more than ``concurrency`` items in flight at once.
 
         **Why this test is important:**
-          - The concurrency bound is what keeps the actor pool (and the downstream KB) from being
-            flooded; PooledExecutor must not widen it while routing.
+          - The concurrency bound is what keeps the actor pool (and the downstream KB)
+            from being flooded; PooledExecutor must not widen it while routing.
 
         **What it tests:**
-          - With concurrency=2 over 8 items, the peak simultaneous in-flight process() calls is <= 2.
+          - With concurrency=2 over 8 items, the peak simultaneous in-flight process()
+            calls is <= 2.
         """
         in_flight = 0
         peak = 0
 
         class _Worker:
-            async def process(self, item: object) -> StepResult:
+            @staticmethod
+            async def process(item: object) -> StepResult:
                 nonlocal in_flight, peak
                 in_flight += 1
                 peak = max(peak, in_flight)
@@ -207,11 +289,17 @@ class TestPooledExecutor:
             async def aclose(self) -> None: ...
 
         async def factory() -> PooledWorker[int]:
+            """Build a worker.
+
+            Returns:
+                The worker.
+
+            """
             await asyncio.sleep(0)
             return _Worker()
 
         ex = PooledExecutor(factory, pool_size=4)
 
-        await ex.run(list(range(8)), concurrency=2)
+        _ = await ex.run(list(range(8)), concurrency=2)
 
-        assert peak <= 2
+        assert peak <= _EXPECTED_PEAK

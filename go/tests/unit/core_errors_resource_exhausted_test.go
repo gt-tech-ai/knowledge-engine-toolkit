@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/rpc"
 )
@@ -37,9 +37,10 @@ func TestResourceExhausted_MapsGRPC8AndHTTP429(t *testing.T) {
 		http.StatusTooManyRequests,
 		apperr.ToHTTPStatus(apperr.CodeResourceExhausted),
 	)
+
 	code, msg := rpc.Sanitize(err)
 	assert.Equal(t, connect.CodeResourceExhausted, code)
-	assert.Equal(t, connect.Code(8), code)
+	assert.Equal(t, connect.Code(codeInput), code)
 	assert.Equal(t, "resource exhausted", msg)
 }
 
@@ -83,3 +84,8 @@ func TestClassify_GRPCResourceExhaustedIsQuotaNotTransient(t *testing.T) {
 	assert.False(t, apperr.IsTransient(err))
 	assert.False(t, exponential.IsRetryable(err))
 }
+
+const (
+	// codeInput is argument 1 of Code in TestResourceExhausted_MapsGRPC8AndHTTP429.
+	codeInput = 8
+)

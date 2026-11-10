@@ -11,10 +11,14 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/secrets/awssm"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
+
+// awssmConfigID is the secret id the AWS Secrets Manager source tests map their refs to.
+const awssmConfigID = "app/staging/e2e/config"
 
 // TestAWSSMSource_GetExtractsJSONField tests that the Secrets Manager Source fetches a
 // secret and extracts the configured JSON field as the credential value.
@@ -28,16 +32,21 @@ import (
 //   - Get resolves the Ref's secret id, decodes the SecretString JSON, and returns the
 //     mapped field's value.
 func TestAWSSMSource_GetExtractsJSONField(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockSecretsManagerAPI(ctrl)
 	blob := `{"client_id":"cid","client_secret":"csecret"}`
+
 	api.EXPECT().
 		GetSecretValue(gomock.Any(), gomock.Any()).
-		Return(&secretsmanager.GetSecretValueOutput{SecretString: aws.String(blob)}, nil)
+		Return(fixtures.BuildRef(func(row *secretsmanager.GetSecretValueOutput) {
+			row.SecretString = aws.String(blob)
+		}), nil)
 
-	ref := types.Ref{Env: "staging", Class: "e2e", Field: "client_secret"}
+	ref := types.Ref{Env: textStaging, Class: textE2e, Field: textClientSecret}
 	src := awssm.New(api, map[types.Ref]awssm.Location{
-		ref: {SecretID: "app/staging/e2e/config", Field: "client_secret"},
+		ref: {SecretID: awssmConfigID, Field: textClientSecret},
 	})
 
 	got, err := src.Get(context.Background(), ref)
@@ -55,20 +64,22 @@ func TestAWSSMSource_GetExtractsJSONField(t *testing.T) {
 // What it tests:
 //   - Get returns CodeNotFound when the decoded JSON has no such field.
 func TestAWSSMSource_MissingFieldIsNotFound(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockSecretsManagerAPI(ctrl)
 	api.EXPECT().
 		GetSecretValue(gomock.Any(), gomock.Any()).
 		Return(
-			&secretsmanager.GetSecretValueOutput{
-				SecretString: aws.String(`{"client_id":"cid"}`),
-			},
+			fixtures.BuildRef(func(row *secretsmanager.GetSecretValueOutput) {
+				row.SecretString = aws.String(`{"client_id":"cid"}`)
+			}),
 			nil,
 		)
 
-	ref := types.Ref{Env: "staging", Class: "e2e", Field: "client_secret"}
+	ref := types.Ref{Env: textStaging, Class: textE2e, Field: textClientSecret}
 	src := awssm.New(api, map[types.Ref]awssm.Location{
-		ref: {SecretID: "app/staging/e2e/config", Field: "client_secret"},
+		ref: {SecretID: awssmConfigID, Field: textClientSecret},
 	})
 
 	_, err := src.Get(context.Background(), ref)
@@ -86,15 +97,17 @@ func TestAWSSMSource_MissingFieldIsNotFound(t *testing.T) {
 // What it tests:
 //   - Get wraps a GetSecretValue error as CodeUpstream.
 func TestAWSSMSource_SDKErrorIsUpstream(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockSecretsManagerAPI(ctrl)
 	api.EXPECT().
 		GetSecretValue(gomock.Any(), gomock.Any()).
 		Return(nil, apperr.Sentinel("throttled"))
 
-	ref := types.Ref{Env: "staging", Class: "e2e", Field: "client_secret"}
+	ref := types.Ref{Env: textStaging, Class: textE2e, Field: textClientSecret}
 	src := awssm.New(api, map[types.Ref]awssm.Location{
-		ref: {SecretID: "app/staging/e2e/config", Field: "client_secret"},
+		ref: {SecretID: awssmConfigID, Field: textClientSecret},
 	})
 
 	_, err := src.Get(context.Background(), ref)
@@ -111,14 +124,21 @@ func TestAWSSMSource_SDKErrorIsUpstream(t *testing.T) {
 // What it tests:
 //   - Put returns CodeInvalidInput (unsupported) without calling the SDK.
 func TestAWSSMSource_PutIsUnsupported(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	api := mocks.NewMockSecretsManagerAPI(ctrl) // no SDK call expected.
 
-	ref := types.Ref{Env: "staging", Class: "e2e", Field: "client_secret"}
+	ref := types.Ref{Env: textStaging, Class: textE2e, Field: textClientSecret}
 	src := awssm.New(api, map[types.Ref]awssm.Location{
-		ref: {SecretID: "app/staging/e2e/config", Field: "client_secret"},
+		ref: {SecretID: awssmConfigID, Field: textClientSecret},
 	})
 
-	err := src.Put(context.Background(), ref, types.NewSecret("v"))
+	err := src.Put(context.Background(), ref, types.NewSecret(textV))
 	require.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
+
+const (
+	// textE2e is the literal "e2e".
+	textE2e = "e2e"
+)

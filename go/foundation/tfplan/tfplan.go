@@ -16,7 +16,7 @@ import (
 
 	tfjson "github.com/hashicorp/terraform-json"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // JSONFile is the name terragrunt gives each unit's `terraform show -json` rendering of
@@ -61,27 +61,14 @@ type Change struct {
 
 // HasChanges reports whether applying the plan would change anything: a resource or an
 // output.
-func (p UnitPlan) HasChanges() bool { return len(p.Changes) > 0 || p.Outputs }
+func (p *UnitPlan) HasChanges() bool { return len(p.Changes) > 0 || p.Outputs }
 
 // ReadUnits reads every unit's JSONFile under dir, sorted by unit path. A missing dir
 // reads as no units.
 func ReadUnits(dir string) ([]UnitPlan, error) {
-	var plans []UnitPlan
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || d.Name() != JSONFile {
-			return err
-		}
-		rel, err := filepath.Rel(dir, filepath.Dir(path))
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "locate the unit of "+path)
-		}
-		p, err := readUnit(path, filepath.ToSlash(rel))
-		if err != nil {
-			return err
-		}
-		plans = append(plans, p)
-		return nil
-	})
+	currentUnitWalk := &unitWalk{dir: dir, plans: nil}
+
+	err := filepath.WalkDir(dir, currentUnitWalk.visit)
 	if err != nil && !apperr.StdIs(err, fs.ErrNotExist) {
 		return nil, apperr.Wrap(
 			err,
@@ -89,46 +76,114 @@ func ReadUnits(dir string) ([]UnitPlan, error) {
 			"read the unit plans under "+dir,
 		)
 	}
-	slices.SortFunc(plans, func(a, b UnitPlan) int { return cmp.Compare(a.Unit, b.Unit) })
-	return plans, nil
+
+	slices.SortFunc(
+		currentUnitWalk.plans,
+		func(a, b UnitPlan) int { return cmp.Compare(a.Unit, b.Unit) },
+	)
+
+	return currentUnitWalk.plans, nil
+}
+
+// unitWalk collects the plan of every unit under dir.
+type unitWalk struct {
+	// dir is the walk's root; a unit is named relative to it.
+	dir string
+
+	// plans holds the plans read.
+	plans []UnitPlan
+}
+
+// visit is the fs.WalkDirFunc that reads each plan file.
+func (w *unitWalk) visit(path string, d fs.DirEntry, err error) error {
+	if err != nil || d.IsDir() || d.Name() != JSONFile {
+		return err
+	}
+
+	rel, err := filepath.Rel(w.dir, filepath.Dir(path))
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "locate the unit of "+path)
+	}
+
+	p, err := readUnit(path, filepath.ToSlash(rel))
+	if err != nil {
+		return err
+	}
+
+	w.plans = append(w.plans, p)
+
+	return nil
 }
 
 // readUnit parses one unit's plan JSON into its counted changes.
 func readUnit(path, unit string) (UnitPlan, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return UnitPlan{}, apperr.Wrap(err, apperr.CodeInternal, "read "+path)
 	}
+
 	var doc tfjson.Plan
-	if err := json.Unmarshal(data, &doc); err != nil {
+
+	err = json.Unmarshal(data, &doc)
+	if err != nil {
 		return UnitPlan{}, apperr.Wrap(err, apperr.CodeInternal, "parse "+path)
 	}
-	p := UnitPlan{Unit: unit}
-	for _, rc := range doc.ResourceChanges {
-		if rc == nil || rc.Change == nil {
+
+	unitPlan := UnitPlan{
+		Unit:    unit,
+		Outputs: outputsChange(&doc),
+		Changes: nil,
+		Add:     0,
+		Change:  0,
+		Destroy: 0,
+	}
+
+	unitPlan.addChanges(&doc)
+
+	slices.SortStableFunc(unitPlan.Changes, func(a, b Change) int {
+		return cmp.Compare(destroyRank(a.Action), destroyRank(b.Action))
+	})
+
+	return unitPlan, nil
+}
+
+// addChanges counts and records each resource change that is an action.
+func (p *UnitPlan) addChanges(doc *tfjson.Plan) {
+	for _, resourceChange := range doc.ResourceChanges {
+		if resourceChange == nil || resourceChange.Change == nil {
 			continue
 		}
-		action := changeAction(rc.Change.Actions, rc.Change.Importing != nil)
+
+		action := changeAction(resourceChange.Change)
 		if action == "" {
 			continue
 		}
+
 		p.count(action)
-		p.Changes = append(p.Changes, Change{Address: rc.Address, Action: action})
+
+		p.Changes = append(
+			p.Changes,
+			Change{Address: resourceChange.Address, Action: action},
+		)
 	}
+}
+
+// outputsChange reports whether any output changes.
+func outputsChange(doc *tfjson.Plan) bool {
 	for _, oc := range doc.OutputChanges {
 		if oc != nil && !oc.Actions.NoOp() {
-			p.Outputs = true
+			return true
 		}
 	}
-	slices.SortStableFunc(p.Changes, func(a, b Change) int {
-		return cmp.Compare(destroyRank(a.Action), destroyRank(b.Action))
-	})
-	return p, nil
+
+	return false
 }
 
 // changeAction labels a resource's planned action list, or returns "" for no change
 // (no-op, or a data source read).
-func changeAction(actions tfjson.Actions, importing bool) string {
+func changeAction(change *tfjson.Change) string {
+	actions := change.Actions
+
 	switch {
 	case actions.Replace():
 		return ActionReplace
@@ -139,15 +194,17 @@ func changeAction(actions tfjson.Actions, importing bool) string {
 	case actions.Delete():
 		return ActionDelete
 	case actions.NoOp(), actions.Read():
-		if importing {
+		if change.Importing != nil {
 			return ActionImport
 		}
+
 		return ""
 	default:
 		names := make([]string, 0, len(actions))
 		for _, a := range actions {
 			names = append(names, string(a))
 		}
+
 		return strings.Join(names, "+")
 	}
 }
@@ -163,7 +220,10 @@ func (p *UnitPlan) count(action string) {
 		p.Destroy++
 	case ActionReplace:
 		p.Add++
+
 		p.Destroy++
+	default:
+		// No other value changes the outcome.
 	}
 }
 
@@ -172,6 +232,7 @@ func destroyRank(action string) int {
 	if action == ActionDelete || action == ActionReplace {
 		return 0
 	}
+
 	return 1
 }
 
@@ -181,37 +242,66 @@ func destroyRank(action string) int {
 // changes, then unchanged units.
 func Summary(title string, plans []UnitPlan) string {
 	plans = slices.Clone(plans)
-	slices.SortStableFunc(plans, func(a, b UnitPlan) int {
-		if c := cmp.Compare(b.Destroy, a.Destroy); c != 0 {
-			return c
-		}
-		return cmp.Compare(changeRank(a), changeRank(b))
-	})
+	slices.SortStableFunc(plans, comparePlans)
+
 	var add, change, destroy int
+
 	for _, p := range plans {
 		add, change, destroy = add+p.Add, change+p.Change, destroy+p.Destroy
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "### %s\n\n", title)
+
+	var builder strings.Builder
+
+	fmt.Fprintf(&builder, "### %s\n\n", title)
+
 	if len(plans) == 0 {
-		b.WriteString("No unit has pending changes.\n")
-		return b.String()
+		_, _ = builder.WriteString("No unit has pending changes.\n")
+
+		return builder.String()
 	}
-	fmt.Fprintf(&b, "%d unit(s): **%d to add, %d to change, %d to destroy.**\n\n",
+
+	fmt.Fprintf(&builder, "%d unit(s): **%d to add, %d to change, %d to destroy.**\n\n",
 		len(plans), add, change, destroy)
-	writeDestroys(&b, plans)
-	b.WriteString("| Unit | Add | Change | Destroy |\n|---|---:|---:|---:|\n")
+	writeDestroys(&builder, plans)
+	writeUnitTable(&builder, plans)
+
 	for _, p := range plans {
-		unit := p.Unit
-		if p.Outputs {
+		writeUnitChanges(&builder, p)
+	}
+
+	return builder.String()
+}
+
+// comparePlans orders the most destructive units first, then by change rank.
+func comparePlans(a, b UnitPlan) int {
+	if c := cmp.Compare(b.Destroy, a.Destroy); c != 0 {
+		return c
+	}
+
+	return cmp.Compare(changeRank(a), changeRank(b))
+}
+
+// writeUnitTable writes one row per unit.
+func writeUnitTable(builder *strings.Builder, plans []UnitPlan) {
+	_, _ = builder.WriteString(
+		"| Unit | Add | Change | Destroy |\n|---|---:|---:|---:|\n",
+	)
+
+	for _, unitPlan := range plans {
+		unit := unitPlan.Unit
+		if unitPlan.Outputs {
 			unit += " (outputs change)"
 		}
-		fmt.Fprintf(&b, "| %s | %d | %d | %d |\n", cell(unit), p.Add, p.Change, p.Destroy)
+
+		fmt.Fprintf(
+			builder,
+			"| %s | %d | %d | %d |\n",
+			cell(unit),
+			unitPlan.Add,
+			unitPlan.Change,
+			unitPlan.Destroy,
+		)
 	}
-	for _, p := range plans {
-		writeUnitChanges(&b, p)
-	}
-	return b.String()
 }
 
 // changeRank orders a unit with resource changes before one without.
@@ -219,13 +309,15 @@ func changeRank(p UnitPlan) int {
 	if len(p.Changes) > 0 {
 		return 0
 	}
+
 	return 1
 }
 
 // writeDestroys writes the "Destroys" section listing every deleted or replaced
 // resource; it writes nothing when the plans destroy nothing.
-func writeDestroys(b *strings.Builder, plans []UnitPlan) {
+func writeDestroys(builder *strings.Builder, plans []UnitPlan) {
 	var rows []string
+
 	for _, p := range plans {
 		for _, c := range p.Changes {
 			if destroyRank(c.Action) == 0 {
@@ -234,25 +326,32 @@ func writeDestroys(b *strings.Builder, plans []UnitPlan) {
 			}
 		}
 	}
+
 	if len(rows) == 0 {
 		return
 	}
-	b.WriteString("#### Destroys\n\n| Unit | Resource | Action |\n|---|---|---|\n")
-	b.WriteString(strings.Join(rows, "\n"))
-	b.WriteString("\n\n")
+
+	_, _ = builder.WriteString(
+		"#### Destroys\n\n| Unit | Resource | Action |\n|---|---|---|\n",
+	)
+	_, _ = builder.WriteString(strings.Join(rows, "\n"))
+	_, _ = builder.WriteString("\n\n")
 }
 
 // writeUnitChanges writes one unit's changed resources as a collapsed list.
-func writeUnitChanges(b *strings.Builder, p UnitPlan) {
-	if len(p.Changes) == 0 {
+func writeUnitChanges(builder *strings.Builder, unitPlan UnitPlan) {
+	if len(unitPlan.Changes) == 0 {
 		return
 	}
-	fmt.Fprintf(b, "\n<details><summary>%s: %d change(s)</summary>\n\n",
-		p.Unit, len(p.Changes))
-	for _, c := range p.Changes {
-		fmt.Fprintf(b, "- %s `%s`\n", c.Action, c.Address)
+
+	fmt.Fprintf(builder, "\n<details><summary>%s: %d change(s)</summary>\n\n",
+		unitPlan.Unit, len(unitPlan.Changes))
+
+	for _, c := range unitPlan.Changes {
+		fmt.Fprintf(builder, "- %s `%s`\n", c.Action, c.Address)
 	}
-	b.WriteString("\n</details>\n")
+
+	_, _ = builder.WriteString("\n</details>\n")
 }
 
 // FailedSummary is the summary a failed plan leaves in place of the unit tables, so a

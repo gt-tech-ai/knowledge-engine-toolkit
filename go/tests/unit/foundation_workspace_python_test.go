@@ -13,7 +13,7 @@ import (
 )
 
 // pyRoots are the Python package roots the discovery cases search.
-func pyRoots() []string { return []string{"libs/python", "services/python", "tools"} }
+func pyRoots() []string { return []string{"libs/python", "services/python", textTools} }
 
 // TestPythonPackages tests discovery of Python packages by pyproject.toml.
 //
@@ -28,24 +28,36 @@ func pyRoots() []string { return []string{"libs/python", "services/python", "too
 //     missing root is tolerated, and an empty repository yields none.
 func TestPythonPackages(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	wsWrite(
 		t,
-		filepath.Join(root, "libs", "python", "shelf", "pyproject.toml"),
-		"[project]\n",
+		filepath.Join(root, textLibs, textPython, "shelf", textPyprojectToml),
+		textProject,
 	)
 	wsWrite(
 		t,
-		filepath.Join(root, "services", "python", "lend", "pyproject.toml"),
-		"[project]\n",
+		filepath.Join(root, textServices, textPython, "lend", textPyprojectToml),
+		textProject,
 	)
 	wsWrite(
 		t,
-		filepath.Join(root, "services", "python", "server", "deep", "pyproject.toml"),
-		"[project]\n",
+		filepath.Join(
+			root,
+			textServices,
+			textPython,
+			"server",
+			"deep",
+			textPyprojectToml,
+		),
+		textProject,
 	)
-	wsWrite(t, filepath.Join(root, "libs", "python", "nope", "readme.md"), "no pyproject")
-	wsWrite(t, filepath.Join(root, "libs", "python", "stray.txt"), "x")
+	wsWrite(
+		t,
+		filepath.Join(root, textLibs, textPython, textNope, "readme.md"),
+		"no pyproject",
+	)
+	wsWrite(t, filepath.Join(root, textLibs, textPython, "stray.txt"), textX)
 
 	pkgs, err := python.Packages(os.DirFS(root), pyRoots(), nil)
 	require.NoError(t, err)
@@ -80,23 +92,34 @@ func TestPythonPackages_Errors(t *testing.T) {
 
 	t.Run("root that is a file", func(t *testing.T) {
 		t.Parallel()
+
 		root := t.TempDir()
-		wsWrite(t, filepath.Join(root, "tools"), "not a dir")
+		wsWrite(t, filepath.Join(root, textTools), "not a dir")
+
 		_, err := python.Packages(os.DirFS(root), pyRoots(), nil)
 		require.Error(t, err)
 	})
 
 	t.Run("unreadable nested directory", func(t *testing.T) {
 		t.Parallel()
+
 		if os.Geteuid() == 0 {
 			t.Skip("root ignores directory permissions")
 		}
+
 		root := t.TempDir()
-		bad := filepath.Join(root, "libs", "python", "shelf", "sub")
-		require.NoError(t, os.MkdirAll(bad, 0o755))
+		bad := filepath.Join(root, textLibs, textPython, "shelf", textSub)
+		require.NoError(t, os.MkdirAll(bad, 0o750))
+
+		info, err := os.Stat(bad)
+		require.NoError(t, err)
+
+		original := info.Mode().Perm()
+
 		require.NoError(t, os.Chmod(bad, 0o000))
-		t.Cleanup(func() { _ = os.Chmod(bad, 0o755) })
-		_, err := python.Packages(os.DirFS(root), pyRoots(), nil)
+		t.Cleanup(func() { _ = os.Chmod(bad, original) })
+
+		_, err = python.Packages(os.DirFS(root), pyRoots(), nil)
 		require.Error(t, err)
 	})
 }
@@ -113,15 +136,28 @@ func TestPythonPackages_Errors(t *testing.T) {
 //     *.egg-info; without src/ the package directory's base name is used.
 func TestPythonModuleName(t *testing.T) {
 	t.Parallel()
+
 	root := t.TempDir()
 	for _, d := range []string{"__pycache__", "shelf.egg-info", "shelf_core"} {
 		require.NoError(
 			t,
-			os.MkdirAll(filepath.Join(root, "libs", "shelf", "src", d), 0o755),
+			os.MkdirAll(
+				filepath.Join(root, textLibs, "shelf", textSrc, d),
+				mkdirAllInputName,
+			),
 		)
 	}
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "flat"), 0o755))
+
+	require.NoError(
+		t,
+		os.MkdirAll(filepath.Join(root, textLibs, "flat"), mkdirAllInputName),
+	)
 
 	assert.Equal(t, "shelf_core", python.ModuleName(os.DirFS(root), "libs/shelf"))
 	assert.Equal(t, "flat", python.ModuleName(os.DirFS(root), "libs/flat"))
 }
+
+const (
+	// mkdirAllInputName is the perm passed to MkdirAll in TestPythonModuleName.
+	mkdirAllInputName = 0o750
+)

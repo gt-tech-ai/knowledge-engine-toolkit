@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/execution/ops"
 )
@@ -19,16 +19,20 @@ func blockingRegistry(
 	t *testing.T,
 ) (reg *ops.Registry, started, release chan struct{}) {
 	t.Helper()
+
 	started, release = make(chan struct{}), make(chan struct{})
-	r := funcRegistry(t, time.Minute, map[string]runFunc{
-		"hold": func(context.Context, any, interfaces.ExecutionObserver) error {
+
+	registry := funcRegistry(t, time.Minute, map[string]runFunc{
+		textHold: func(context.Context, any, interfaces.ExecutionObserver) error {
 			close(started)
 			<-release
+
 			return nil
 		},
-		"ok": func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
+		textOk: func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
-	return r, started, release
+
+	return registry, started, release
 }
 
 // TestExecutionOpsBulkhead_RejectsSecondWorkingTreeOp tests that a second operation
@@ -45,10 +49,12 @@ func TestExecutionOpsBulkhead_RejectsSecondWorkingTreeOp(t *testing.T) {
 
 	reg, started, release := blockingRegistry(t)
 	done := make(chan error, 1)
-	go func() { done <- reg.Run(context.Background(), "hold", nil, nil) }()
+
+	go func() { done <- reg.Run(context.Background(), textHold, nil, nil) }()
+
 	<-started
 
-	err := reg.Run(context.Background(), "ok", nil, nil)
+	err := reg.Run(context.Background(), textOk, nil, nil)
 	require.Error(t, err)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 	assert.Contains(t, err.Error(), "busy: hold is running")
@@ -70,26 +76,27 @@ func TestExecutionOpsBulkhead_RejectsSecondWorkingTreeOp(t *testing.T) {
 func TestExecutionOpsBulkhead_ReleasesAfterRun(t *testing.T) {
 	t.Parallel()
 
-	r := funcRegistry(t, time.Minute, map[string]runFunc{
-		"ok": func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
+	registry := funcRegistry(t, time.Minute, map[string]runFunc{
+		textOk: func(context.Context, any, interfaces.ExecutionObserver) error { return nil },
 	})
-	require.NoError(t, r.Run(context.Background(), "ok", nil, nil))
+	require.NoError(t, registry.Run(context.Background(), textOk, nil, nil))
 
-	res, err := r.Reserve("ok", "run-1")
+	res, err := registry.Reserve(textOk, "run-1")
 	require.NoError(t, err)
-	err = r.Run(context.Background(), "ok", nil, nil)
+
+	err = registry.Run(context.Background(), textOk, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "busy: run-1 is running")
 	res.Release()
 	res.Release()
-	require.NoError(t, r.Run(context.Background(), "ok", nil, nil))
+	require.NoError(t, registry.Run(context.Background(), textOk, nil, nil))
 
-	res, err = r.Reserve("ok", "run-2")
+	res, err = registry.Reserve(textOk, "run-2")
 	require.NoError(t, err)
 	require.NoError(t, res.Run(context.Background(), nil, nil))
 	require.Error(t, res.Run(context.Background(), nil, nil))
-	require.NoError(t, r.Run(context.Background(), "ok", nil, nil))
+	require.NoError(t, registry.Run(context.Background(), textOk, nil, nil))
 
-	_, err = r.Reserve("rm", "x")
+	_, err = registry.Reserve(textRm, textX)
 	assert.Equal(t, apperr.CodeForbidden, apperr.Code(err))
 }

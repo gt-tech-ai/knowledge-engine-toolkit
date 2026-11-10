@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -23,35 +23,69 @@ const statusActive = "ACTIVE"
 func (s *Store) ensureSchema(ctx context.Context, session interfaces.CQLSession) error {
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.SchemaTimeout)
 	defer cancel()
-	type table struct{ name, ddl string }
-	var tables []table
+
+	tables, err := s.schemaTables()
+	if err != nil {
+		return err
+	}
+
+	for _, t := range tables {
+		err := session.Query(t.ddl).WithContext(ctx).Exec()
+		if err != nil {
+			return err
+		}
+	}
+
+	if !s.cfg.AwaitActive {
+		return nil
+	}
+
+	return s.awaitTables(ctx, session, tables)
+}
+
+// awaitTables waits for each table to become active.
+func (s *Store) awaitTables(
+	ctx context.Context, session interfaces.CQLSession, tables []schemaTable,
+) error {
+	for _, t := range tables {
+		err := s.awaitActive(ctx, session, t.name)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// schemaTable is one rollup table and the DDL that creates it.
+type schemaTable struct {
+	// name is the table's name.
+	name string
+
+	// ddl is its CREATE statement.
+	ddl string
+}
+
+// schemaTables lists every declared table, sorted so the DDL order is stable.
+func (s *Store) schemaTables() ([]schemaTable, error) {
+	var tables []schemaTable
+
 	for cube, grains := range s.cfg.Cubes {
 		for _, grain := range grains {
 			ddl, err := SchemaCQL(s.cfg.Keyspace, cube, grain)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			tables = append(tables, table{name: TableName(cube, grain), ddl: ddl})
+
+			tables = append(tables, schemaTable{name: TableName(cube, grain), ddl: ddl})
 		}
 	}
-	slices.SortFunc(
-		tables,
-		func(a, b table) int { return strings.Compare(a.name, b.name) },
-	)
-	for _, t := range tables {
-		if err := session.Query(t.ddl).WithContext(ctx).Exec(); err != nil {
-			return err
-		}
-	}
-	if !s.cfg.AwaitActive {
-		return nil
-	}
-	for _, t := range tables {
-		if err := s.awaitActive(ctx, session, t.name); err != nil {
-			return err
-		}
-	}
-	return nil
+
+	slices.SortFunc(tables, func(a, b schemaTable) int {
+		return strings.Compare(a.name, b.name)
+	})
+
+	return tables, nil
 }
 
 // awaitActive polls table's status every SchemaPollInterval until it is ACTIVE.
@@ -63,6 +97,7 @@ func (s *Store) awaitActive(
 ) error {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -72,13 +107,16 @@ func (s *Store) awaitActive(
 			)
 		case <-timer.C:
 		}
+
 		status, err := s.tableStatus(ctx, session, table)
 		if err != nil {
 			return err
 		}
+
 		if status == statusActive {
 			return nil
 		}
+
 		timer.Reset(s.cfg.SchemaPollInterval)
 	}
 }
@@ -93,10 +131,15 @@ func (s *Store) tableStatus(
 		WithContext(ctx).
 		Idempotent(true).
 		Iter()
+
 	var status string
+
 	iter.Scan(&status)
-	if err := iter.Close(); err != nil {
+
+	err := iter.Close()
+	if err != nil {
 		return "", err
 	}
+
 	return status, nil
 }

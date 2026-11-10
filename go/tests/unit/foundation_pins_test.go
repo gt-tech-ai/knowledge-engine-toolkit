@@ -9,20 +9,21 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/gen"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/pins"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
 // pinsEcosystems is a codebase with one marker file per ecosystem, plus markers that
 // must not count: a vendored subchart and files under node_modules, vendor and .venv.
 func pinsEcosystems() map[string]string {
 	return map[string]string{
-		"go.work":                            "go 1.27\n\nuse ./svc\n",
-		"go.mod":                             "module example.com/mono\n\ngo 1.27\n",
+		textGoWork:                           "go 1.27\n\nuse ./svc\n",
+		textGoMod:                            "module example.com/mono\n\ngo 1.27\n",
 		"py/lib/pyproject.toml":              "[project]\nname = \"x\"\n",
 		"web/package.json":                   "{}\n",
-		"docker/api/Dockerfile":              "FROM scratch\n",
+		textDockerAPIDockerfile:              "FROM scratch\n",
 		"docker/compose.yaml":                "services: {}\n",
 		".github/workflows/ci.yaml":          "name: ci\n",
-		"infra/main.tf":                      "terraform {}\n",
+		textInfraMainTf:                      "terraform {}\n",
 		"infra/live/terragrunt.hcl":          "terraform {}\n",
 		"deploy/api/Chart.yaml":              "name: api\n",
 		"deploy/api/charts/redis/Chart.yaml": "name: redis\n",
@@ -36,24 +37,32 @@ func pinsPolicy() pins.Policy {
 		Extends:             []string{"config:recommended"},
 		Labels:              []string{"dependencies"},
 		Schedule:            []string{"before 6am on Monday"},
-		PRHourlyLimit:       2,
-		PRConcurrentLimit:   5,
+		PRHourlyLimit:       prHourlyLimit,
+		PRConcurrentLimit:   prConcurrentLimit,
 		LockFileMaintenance: &pins.LockFileMaintenance{Enabled: true},
 		VulnerabilityAlerts: &pins.VulnerabilityAlerts{
-			Enabled: true, Labels: []string{"security"},
+			Enabled: true, Labels: []string{textSecurity},
 		},
-		GroupRules: []pins.Gated[pins.PackageRule]{{
-			When:  []pins.Manager{pins.ManagerDockerCompose},
-			Value: pins.PackageRule{GroupName: "Base images"},
-		}},
-		PinRules: []pins.Gated[pins.PackageRule]{{
-			When:  []pins.Manager{pins.ManagerGomod},
-			Value: pins.PackageRule{MatchDatasources: []string{"golang-version"}},
-		}},
+		GroupRules: []pins.Gated[pins.PackageRule]{
+			{
+				When: []pins.Manager{pins.ManagerDockerCompose},
+				Value: fixtures.Build(func(row *pins.PackageRule) {
+					row.GroupName = "Base images"
+				}),
+			},
+		},
+		PinRules: []pins.Gated[pins.PackageRule]{
+			{
+				When: []pins.Manager{pins.ManagerGomod},
+				Value: fixtures.Build(func(row *pins.PackageRule) {
+					row.MatchDatasources = []string{"golang-version"}
+				}),
+			},
+		},
 		CustomManagers: []pins.Gated[pins.CustomManager]{{
 			When: []pins.Manager{pins.ManagerGomod, pins.ManagerGithubActions},
 			Value: pins.CustomManager{
-				CustomType: "regex", DatasourceTemplate: "go",
+				CustomType: textRegex, DatasourceTemplate: textGoLower,
 				ManagerFilePatterns: []string{"/(^|/)tools\\.yaml$/"},
 				MatchStrings: []string{
 					"package: (?<depName>\\S+)\\s+version: (?<currentValue>\\S+)",
@@ -80,6 +89,7 @@ func pinsPolicy() pins.Policy {
 //     has no managers.
 func TestFoundationPins_Detect(t *testing.T) {
 	t.Parallel()
+
 	got, err := pins.Detect(t.Context(), memoryCodebase(t, pinsEcosystems()))
 	require.NoError(t, err)
 	assert.Equal(t, []pins.Manager{
@@ -212,30 +222,49 @@ const pinsGolden = `{
 //     manager's unset lists are omitted rather than rendered as null.
 func TestFoundationPins_Render(t *testing.T) {
 	t.Parallel()
-	e := pins.EcosystemSet{
+
+	ecosystemSet := pins.EcosystemSet{
 		Managers:    []pins.Manager{pins.ManagerGomod, pins.ManagerGithubActions},
 		IgnorePaths: []string{".venv/**", "**/node_modules/**"},
 		GoModule:    "example.com/mono",
 	}
-	got, err := pins.Render(e, pinsPolicy())
+	got, err := pins.Render(ecosystemSet, new(pinsPolicy()))
 	require.NoError(t, err)
-	assert.Equal(t, strings.Split(pinsGolden, "\n"), strings.Split(string(got), "\n"),
-		"byte-for-byte, line by line")
+	assert.Equal(
+		t,
+		strings.Split(pinsGolden, textNewline),
+		strings.Split(string(got), textNewline),
+		"byte-for-byte, line by line",
+	)
 
-	again, err := pins.Render(e, pinsPolicy())
+	again, err := pins.Render(ecosystemSet, new(pinsPolicy()))
 	require.NoError(t, err)
 	assert.Equal(t, got, again)
 
 	bare := pinsPolicy()
-	bare.CustomManagers[0].Value = pins.CustomManager{CustomType: "regex"}
-	got, err = pins.Render(e, bare)
+
+	bare.CustomManagers[0].Value = fixtures.Build(func(row *pins.CustomManager) {
+		row.CustomType = textRegex
+	})
+	got, err = pins.Render(ecosystemSet, &bare)
 	require.NoError(t, err)
-	assert.NotContains(t, string(got), "null", "an unset list is omitted, not null")
+	assert.NotContains(t, string(got), textNull, "an unset list is omitted, not null")
 
 	cfg := pins.Build(pins.EcosystemSet{
-		Managers: []pins.Manager{pins.ManagerDockerCompose, pins.ManagerHelmv3, "bogus"},
-	}, pinsPolicy())
-	require.Len(t, cfg.PackageRules, 4, "two managers, the group rule, the major rule")
+		Managers: []pins.Manager{
+			pins.ManagerDockerCompose,
+			pins.ManagerHelmv3,
+			textBogus,
+		},
+		GoModule:    "",
+		IgnorePaths: nil,
+	}, new(pinsPolicy()))
+	require.Len(
+		t,
+		cfg.PackageRules,
+		wantPackageRulesLen,
+		"two managers, the group rule, the major rule",
+	)
 	assert.Equal(t, "Base images", cfg.PackageRules[2].GroupName)
 	assert.Equal(t, []string{"deploy/**/charts/**"}, cfg.IgnorePaths)
 	assert.Empty(t, cfg.CustomManagers)
@@ -252,19 +281,33 @@ func TestFoundationPins_Render(t *testing.T) {
 //     a Dockerfile makes renovate.json drift.
 func TestFoundationPins_Generator(t *testing.T) {
 	t.Parallel()
-	g := pins.NewGenerator("", pinsPolicy())
-	assert.Equal(t, "renovate", g.Name())
-	files := map[string]string{"go.mod": "module example.com/mono\n"}
-	out, err := g.Render(t.Context(), memoryCodebase(t, files))
+
+	generator := pins.NewGenerator("", pinsPolicy())
+	assert.Equal(t, "renovate", generator.Name())
+
+	files := map[string]string{textGoMod: "module example.com/mono\n"}
+	out, err := generator.Render(t.Context(), memoryCodebase(t, files))
 	require.NoError(t, err)
+
 	files[pins.ConfigFileName] = string(out[pins.ConfigFileName])
 
-	d, err := gen.Check(t.Context(), memoryCodebase(t, files), g)
+	drift, err := gen.Check(t.Context(), memoryCodebase(t, files), generator)
 	require.NoError(t, err)
-	assert.True(t, d.InSync, d.Diff)
+	assert.True(t, drift.InSync, drift.Diff)
 
-	files["Dockerfile"] = "FROM scratch\n"
-	d, err = gen.Check(t.Context(), memoryCodebase(t, files), g)
+	files[textDockerfile] = "FROM scratch\n"
+	drift, err = gen.Check(t.Context(), memoryCodebase(t, files), generator)
 	require.NoError(t, err)
-	assert.Equal(t, []string{pins.ConfigFileName}, d.Paths)
+	assert.Equal(t, []string{pins.ConfigFileName}, drift.Paths)
 }
+
+const (
+	// prConcurrentLimit is the PRConcurrentLimit field in pinsPolicy.
+	prConcurrentLimit = 5
+
+	// prHourlyLimit is the PRHourlyLimit field in pinsPolicy.
+	prHourlyLimit = 2
+
+	// wantPackageRulesLen is the expected package rules len.
+	wantPackageRulesLen = 4
+)

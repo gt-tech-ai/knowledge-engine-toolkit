@@ -13,6 +13,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"time"
 
 	// PostgreSQL driver registration.
@@ -20,8 +21,14 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// readyLogOccurrences counts the ready lines Postgres logs across its init restart.
+const readyLogOccurrences = 2
+
+// startupTimeout bounds the container's start.
+const startupTimeout = 30 * time.Second
 
 const (
 	// dbUser is the superuser the PostgreSQL testcontainer is provisioned with.
@@ -46,30 +53,37 @@ type TestDatabase struct {
 // NewTestDatabase starts a PostgreSQL container and returns a TestDatabase whose
 // DSN points at an empty database (no schema applied).
 func NewTestDatabase(ctx context.Context) (*TestDatabase, error) {
-	req := testcontainers.ContainerRequest{
-		Image:        pgImage,
-		ExposedPorts: []string{"5432/tcp"},
-		Env: map[string]string{
-			"POSTGRES_USER":     dbUser,
-			"POSTGRES_PASSWORD": dbPassword,
-			"POSTGRES_DB":       dbName,
-		},
-		WaitingFor: wait.ForLog("database system is ready to accept connections").
-			WithOccurrence(2).
-			WithStartupTimeout(30 * time.Second),
+	var containerRequest testcontainers.ContainerRequest
+
+	containerRequest.Image = pgImage
+	containerRequest.ExposedPorts = []string{"5432/tcp"}
+	containerRequest.Env = map[string]string{
+		"POSTGRES_USER":     dbUser,
+		"POSTGRES_PASSWORD": dbPassword,
+		"POSTGRES_DB":       dbName,
 	}
+	containerRequest.WaitingFor = wait.
+		ForLog("database system is ready to accept connections").
+		WithOccurrence(readyLogOccurrences).
+		WithStartupTimeout(startupTimeout)
+
+	req := containerRequest
 
 	container, err := testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
+			ProviderType:     0,
+			Logger:           nil,
+			Reuse:            false,
 		},
 	)
 	if err != nil {
 		// A failed start (e.g. a readiness timeout) can still leave a container behind;
 		// TerminateContainer is nil-safe.
 		_ = testcontainers.TerminateContainer(container)
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -79,7 +93,8 @@ func NewTestDatabase(ctx context.Context) (*TestDatabase, error) {
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
@@ -89,12 +104,13 @@ func NewTestDatabase(ctx context.Context) (*TestDatabase, error) {
 
 	port, err := container.MappedPort(ctx, "5432/tcp")
 	if err != nil {
-		container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on setup failure
+		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
+
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "failed to get mapped port")
 	}
 
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		dbUser, dbPassword, host, port.Port(), dbName)
+	dsn := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
+		dbUser, dbPassword, net.JoinHostPort(host, port.Port()), dbName)
 
 	return &TestDatabase{
 		container: container,
@@ -114,12 +130,13 @@ func (td *TestDatabase) OpenDB() (*sql.DB, error) {
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "open database")
 	}
+
 	return db, nil
 }
 
 // Close terminates the container.
 func (td *TestDatabase) Close(ctx context.Context) {
 	if td.container != nil {
-		td.container.Terminate(ctx) //nolint:errcheck // best-effort cleanup on teardown
+		_ = td.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
 }

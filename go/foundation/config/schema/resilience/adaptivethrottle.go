@@ -1,8 +1,14 @@
 package resilience
 
 import (
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultAdaptiveThrottleConfigK is the default K of AdaptiveThrottleConfig.
+const defaultAdaptiveThrottleConfigK = 2.0
+
+// defaultAdaptiveThrottleConfigDecay is the default Decay of AdaptiveThrottleConfig.
+const defaultAdaptiveThrottleConfigDecay = 0.98
 
 // AdaptiveThrottleConfig tunes the client-side SRE adaptive throttler
 // (adaptivethrottle.Config), read from the `resilience.adaptive_throttle` overlay.
@@ -28,8 +34,8 @@ type AdaptiveThrottleConfig struct {
 func DefaultAdaptiveThrottleConfig() AdaptiveThrottleConfig {
 	return AdaptiveThrottleConfig{
 		Kind:  "disabled",
-		K:     2.0,
-		Decay: 0.98,
+		K:     defaultAdaptiveThrottleConfigK,
+		Decay: defaultAdaptiveThrottleConfigDecay,
 	}
 }
 
@@ -39,8 +45,10 @@ func (c AdaptiveThrottleConfig) Validate() error {
 	if c.K < 0 {
 		return apperr.InvalidInput("resilience.adaptive_throttle.k must be >= 0")
 	}
+
 	if c.Decay < 0 || c.Decay > 1 {
 		return apperr.InvalidInput("resilience.adaptive_throttle.decay must be in [0,1]")
 	}
+
 	return nil
 }

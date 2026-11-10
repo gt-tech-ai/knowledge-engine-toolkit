@@ -39,13 +39,18 @@ func TestRequestID_GeneratesWhenMissing(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.NotEmpty(
 		t,
-		rec.Header().Get("X-Request-ID"),
+		rec.Header().Get(textXRequestID),
 		"X-Request-ID header not set on response",
 	)
 }
@@ -71,12 +76,18 @@ func TestRequestID_PreservesExisting(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("X-Request-ID", "existing-id")
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
+	req.Header.Set(textXRequestID, "existing-id")
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	assert.Equal(t, "existing-id", rec.Header().Get("X-Request-ID"))
+	assert.Equal(t, "existing-id", rec.Header().Get(textXRequestID))
 }
 
 // TestRecovery_CatchesPanic tests that handler panics are caught and converted to 500
@@ -104,7 +115,12 @@ func TestRecovery_CatchesPanic(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -134,7 +150,12 @@ func TestRecovery_PassesThroughNormally(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -164,14 +185,19 @@ func TestCORS_SetsHeaders(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(
 		t,
 		"*",
-		rec.Header().Get("Access-Control-Allow-Origin"),
+		rec.Header().Get(textAccessControlAllowOrigin),
 		"CORS origin header not set",
 	)
 	assert.NotEmpty(
@@ -210,7 +236,12 @@ func TestCORS_ExposesTraceResponseHeader(t *testing.T) {
 		),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -246,7 +277,7 @@ func TestCORS_PreflightReturns204(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "OPTIONS", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(t.Context(), "OPTIONS", textSlash, http.NoBody)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -268,7 +299,7 @@ func TestCORS_PreflightReturns204(t *testing.T) {
 func TestCompression_CompressesLargeResponse(t *testing.T) {
 	t.Parallel()
 
-	largeBody := strings.Repeat("hello world ", 200) // > 1KB
+	largeBody := strings.Repeat("hello world ", repeatInputResponse) // > 1KB
 
 	handler := middleware.Compression()(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -276,22 +307,30 @@ func TestCompression_CompressesLargeResponse(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("Accept-Encoding", "gzip")
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
+	req.Header.Set("Accept-Encoding", textGzip)
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"expected gzip Content-Encoding for large response",
 	)
 
 	// Verify we can decompress
 	reader, err := gzip.NewReader(rec.Body)
 	require.NoError(t, err, "gzip decode must not fail")
+
 	defer func() { _ = reader.Close() }()
+
 	body, _ := io.ReadAll(reader)
 	assert.Contains(t, string(body), "hello world")
 }
@@ -315,15 +354,21 @@ func TestCompression_SkipsSmallResponse(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
-	req.Header.Set("Accept-Encoding", "gzip")
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
+	req.Header.Set("Accept-Encoding", textGzip)
+
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.NotEqual(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"should not compress small responses",
 	)
 }
@@ -341,7 +386,7 @@ func TestCompression_SkipsSmallResponse(t *testing.T) {
 func TestCompression_SkipsWithoutAcceptEncoding(t *testing.T) {
 	t.Parallel()
 
-	largeBody := strings.Repeat("hello world ", 200)
+	largeBody := strings.Repeat("hello world ", repeatInputEncoding)
 
 	handler := middleware.Compression()(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -349,15 +394,20 @@ func TestCompression_SkipsWithoutAcceptEncoding(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
 	// No Accept-Encoding header
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	assert.NotEqual(
 		t,
-		"gzip",
-		rec.Header().Get("Content-Encoding"),
+		textGzip,
+		rec.Header().Get(textContentEncoding),
 		"should not compress without Accept-Encoding: gzip",
 	)
 }
@@ -384,7 +434,7 @@ func TestHTTPMetrics_Records200(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		t.Context(),
-		"GET",
+		textGetUpper,
 		"/api/v1/things",
 		http.NoBody,
 	)
@@ -415,7 +465,7 @@ func TestHTTPMetrics_Buckets404AsNotFound(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		t.Context(),
-		"GET",
+		textGetUpper,
 		"/unknown-path",
 		http.NoBody,
 	)
@@ -450,7 +500,7 @@ func TestHTTPMetrics_PatternUsedAsRouteLabel(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(
 		t.Context(),
-		"GET",
+		textGetUpper,
 		"/api/v1/items",
 		http.NoBody,
 	)
@@ -478,35 +528,37 @@ func TestHTTPMetrics_NormalizesIDSegmentsToOneRouteSeries(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockMetrics(ctrl)
+	metrics := mocks.NewMockMetrics(ctrl)
 	counter := mocks.NewMockCounter(ctrl)
 	hist := mocks.NewMockHistogram(ctrl)
 
-	m.EXPECT().
-		Counter("http_server_requests_total", gomock.Any(), "method", "route", "status").
+	metrics.EXPECT().
+		Counter("http_server_requests_total", gomock.Any(), textMethod, "route", textStatus).
 		Return(counter)
-	m.EXPECT().
+	metrics.EXPECT().
 		Histogram(
 			"http_server_request_duration_seconds",
 			gomock.Any(),
 			gomock.Any(),
-			"method",
+			textMethod,
 			"route",
-			"status",
+			textStatus,
 		).
 		Return(hist)
 
 	// Both distinct-UUID paths must land on the SAME normalized label — Times(2)
 	// on one expectation fails (unexpected call) if normalization leaks the id.
-	counter.EXPECT().Inc("GET", "/api/documents/{id}", "200").Times(2)
-	hist.EXPECT().Observe(gomock.Any(), "GET", "/api/documents/{id}", "200").Times(2)
+	counter.EXPECT().Inc(textGetUpper, "/api/documents/{id}", text200).Times(wantCalls)
+	hist.EXPECT().
+		Observe(gomock.Any(), textGetUpper, "/api/documents/{id}", text200).
+		Times(wantCalls)
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := middleware.HTTPMetrics(m)(inner)
+	handler := middleware.HTTPMetrics(metrics)(inner)
 
-	for _, id := range []string{
+	for _, identifier := range []string{
 		"11111111-1111-1111-1111-111111111111",
 		"22222222-2222-2222-2222-222222222222",
 	} {
@@ -514,8 +566,8 @@ func TestHTTPMetrics_NormalizesIDSegmentsToOneRouteSeries(t *testing.T) {
 		// exercising the normalization branch.
 		req := httptest.NewRequestWithContext(
 			t.Context(),
-			"GET",
-			"/api/documents/"+id,
+			textGetUpper,
+			"/api/documents/"+identifier,
 			http.NoBody,
 		)
 		handler.ServeHTTP(httptest.NewRecorder(), req)
@@ -537,11 +589,69 @@ func TestHTTPMetrics_NormalizesIDSegmentsToOneRouteSeries(t *testing.T) {
 func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name      string
-		path      string
-		wantRoute string
-	}{
+	cases := routeLabelCasesTable()
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			metrics := mocks.NewMockMetrics(ctrl)
+			counter := mocks.NewMockCounter(ctrl)
+			hist := mocks.NewMockHistogram(ctrl)
+
+			metrics.EXPECT().
+				Counter(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(counter)
+			metrics.EXPECT().
+				Histogram(
+					gomock.Any(),
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				).
+				Return(hist)
+
+			var gotRoute string
+
+			hist.EXPECT().Observe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+			counter.EXPECT().
+				Inc(gomock.Any(), gomock.Any(), gomock.Any()).
+				Do(func(labelValues ...string) { gotRoute = labelValues[1] })
+
+			inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+			handler := middleware.HTTPMetrics(metrics)(inner)
+
+			req := httptest.NewRequestWithContext(
+				t.Context(),
+				textGetUpper,
+				testCase.path,
+				http.NoBody,
+			)
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+
+			assert.Equal(
+				t,
+				testCase.wantRoute,
+				gotRoute,
+				"route label for %s",
+				testCase.path,
+			)
+		})
+	}
+}
+
+// routeLabelCasesRow is one row of routeLabelCasesTable.
+type routeLabelCasesRow struct {
+	name      string
+	path      string
+	wantRoute string
+}
+
+// routeLabelCasesTable builds the table TestHTTPMetrics_RouteLabelNormalizationCases
+// runs.
+func routeLabelCasesTable() []routeLabelCasesRow {
+	return []routeLabelCasesRow{
 		{"numeric id", "/api/items/42", "/api/items/{id}"},
 		{
 			"uuid",
@@ -558,13 +668,17 @@ func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 		{"long hex token", "/api/blobs/deadbeefdeadbeef01", "/api/blobs/{id}"},
 		// A >=16-char all-hex segment with a digit (no dashes) is a hash/object key
 		// → {id}. Also exercises isUUID's separator-mismatch branch (s[8] != '-').
-		{"long hex hash", "/api/x/" + strings.Repeat("a1", 18), "/api/x/{id}"},
+		{
+			"long hex hash",
+			textAPIX + strings.Repeat("a1", repeatInputTable),
+			"/api/x/{id}",
+		},
 		// >=16 chars, has a digit (passes the fast-path) but a non-hex byte → not an
 		// id; covers isHex's reject branch.
 		{
 			"long non-hex token",
-			"/api/blobs/9" + strings.Repeat("z", 16),
-			"/api/blobs/9" + strings.Repeat("z", 16),
+			"/api/blobs/9" + strings.Repeat("z", repeatInputCasesTable),
+			"/api/blobs/9" + strings.Repeat("z", repeatInputCasesTable),
 		},
 		// 36 chars with UUID separators and a leading digit but a non-hex byte → not
 		// a UUID (isUUID's hex-reject branch) and not long-hex → unchanged.
@@ -577,52 +691,10 @@ func TestHTTPMetrics_RouteLabelNormalizationCases(t *testing.T) {
 		// skips digit-free paths, an accepted tradeoff (real ids carry digits).
 		{
 			"digit-free hex passes through",
-			"/api/x/" + strings.Repeat("a", 36),
-			"/api/x/" + strings.Repeat("a", 36),
+			textAPIX + strings.Repeat(textA, repeatInputLabelCasesTable),
+			textAPIX + strings.Repeat(textA, repeatInputLabelCasesTable),
 		},
 		{"no id segment", "/api/v1/health", "/api/v1/health"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctrl := gomock.NewController(t)
-			m := mocks.NewMockMetrics(ctrl)
-			counter := mocks.NewMockCounter(ctrl)
-			hist := mocks.NewMockHistogram(ctrl)
-
-			m.EXPECT().
-				Counter(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-				Return(counter)
-			m.EXPECT().
-				Histogram(
-					gomock.Any(),
-					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-				).
-				Return(hist)
-
-			var gotRoute string
-			hist.EXPECT().Observe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
-			counter.EXPECT().
-				Inc(gomock.Any(), gomock.Any(), gomock.Any()).
-				Do(func(labelValues ...string) { gotRoute = labelValues[1] })
-
-			inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusOK)
-			})
-			handler := middleware.HTTPMetrics(m)(inner)
-
-			req := httptest.NewRequestWithContext(
-				t.Context(),
-				"GET",
-				tc.path,
-				http.NoBody,
-			)
-			handler.ServeHTTP(httptest.NewRecorder(), req)
-
-			assert.Equal(t, tc.wantRoute, gotRoute, "route label for %s", tc.path)
-		})
 	}
 }
 
@@ -640,14 +712,14 @@ func TestHTTPMetrics_EmptyPathRouteLabel(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	m := mocks.NewMockMetrics(ctrl)
+	metrics := mocks.NewMockMetrics(ctrl)
 	counter := mocks.NewMockCounter(ctrl)
 	hist := mocks.NewMockHistogram(ctrl)
 
-	m.EXPECT().
+	metrics.EXPECT().
 		Counter(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(counter)
-	m.EXPECT().
+	metrics.EXPECT().
 		Histogram(
 			gomock.Any(),
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
@@ -655,6 +727,7 @@ func TestHTTPMetrics_EmptyPathRouteLabel(t *testing.T) {
 		Return(hist)
 
 	var gotRoute string
+
 	hist.EXPECT().Observe(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 	counter.EXPECT().
 		Inc(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -663,13 +736,19 @@ func TestHTTPMetrics_EmptyPathRouteLabel(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := middleware.HTTPMetrics(m)(inner)
+	handler := middleware.HTTPMetrics(metrics)(inner)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
+
 	req.URL.Path = "" // simulate a malformed request with no path
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
-	assert.Equal(t, "/", gotRoute)
+	assert.Equal(t, textSlash, gotRoute)
 }
 
 // TestHTTPMetrics_FlushesResponseWriter tests that Flush propagates through
@@ -691,11 +770,17 @@ func TestHTTPMetrics_FlushesResponseWriter(t *testing.T) {
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
+
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/stream", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		"/stream",
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -722,7 +807,12 @@ func TestHTTPTracing_HandlerReceivesContext(t *testing.T) {
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/api/traced", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		"/api/traced",
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -746,31 +836,40 @@ func TestChain_AppliesInOrder(t *testing.T) {
 
 	var order []string
 
-	m1 := func(next http.Handler) http.Handler {
+	callback := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			order = append(order, "m1-before")
+
 			next.ServeHTTP(w, r)
+
 			order = append(order, "m1-after")
 		})
 	}
-	m2 := func(next http.Handler) http.Handler {
+	currentCallback := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			order = append(order, "m2-before")
+
 			next.ServeHTTP(w, r)
+
 			order = append(order, "m2-after")
 		})
 	}
 
 	handler := middleware.Chain(
-		m1,
-		m2,
+		callback,
+		currentCallback,
 	)(
 		http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 			order = append(order, "handler")
 		}),
 	)
 
-	req := httptest.NewRequestWithContext(t.Context(), "GET", "/", http.NoBody)
+	req := httptest.NewRequestWithContext(
+		t.Context(),
+		textGetUpper,
+		textSlash,
+		http.NoBody,
+	)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -782,3 +881,27 @@ func TestChain_AppliesInOrder(t *testing.T) {
 		"middleware chain must execute in registration order",
 	)
 }
+
+const (
+	// repeatInputCasesTable is the count passed to Repeat in routeLabelCasesTable.
+	repeatInputCasesTable = 16
+
+	// repeatInputEncoding is the count passed to Repeat in
+	// TestCompression_SkipsWithoutAcceptEncoding.
+	repeatInputEncoding = 200
+
+	// repeatInputLabelCasesTable is the count passed to Repeat in routeLabelCasesTable.
+	repeatInputLabelCasesTable = 36
+
+	// repeatInputResponse is the count passed to Repeat in
+	// TestCompression_CompressesLargeResponse.
+	repeatInputResponse = 200
+
+	// repeatInputTable is the count passed to Repeat in routeLabelCasesTable.
+	repeatInputTable = 18
+)
+
+const (
+	// textAPIX is the literal "/api/x/".
+	textAPIX = "/api/x/"
+)

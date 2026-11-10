@@ -20,16 +20,17 @@ func Decorate(
 	if err != nil {
 		return nil, err
 	}
-	return &decorated{base: base, Base: b}, nil
+
+	return &decorated{base: base, Base: &b}, nil
 }
 
 // decorated runs each ReplayBuffer operation through the client tier.
 type decorated struct {
+	// Base runs the operations.
+	*client.Base
+
 	// base is the wrapped buffer.
 	base interfaces.ReplayBuffer
-
-	// Base runs the operations.
-	client.Base
 }
 
 var _ interfaces.ReplayBuffer = (*decorated)(nil)
@@ -55,11 +56,17 @@ func (d *decorated) ReplayAfter(
 	ctx context.Context,
 	key, afterMsgID string,
 ) ([]interfaces.BufferedMessage, bool, error) {
-	r, err := d.Exec(ctx, "replay_after", func(ctx context.Context) (replay, error) {
-		msgs, complete, err := d.base.ReplayAfter(ctx, key, afterMsgID)
-		return replay{msgs: msgs, complete: complete}, err
-	})
-	return r.msgs, r.complete, err
+	currentReplay, err := d.Exec(
+		ctx,
+		"replay_after",
+		func(ctx context.Context) (replay, error) {
+			msgs, complete, err := d.base.ReplayAfter(ctx, key, afterMsgID)
+
+			return replay{msgs: msgs, complete: complete}, err
+		},
+	)
+
+	return currentReplay.msgs, currentReplay.complete, err
 }
 
 // Prune drops entries up to upToMsgID as the operation "prune".

@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cache"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
@@ -47,50 +48,56 @@ func cached[T, P any, ID comparable](
 	c Cache[T, ID],
 	name string,
 ) decorate.Roles[T, P, ID] {
-	rc := &roleCache[T, ID]{cache: c, name: name}
+	rc := &roleCache[T, ID]{cache: c, name: name, sf: singleflight.Group{}}
+
+	cacheReads(&roles, rc)
+	cacheWrites(&roles, rc)
+
+	return roles
+}
+
+// cacheReads serves Get and Exists from the cache where it can.
+func cacheReads[T, P any, ID comparable](
+	roles *decorate.Roles[T, P, ID], currentRoleCache *roleCache[T, ID],
+) {
 	if get := roles.Get; get != nil {
-		roles.Get = func(ctx context.Context, id ID) (*T, error) { return rc.get(ctx, id, get) }
+		roles.Get = func(ctx context.Context, id ID) (*T,
+			error,
+		) {
+			return currentRoleCache.get(ctx, id, get)
+		}
 	}
+
 	if exists := roles.Exists; exists != nil {
 		roles.Exists = func(ctx context.Context, id ID) (bool, error) {
-			if interfaces.InTx(ctx) {
-				return exists(ctx, id)
-			}
-			if _, ok := rc.read(ctx, CacheKey(name, id)); ok {
-				return true, nil
-			}
-			return exists(ctx, id)
+			return currentRoleCache.exists(ctx, id, exists)
 		}
 	}
-	if create := roles.Create; create != nil && c.IDOf != nil {
+}
+
+// cacheWrites primes the cache on Create and evicts on Update and Delete.
+func cacheWrites[T, P any, ID comparable](
+	roles *decorate.Roles[T, P, ID], currentRoleCache *roleCache[T, ID],
+) {
+	if create := roles.Create; create != nil && currentRoleCache.cache.IDOf != nil {
 		roles.Create = func(ctx context.Context, entity *T) (*T, error) {
-			result, err := create(ctx, entity)
-			if err != nil {
-				return nil, err
-			}
-			rc.prime(ctx, CacheKey(name, c.IDOf(result)), result)
-			return result, nil
+			return currentRoleCache.create(ctx, entity, create)
 		}
 	}
+
 	if update := roles.Update; update != nil {
 		roles.Update = func(ctx context.Context, id ID, entity *T) (*T, error) {
-			result, err := update(ctx, id, entity)
-			if err == nil {
-				rc.evict(ctx, CacheKey(name, id))
-			}
-			return result, err
+			return currentRoleCache.update(ctx, id, entity, update)
 		}
 	}
+
 	if del := roles.Delete; del != nil {
-		roles.Delete = func(ctx context.Context, id ID) error {
-			err := del(ctx, id)
-			if err == nil {
-				rc.evict(ctx, CacheKey(name, id))
-			}
-			return err
+		roles.Delete = func(ctx context.Context,
+			id ID,
+		) error {
+			return currentRoleCache.remove(ctx, id, del)
 		}
 	}
-	return roles
 }
 
 // roleCache holds the cache state a cached repository's roles share.
@@ -105,71 +112,143 @@ type roleCache[T any, ID comparable] struct {
 	cache Cache[T, ID]
 }
 
+// exists answers from the cache outside a transaction; a miss asks the next tier.
+func (rc *roleCache[T, ID]) exists(
+	ctx context.Context, identifier ID, next func(context.Context, ID) (bool, error),
+) (bool, error) {
+	if interfaces.InTx(ctx) {
+		return next(ctx, identifier)
+	}
+
+	if _, ok := rc.read(ctx, CacheKey(rc.name, identifier)); ok {
+		return true, nil
+	}
+
+	return next(ctx, identifier)
+}
+
+// create primes the cache with a created entity.
+func (rc *roleCache[T, ID]) create(
+	ctx context.Context, entity *T, next func(context.Context, *T) (*T, error),
+) (*T, error) {
+	result, err := next(ctx, entity)
+	if err != nil {
+		return nil, err
+	}
+
+	rc.prime(ctx, CacheKey(rc.name, rc.cache.IDOf(result)), result)
+
+	return result, nil
+}
+
+// update evicts the entity once the update succeeds.
+func (rc *roleCache[T, ID]) update(
+	ctx context.Context, id ID, entity *T, next func(context.Context, ID, *T) (*T, error),
+) (*T, error) {
+	result, err := next(ctx, id, entity)
+	if err == nil {
+		rc.evict(ctx, CacheKey(rc.name, id))
+	}
+
+	return result, err
+}
+
+// remove evicts the entity once the delete succeeds.
+func (rc *roleCache[T, ID]) remove(
+	ctx context.Context, id ID, next func(context.Context, ID) error,
+) error {
+	err := next(ctx, id)
+	if err == nil {
+		rc.evict(ctx, CacheKey(rc.name, id))
+	}
+
+	return err
+}
+
 // read returns the cached entity under key, if a current one is there.
-func (c *roleCache[T, ID]) read(ctx context.Context, key string) (*T, bool) {
-	data, hit := c.cache.Store.Get(ctx, key)
+func (rc *roleCache[T, ID]) read(ctx context.Context, key string) (*T, bool) {
+	data, hit := rc.cache.Store.Get(ctx, key)
 	if !hit {
 		return nil, false
 	}
-	val, ok, err := cache.Decode[T](data, c.cache.Version)
+
+	val, ok, err := cache.Decode[T](data, rc.cache.Version)
 	if err != nil || !ok {
 		return nil, false
 	}
+
 	return &val, true
 }
 
 // write caches entity under key, best effort.
-func (c *roleCache[T, ID]) write(ctx context.Context, key string, entity *T) {
-	if encoded, err := cache.Encode(*entity, c.cache.Version); err == nil {
-		c.cache.Store.Set(ctx, key, encoded, c.cache.TTL)
+func (rc *roleCache[T, ID]) write(ctx context.Context, key string, entity *T) {
+	encoded, err := cache.Encode(*entity, rc.cache.Version)
+	if err == nil {
+		rc.cache.Store.Set(ctx, key, encoded, rc.cache.TTL)
 	}
 }
 
 // prime caches a created entity: now outside a transaction, after the commit inside one.
 // It encodes now, so a caller that edits entity afterwards cannot change the entry.
-func (c *roleCache[T, ID]) prime(ctx context.Context, key string, entity *T) {
-	encoded, err := cache.Encode(*entity, c.cache.Version)
+func (rc *roleCache[T, ID]) prime(ctx context.Context, key string, entity *T) {
+	encoded, err := cache.Encode(*entity, rc.cache.Version)
 	if err != nil {
 		return
 	}
+
 	interfaces.RegisterAfterCommit(ctx, func() {
-		c.cache.Store.Set(ctx, key, encoded, c.cache.TTL)
+		rc.cache.Store.Set(ctx, key, encoded, rc.cache.TTL)
 	})
 }
 
 // evict drops key now and, inside a transaction, again after the commit.
-func (c *roleCache[T, ID]) evict(ctx context.Context, key string) {
-	c.cache.Store.Delete(ctx, key)
+func (rc *roleCache[T, ID]) evict(ctx context.Context, key string) {
+	rc.cache.Store.Delete(ctx, key)
+
 	if interfaces.InTx(ctx) {
-		interfaces.RegisterAfterCommit(ctx, func() { c.cache.Store.Delete(ctx, key) })
+		interfaces.RegisterAfterCommit(ctx, func() { rc.cache.Store.Delete(ctx, key) })
 	}
 }
 
 // get reads the entity from the cache, or through get on a miss, returning a copy.
 // Inside a transaction it reads the store and leaves the cache alone.
-func (c *roleCache[T, ID]) get(
+func (rc *roleCache[T, ID]) get(
 	ctx context.Context,
-	id ID,
+	identifier ID,
 	get func(context.Context, ID) (*T, error),
 ) (*T, error) {
 	if interfaces.InTx(ctx) {
-		return get(ctx, id)
+		return get(ctx, identifier)
 	}
-	key := CacheKey(c.name, id)
-	if val, ok := c.read(ctx, key); ok {
+
+	key := CacheKey(rc.name, identifier)
+	if val, ok := rc.read(ctx, key); ok {
 		return val, nil
 	}
-	v, err, _ := c.sf.Do(key, func() (any, error) {
-		result, err := get(ctx, id)
+
+	value, err, _ := rc.sf.Do(key, func() (any, error) {
+		result, err := get(ctx, identifier)
 		if err != nil {
 			return nil, err
 		}
-		c.write(ctx, key, result)
+
+		rc.write(ctx, key, result)
+
 		return result, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	entity := *v.(*T)
+
+	cached, ok := value.(*T)
+	if !ok {
+		return nil, apperr.New(
+			apperr.CodeInternal,
+			"repository cache: loaded value has the wrong type",
+		)
+	}
+
+	entity := *cached
+
 	return &entity, nil
 }

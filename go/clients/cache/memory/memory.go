@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // DefaultMaxEntries bounds the cache when the configured bound is not positive.
@@ -58,12 +59,14 @@ func New(maxEntries int, defaultTTL time.Duration, now func() time.Time) *Cache 
 	if maxEntries <= 0 {
 		maxEntries = DefaultMaxEntries
 	}
+
 	return &Cache{
 		now:   now,
 		items: map[string]*list.Element{},
 		order: list.New(),
 		max:   maxEntries,
 		ttl:   defaultTTL,
+		mu:    sync.Mutex{},
 	}
 }
 
@@ -72,17 +75,22 @@ func New(maxEntries int, defaultTTL time.Duration, now func() time.Time) *Cache 
 func (c *Cache) Get(_ context.Context, key string) ([]byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	el, ok := c.items[key]
+
+	element, ok := c.items[key]
 	if !ok {
 		return nil, false
 	}
-	e, _ := el.Value.(*entry)
-	if !c.now().Before(e.expires) {
-		c.remove(el)
+
+	currentEntry := stdx.As[*entry](element.Value)
+	if !c.now().Before(currentEntry.expires) {
+		c.remove(element)
+
 		return nil, false
 	}
-	c.order.MoveToFront(el)
-	return append([]byte(nil), e.value...), true
+
+	c.order.MoveToFront(element)
+
+	return append([]byte(nil), currentEntry.value...), true
 }
 
 // Set stores a copy of value under key for ttl (the default TTL when zero), evicting
@@ -92,18 +100,27 @@ func (c *Cache) Set(_ context.Context, key string, value []byte, ttl time.Durati
 	if ttl == 0 {
 		ttl = c.ttl
 	}
+
 	if ttl <= 0 {
 		return
 	}
-	e := &entry{key: key, value: append([]byte(nil), value...), expires: c.now().Add(ttl)}
+
+	currentEntry := &entry{
+		key:     key,
+		value:   append([]byte(nil), value...),
+		expires: c.now().Add(ttl),
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	if el, ok := c.items[key]; ok {
-		el.Value = e
+		el.Value = currentEntry
 		c.order.MoveToFront(el)
+
 		return
 	}
-	c.items[key] = c.order.PushFront(e)
+
+	c.items[key] = c.order.PushFront(currentEntry)
 	for c.order.Len() > c.max {
 		c.remove(c.order.Back())
 	}
@@ -113,6 +130,7 @@ func (c *Cache) Set(_ context.Context, key string, value []byte, ttl time.Durati
 func (c *Cache) Delete(_ context.Context, key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	if el, ok := c.items[key]; ok {
 		c.remove(el)
 	}
@@ -120,6 +138,6 @@ func (c *Cache) Delete(_ context.Context, key string) {
 
 // remove drops el from both the order and the map; the caller holds mu.
 func (c *Cache) remove(el *list.Element) {
-	e, _ := c.order.Remove(el).(*entry)
+	e := stdx.As[*entry](c.order.Remove(el))
 	delete(c.items, e.key)
 }

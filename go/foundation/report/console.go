@@ -5,10 +5,16 @@ import (
 	"fmt"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// exitCodeInput is the exit status for a failure the caller can correct.
+const exitCodeInput = 2
+
+// exitCodeUnavailable is the exit status for an unavailable dependency.
+const exitCodeUnavailable = 3
 
 // ConsoleConfig tunes a Console. A composition root resolves it from the environment
 // (a TTY, NO_COLOR, CI, GITHUB_STEP_SUMMARY); the console itself reads nothing.
@@ -47,9 +53,11 @@ type Console struct {
 // NewConsole returns a Console writing to streams.Err at LevelNormal. Streams missing a
 // writer are CodeInvalidInput.
 func NewConsole(streams types.Streams, cfg ConsoleConfig) (*Console, error) {
-	if err := streams.Require(); err != nil {
+	err := streams.Require()
+	if err != nil {
 		return nil, err
 	}
+
 	return &Console{
 		p:   newPrinter(streams.Err, LevelNormal, !cfg.CI, cfg.Color, cfg.Hints),
 		cfg: cfg,
@@ -65,13 +73,15 @@ func (c *Console) Level() Level { return Level(c.p.level.Load()) }
 // Groupf opens a section titled by format: a collapsible log group under GitHub
 // Actions, otherwise a bold header at the verbose level only (the line reporter's phase
 // lines already title a normal run).
-func (c *Console) Groupf(format string, a ...any) {
+func (c *Console) Groupf(format string, items ...any) {
 	if c.cfg.GitHubActions {
-		_, _ = fmt.Fprintf(c.p.w, "::group::%s\n", fmt.Sprintf(format, a...))
+		_, _ = fmt.Fprintf(c.p.w, "::group::%s\n", fmt.Sprintf(format, items...))
+
 		return
 	}
+
 	if c.p.at(LevelVerbose) {
-		c.p.headerf(format, a...)
+		c.p.headerf(format, items...)
 	}
 }
 
@@ -121,17 +131,20 @@ func (c *Console) Errorf(format string, a ...any) {
 // verdict is also appended there.
 func (c *Console) Observer() interfaces.ExecutionObserver {
 	var obs interfaces.ExecutionObserver
+
 	switch {
 	case c.p.at(LevelVerbose):
 		obs = &table{p: c.p}
 	case c.cfg.CI:
-		obs = Composite(newLine(c.p), &ghActions{w: c.p.w})
+		obs = Composite(newLine(c.p), &ghActions{w: c.p.w, pending: nil})
 	default:
 		obs = newLine(c.p)
 	}
+
 	if c.cfg.StepSummaryPath != "" {
 		obs = Composite(obs, &stepSummary{path: c.cfg.StepSummaryPath})
 	}
+
 	return obs
 }
 
@@ -140,14 +153,19 @@ func (c *Console) Observer() interfaces.ExecutionObserver {
 // ExitCode(code); any other error prints as "Error: <err>" and exits 1.
 func (c *Console) FormatError(err error) int {
 	var appErr *apperr.AppError
+
 	if apperr.As(err, &appErr) {
 		c.Errorf("%s: %s", appErr.Code, appErr.Message)
+
 		if appErr.Err != nil {
 			c.Debugf("  cause: %v", appErr.Err)
 		}
+
 		return ExitCode(appErr.Code)
 	}
+
 	c.Errorf("Error: %v", err)
+
 	return 1
 }
 
@@ -157,9 +175,9 @@ func (c *Console) FormatError(err error) int {
 func ExitCode(code apperr.ErrorCode) int {
 	switch code {
 	case apperr.CodeInvalidInput, apperr.CodeNotFound, apperr.CodeQualityFailed:
-		return 2
+		return exitCodeInput
 	case apperr.CodeUnavailable:
-		return 3
+		return exitCodeUnavailable
 	case apperr.CodeUnknown,
 		apperr.CodeInternal,
 		apperr.CodeUnauthorized,
@@ -172,8 +190,10 @@ func ExitCode(code apperr.ErrorCode) int {
 		apperr.CodeResourceExhausted:
 		return 1
 	default:
-		return 1
+		// Any other value takes the shared result below.
 	}
+
+	return 1
 }
 
 // CommandHook returns a CmdHook that echoes each command the runner starts, and its
@@ -205,7 +225,7 @@ func (h hook) print(s style, format, cmd string) {
 // Logger returns an interfaces.Logger that prints through the console: Debug at the
 // verbose level, Info and Warn at the normal level, Error always. Key-value pairs are
 // appended to the message as " key=value".
-func (c *Console) Logger() interfaces.Logger { return &consoleLogger{c: c} }
+func (c *Console) Logger() interfaces.Logger { return &consoleLogger{c: c, kvs: nil} }
 
 // consoleLogger is the console's Logger.
 type consoleLogger struct {
@@ -221,7 +241,7 @@ func (l *consoleLogger) Debug(
 	msg string,
 	kvs ...any,
 ) {
-	l.c.Debugf("%s", l.format(msg, kvs))
+	l.c.Debugf(textS, l.format(msg, kvs))
 }
 
 // Info prints msg at the normal level.
@@ -229,7 +249,7 @@ func (l *consoleLogger) Info(
 	msg string,
 	kvs ...any,
 ) {
-	l.c.Infof("%s", l.format(msg, kvs))
+	l.c.Infof(textS, l.format(msg, kvs))
 }
 
 // Warn prints msg at the normal level.
@@ -237,7 +257,7 @@ func (l *consoleLogger) Warn(
 	msg string,
 	kvs ...any,
 ) {
-	l.c.Warnf("%s", l.format(msg, kvs))
+	l.c.Warnf(textS, l.format(msg, kvs))
 }
 
 // Error prints msg at every level.
@@ -245,13 +265,15 @@ func (l *consoleLogger) Error(
 	msg string,
 	kvs ...any,
 ) {
-	l.c.Errorf("%s", l.format(msg, kvs))
+	l.c.Errorf(textS, l.format(msg, kvs))
 }
 
 // With returns a logger that appends kvs to every message after the pairs already bound.
 func (l *consoleLogger) With(kvs ...any) interfaces.Logger {
 	merged := make([]any, 0, len(l.kvs)+len(kvs))
+
 	merged = append(append(merged, l.kvs...), kvs...)
+
 	return &consoleLogger{c: l.c, kvs: merged}
 }
 
@@ -264,12 +286,16 @@ func (l *consoleLogger) format(msg string, kvs []any) string {
 	if len(l.kvs) == 0 && len(kvs) == 0 {
 		return msg
 	}
-	var sb strings.Builder
-	sb.WriteString(msg)
+
+	var builder strings.Builder
+
+	_, _ = builder.WriteString(msg)
+
 	for _, list := range [][]any{l.kvs, kvs} {
-		for i := 0; i+1 < len(list); i += 2 {
-			_, _ = fmt.Fprintf(&sb, " %v=%v", list[i], list[i+1])
+		for i := 0; i+1 < len(list); i += pairStride {
+			_, _ = fmt.Fprintf(&builder, " %v=%v", list[i], list[i+1])
 		}
 	}
-	return sb.String()
+
+	return builder.String()
 }

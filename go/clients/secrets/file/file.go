@@ -13,10 +13,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// minQuotedLen is the shortest value that can carry an opening and a closing quote.
+const minQuotedLen = 2
+
+// privateDirMode is the mode of a directory only its owner enters.
+const privateDirMode = 0o700
 
 // credentialFilePerm is the mode for a written credential file: owner read/write only,
 // so a secret store is never group- or world-readable.
@@ -56,6 +62,7 @@ func (s source) Get(_ context.Context, ref types.Ref) (types.Secret, error) {
 			fmt.Sprintf("no file location mapped for credential %s", ref),
 		)
 	}
+
 	data, err := os.ReadFile(loc.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -63,18 +70,21 @@ func (s source) Get(_ context.Context, ref types.Ref) (types.Secret, error) {
 				fmt.Sprintf("credential file %q does not exist for %s", loc.Path, ref),
 			)
 		}
+
 		return types.Secret{}, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			"reading credential file",
 		)
 	}
+
 	value, found := lookup(data, loc.Key)
 	if !found || value == "" {
 		return types.Secret{}, apperr.NotFound(
 			fmt.Sprintf("key %q not found in credential file for %s", loc.Key, ref),
 		)
 	}
+
 	return types.NewSecret(value), nil
 }
 
@@ -89,23 +99,27 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 			fmt.Sprintf("no file location mapped for credential %s", ref),
 		)
 	}
+
 	// Ensure the parent directory exists (0700 — a secrets dir), so a first write to a
 	// not-yet-created git-ignored store (e.g. .secrets/) succeeds; the check-ignore below
 	// also runs with this directory as its working dir.
-	if err := os.MkdirAll(filepath.Dir(loc.Path), 0o700); err != nil {
+	err := os.MkdirAll(filepath.Dir(loc.Path), privateDirMode)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "creating credential directory")
 	}
+
 	// `git check-ignore -q <path>` exits 0 when the path IS ignored; the CommandRunner
 	// returns a non-nil error for any non-zero exit (not-ignored, or git unavailable),
 	// so we fail SAFE — refuse the write unless git positively confirms the path ignored.
-	if err := s.runner.Run(
+	err = s.runner.Run(
 		ctx,
 		filepath.Dir(loc.Path),
 		"git",
 		"check-ignore",
 		"-q",
 		loc.Path,
-	); err != nil {
+	)
+	if err != nil {
 		return apperr.New(
 			apperr.CodeInvalidInput,
 			fmt.Sprintf(
@@ -119,22 +133,27 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 	if err != nil && !os.IsNotExist(err) {
 		return apperr.Wrap(err, apperr.CodeInternal, "reading credential file for update")
 	}
+
 	updated := upsert(data, loc.Key, value.Reveal())
-	if err := os.WriteFile(loc.Path, updated, credentialFilePerm); err != nil {
+
+	err = os.WriteFile(loc.Path, updated, credentialFilePerm)
+	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "writing credential file")
 	}
+
 	return nil
 }
 
 // lookup returns the value for key in a dotenv-style KEY=value buffer. Blank lines and
 // lines beginning with '#' are ignored; the value is everything after the first '='.
 func lookup(data []byte, key string) (string, bool) {
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), textNewline) {
 		k, v, ok := splitKV(line)
 		if ok && k == key {
 			return v, true
 		}
 	}
+
 	return "", false
 }
 
@@ -142,31 +161,41 @@ func lookup(data []byte, key string) (string, bool) {
 // or appends a new one when the key is absent.
 func upsert(data []byte, key, value string) []byte {
 	line := key + "=" + value
-	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(string(data), textNewline), textNewline)
 	replaced := false
 	out := make([]string, 0, len(lines)+1)
-	for _, l := range lines {
-		if k, _, ok := splitKV(l); ok && k == key {
-			// Preserve a shell `export ` prefix on the replaced line, so updating a key in a
-			// dotenv file maintained for both `source` and this backend keeps it sourceable.
-			if strings.HasPrefix(strings.TrimSpace(l), "export ") {
-				out = append(out, "export "+line)
-			} else {
-				out = append(out, line)
-			}
+
+	for _, text := range lines {
+		if k, _, ok := splitKV(text); ok && k == key {
+			out = append(out, replacementLine(text, line))
 			replaced = true
+
 			continue
 		}
-		out = append(out, l)
+
+		out = append(out, text)
 	}
+
 	if !replaced {
 		out = append(out, line)
 	}
+
 	// Drop a leading empty element from splitting an empty/whitespace buffer.
 	if len(out) > 0 && strings.TrimSpace(out[0]) == "" {
 		out = out[1:]
 	}
-	return []byte(strings.Join(out, "\n") + "\n")
+
+	return []byte(strings.Join(out, textNewline) + textNewline)
+}
+
+// replacementLine preserves a shell `export ` prefix on the replaced line, so updating a
+// key in a dotenv file maintained for both `source` and this backend keeps it sourceable.
+func replacementLine(old, line string) string {
+	if strings.HasPrefix(strings.TrimSpace(old), textExport) {
+		return textExport + line
+	}
+
+	return line
 }
 
 // splitKV parses a single dotenv line into its key and value. It reports ok=false for a
@@ -178,28 +207,33 @@ func upsert(data []byte, key, value string) []byte {
 // literal.
 func splitKV(line string) (key, value string, ok bool) {
 	trimmed := strings.TrimSpace(line)
-	trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "export "))
+
+	trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, textExport))
+
 	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 		return "", "", false
 	}
-	eq := strings.IndexByte(trimmed, '=')
-	if eq < 0 {
+
+	count := strings.IndexByte(trimmed, '=')
+	if count < 0 {
 		return "", "", false
 	}
+
 	return strings.TrimSpace(
-			trimmed[:eq],
+			trimmed[:count],
 		), unquote(
-			strings.TrimSpace(trimmed[eq+1:]),
+			strings.TrimSpace(trimmed[count+1:]),
 		), true
 }
 
 // unquote strips one matching pair of surrounding single or double quotes from a dotenv
 // value (shell quoting), leaving an unquoted or unbalanced value unchanged.
-func unquote(v string) string {
-	if len(v) >= 2 {
-		if c := v[0]; (c == '"' || c == '\'') && v[len(v)-1] == c {
-			return v[1 : len(v)-1]
+func unquote(text string) string {
+	if len(text) >= minQuotedLen {
+		if c := text[0]; (c == '"' || c == '\'') && text[len(text)-1] == c {
+			return text[1 : len(text)-1]
 		}
 	}
-	return v
+
+	return text
 }

@@ -40,15 +40,19 @@ func kinds() client.Kinds[Config, Deps, interfaces.DatabasePool] {
 				return postgres.New(&cfg.Database), nil
 			},
 		},
+		Decorate:   nil,
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
 // NewFromConfig builds the pool cfg.Kind selects, without I/O (it connects on Start).
 // An unknown kind is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.DatabasePool, error) {
-	return kinds().New(ctx, cfg.Kind, cfg, deps)
+	return kinds().New(ctx, cfg.Kind, *cfg, deps)
 }

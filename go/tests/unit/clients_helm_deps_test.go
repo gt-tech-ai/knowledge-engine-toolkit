@@ -9,9 +9,10 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/helm"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -27,29 +28,47 @@ import (
 //     does not build again.
 func TestBuildDeps_OncePerChartPerSnapshot(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
-	c := mocks.NewMockHelmClient(gomock.NewController(t))
-	snap := codebase.NewSnapshot("t")
-	c.EXPECT().DependencyBuild(gomock.Any(), "charts/api").Return(nil).Times(1)
-	c.EXPECT().DependencyBuild(gomock.Any(), "charts/web").Return(nil).Times(1)
+	helmClient := mocks.NewMockHelmClient(gomock.NewController(t))
+	snap := codebase.NewSnapshot(textT)
 
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Go(func() { assert.NoError(t, helm.BuildDeps(ctx, c, snap, "charts/api")) })
+	helmClient.EXPECT().DependencyBuild(gomock.Any(), textChartsAPI).Return(nil).Times(1)
+	helmClient.EXPECT().DependencyBuild(gomock.Any(), "charts/web").Return(nil).Times(1)
+
+	var group sync.WaitGroup
+
+	for range iterationsSnapshot {
+		group.Go(
+			func() { assert.NoError(t, helm.BuildDeps(ctx, helmClient, snap, textChartsAPI)) },
+		)
 	}
-	wg.Wait()
-	require.NoError(t, helm.BuildDeps(ctx, c, snap, "charts/web"))
 
-	c.EXPECT().Template(gomock.Any(), gomock.Any()).Return([]byte("kind: X\n"), nil)
-	_, err := helm.NewRenderer(c, snap).
-		Render(ctx, types.RenderSpec{ChartDir: "charts/api"})
+	group.Wait()
+	require.NoError(t, helm.BuildDeps(ctx, helmClient, snap, "charts/web"))
+
+	helmClient.EXPECT().
+		Template(gomock.Any(), gomock.Any()).
+		Return([]byte("kind: X\n"), nil)
+
+	_, err := helm.NewRenderer(helmClient, snap).
+		Render(ctx, fixtures.BuildRef(func(row *types.RenderSpec) {
+			row.ChartDir = textChartsAPI
+		}))
 	require.NoError(t, err)
 
-	bad := codebase.NewSnapshot("bad")
-	c.EXPECT().DependencyBuild(gomock.Any(), "charts/bad").
-		Return(apperr.New(apperr.CodeUpstream, "boom")).Times(1)
-	for range 2 {
-		err := helm.BuildDeps(ctx, c, bad, "charts/bad")
+	bad := codebase.NewSnapshot(textBad)
+
+	helmClient.EXPECT().DependencyBuild(gomock.Any(), "charts/bad").
+		Return(apperr.New(apperr.CodeUpstream, textBoom)).Times(1)
+
+	for range iterations {
+		err := helm.BuildDeps(ctx, helmClient, bad, "charts/bad")
 		assert.Equal(t, apperr.CodeUpstream, apperr.Code(err))
 	}
 }
+
+const (
+	// iterationsSnapshot is the iteration count in TestBuildDeps_OncePerChartPerSnapshot.
+	iterationsSnapshot = 8
+)

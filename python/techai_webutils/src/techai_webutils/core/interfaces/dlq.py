@@ -17,19 +17,19 @@ class DeadLetter:
     """A message routed to the dead-letter queue after a permanent failure."""
 
     id: str
-    """The source message identifier, used as the ``source_id`` DLQ attribute for correlation back to the
-    original message."""
+    """The source message identifier, used as the ``source_id`` DLQ attribute for
+    correlation back to the original message."""
 
     payload: bytes
     """The raw source message body, preserved verbatim for forensics."""
 
     reason: str
-    """A short machine/human tag for why the message was dead-lettered (e.g. ``unsupported_format``);
-    surfaced as the ``reason`` DLQ attribute."""
+    """A short machine/human tag for why the message was dead-lettered (e.g.
+    ``unsupported_format``); surfaced as the ``reason`` DLQ attribute."""
 
     metadata: dict[str, str] = field(default_factory=dict)
-    """Optional extra context propagated as DLQ message attributes; keys colliding with the reserved
-    ``reason``/``source_id`` attributes are dropped."""
+    """Optional extra context propagated as DLQ message attributes; keys colliding with
+    the reserved ``reason``/``source_id`` attributes are dropped."""
 
 
 class DeadLetterBackend(ABC):
@@ -37,5 +37,10 @@ class DeadLetterBackend(ABC):
 
     @abstractmethod
     async def send(self, letter: DeadLetter) -> None:
-        """Persist a dead letter; raise if the sink is unavailable."""
+        """Persist a dead letter; raise if the sink is unavailable.
+
+        Args:
+            letter: The failed message with its error and attempt count.
+
+        """
         ...

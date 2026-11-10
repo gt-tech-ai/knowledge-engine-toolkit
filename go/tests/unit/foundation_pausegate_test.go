@@ -7,8 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/pausegate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
@@ -25,10 +26,14 @@ import (
 //     elapses, then it reopens (the gauge reads 0).
 func TestPauseGate_ClosesForThePauseOnAnOutage(t *testing.T) {
 	t.Parallel()
-	now := time.Unix(1_000, 0)
+
+	now := time.Unix(unixInputOutage, 0)
 	gauge := mocks.NewMockGauge(gomock.NewController(t))
-	gate, err := pausegate.New(pausegate.Config{Pause: 30 * time.Second}, gauge,
-		func() time.Time { return now })
+	gate, err := pausegate.New(
+		pausegate.Config{Pause: 30 * time.Second, Codes: nil},
+		gauge,
+		func() time.Time { return now },
+	)
 	require.NoError(t, err)
 
 	gauge.EXPECT().Set(float64(0)).AnyTimes()
@@ -41,8 +46,11 @@ func TestPauseGate_ClosesForThePauseOnAnOutage(t *testing.T) {
 	require.Equal(t, apperr.CodeUnavailable, apperr.Code(gate.Ready(t.Context())))
 
 	now = now.Add(29 * time.Second)
+
 	require.Error(t, gate.Ready(t.Context()))
+
 	now = now.Add(time.Second)
+
 	require.NoError(t, gate.Ready(t.Context()))
 }
 
@@ -55,6 +63,13 @@ func TestPauseGate_ClosesForThePauseOnAnOutage(t *testing.T) {
 //   - Pause <= 0 is CodeInvalidInput.
 func TestPauseGate_RejectsANonPositivePause(t *testing.T) {
 	t.Parallel()
-	_, err := pausegate.New(pausegate.Config{}, nil, time.Now)
+
+	_, err := pausegate.New(stdx.Zero[pausegate.Config](), nil, time.Now)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 }
+
+const (
+	// unixInputOutage is the sec passed to Unix in
+	// TestPauseGate_ClosesForThePauseOnAnOutage.
+	unixInputOutage = 1_000
+)

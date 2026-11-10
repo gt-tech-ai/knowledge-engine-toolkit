@@ -15,14 +15,14 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
 // SecretsManagerAPI is the subset of the aws-sdk-go-v2 Secrets Manager client used by the
 // source. It is an exported, injectable seam so unit tests drive it with a generated mock
-// without network access, mirroring the S3 client's S3API seam. *secretsmanager.Client
+// without network access, mirroring the S3 client's API seam. *secretsmanager.Client
 // satisfies it. The name is distinct (not a bare API) so its generated mock does not
 // collide with the SQS client's API seam in the shared mocks package.
 //
@@ -31,9 +31,9 @@ import (
 type SecretsManagerAPI interface {
 	// GetSecretValue retrieves a secret's value (the SecretString JSON blob).
 	GetSecretValue(
-		context.Context,
-		*secretsmanager.GetSecretValueInput,
-		...func(*secretsmanager.Options),
+		ctx context.Context,
+		in *secretsmanager.GetSecretValueInput,
+		optFns ...func(*secretsmanager.Options),
 	) (*secretsmanager.GetSecretValueOutput, error)
 }
 
@@ -77,6 +77,7 @@ func NewClient(
 			"loading aws config for secrets manager",
 		)
 	}
+
 	return New(secretsmanager.NewFromConfig(awsCfg), locs), nil
 }
 
@@ -91,8 +92,11 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 			fmt.Sprintf("no secrets-manager location mapped for credential %s", ref),
 		)
 	}
+
 	out, err := s.api.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(loc.SecretID),
+		SecretId:     aws.String(loc.SecretID),
+		VersionId:    nil,
+		VersionStage: nil,
 	})
 	if err != nil {
 		return types.Secret{}, apperr.Wrap(
@@ -101,19 +105,24 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 			"fetching secret from secrets manager",
 		)
 	}
+
 	if out.SecretString == nil {
 		return types.Secret{}, apperr.NotFound(
 			fmt.Sprintf("secret %q has no string value for %s", loc.SecretID, ref),
 		)
 	}
+
 	var fields map[string]string
-	if err := json.Unmarshal([]byte(*out.SecretString), &fields); err != nil {
+
+	err = json.Unmarshal([]byte(*out.SecretString), &fields)
+	if err != nil {
 		return types.Secret{}, apperr.Wrap(
 			err,
 			apperr.CodeInternal,
 			"decoding secrets manager json",
 		)
 	}
+
 	value, found := fields[loc.Field]
 	if !found || value == "" {
 		return types.Secret{}, apperr.NotFound(
@@ -125,12 +134,13 @@ func (s source) Get(ctx context.Context, ref types.Ref) (types.Secret, error) {
 			),
 		)
 	}
+
 	return types.NewSecret(value), nil
 }
 
 // Put is unsupported: Secrets Manager secrets are written out-of-band by IaC. It returns
 // a coded error so a caller routing a write to this backend fails loudly.
-func (s source) Put(_ context.Context, ref types.Ref, _ types.Secret) error {
+func (source) Put(_ context.Context, ref types.Ref, _ types.Secret) error {
 	return apperr.New(
 		apperr.CodeInvalidInput,
 		fmt.Sprintf(

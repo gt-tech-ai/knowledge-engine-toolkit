@@ -2,6 +2,7 @@ package unit_test
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/services/suite"
@@ -23,37 +24,69 @@ import (
 // that reaches the network, and a fmt row no lint selection may pick.
 func suiteRuns() []types.ToolRun {
 	return []types.ToolRun{
-		{Name: "golangci-lint", Verb: "lint", Group: "Lint", Tags: []string{"go"}},
-		{Name: "ruff", Verb: "lint", Group: "Lint", Tags: []string{"python", "slow"}},
-		{
-			Name:  "lychee",
-			Verb:  "lint",
-			Group: "Docs Lint",
-			Tags:  []string{"docs", "online"},
-		},
-		{Name: "gofumpt", Verb: "fmt", Group: "Format", Tags: []string{"go"}},
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textGolangciLint
+			row.Verb = textLint
+			row.Group = textLintTitle
+			row.Tags = []string{textGoLower}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textRuff
+			row.Verb = textLint
+			row.Group = textLintTitle
+			row.Tags = []string{textPython, textSlow}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textLychee
+			row.Verb = textLint
+			row.Group = textDocsLint
+			row.Tags = []string{textDocsLower, textOnline}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textGofumpt
+			row.Verb = textFmt
+			row.Group = textFormat
+			row.Tags = []string{textGoLower}
+		}),
 	}
 }
 
 // lintSuite is a lint suite over suiteRuns.
 func lintSuite() types.Suite {
 	lint := func(tag string) types.Selection {
-		return types.Selection{Verbs: []string{"lint"}, Tags: []string{tag}}
+		return fixtures.Build(func(row *types.Selection) {
+			row.Verbs = []string{textLint}
+			row.Tags = []string{tag}
+		})
 	}
+
 	return types.Suite{
-		Title: "Lint",
-		Select: types.Selection{
-			Verbs:   []string{"lint"},
-			AnyTags: []string{"go", "python"},
+		Title: textLintTitle,
+		Select: fixtures.Build(func(row *types.Selection) {
+			row.Verbs = []string{textLint}
+			row.AnyTags = []string{textGoLower, textPython}
+		}),
+		Phases: []types.Phase{
+			{Group: textDocsLint, Serial: false},
+			{Group: textLintTitle, Serial: false},
 		},
-		Phases: []types.Phase{{Group: "Docs Lint"}, {Group: "Lint"}},
 		Selectors: map[string]types.Selection{
-			"go": lint("go"), "python": lint("python"), "docs": lint("docs"),
+			textGoLower: lint(
+				textGoLower,
+			),
+			textPython:    lint(textPython),
+			textDocsLower: lint(textDocsLower),
 		},
 		Modifiers: map[string]types.Selection{
-			"fast":    {ExcludeTags: []string{"slow"}},
-			"offline": {ExcludeTags: []string{"online"}},
+			textFast: fixtures.Build(func(row *types.Selection) {
+				row.ExcludeTags = []string{textSlow}
+			}),
+			textOffline: fixtures.Build(func(row *types.Selection) {
+				row.ExcludeTags = []string{textOnline}
+			}),
 		},
+		Gated: nil,
+		Steps: nil,
 	}
 }
 
@@ -63,6 +96,7 @@ func entryNames(es []suite.Entry) []string {
 	for _, e := range es {
 		out = append(out, e.Name)
 	}
+
 	return out
 }
 
@@ -81,51 +115,101 @@ func entryNames(es []suite.Entry) []string {
 //     the catalog is INVALID_INPUT.
 func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 	t.Parallel()
-	s := lintSuite()
+
+	currentSuite := lintSuite()
 	catalog := suite.Runs(nil, nil, suiteRuns())
 	names := func(s types.Suite, cat []suite.Entry, flags ...string) []string {
-		got, err := suite.Select(s, cat, flags)
+		got, err := suite.Select(&s, cat, flags)
 		require.NoError(t, err)
+
 		return entryNames(got)
 	}
-	assert.Equal(t, []string{"golangci-lint", "ruff"}, names(s, catalog))
-	assert.Equal(t, []string{"golangci-lint", "ruff"}, names(s, catalog, "python", "go"))
-	assert.Equal(t, []string{"golangci-lint"}, names(s, catalog, "go", "fast"))
-	assert.Equal(t, []string{"lychee"}, names(s, catalog, "docs"))
-	assert.Empty(t, names(s, catalog, "docs", "offline"))
-	_, err := suite.Select(s, catalog, []string{"rust"})
-	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	require.ErrorContains(t, err, "rust")
+	assert.Equal(t, []string{textGolangciLint, textRuff}, names(currentSuite, catalog))
+	assert.Equal(
+		t,
+		[]string{textGolangciLint, textRuff},
+		names(currentSuite, catalog, textPython, textGoLower),
+	)
+	assert.Equal(
+		t,
+		[]string{textGolangciLint},
+		names(currentSuite, catalog, textGoLower, textFast),
+	)
+	assert.Equal(t, []string{textLychee}, names(currentSuite, catalog, textDocsLower))
+	assert.Empty(t, names(currentSuite, catalog, textDocsLower, textOffline))
 
-	gated := s
-	gated.Gated = map[string]string{"offline": "offline"}
+	_, err := suite.Select(&currentSuite, catalog, []string{textRust})
+	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	require.ErrorContains(t, err, textRust)
+
+	gated := currentSuite
+
+	gated.Gated = map[string]string{textOffline: textOffline}
+
+	testServicesSuiteSelectComposesFlagsOffline(t, &currentSuite, catalog, names, &gated)
+}
+
+// testServicesSuiteSelectComposesFlagsOffline continues
+// TestServicesSuite_SelectComposesFlags: offline.
+func testServicesSuiteSelectComposesFlagsOffline(
+	t *testing.T,
+	currentSuite *types.Suite,
+	catalog []suite.Entry,
+	names func(s types.Suite, cat []suite.Entry, flags ...string) []string,
+	gated *types.Suite,
+) {
+	t.Helper()
+
+	var err error
+
 	offline := suite.Runs(nil, nil, []types.ToolRun{
-		{
-			Name:  "lychee",
-			Verb:  "lint",
-			Group: "Docs Lint",
-			Tags:  []string{"docs", "online"},
-		},
-		{
-			Name:  "lychee offline",
-			Verb:  "lint",
-			Group: "Docs Lint",
-			Tags:  []string{"docs", "offline"},
-		},
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textLychee
+			row.Verb = textLint
+			row.Group = textDocsLint
+			row.Tags = []string{textDocsLower, textOnline}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = "lychee offline"
+			row.Verb = textLint
+			row.Group = textDocsLint
+			row.Tags = []string{textDocsLower, textOffline}
+		}),
 	})
-	assert.Equal(t, []string{"lychee"}, names(gated, offline, "docs"))
-	assert.Equal(t, []string{"lychee offline"}, names(gated, offline, "docs", "offline"))
+	assert.Equal(t, []string{textLychee}, names(*gated, offline, textDocsLower))
+	assert.Equal(
+		t,
+		[]string{"lychee offline"},
+		names(*gated, offline, textDocsLower, textOffline),
+	)
 
 	steps := suite.Steps(map[string]suite.Step{
-		"lint.vet": {Group: "Lint", Tags: []string{"go"}},
-		"lint.off": {Group: "Lint", Tags: []string{"go"}},
+		textLintVet: {
+			Group: textLintTitle,
+			Tags:  []string{textGoLower},
+			Run:   nil,
+			Tools: nil,
+		},
+		"lint.off": {
+			Group: textLintTitle,
+			Tags:  []string{textGoLower},
+			Run:   nil,
+			Tools: nil,
+		},
 	})
-	withSteps := s
-	withSteps.Steps = []string{"lint.vet"}
-	all := append(append([]suite.Entry{}, catalog...), steps...)
-	assert.Equal(t, []string{"golangci-lint", "lint.vet"}, names(withSteps, all, "go"))
+	withSteps := *currentSuite
+
+	withSteps.Steps = []string{textLintVet}
+
+	all := slices.Concat(catalog, steps)
+	assert.Equal(
+		t,
+		[]string{textGolangciLint, textLintVet},
+		names(withSteps, all, textGoLower),
+	)
+
 	withSteps.Steps = []string{"lint.nope"}
-	_, err = suite.Select(withSteps, all, nil)
+	_, err = suite.Select(&withSteps, all, nil)
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
 	assert.ErrorContains(t, err, "lint.nope")
 }
@@ -142,27 +226,31 @@ func TestServicesSuite_SelectComposesFlags(t *testing.T) {
 //     drops an empty phase; an unphased group is INVALID_INPUT naming entry and group.
 func TestServicesSuite_PlanOrdersPhases(t *testing.T) {
 	t.Parallel()
-	s := lintSuite()
-	s.Phases[1].Serial = true
+
+	currentSuite := lintSuite()
+
+	currentSuite.Phases[1].Serial = true
+
 	selected, err := suite.Select(
-		s,
+		&currentSuite,
 		suite.Runs(nil, nil, suiteRuns()),
-		[]string{"go", "docs"},
+		[]string{textGoLower, textDocsLower},
 	)
 	require.NoError(t, err)
-	plan, err := suite.Plan(s, selected)
+
+	plan, err := suite.Plan(&currentSuite, selected)
 	require.NoError(t, err)
-	require.Len(t, plan, 2)
-	assert.Equal(t, "Docs Lint", plan[0].Group)
+	require.Len(t, plan, wantPlanLen)
+	assert.Equal(t, textDocsLint, plan[0].Group)
 	assert.False(t, plan[0].Serial)
-	assert.Equal(t, "lychee", plan[0].Entries[0].Name)
-	assert.Equal(t, "Lint", plan[1].Group)
+	assert.Equal(t, textLychee, plan[0].Entries[0].Name)
+	assert.Equal(t, textLintTitle, plan[1].Group)
 	assert.True(t, plan[1].Serial)
 
-	_, err = suite.Plan(s, suite.Runs(nil, nil, suiteRuns()[3:]))
+	_, err = suite.Plan(&currentSuite, suite.Runs(nil, nil, suiteRuns()[3:]))
 	require.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
-	require.ErrorContains(t, err, "gofumpt")
-	assert.ErrorContains(t, err, "Format")
+	require.ErrorContains(t, err, textGofumpt)
+	assert.ErrorContains(t, err, textFormat)
 }
 
 // TestServicesSuite_Gate tests the gate a suite builds.
@@ -181,79 +269,276 @@ func TestServicesSuite_PlanOrdersPhases(t *testing.T) {
 //   - An unknown flag is one failing job naming the flag, from Gate and from Jobs.
 func TestServicesSuite_Gate(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	tr := mocks.NewMockToolRunner(ctrl)
-	var inFlight, peak atomic.Int32
-	var mu sync.Mutex
-	var ran []string
-	tr.EXPECT().Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(2).
+
+	testServicesSuiteGateRunsConcurrently(t, ctrl, tr)
+}
+
+// testServicesSuiteGateRunsConcurrently continues testServicesSuiteGate: runs
+// concurrently.
+func testServicesSuiteGateRunsConcurrently(
+	t *testing.T,
+	ctrl *gomock.Controller,
+	toolRunner *mocks.MockToolRunner,
+) {
+	t.Helper()
+
+	var (
+		inFlight, peak atomic.Int32
+		lock           sync.Mutex
+		ran            []string
+	)
+
+	toolRunner.EXPECT().
+		Run(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(2).
 		DoAndReturn(func(
-			_ context.Context, _ interfaces.Codebase, r types.ToolRun, _ types.RunOptions,
+			_ context.Context, _ interfaces.Codebase, rRef *types.ToolRun, _ types.RunOptions,
 		) (types.StepResults, error) {
+			toolRun := *rRef
+
 			n := inFlight.Add(1)
-			for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
-			}
+			recordPeak(&peak, n)
+
 			time.Sleep(10 * time.Millisecond)
 			inFlight.Add(-1)
-			mu.Lock()
-			ran = append(ran, r.Name)
-			mu.Unlock()
-			return types.OneStep(r.Name, types.StatusPass, nil), nil
+			lock.Lock()
+
+			ran = append(ran, toolRun.Name)
+			lock.Unlock()
+
+			return types.OneStep(toolRun.Name, types.StatusPass, nil), nil
 		})
+
 	runner := mocks.NewMockCommandRunner(ctrl)
-	s := types.Suite{
-		Title:  "Lint",
-		Select: types.Selection{Verbs: []string{"lint"}},
-		Phases: []types.Phase{{Group: "Format", Serial: true}, {Group: "Lint"}},
+
+	testServicesSuiteGateChecksPhases(t, toolRunner, &peak, &lock, &ran, runner)
+}
+
+// testServicesSuiteGateChecksPhases continues testServicesSuiteGateRunsConcurrently:
+// checks phases.
+func testServicesSuiteGateChecksPhases(
+	t *testing.T,
+	toolRunner *mocks.MockToolRunner,
+	peak *atomic.Int32,
+	lock *sync.Mutex,
+	ran *[]string,
+	runner *mocks.MockCommandRunner,
+) {
+	t.Helper()
+
+	currentSuite := types.Suite{
+		Title: textLintTitle,
+		Select: fixtures.Build(func(row *types.Selection) {
+			row.Verbs = []string{textLint}
+		}),
+		Phases: []types.Phase{
+			{Group: textFormat, Serial: true},
+			{Group: textLintTitle, Serial: false},
+		},
 		Selectors: map[string]types.Selection{
-			"go":     {Verbs: []string{"lint"}, Tags: []string{"go"}},
-			"python": {Verbs: []string{"lint"}, Tags: []string{"python"}},
+			textGoLower: fixtures.Build(func(row *types.Selection) {
+				row.Verbs = []string{textLint}
+				row.Tags = []string{textGoLower}
+			}),
+			textPython: fixtures.Build(func(row *types.Selection) {
+				row.Verbs = []string{textLint}
+				row.Tags = []string{textPython}
+			}),
 		},
-		Steps: []string{"lint.vet"},
+		Steps:     []string{textLintVet},
+		Modifiers: nil,
+		Gated:     nil,
 	}
-	catalog := append(suite.Runs(tr, nil, []types.ToolRun{
-		{Name: "gofumpt", Verb: "lint", Group: "Format", Tags: []string{"go"}},
-		{Name: "golines", Verb: "lint", Group: "Format", Tags: []string{"go"}},
-		{Name: "ruff", Verb: "lint", Group: "Lint", Tags: []string{"python"}},
-	}), suite.Steps(map[string]suite.Step{"lint.vet": {
-		Group: "Lint", Tags: []string{"go"},
+
+	testServicesSuiteGateChecksTools(
+		t,
+		toolRunner,
+		peak,
+		lock,
+		ran,
+		runner,
+		&currentSuite,
+	)
+}
+
+// testServicesSuiteGateChecksTools continues testServicesSuiteGateChecksPhases.
+func testServicesSuiteGateChecksTools(
+	t *testing.T,
+	toolRunner *mocks.MockToolRunner,
+	peak *atomic.Int32,
+	lock *sync.Mutex,
+	ran *[]string,
+	runner *mocks.MockCommandRunner,
+	currentSuiteRef *types.Suite,
+) {
+	t.Helper()
+
+	currentSuite := *currentSuiteRef
+
+	catalog := append(suite.Runs(toolRunner, nil, []types.ToolRun{
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textGofumpt
+			row.Verb = textLint
+			row.Group = textFormat
+			row.Tags = []string{textGoLower}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = "golines"
+			row.Verb = textLint
+			row.Group = textFormat
+			row.Tags = []string{textGoLower}
+		}),
+		fixtures.Build(func(row *types.ToolRun) {
+			row.Name = textRuff
+			row.Verb = textLint
+			row.Group = textLintTitle
+			row.Tags = []string{textPython}
+		}),
+	}), suite.Steps(map[string]suite.Step{textLintVet: {
+		Group: textLintTitle, Tags: []string{textGoLower},
 		Run: func(_ context.Context, env *suite.StepEnv) (types.StepResults, error) {
-			assert.Same(t, runner, env.Runner.(*mocks.MockCommandRunner))
-			mu.Lock()
-			ran = append(ran, "lint.vet@"+env.Root)
-			mu.Unlock()
-			return types.OneStep("vet", types.StatusPass, nil), nil
+			assert.Same(t, runner, asType[*mocks.MockCommandRunner](t, env.Runner))
+			lock.Lock()
+
+			(*ran) = append((*ran), "lint.vet@"+env.Root)
+			lock.Unlock()
+
+			return types.OneStep(textVet, types.StatusPass, nil), nil
 		},
+		Tools: nil,
 	}})...)
-	env := suite.Env{Decs: fixtures.Decorations()}
-	g := suite.Gate{Env: env, Suite: s, Catalog: catalog, Flags: []string{"go"}}.Gate()
-	phases := make([]string, 0, 2)
-	for _, p := range g.Phases() {
+
+	testServicesSuiteGateChecksToolsRunsGate(t,
+		toolRunner,
+		peak,
+		ran,
+		runner,
+		&currentSuite,
+		catalog,
+	)
+}
+
+// testServicesSuiteGateChecksToolsRunsGate continues testServicesSuiteGateChecksTools.
+func testServicesSuiteGateChecksToolsRunsGate(t *testing.T,
+	toolRunner *mocks.MockToolRunner,
+	peak *atomic.Int32,
+	ran *[]string,
+	runner *mocks.MockCommandRunner,
+	currentSuite *types.Suite,
+	catalog []suite.Entry,
+) {
+	t.Helper()
+
+	env := fixtures.Build(func(row *suite.Env) {
+		row.Decs = fixtures.Decorations()
+	})
+	gate := (&suite.Gate{
+		Env: env, Suite: *currentSuite, Catalog: catalog,
+		Flags: []string{textGoLower},
+		Obs:   nil,
+		Err:   nil,
+	}).Gate()
+	phases := make([]string, 0, makeInput)
+
+	for _, p := range gate.Phases() {
 		phases = append(phases, p.Name)
 	}
-	assert.Equal(t, []string{"Format", "Lint"}, phases)
-	require.NoError(t, g.Run(t.Context(), runner, "/r"))
-	assert.Equal(t, []string{"gofumpt", "golines", "lint.vet@/r"}, ran)
+
+	assert.Equal(t, []string{textFormat, textLintTitle}, phases)
+	require.NoError(t, gate.Run(t.Context(), runner, textR))
+	assert.Equal(t, []string{textGofumpt, "golines", "lint.vet@/r"}, (*ran))
 	assert.Equal(t, int32(1), peak.Load(), "a serial phase runs one row at a time")
 
-	plain := types.ToolRun{Name: "hadolint", Verb: "lint"}
-	tr.EXPECT().Run(gomock.Any(), nil, plain, types.RunOptions{Fix: true}).
-		Return(nil, apperr.New(apperr.CodeInvalidInput, "no value for {image}"))
-	j := suite.Runs(tr, nil, []types.ToolRun{plain})[0].Job(suite.Env{
-		Decs: fixtures.Decorations(), Opts: types.RunOptions{Fix: true},
+	testServicesSuiteGateChecksSingle(t, toolRunner, runner, currentSuite, catalog, env)
+}
+
+// testServicesSuiteGateChecksSingle continues TestServicesSuite_Gate: checks single.
+func testServicesSuiteGateChecksSingle(
+	t *testing.T,
+	toolRunner *mocks.MockToolRunner,
+	runner *mocks.MockCommandRunner,
+	currentSuite *types.Suite,
+	catalog []suite.Entry,
+	env suite.Env,
+) {
+	t.Helper()
+
+	plain := fixtures.Build(func(row *types.ToolRun) {
+		row.Name = textHadolint
+		row.Verb = textLint
 	})
-	assert.Equal(t, types.JobMeta{Name: "hadolint", Group: "lint"}, j.Meta())
-	got, err := j.Execute(t.Context(), runner, "/r")
+	toolRunner.EXPECT().
+		Run(gomock.Any(), nil, any(&plain), fixtures.Build(func(row *types.RunOptions) {
+			row.Fix = true
+		})).
+		Return(nil, apperr.New(apperr.CodeInvalidInput, "no value for {image}"))
+
+	anyJob := suite.Runs(toolRunner, nil, []types.ToolRun{plain})[0].Job(suite.Env{
+		Decs: fixtures.Decorations(),
+		Opts: fixtures.Build(func(row *types.RunOptions) {
+			row.Fix = true
+		}),
+		Snapshot:  nil,
+		Component: "",
+	})
+	assert.Equal(
+		t,
+		types.JobMeta{Name: textHadolint, Group: textLint, Tool: "", WarnOnly: false},
+		anyJob.Meta(),
+	)
+
+	got, err := anyJob.Execute(t.Context(), runner, textR)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, types.StatusFail, got[0].Status)
 	assert.Contains(t, got[0].Error, string(apperr.CodeInvalidInput))
 
-	bad := suite.Gate{Env: env, Suite: s, Catalog: catalog, Flags: []string{"rust"}}
-	require.Error(t, bad.Gate().Run(t.Context(), runner, "/r"))
+	bad := suite.Gate{
+		Env:     env,
+		Suite:   *currentSuite,
+		Catalog: catalog,
+		Flags:   []string{textRust},
+		Obs:     nil,
+		Err:     nil,
+	}
+	require.Error(t, bad.Gate().Run(t.Context(), runner, textR))
+
 	jobs := bad.Jobs()
 	require.Len(t, jobs, 1)
-	res, _ := jobs[0].Execute(t.Context(), runner, "/r")
+
+	res, _ := jobs[0].Execute(t.Context(), runner, textR)
 	require.Len(t, res, 1)
-	assert.Contains(t, res[0].Error, "rust")
+	assert.Contains(t, res[0].Error, textRust)
 }
+
+// recordPeak raises peak to n unless a concurrent caller already raised it further.
+func recordPeak(peak *atomic.Int32, n int32) {
+	for {
+		seen := peak.Load()
+		if n <= seen || peak.CompareAndSwap(seen, n) {
+			return
+		}
+	}
+}
+
+const (
+	// wantPlanLen is the expected plan len.
+	wantPlanLen = 2
+)
+
+const (
+	// textDocsLint is the literal "Docs Lint".
+	textDocsLint = "Docs Lint"
+
+	// textLintVet is the literal "lint.vet".
+	textLintVet = "lint.vet"
+
+	// textLychee is the literal "lychee".
+	textLychee = "lychee"
+
+	// textOnline is the literal "online".
+	textOnline = "online"
+)

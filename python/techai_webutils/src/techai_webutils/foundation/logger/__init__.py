@@ -10,6 +10,7 @@ from techai_webutils.foundation.logger.builder import (
     default_config,
     new_logger_from_config,
 )
+from techai_webutils.foundation.logger.context import log_context
 from techai_webutils.foundation.logger.logger import (
     StructlogLogger,
     configure_logging,
@@ -17,16 +18,19 @@ from techai_webutils.foundation.logger.logger import (
     new_logger,
 )
 from techai_webutils.foundation.logger.redact import redact_pii
+from techai_webutils.foundation.logger.sampled import SampledLogger
 from techai_webutils.foundation.logger.stdlib_logger import StdlibLogger
 
 __all__ = [
     "LoggerConfig",
     "LoggerKind",
+    "SampledLogger",
     "StdlibLogger",
     "StructlogLogger",
     "configure_logging",
     "default_config",
     "get_logger",
+    "log_context",
     "new_logger",
     "new_logger_from_config",
     "redact_pii",

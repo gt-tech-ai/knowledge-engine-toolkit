@@ -11,38 +11,47 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	smithy "github.com/aws/smithy-go"
+	"github.com/aws/smithy-go/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/account"
 	kests "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/aws/sts"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
 
 // accountTarget is the target every resolver test resolves "stg" to.
 func accountTarget(context.Context, string) (account.Target, error) {
 	return account.Target{
-		Profile:         "acme-stg",
-		Region:          "us-east-1",
-		ExpectedAccount: "111122223333",
+		Profile:         textAcmeStg,
+		Region:          textUsEast1,
+		ExpectedAccount: text111122223333,
 		LoginHint:       "run `acme login stg`",
 	}, nil
 }
 
 // credsUntil returns an aws.Config whose credentials expire at exp (zero: never).
 func credsUntil(exp time.Time) aws.Config {
-	return aws.Config{
-		Region: "us-east-1",
-		Credentials: aws.CredentialsProviderFunc(
+	return fixtures.Build(func(row *aws.Config) {
+		row.Region = textUsEast1
+		row.Credentials = aws.CredentialsProviderFunc(
 			func(context.Context) (aws.Credentials, error) {
 				return aws.Credentials{
-					AccessKeyID: "AKIA", SecretAccessKey: "secret", SessionToken: "tok",
-					CanExpire: !exp.IsZero(), Expires: exp,
+					AccessKeyID:     "AKIA",
+					SecretAccessKey: textSecret,
+					SessionToken:    textTok,
+					CanExpire:       !exp.IsZero(),
+					Expires:         exp,
+					Source:          "",
+					AccountID:       "",
 				}, nil
-			}),
-	}
+			})
+	})
 }
 
 // newAccountResolver builds an sdk-kind resolver over api and load.
@@ -53,16 +62,33 @@ func newAccountResolver(
 	getenv func(string) string,
 ) account.Resolver {
 	t.Helper()
-	r, err := account.NewFromConfig(t.Context(),
-		account.Config{Kind: account.KindSDK},
-		account.Deps{Target: accountTarget, LoadAWS: load, STS: api, Getenv: getenv})
+
+	resolver, err := account.NewFromConfig(
+		t.Context(),
+		account.Config{Kind: account.KindSDK, Name: ""},
+		account.Deps{
+			Target:      accountTarget,
+			LoadAWS:     load,
+			STS:         api,
+			Getenv:      getenv,
+			Decorations: decorate.Decorations{},
+		},
+	)
 	require.NoError(t, err)
-	return r
+
+	return resolver
 }
 
-// identity returns a GetCallerIdentity output for acct.
+// identity returns a GetCallerIdentity output for acct, its caller an SSO role session.
 func identity(acct string) *sts.GetCallerIdentityOutput {
-	return &sts.GetCallerIdentityOutput{Account: aws.String(acct)}
+	return &sts.GetCallerIdentityOutput{
+		Account: aws.String(acct),
+		Arn: aws.String(
+			"arn:aws:sts::" + acct + ":assumed-role/Operator/jane",
+		),
+		UserId:         nil,
+		ResultMetadata: middleware.Metadata{},
+	}
 }
 
 // TestAccountResolver_VerifiesTheAccount tests that a session is served only for the
@@ -73,11 +99,13 @@ func identity(acct string) *sts.GetCallerIdentityOutput {
 //     from, the wrong cloud; the resolver is the one place that refuses it.
 //
 // What it tests:
-//   - A matching caller identity yields a Session naming the account, region and the
-//     profile it loaded, with the retrieved credentials pinned.
+//   - A matching caller identity yields a Session naming the account, region, the
+//     profile it loaded and the caller's ARN (the verified principal an operator action
+//     is attributed to), with the retrieved credentials pinned.
 //   - A mismatch is INVALID_INPUT naming both accounts and the env.
 func TestAccountResolver_VerifiesTheAccount(t *testing.T) {
 	t.Parallel()
+
 	ctx := t.Context()
 	load := func(context.Context, string, string) (aws.Config, error) {
 		return credsUntil(time.Time{}), nil
@@ -85,23 +113,36 @@ func TestAccountResolver_VerifiesTheAccount(t *testing.T) {
 
 	api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 	api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
-		Return(identity("111122223333"), nil)
-	s, err := newAccountResolver(t, api, load, nil).Resolve(ctx, "stg", false)
+		Return(identity(text111122223333), nil)
+
+	session, err := newAccountResolver(t, api, load, nil).Resolve(ctx, textStg, false)
 	require.NoError(t, err)
-	assert.Equal(t, "111122223333", s.Account)
-	assert.Equal(t, "us-east-1", s.Region)
-	assert.Equal(t, "acme-stg", s.Profile, "no ambient chain: the profile is forced")
-	assert.Equal(t, "AKIA", s.Creds.AccessKeyID)
-	pinned, err := s.AWS.Credentials.Retrieve(ctx)
+	assert.Equal(t, text111122223333, session.Account)
+	assert.Equal(t, textUsEast1, session.Region)
+	assert.Equal(
+		t,
+		textAcmeStg,
+		session.Profile,
+		"no ambient chain: the profile is forced",
+	)
+	assert.Equal(
+		t,
+		"arn:aws:sts::111122223333:assumed-role/Operator/jane",
+		session.Principal,
+	)
+	assert.Equal(t, "AKIA", session.Creds.AccessKeyID)
+
+	pinned, err := session.AWS.Credentials.Retrieve(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "tok", pinned.SessionToken, "the verified snapshot is pinned")
+	assert.Equal(t, textTok, pinned.SessionToken, "the verified snapshot is pinned")
 
 	wrong := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 	wrong.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
 		Return(identity("999988887777"), nil)
-	_, err = newAccountResolver(t, wrong, load, nil).Resolve(ctx, "stg", false)
+
+	_, err = newAccountResolver(t, wrong, load, nil).Resolve(ctx, textStg, false)
 	require.Error(t, err)
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 	assert.Contains(t, err.Error(),
 		"wrong account: credentials are for 999988887777, expected 111122223333 for stg")
 }
@@ -118,15 +159,21 @@ func TestAccountResolver_VerifiesTheAccount(t *testing.T) {
 //     the hint; a non-auth STS error is UNAVAILABLE.
 func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 	t.Parallel()
-	ok := func(context.Context, string, string) (aws.Config, error) {
+
+	callback := func(context.Context, string, string) (aws.Config, error) {
 		return credsUntil(time.Time{}), nil
 	}
 
 	failLoad := func(context.Context, string, string) (aws.Config, error) {
 		return aws.Config{}, apperr.Sentinel("no sso token")
 	}
-	_, err := newAccountResolver(t, nil, failLoad, nil).Resolve(t.Context(), "stg", false)
-	assert.True(t, apperr.Is(err, apperr.CodeUnauthorized), "got %v", err)
+	_, err := newAccountResolver(
+		t,
+		nil,
+		failLoad,
+		nil,
+	).Resolve(t.Context(), textStg, false)
+	assert.True(t, apperr.Is(err, apperr.CodeUnauthorized), textGotV, err)
 	assert.Contains(t, err.Error(), "run `acme login stg`")
 
 	cases := []struct {
@@ -135,34 +182,56 @@ func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 		code apperr.ErrorCode
 	}{
 		{
-			&smithy.GenericAPIError{Code: "ExpiredToken"},
+			&smithy.GenericAPIError{Code: "ExpiredToken", Message: "", Fault: 0},
 			"expired token",
 			apperr.CodeUnauthorized,
 		},
 		{
-			&smithy.GenericAPIError{Code: "AccessDenied"},
+			&smithy.GenericAPIError{Code: textAccessdenied, Message: "", Fault: 0},
 			"access denied",
 			apperr.CodeUnauthorized,
 		},
 		{
-			&smithy.GenericAPIError{Code: "Throttling"},
+			&smithy.GenericAPIError{Code: "Throttling", Message: "", Fault: 0},
 			"throttled",
 			apperr.CodeUnavailable,
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+
+	testAccountResolverAuthFailuresNameTheLoginCases(t, callback, cases)
+}
+
+// testAccountResolverAuthFailuresNameTheLoginCases continues
+// TestAccountResolver_AuthFailuresNameTheLogin: cases.
+func testAccountResolverAuthFailuresNameTheLoginCases(
+	t *testing.T,
+	callback func(context.Context, string, string) (aws.Config, error),
+	cases []struct {
+		err  error
+		name string
+		code apperr.ErrorCode
+	},
+) {
+	t.Helper()
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
-			api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).Return(nil, tc.err)
+			api.EXPECT().
+				GetCallerIdentity(gomock.Any(), gomock.Any()).
+				Return(nil, testCase.err)
+
 			_, err := newAccountResolver(
 				t,
 				api,
-				ok,
+				callback,
 				nil,
-			).Resolve(t.Context(), "stg", false)
-			assert.True(t, apperr.Is(err, tc.code), "got %v", err)
-			if tc.code == apperr.CodeUnauthorized {
+			).Resolve(t.Context(), textStg, false)
+			assert.True(t, apperr.Is(err, testCase.code), textGotV, err)
+
+			if testCase.code == apperr.CodeUnauthorized {
 				assert.Contains(t, err.Error(), "run `acme login stg`")
 			}
 		})
@@ -180,28 +249,32 @@ func TestAccountResolver_AuthFailuresNameTheLogin(t *testing.T) {
 //     ExpirySkew is verified again on each resolve.
 func TestAccountResolver_CachesUntilExpiry(t *testing.T) {
 	t.Parallel()
+
 	cases := []struct {
 		exp   time.Time
 		name  string
 		calls int
 	}{
 		{time.Now().Add(time.Hour), "far future is cached", 1},
-		{time.Now().Add(time.Minute), "inside the skew re-resolves", 2},
+		{time.Now().Add(time.Minute), "inside the skew re-resolves", casesExpiry},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
+
 			api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 			api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
-				Return(identity("111122223333"), nil).Times(tc.calls)
+				Return(identity(text111122223333), nil).Times(testCase.calls)
+
 			load := func(context.Context, string, string) (aws.Config, error) {
-				return credsUntil(tc.exp), nil
+				return credsUntil(testCase.exp), nil
 			}
 			r := newAccountResolver(t, api, load, nil)
+
 			for range 2 {
-				s, err := r.Resolve(t.Context(), "stg", false)
+				s, err := r.Resolve(t.Context(), textStg, false)
 				require.NoError(t, err)
-				assert.WithinDuration(t, tc.exp, s.ExpiresAt(), time.Second)
+				assert.WithinDuration(t, testCase.exp, s.ExpiresAt(), time.Second)
 			}
 		})
 	}
@@ -219,27 +292,34 @@ func TestAccountResolver_CachesUntilExpiry(t *testing.T) {
 //     profile despite it.
 func TestAccountResolver_AmbientChain(t *testing.T) {
 	t.Parallel()
+
 	getenv := func(k string) string {
 		if k == "AWS_WEB_IDENTITY_TOKEN_FILE" {
 			return "/var/run/token"
 		}
+
 		return ""
 	}
+
 	var profiles []string
+
 	load := func(_ context.Context, profile, _ string) (aws.Config, error) {
 		profiles = append(profiles, profile)
+
 		return credsUntil(time.Time{}), nil
 	}
 	api := mocks.NewMockAWSSTSAPI(gomock.NewController(t))
 	api.EXPECT().GetCallerIdentity(gomock.Any(), gomock.Any()).
-		Return(identity("111122223333"), nil).Times(2)
+		Return(identity(text111122223333), nil).Times(wantCalls)
+
 	r := newAccountResolver(t, api, load, getenv)
 
-	_, err := r.Resolve(t.Context(), "stg", false)
+	_, err := r.Resolve(t.Context(), textStg, false)
 	require.NoError(t, err)
-	_, err = r.Resolve(t.Context(), "stg", true)
+
+	_, err = r.Resolve(t.Context(), textStg, true)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"", "acme-stg"}, profiles)
+	assert.Equal(t, []string{"", textAcmeStg}, profiles)
 }
 
 // TestAccountResolver_StubDoesNoIO tests the default kind.
@@ -253,33 +333,42 @@ func TestAccountResolver_AmbientChain(t *testing.T) {
 //     loader; an unknown kind is INVALID_INPUT.
 func TestAccountResolver_StubDoesNoIO(t *testing.T) {
 	t.Parallel()
+
 	load := func(context.Context, string, string) (aws.Config, error) {
 		t.Fatal("the stub loaded AWS config")
-		return aws.Config{}, nil
+
+		return stdx.Zero[aws.Config](), nil
 	}
-	r, err := account.NewFromConfig(t.Context(), account.Config{},
-		account.Deps{Target: accountTarget, LoadAWS: load})
+	resolver, err := account.NewFromConfig(
+		t.Context(),
+		stdx.Zero[account.Config](),
+		fixtures.Build(func(row *account.Deps) {
+			row.Target = accountTarget
+			row.LoadAWS = load
+		}),
+	)
 	require.NoError(t, err)
-	s, err := r.Resolve(t.Context(), "anything", false)
+
+	s, err := resolver.Resolve(t.Context(), "anything", false)
 	require.NoError(t, err)
 	assert.Equal(t, kests.StubAccount, s.Account)
 
 	_, err = account.NewFromConfig(
 		t.Context(),
-		account.Config{Kind: "nope"},
-		account.Deps{},
+		account.Config{Kind: textNope, Name: ""},
+		stdx.Zero[account.Deps](),
 	)
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 }
 
 // stgProfile is the profile the writer tests upsert.
 func stgProfile() account.Profile {
 	return account.Profile{
-		Name:        "acme-stg",
-		SSOSession:  "acme",
+		Name:        textAcmeStg,
+		SSOSession:  textAcme,
 		SSOStartURL: "https://acme.awsapps.com/start",
-		SSORegion:   "us-east-1",
-		AccountID:   "111122223333",
+		SSORegion:   textUsEast1,
+		AccountID:   text111122223333,
 		RoleName:    "Admin",
 		Region:      "us-west-2",
 	}
@@ -298,37 +387,48 @@ func stgProfile() account.Profile {
 //     leaves the file untouched.
 func TestUpsertProfile(t *testing.T) {
 	t.Parallel()
-	path := filepath.Join(t.TempDir(), "aws", "config")
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+
+	path := filepath.Join(t.TempDir(), "aws", textConfig)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), mkdirAllInput))
 	require.NoError(
 		t,
-		os.WriteFile(path, []byte("[profile other]\nregion = eu-west-1\n"), 0o600),
+		os.WriteFile(
+			path,
+			[]byte("[profile other]\nregion = eu-west-1\n"),
+			writeFileInput,
+		),
 	)
 
-	require.NoError(t, account.UpsertProfile(path, "acme", stgProfile()))
-	first, err := os.ReadFile(path)
+	require.NoError(t, account.UpsertProfile(path, textAcme, new(stgProfile())))
+
+	first, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
+
 	out := string(first)
 	assert.True(t, strings.HasPrefix(out, "[profile other]\nregion = eu-west-1\n"))
 	assert.Contains(t, out, "# >>> acme managed\n[sso-session acme]\n")
 	assert.Contains(t, out, "[profile acme-stg]\nsso_session = acme\n"+
 		"sso_account_id = 111122223333\nsso_role_name = Admin\nregion = us-west-2\n")
 
-	require.NoError(t, account.UpsertProfile(path, "acme", stgProfile()))
-	again, err := os.ReadFile(path)
+	require.NoError(t, account.UpsertProfile(path, textAcme, new(stgProfile())))
+
+	again, err := os.ReadFile(filepath.Clean(path))
 	require.NoError(t, err)
 	assert.Equal(t, out, string(again), "a re-run is byte-identical")
+
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(fileModeInput), info.Mode().Perm())
 
-	dup := filepath.Join(t.TempDir(), "config")
+	dup := filepath.Join(t.TempDir(), textConfig)
 	original := "[sso-session acme]\nsso_region = eu-west-1\n"
-	require.NoError(t, os.WriteFile(dup, []byte(original), 0o600))
-	err = account.UpsertProfile(dup, "acme", stgProfile())
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	require.NoError(t, os.WriteFile(dup, []byte(original), writeFileInput))
+
+	err = account.UpsertProfile(dup, textAcme, new(stgProfile()))
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 	assert.Contains(t, err.Error(), "[sso-session acme]")
-	got, err := os.ReadFile(dup)
+
+	got, err := os.ReadFile(filepath.Clean(dup))
 	require.NoError(t, err)
 	assert.Equal(t, original, string(got), "the file is untouched")
 }
@@ -342,10 +442,12 @@ func TestUpsertProfile(t *testing.T) {
 //   - AWS_CONFIG_FILE wins; otherwise the path ends in .aws/config.
 func TestConfigPath(t *testing.T) {
 	t.Parallel()
+
 	got, err := account.ConfigPath(func(k string) string {
 		if k == "AWS_CONFIG_FILE" {
 			return "/tmp/custom/config"
 		}
+
 		return ""
 	})
 	require.NoError(t, err)
@@ -353,6 +455,19 @@ func TestConfigPath(t *testing.T) {
 
 	got, err = account.ConfigPath(func(string) string { return "" })
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(".aws", "config"),
+	assert.Equal(t, filepath.Join(".aws", textConfig),
 		filepath.Join(filepath.Base(filepath.Dir(got)), filepath.Base(got)))
 }
+
+const (
+	// casesExpiry is an element of a literal in TestAccountResolver_CachesUntilExpiry.
+	casesExpiry = 2
+)
+
+const (
+	// text111122223333 is the literal "111122223333".
+	text111122223333 = "111122223333"
+
+	// textAcmeStg is the literal "acme-stg".
+	textAcmeStg = "acme-stg"
+)

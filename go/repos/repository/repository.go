@@ -13,14 +13,18 @@ import (
 // circuit breaker → retry, outermost first. Retry never runs inside a transaction,
 // and a Create never retries (it is not idempotent).
 func Tier() decorate.Tier {
-	return decorate.Tier{Name: "repository", Order: []decorate.Layer{
-		decorate.LayerTracing,
-		decorate.LayerMetrics,
-		decorate.LayerLogging,
-		decorate.LayerTimeout,
-		decorate.LayerCircuitBreaker,
-		decorate.LayerRetry,
-	}}
+	return decorate.Tier{
+		Name: "repository", Order: []decorate.Layer{
+			decorate.LayerTracing,
+			decorate.LayerMetrics,
+			decorate.LayerLogging,
+			decorate.LayerTimeout,
+			decorate.LayerCircuitBreaker,
+			decorate.LayerRetry,
+		},
+		SpanKind: 0,
+		Edge:     false,
+	}
 }
 
 // Base is the embeddable core of a repository named by its Subject: Name and Exec run a
@@ -41,5 +45,6 @@ func NewBase[R any](decs decorate.Decorations, name string) (Base, error) {
 	if err != nil {
 		return Base{}, err
 	}
+
 	return Base{Subject: subject}, nil
 }

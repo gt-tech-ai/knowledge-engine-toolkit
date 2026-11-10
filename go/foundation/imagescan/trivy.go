@@ -7,7 +7,7 @@ package imagescan
 import (
 	"context"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -42,6 +42,7 @@ func (p TrivyPolicy) Validate() error {
 		return apperr.New(apperr.CodeInvalidInput,
 			"image scan policy: scanners, severity and ignore file are required")
 	}
+
 	return nil
 }
 
@@ -51,39 +52,73 @@ func (p TrivyPolicy) Args(ref string) []string {
 	if p.IgnoreUnfixed {
 		args = append(args, "--ignore-unfixed")
 	}
+
 	exit := "1"
 	if p.ReportOnly {
 		exit = "0"
 	}
+
 	return append(args, "--ignorefile", p.IgnoreFile, "--exit-code", exit, ref)
 }
 
+// trivyBinary is the scanner's executable.
+const trivyBinary = "trivy"
+
 // ScanImage scans the container image ref (a local tag or a pushed `<repo>@sha256:…`
 // digest) with Trivy under policy, run through runner in dir. A remaining finding fails
-// the row, unless the policy is ReportOnly. A missing trivy is a Skip, or a Fail
-// (CodeNotFound) under strict, so a broken install can't silently pass a gate; an
-// invalid policy is a Fail.
+// the row, unless the policy is ReportOnly. A missing trivy is a Skip; an invalid policy
+// is a Fail.
 func ScanImage(
 	ctx context.Context,
 	runner interfaces.CommandRunner,
 	dir string,
 	policy TrivyPolicy,
 	ref string,
-	strict bool,
 ) types.StepResults {
-	if !runner.Exists("trivy") {
-		if !strict {
-			return types.OneStep(trivyStep, types.StatusSkip, nil)
-		}
-		return types.OneStep(trivyStep, types.StatusFail, apperr.New(
-			apperr.CodeNotFound, "trivy not found on PATH; a strict scan can't run"))
+	if !runner.Exists(trivyBinary) {
+		return types.OneStep(trivyStep, types.StatusSkip, nil)
 	}
-	if err := policy.Validate(); err != nil {
+
+	return runTrivy(ctx, runner, dir, policy, ref)
+}
+
+// ScanImageStrict is ScanImage, except that a missing trivy is a Fail (CodeNotFound),
+// so a broken install can't silently pass a gate.
+func ScanImageStrict(
+	ctx context.Context,
+	runner interfaces.CommandRunner,
+	dir string,
+	policy TrivyPolicy,
+	ref string,
+) types.StepResults {
+	if !runner.Exists(trivyBinary) {
+		return types.OneStep(trivyStep, types.StatusFail, apperr.New(
+			apperr.CodeNotFound,
+			"trivy not found on PATH; a strict scan can't run",
+		))
+	}
+
+	return runTrivy(ctx, runner, dir, policy, ref)
+}
+
+// runTrivy validates policy and scans ref with an installed trivy.
+func runTrivy(
+	ctx context.Context,
+	runner interfaces.CommandRunner,
+	dir string,
+	policy TrivyPolicy,
+	ref string,
+) types.StepResults {
+	err := policy.Validate()
+	if err != nil {
 		return types.OneStep(trivyStep, types.StatusFail, err)
 	}
-	if err := runner.Run(ctx, dir, "trivy", policy.Args(ref)...); err != nil {
+
+	err = runner.Run(ctx, dir, trivyBinary, policy.Args(ref)...)
+	if err != nil {
 		return types.OneStep(trivyStep, types.StatusFail,
 			apperr.Wrap(err, apperr.CodeInternal, "unignored vulnerabilities in "+ref))
 	}
+
 	return types.OneStep(trivyStep, types.StatusPass, nil)
 }

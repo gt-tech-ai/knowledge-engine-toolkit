@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Compile-time assertion: BufferingRunner must satisfy CommandRunner.
@@ -37,12 +37,22 @@ type BufferingRunner struct {
 
 // NewBufferingRunner wraps inner and replays command output to the terminal.
 func NewBufferingRunner(inner CommandRunner) *BufferingRunner {
-	return &BufferingRunner{inner: inner}
+	return &BufferingRunner{
+		inner: inner,
+		buf:   bytes.Buffer{},
+		mu:    sync.Mutex{},
+		quiet: false,
+	}
 }
 
 // NewQuietBufferingRunner wraps inner and captures output without terminal replay.
 func NewQuietBufferingRunner(inner CommandRunner) *BufferingRunner {
-	return &BufferingRunner{inner: inner, quiet: true}
+	return &BufferingRunner{
+		inner: inner,
+		quiet: true,
+		buf:   bytes.Buffer{},
+		mu:    sync.Mutex{},
+	}
 }
 
 // Run executes a command via RunBuffered, replays output to the terminal, and
@@ -74,9 +84,11 @@ func (b *BufferingRunner) RunBuffered(
 ) CmdResult {
 	result := b.inner.RunBuffered(ctx, dir, name, args...)
 	b.mu.Lock()
-	b.buf.Write(result.Stdout)
-	b.buf.Write(result.Stderr)
+
+	_, _ = b.buf.Write(result.Stdout)
+	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
+
 	return result
 }
 
@@ -91,9 +103,11 @@ func (b *BufferingRunner) RunBufferedWithEnv(
 ) CmdResult {
 	result := b.inner.RunBufferedWithEnv(ctx, dir, extraEnv, name, args...)
 	b.mu.Lock()
-	b.buf.Write(result.Stdout)
-	b.buf.Write(result.Stderr)
+
+	_, _ = b.buf.Write(result.Stdout)
+	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
+
 	return result
 }
 
@@ -109,9 +123,11 @@ func (b *BufferingRunner) RunBufferedWithInput(
 ) CmdResult {
 	result := b.inner.RunBufferedWithInput(ctx, dir, extraEnv, input, name, args...)
 	b.mu.Lock()
-	b.buf.Write(result.Stdout)
-	b.buf.Write(result.Stderr)
+
+	_, _ = b.buf.Write(result.Stdout)
+	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
+
 	return result
 }
 
@@ -128,6 +144,7 @@ func (b *BufferingRunner) RequireTool(name, installHint string) error {
 func (b *BufferingRunner) Captured() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	return bytes.Clone(b.buf.Bytes())
 }
 
@@ -140,44 +157,58 @@ func (b *BufferingRunner) runBufferedAndReplay(
 	name string,
 	args ...string,
 ) error {
-	cmdStr := name + " " + strings.Join(args, " ")
-	if !b.quiet {
-		fmt.Fprintf(os.Stderr, ">> %s\n", cmdStr)
-	}
+	cmdStr := name + textSpace + strings.Join(args, textSpace)
+
+	b.note(">>", cmdStr)
 
 	if len(extraEnv) > 0 {
 		err := b.inner.RunWithEnv(ctx, dir, extraEnv, name, args...)
-		if err == nil && !b.quiet {
-			fmt.Fprintf(os.Stderr, "ok %s\n", cmdStr)
+		if err == nil {
+			b.note("ok", cmdStr)
 		}
+
 		return err
 	}
 
 	result := b.inner.RunBuffered(ctx, dir, name, args...)
 
-	if !b.quiet {
-		if len(result.Stdout) > 0 {
-			_, _ = os.Stdout.Write(result.Stdout)
-		}
-		if len(result.Stderr) > 0 {
-			_, _ = os.Stderr.Write(result.Stderr)
-		}
-	}
+	b.replay(result.Stdout, result.Stderr)
 
 	b.mu.Lock()
-	b.buf.Write(result.Stdout)
-	b.buf.Write(result.Stderr)
+
+	_, _ = b.buf.Write(result.Stdout)
+	_, _ = b.buf.Write(result.Stderr)
 	b.mu.Unlock()
 
 	if result.Err != nil {
-		if !b.quiet {
-			fmt.Fprintf(os.Stderr, "FAIL %s\n", cmdStr)
-		}
+		b.note("FAIL", cmdStr)
+
 		return apperr.Wrap(result.Err, apperr.CodeInternal, cmdStr+" failed")
 	}
 
-	if !b.quiet {
-		fmt.Fprintf(os.Stderr, "ok %s\n", cmdStr)
-	}
+	b.note("ok", cmdStr)
+
 	return nil
+}
+
+// note prints one progress line unless the runner is quiet.
+func (b *BufferingRunner) note(verb, cmd string) {
+	if !b.quiet {
+		_, _ = fmt.Fprintf(os.Stderr, "%s %s\n", verb, cmd)
+	}
+}
+
+// replay echoes a finished command's output unless the runner is quiet.
+func (b *BufferingRunner) replay(stdout, stderr []byte) {
+	if b.quiet {
+		return
+	}
+
+	if len(stdout) > 0 {
+		_, _ = os.Stdout.Write(stdout)
+	}
+
+	if len(stderr) > 0 {
+		_, _ = os.Stderr.Write(stderr)
+	}
 }

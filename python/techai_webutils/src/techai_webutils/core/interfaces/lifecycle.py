@@ -33,7 +33,12 @@ class ManagedResource(Protocol):
     """
 
     async def __aenter__(self) -> Self:
-        """Enter the async context, acquiring the resource; return self."""
+        """Enter the async context, acquiring the resource; return self.
+
+        Returns:
+            This resource, ready to use.
+
+        """
         ...
 
     async def __aexit__(
@@ -42,7 +47,17 @@ class ManagedResource(Protocol):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> bool | None:
-        """Exit the async context, releasing any owned resource."""
+        """Exit the async context, releasing any owned resource.
+
+        Args:
+            exc_type: The body's exception type, or ``None`` on success.
+            exc_val: The body's exception, or ``None`` on success.
+            exc_tb: The body's traceback, or ``None`` on success.
+
+        Returns:
+            A falsy value, so an exception from the body propagates.
+
+        """
         ...
 
 

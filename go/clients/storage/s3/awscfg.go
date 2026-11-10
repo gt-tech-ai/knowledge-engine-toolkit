@@ -11,9 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 )
+
+// sdkRetryMaxAttempts is the attempts the AWS SDK makes before giving up.
+const sdkRetryMaxAttempts = 4
 
 // kindMinIO is the infra.S3Config Kind of the MinIO (local/dev) backend, which uses
 // path-style addressing, an explicit endpoint and static credentials.
@@ -22,7 +25,9 @@ const kindMinIO = "minio"
 // s3OptionsApplier returns the s3.Options mutator encoding the dev/stage backend
 // differences: MinIO needs path-style addressing and an explicit endpoint, while
 // AWS S3 uses virtual-host addressing and the SDK-resolved regional endpoint.
-func s3OptionsApplier(cfg infra.S3Config) func(*s3.Options) {
+func s3OptionsApplier(cfgRef *infra.S3Config) func(*s3.Options) {
+	cfg := *cfgRef
+
 	return func(o *s3.Options) {
 		o.UsePathStyle = cfg.ForcePathStyle
 		if cfg.Kind == kindMinIO && cfg.Endpoint != "" {
@@ -40,7 +45,8 @@ func s3OptionsApplier(cfg infra.S3Config) func(*s3.Options) {
 // "minioadmin" key. Presenting it to real AWS S3 fails every request with
 // InvalidAccessKeyId and bypasses IRSA — the staging orphaned-file-cleanup /
 // presign / download breakage this guards against.
-func UseStaticCredentials(cfg infra.S3Config) bool {
+// cfg must not be nil.
+func UseStaticCredentials(cfg *infra.S3Config) bool {
 	return cfg.Kind == kindMinIO && cfg.AccessKeyID != ""
 }
 
@@ -48,14 +54,15 @@ func UseStaticCredentials(cfg infra.S3Config) bool {
 // credentials are used only for the MinIO/dev backend; the AWS backend (kind="s3")
 // uses the default credential chain (IRSA / env / shared-file). See
 // UseStaticCredentials.
-func NewAWSClient(ctx context.Context, cfg infra.S3Config) (*s3.Client, error) {
+// cfg must not be nil.
+func NewAWSClient(ctx context.Context, cfg *infra.S3Config) (*s3.Client, error) {
 	// Retry with exponential backoff on transient errors (5xx, throttling) is
 	// provided by the SDK's standard retryer — this is the correct layer for it,
 	// since the StorageClient decorator cannot safely retry body-consuming uploads.
 	loadOpts := []func(*awsconfig.LoadOptions) error{
 		awsconfig.WithRegion(cfg.Region),
 		awsconfig.WithRetryMode(aws.RetryModeStandard),
-		awsconfig.WithRetryMaxAttempts(4),
+		awsconfig.WithRetryMaxAttempts(sdkRetryMaxAttempts),
 	}
 	if UseStaticCredentials(cfg) {
 		loadOpts = append(loadOpts, awsconfig.WithCredentialsProvider(
@@ -66,10 +73,12 @@ func NewAWSClient(ctx context.Context, cfg infra.S3Config) (*s3.Client, error) {
 			),
 		))
 	}
+
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loadOpts...)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "loading aws config")
 	}
+
 	return s3.NewFromConfig(awsCfg, s3OptionsApplier(cfg)), nil
 }
 
@@ -78,9 +87,10 @@ func NewAWSClient(ctx context.Context, cfg infra.S3Config) (*s3.Client, error) {
 // selection. It is the connector-scoped path: a connector presents its OWN credentials
 // (STS-assumed role or a static access key) to reach an external bucket.
 // Path-style/endpoint handling (MinIO vs AWS) still comes from cfg via s3OptionsApplier.
+// cfg must not be nil.
 func NewAWSClientWithCredentials(
 	ctx context.Context,
-	cfg infra.S3Config,
+	cfg *infra.S3Config,
 	creds aws.CredentialsProvider,
 	region string,
 ) (*s3.Client, error) {
@@ -88,7 +98,7 @@ func NewAWSClientWithCredentials(
 		ctx,
 		awsconfig.WithRegion(region),
 		awsconfig.WithRetryMode(aws.RetryModeStandard),
-		awsconfig.WithRetryMaxAttempts(4),
+		awsconfig.WithRetryMaxAttempts(sdkRetryMaxAttempts),
 		awsconfig.WithCredentialsProvider(creds),
 	)
 	if err != nil {
@@ -98,5 +108,6 @@ func NewAWSClientWithCredentials(
 			"loading aws config with credentials",
 		)
 	}
+
 	return s3.NewFromConfig(awsCfg, s3OptionsApplier(cfg)), nil
 }

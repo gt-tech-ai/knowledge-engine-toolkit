@@ -14,6 +14,7 @@ func Inject(ctx context.Context, carrier map[string]string) {
 	if carrier == nil {
 		return
 	}
+
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(carrier))
 }
 
@@ -24,5 +25,6 @@ func Extract(ctx context.Context, carrier map[string]string) context.Context {
 	if len(carrier) == 0 {
 		return ctx
 	}
+
 	return otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(carrier))
 }

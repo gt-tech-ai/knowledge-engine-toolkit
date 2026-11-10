@@ -3,8 +3,24 @@ package resilience
 import (
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
+
+// defaultBreakerConfigInterval is the default Interval of BreakerConfig.
+const defaultBreakerConfigInterval = 60 * time.Second
+
+// defaultBreakerConfigTimeout is the default Timeout of BreakerConfig.
+const defaultBreakerConfigTimeout = 30 * time.Second
+
+// defaultBreakerConfigConsecutiveFailures is the default ConsecutiveFailures of
+// BreakerConfig.
+const defaultBreakerConfigConsecutiveFailures = 5
+
+// defaultBreakerConfigFailureRatio is the default FailureRatio of BreakerConfig.
+const defaultBreakerConfigFailureRatio = 0.5
+
+// defaultBreakerConfigMinRequests is the default MinRequests of BreakerConfig.
+const defaultBreakerConfigMinRequests = 10
 
 // BreakerConfig tunes the gobreaker circuit-breaker decorator
 // (circuitbreaker.Config). Name and Kind stay with the provider (identity /
@@ -33,16 +49,16 @@ type BreakerConfig struct {
 	MinRequests uint32 `mapstructure:"min_requests"`
 }
 
-// DefaultBreakerConfig returns defaults identical to
-// circuitbreaker.DefaultConfig(name) (excluding the per-provider Name).
+// DefaultBreakerConfig returns defaults identical to circuitbreaker.DefaultConfig(name)
+// (excluding the per-provider Name).
 func DefaultBreakerConfig() BreakerConfig {
 	return BreakerConfig{
 		MaxRequests:         1,
-		Interval:            60 * time.Second,
-		Timeout:             30 * time.Second,
-		ConsecutiveFailures: 5,
-		FailureRatio:        0.5,
-		MinRequests:         10,
+		Interval:            defaultBreakerConfigInterval,
+		Timeout:             defaultBreakerConfigTimeout,
+		ConsecutiveFailures: defaultBreakerConfigConsecutiveFailures,
+		FailureRatio:        defaultBreakerConfigFailureRatio,
+		MinRequests:         defaultBreakerConfigMinRequests,
 	}
 }
 
@@ -53,11 +69,14 @@ func (c BreakerConfig) Validate() error {
 			"resilience.circuit_breaker.failure_ratio must be in [0,1]",
 		)
 	}
+
 	if c.Interval < 0 {
 		return apperr.InvalidInput("resilience.circuit_breaker.interval must be >= 0")
 	}
+
 	if c.Timeout < 0 {
 		return apperr.InvalidInput("resilience.circuit_breaker.timeout must be >= 0")
 	}
+
 	return nil
 }

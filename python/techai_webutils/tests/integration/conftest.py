@@ -20,15 +20,26 @@ optional local check).
 from __future__ import annotations
 
 import asyncio
+import functools
+import importlib
 import logging
+import time
 import uuid
-from typing import TYPE_CHECKING
+from pathlib import PurePosixPath
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit, urlunsplit
 
 import aiobotocore.session
 import asyncpg
+import httpx
 import pytest
 import pytest_asyncio
+import ray
+from docker.errors import DockerException
+from redis.asyncio import Redis
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
+from testcontainers.redis import RedisContainer
 
 from techai_webutils.clients.cache.redis import RedisCache
 from techai_webutils.clients.cache.types import FailureMode
@@ -36,40 +47,58 @@ from techai_webutils.clients.messaging.config import SQSConfig
 from techai_webutils.clients.storage.config import S3Config
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Iterator
+    from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+    from unittest.mock import MagicMock
 
-# Container images. ElasticMQ is pinned to a release tag and MinIO by digest; redis:7-alpine (and
-# postgres:16-alpine below) are floating major-version tags, so a new upstream 7.x/16.x image can
-# change behaviour between runs.
+    from aiobotocore.session import ClientCreatorContext
+    from testcontainers.core.docker_client import DockerClient
+    from types_aiobotocore_sqs import SQSClient
+
+_FAKE_CRED_1 = "test"
+
+_EXPECTED_STATUS = 200
+
+# Container images. ElasticMQ is pinned to a release tag and MinIO by digest;
+# redis:7-alpine (and postgres:16-alpine below) are floating major-version tags, so a new
+# upstream 7.x/16.x image can change behaviour between runs.
 _REDIS_IMAGE = "redis:7-alpine"
 _ELASTICMQ_IMAGE = "softwaremill/elasticmq:1.6.6"
 # MinIO no longer publishes images: Chainguard's free build, pinned by digest (the Go
 # fixture go/tests/fixtures/dbtest/minio pins the same one).
-_MINIO_IMAGE = "cgr.dev/chainguard/minio:latest@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1"
+_MINIO_IMAGE = (
+    "cgr.dev/chainguard/minio:latest"
+    "@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1"
+)
 
 # MinIO root credentials (MinIO's well-known local defaults). ElasticMQ ignores creds.
 _MINIO_USER = "minioadmin"
-_MINIO_PASSWORD = "minioadmin"
+_MINIO_ROOT_CRED = "minioadmin"
 
 
+@functools.cache
 def _docker_available() -> bool:
     """Return True if a reachable Docker daemon is present.
 
     Checked lazily (only when an integration test actually runs) so the default
     unit run, which deselects this directory, never pays the probe cost.
+
+    Returns:
+        True if a reachable Docker daemon is present.
+
     """
     try:
-        from testcontainers.core.docker_client import DockerClient
-
-        DockerClient().client.ping()
-    except Exception:
+        module = importlib.import_module("testcontainers.core.docker_client")
+        classes = cast("dict[str, type[DockerClient]]", vars(module))
+        docker_client = classes["DockerClient"]
+        client = docker_client()
+        _ = client.client.ping()
+    except (OSError, DockerException):
         return False
     return True
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _require_docker() -> None:
-    """Skip the entire integration suite when no Docker daemon is reachable."""
+def pytest_runtest_setup() -> None:
+    """Skip each integration test when no Docker daemon is reachable."""
     if not _docker_available():
         pytest.skip("Docker daemon not available — integration tests skipped")
 
@@ -82,23 +111,33 @@ def _require_docker() -> None:
 
 @pytest.fixture(scope="session")
 def redis_container() -> Iterator[object]:
-    """Start a real Redis server for the session."""
-    from testcontainers.redis import RedisContainer
+    """Start a real Redis server for the session.
 
+    Yields:
+        A real Redis server for the session.
+
+    """
     with RedisContainer(_REDIS_IMAGE) as container:
         yield container
 
 
 @pytest.fixture(scope="session")
 def sqs_endpoint() -> Iterator[str]:
-    """Start ElasticMQ (SQS-compatible) and yield its mapped HTTP endpoint."""
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.waiting_utils import wait_for_logs
+    """Start ElasticMQ (SQS-compatible) and yield its mapped HTTP endpoint.
 
-    container = DockerContainer(_ELASTICMQ_IMAGE).with_exposed_ports(9324)
-    container.start()
+    Yields:
+        The mapped endpoint.
+
+    """
+    container = (
+        DockerContainer(_ELASTICMQ_IMAGE)
+        .with_exposed_ports(9324)
+        .waiting_for(
+            LogMessageWaitStrategy("Started SQS rest server").with_startup_timeout(90)
+        )
+    )
+    _ = container.start()
     try:
-        wait_for_logs(container, "Started SQS rest server", timeout=90)
         host = container.get_container_host_ip()
         port = int(container.get_exposed_port(9324))
         yield f"http://{host}:{port}"
@@ -108,20 +147,22 @@ def sqs_endpoint() -> Iterator[str]:
 
 @pytest.fixture(scope="session")
 def minio_endpoint() -> Iterator[str]:
-    """Start MinIO (S3-compatible) and yield its mapped HTTP endpoint."""
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.waiting_utils import wait_for_logs
+    """Start MinIO (S3-compatible) and yield its mapped HTTP endpoint.
 
+    Yields:
+        The mapped endpoint.
+
+    """
     container = (
         DockerContainer(_MINIO_IMAGE)
         .with_env("MINIO_ROOT_USER", _MINIO_USER)
-        .with_env("MINIO_ROOT_PASSWORD", _MINIO_PASSWORD)
+        .with_env("MINIO_ROOT_PASSWORD", _MINIO_ROOT_CRED)
         .with_exposed_ports(9000)
         .with_command("server /data")
+        .waiting_for(LogMessageWaitStrategy("API:").with_startup_timeout(90))
     )
-    container.start()
+    _ = container.start()
     try:
-        wait_for_logs(container, "API:", timeout=90)
         host = container.get_container_host_ip()
         port = int(container.get_exposed_port(9000))
         yield f"http://{host}:{port}"
@@ -136,11 +177,17 @@ def minio_endpoint() -> Iterator[str]:
 
 @pytest_asyncio.fixture
 async def redis_cache(redis_container: object) -> AsyncIterator[RedisCache]:
-    """Yield a RedisCache bound to the live container, in ERROR mode (no masking)."""
-    from redis.asyncio import Redis
+    """Yield a RedisCache bound to the live container, in ERROR mode (no masking).
 
-    host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
-    port = int(redis_container.get_exposed_port(redis_container.port))  # type: ignore[attr-defined]
+    Args:
+        redis_container: A real Redis server for the session.
+
+    Yields:
+        A RedisCache bound to the live container, in ERROR mode (no masking).
+
+    """
+    host = redis_container.get_container_host_ip()
+    port = int(redis_container.get_exposed_port(redis_container.port))
     client = Redis(host=host, port=port)
     try:
         # ERROR mode so a real connection fault surfaces instead of a silent miss.
@@ -149,24 +196,45 @@ async def redis_cache(redis_container: object) -> AsyncIterator[RedisCache]:
         await client.aclose()
 
 
-async def _create_sqs_queue(endpoint: str, name: str) -> str:
-    """Create a queue and return a queue URL whose host is the mapped endpoint.
+async def _create_sqs_queue(
+    endpoint: str, name: str, attributes: Mapping[str, str] | None = None
+) -> str:
+    """Create a queue (with ``attributes``, e.g. a redrive policy) and return its URL.
+
+    The URL's host is the mapped endpoint.
 
     ElasticMQ echoes its internal node-address host in the returned QueueUrl, which
     does not match the randomly-mapped host port; rewrite the host/port to the test
     endpoint while preserving the queue path so aiobotocore targets the container.
+
+    Args:
+        endpoint: The SQS endpoint.
+        name: The queue's name.
+        attributes: The queue's attributes.
+
+    Returns:
+        A queue (with ``attributes``, e.g. a redrive policy) and return its URL.
+
     """
     session = aiobotocore.session.get_session()
-    async with session.create_client(
-        "sqs",
-        endpoint_url=endpoint,
-        region_name="us-east-1",
-        aws_access_key_id="test",
-        aws_secret_access_key="test",
+    async with cast(
+        "ClientCreatorContext[SQSClient]",
+        session.create_client(
+            "sqs",
+            endpoint_url=endpoint,
+            region_name="us-east-1",
+            aws_access_key_id="test",
+            aws_secret_access_key=_FAKE_CRED_1,
+        ),
     ) as client:
-        resp = await client.create_queue(QueueName=name)
+        resp = cast(
+            "dict[str, object]",
+            await cast("MagicMock", client.create_queue)(
+                QueueName=name, Attributes=dict(attributes or {})
+            ),
+        )
     endpoint_parts = urlsplit(endpoint)
-    queue_parts = urlsplit(resp["QueueUrl"])
+    queue_parts = urlsplit(cast("str", resp["QueueUrl"]))
     return urlunsplit((
         endpoint_parts.scheme,
         endpoint_parts.netloc,
@@ -178,39 +246,93 @@ async def _create_sqs_queue(endpoint: str, name: str) -> str:
 
 @pytest_asyncio.fixture
 async def sqs_config(sqs_endpoint: str) -> SQSConfig:
-    """Return a fresh SQS queue (unique per test) wrapped in an SQSConfig."""
+    """Return a fresh SQS queue (unique per test) wrapped in an SQSConfig.
+
+    Args:
+        sqs_endpoint: The HTTP endpoint of the session's ElasticMQ (SQS-compatible).
+
+    Returns:
+        A fresh SQS queue (unique per test) wrapped in an SQSConfig.
+
+    """
     queue_url = await _create_sqs_queue(sqs_endpoint, f"it-{uuid.uuid4().hex[:12]}")
     return SQSConfig(
         endpoint=sqs_endpoint,
         region="us-east-1",
         queue_url=queue_url,
         access_key="test",
-        secret_key="test",
+        secret_key=_FAKE_CRED_1,
         max_messages=10,
         # Short long-poll so the subscriber loop returns promptly in tests.
         wait_time_seconds=1,
     )
 
 
+@pytest.fixture
+def make_sqs_queue(
+    sqs_endpoint: str,
+) -> Callable[[str, Mapping[str, str] | None], Awaitable[str]]:
+    """Return a coroutine that creates queue ``name`` with ``attributes``.
+
+    The coroutine returns the queue's URL.
+
+    Callers pass unique names; a test needing a dead-letter queue creates it first, then
+    the source queue with a ``RedrivePolicy`` naming it.
+
+    Args:
+        sqs_endpoint: The HTTP endpoint of the session's ElasticMQ (SQS-compatible).
+
+    Returns:
+        A coroutine that creates queue ``name`` with ``attributes``.
+
+    """
+
+    async def make(name: str, attributes: Mapping[str, str] | None = None) -> str:
+        """Create queue ``name`` with ``attributes``.
+
+        Args:
+            name: The queue's name.
+            attributes: The queue's attributes; ``None`` sets none.
+
+        Returns:
+            The queue's URL.
+
+        """
+        return await _create_sqs_queue(sqs_endpoint, name, attributes)
+
+    return make
+
+
 @pytest_asyncio.fixture
 async def s3_config(minio_endpoint: str) -> S3Config:
-    """Return a fresh MinIO bucket (unique per test) wrapped in an S3Config."""
+    """Return a fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
+    Args:
+        minio_endpoint: The HTTP endpoint of the session's MinIO (S3-compatible).
+
+    Returns:
+        A fresh MinIO bucket (unique per test) wrapped in an S3Config.
+
+    """
     bucket = f"it-{uuid.uuid4().hex[:12]}"
     session = aiobotocore.session.get_session()
-    async with session.create_client(
-        "s3",
-        endpoint_url=minio_endpoint,
-        region_name="us-east-1",
-        aws_access_key_id=_MINIO_USER,
-        aws_secret_access_key=_MINIO_PASSWORD,
+    async with cast(
+        "ClientCreatorContext[SQSClient]",
+        session.create_client(
+            "s3",
+            endpoint_url=minio_endpoint,
+            region_name="us-east-1",
+            aws_access_key_id=_MINIO_USER,
+            aws_secret_access_key=_MINIO_ROOT_CRED,
+        ),
     ) as client:
-        await client.create_bucket(Bucket=bucket)
+        await cast("MagicMock", client.create_bucket)(Bucket=bucket)
     return S3Config(
         endpoint=minio_endpoint,
         bucket=bucket,
         region="us-east-1",
         access_key=_MINIO_USER,
-        secret_key=_MINIO_PASSWORD,
+        secret_key=_MINIO_ROOT_CRED,
     )
 
 
@@ -223,36 +345,51 @@ _POSTGRES_IMAGE = "postgres:16-alpine"
 
 
 async def _await_pg_ready(dsn: str) -> None:
-    """Poll until a real TCP connection succeeds (postgres logs 'ready' during init before TCP is up)."""
+    """Poll until a real TCP connection succeeds.
+
+    Postgres logs 'ready' during init, before TCP is up.
+
+    Args:
+        dsn: The database's DSN.
+
+    Raises:
+        RuntimeError: Postgres did not become ready in time.
+
+    """
     for _ in range(60):
         try:
             conn = await asyncpg.connect(dsn)
             await conn.close()
-            return
         except (OSError, asyncpg.PostgresError):
             await asyncio.sleep(0.5)
+        else:
+            return
     msg = "postgres did not become ready in time"
     raise RuntimeError(msg)
 
 
 @pytest.fixture(scope="module")
 def postgres_dsn() -> Iterator[str]:
-    """Start a real Postgres for the module and yield a libpq DSN for it."""
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.waiting_utils import wait_for_logs
+    """Start a real Postgres for the module and yield a libpq DSN for it.
 
+    Yields:
+        A real Postgres for the module and yield a libpq DSN for it.
+
+    """
     container = (
         DockerContainer(_POSTGRES_IMAGE)
         .with_env("POSTGRES_USER", "app")
         .with_env("POSTGRES_PASSWORD", "dev_password")
         .with_env("POSTGRES_DB", "knowledge_engine")
         .with_exposed_ports(5432)
-    )
-    container.start()
-    try:
-        wait_for_logs(
-            container, "database system is ready to accept connections", timeout=60
+        .waiting_for(
+            LogMessageWaitStrategy(
+                "database system is ready to accept connections"
+            ).with_startup_timeout(60)
         )
+    )
+    _ = container.start()
+    try:
         host = container.get_container_host_ip()
         port = int(container.get_exposed_port(5432))
         dsn = f"postgresql://app:dev_password@{host}:{port}/knowledge_engine?sslmode=disable"
@@ -271,25 +408,33 @@ def postgres_dsn() -> Iterator[str]:
 
 
 @pytest.fixture(scope="module")
-def ray_cluster(request: pytest.FixtureRequest) -> object:
-    """Start a small local Ray cluster ONCE for the module and pickle its mappers/workers by value.
+def ray_cluster(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Start a small local Ray cluster ONCE for the module.
 
-    Module-scoped so the two integration tests share a single ``ray.init``/``ray.shutdown`` (cluster
-    spin-up dominates the runtime) rather than paying it twice. Ray workers are separate processes
-    that cannot import a pytest-loaded test module by name, so the mapper/worker factory must be
-    shipped *by value* via cloudpickle — the same requirement production mappers meet by living in
-    an installed package. (The requesting test module skips itself unless ``RAY_INTEGRATION`` is set —
+    Its mappers and workers pickle by value.
+
+    Module-scoped so the two integration tests share a single
+    ``ray.init``/``ray.shutdown`` (cluster spin-up dominates the runtime) rather than
+    paying it twice. Ray workers are separate processes that cannot import a pytest-loaded
+    test module by name, so the mapper/worker factory must be shipped *by value* via
+    cloudpickle — the same requirement production mappers meet by living in an installed
+    package. (The requesting test module skips itself unless ``RAY_INTEGRATION`` is set —
     ray itself is importable in CI, since the dev dependency group pins it — and also via
-    ``importorskip`` where ray is not installed at all, so it adds nothing to the CI or default-local
-    pipeline.)
+    ``importorskip`` where ray is not installed at all, so it adds nothing to the CI or
+    default-local pipeline.)
 
-    ``request.module`` is the requesting test module (where the picklable mappers/workers are defined),
-    so registering it — rather than this conftest — reproduces the original per-module pickle-by-value
-    behaviour now that the fixture lives centrally.
+    ``request.module`` is the requesting test module (where the picklable mappers/workers
+    are defined), so registering it — rather than this conftest — reproduces the original
+    per-module pickle-by-value behaviour now that the fixture lives centrally.
+
+    Args:
+        request: Names the requesting test module and finalizes the cluster.
+
+    Yields:
+        Nothing; the cluster runs until the module's tests finish.
+
     """
-    import ray
-
-    ray.init(
+    _ = ray.init(
         num_cpus=2,
         ignore_reinit_error=True,
         include_dashboard=False,
@@ -299,3 +444,99 @@ def ray_cluster(request: pytest.FixtureRequest) -> object:
     yield
     ray.cloudpickle.unregister_pickle_by_value(request.module)
     ray.shutdown()
+
+
+# --------------------------------------------------------------------------- #
+# OpenSearch (k-NN + BM25) via testcontainers, security plugin off. Two         #
+# independent single-node clusters stand in for two domains; each allows fs    #
+# snapshot repositories under _OPENSEARCH_SNAPSHOT_PATH.                        #
+# --------------------------------------------------------------------------- #
+
+_OPENSEARCH_IMAGE = "opensearchproject/opensearch:2.19.1"
+_OPENSEARCH_SNAPSHOT_PATH = PurePosixPath("/", "tmp", "snapshots").as_posix()
+"""The node's ``path.repo``: an ``fs`` snapshot repository must sit under it."""
+
+
+def _await_opensearch(url: str) -> None:
+    """Poll ``/_cluster/health`` until the node answers.
+
+    It logs readiness before HTTP is up.
+
+    Args:
+        url: The domain's URL.
+
+    Raises:
+        RuntimeError: Opensearch did not become ready in time.
+
+    """
+    for _ in range(120):
+        try:
+            if (
+                httpx.get(f"{url}/_cluster/health", timeout=2).status_code
+                == _EXPECTED_STATUS
+            ):
+                return
+        except httpx.TransportError:
+            time.sleep(1)
+    msg = "opensearch did not become ready in time"
+    raise RuntimeError(msg)
+
+
+def _opensearch() -> Iterator[str]:
+    """Start one single-node OpenSearch and yield its HTTP URL.
+
+    Yields:
+        One single-node OpenSearch and yield its HTTP URL.
+
+    """
+    container = (
+        DockerContainer(_OPENSEARCH_IMAGE)
+        .with_env("discovery.type", "single-node")
+        .with_env("DISABLE_SECURITY_PLUGIN", "true")
+        .with_env("DISABLE_INSTALL_DEMO_CONFIG", "true")
+        .with_env("OPENSEARCH_JAVA_OPTS", "-Xms512m -Xmx512m")
+        .with_env("path.repo", _OPENSEARCH_SNAPSHOT_PATH)
+        .with_exposed_ports(9200)
+    )
+    _ = container.start()
+    try:
+        url = f"http://{container.get_container_host_ip()}:{container.get_exposed_port(9200)}"
+        _await_opensearch(url)
+        yield url
+    finally:
+        container.stop()
+
+
+@pytest.fixture(scope="session")
+def opensearch_url() -> Iterator[str]:
+    """Start the first OpenSearch domain for the session and yield its URL.
+
+    Yields:
+        The first OpenSearch domain for the session and yield its URL.
+
+    """
+    yield from _opensearch()
+
+
+@pytest.fixture(scope="session")
+def opensearch_url_b() -> Iterator[str]:
+    """Start a second, independent OpenSearch domain for the session and yield its URL.
+
+    Yields:
+        A second, independent OpenSearch domain for the session and yield its URL.
+
+    """
+    yield from _opensearch()
+
+
+@pytest.fixture(scope="session")
+def opensearch_snapshot_path() -> str:
+    """Return the path where OpenSearch containers accept snapshots.
+
+    Every container accepts ``fs`` snapshot repositories under it.
+
+    Returns:
+        The path every OpenSearch container accepts ``fs`` snapshot repositories.
+
+    """
+    return _OPENSEARCH_SNAPSHOT_PATH

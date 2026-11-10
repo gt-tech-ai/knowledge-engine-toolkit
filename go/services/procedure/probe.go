@@ -10,10 +10,13 @@ import (
 	"strings"
 	"time"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
+
+// probeBackoffFactor multiplies the wait between probe attempts.
+const probeBackoffFactor = 2
 
 // The probe defaults: the first retry's wait, its cap, and the bound on one attempt.
 const (
@@ -61,57 +64,70 @@ type check struct {
 // probe that does not expand to exactly one kind fails without an attempt.
 func (e *engine) probe(
 	ctx context.Context,
-	c *compiled,
-	p *types.ProcProbe,
+	currentCompiled *compiled,
+	procProbe *types.ProcProbe,
 	name string,
 	vars Vars,
 ) types.StepResult {
 	start := time.Now()
-	chk, err := c.check(ctx, p, vars)
+
+	chk, err := currentCompiled.check(ctx, procProbe, vars)
 	if err == nil {
-		err = e.retry(ctx, chk)
+		err = e.retry(ctx, &chk)
 	}
-	res := c.result(name, types.StatusPass, "")
+
+	res := currentCompiled.result(name, types.StatusPass, "")
+
 	if err != nil {
 		msg := err.Error()
 		if chk.hint != "" {
 			msg += " (hint: " + chk.hint + ")"
 		}
-		res = c.result(name, types.StatusFail, msg)
+
+		res = currentCompiled.result(name, types.StatusFail, msg)
 	}
+
 	res.Duration = time.Since(start)
+
 	return res
 }
 
 // retry attempts chk until one passes, its timeout ends or ctx is done, returning the
 // last attempt's error.
-func (e *engine) retry(ctx context.Context, chk check) error {
+func (e *engine) retry(ctx context.Context, chk *check) error {
 	if chk.timeout > 0 {
 		var cancel context.CancelFunc
+
 		ctx, cancel = context.WithTimeout(ctx, chk.timeout)
+
 		defer cancel()
 	}
+
 	wait := chk.delay
 	for {
 		err := e.attempt(ctx, chk)
 		if err == nil || chk.timeout == 0 {
 			return err
 		}
+
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+
 			return err
 		case <-timer.C:
 		}
-		wait = min(wait*2, chk.maxDelay)
+
+		wait = min(wait*probeBackoffFactor, chk.maxDelay)
 	}
 }
 
 // attempt runs chk once, bounded by probeAttemptTimeout.
-func (e *engine) attempt(ctx context.Context, chk check) error {
+func (e *engine) attempt(ctx context.Context, chk *check) error {
 	ctx, cancel := context.WithTimeout(ctx, probeAttemptTimeout)
 	defer cancel()
+
 	switch {
 	case chk.http != "":
 		return e.probeHTTP(ctx, chk)
@@ -123,73 +139,97 @@ func (e *engine) attempt(ctx context.Context, chk check) error {
 }
 
 // probeHTTP GETs chk's URL and checks its status and body.
-func (e *engine) probeHTTP(ctx context.Context, chk check) error {
+func (e *engine) probeHTTP(ctx context.Context, chk *check) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, chk.http, http.NoBody)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInvalidInput, "probe request "+chk.http)
 	}
+
 	doer := e.deps.HTTP
 	if doer == nil {
 		doer = http.DefaultClient
 	}
+
 	resp, err := doer.Do(req)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "HTTP GET "+chk.http)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
-	switch {
-	case chk.status != 0 && resp.StatusCode != chk.status:
-		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
-			"HTTP GET %s: status %d, want %d", chk.http, resp.StatusCode, chk.status))
-	case chk.status == 0 && (resp.StatusCode < 200 || resp.StatusCode >= 300):
-		return apperr.New(apperr.CodeUnavailable,
-			fmt.Sprintf("HTTP GET %s: status %d", chk.http, resp.StatusCode))
-	case chk.contains == "":
-		return nil
+
+	err = probeStatusError(chk, resp.StatusCode)
+	if err != nil || chk.contains == "" {
+		return err
 	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, probeBodyLimit))
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "read body from "+chk.http)
 	}
+
 	if !strings.Contains(string(body), chk.contains) {
 		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"HTTP GET %s: body does not contain %q", chk.http, chk.contains))
 	}
+
+	return nil
+}
+
+// probeStatusError checks the response status: the expected one when set, else any 2xx.
+func probeStatusError(chk *check, status int) error {
+	if chk.status != 0 && status != chk.status {
+		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
+			"HTTP GET %s: status %d, want %d", chk.http, status, chk.status))
+	}
+
+	if chk.status == 0 &&
+		(status < http.StatusOK || status >= http.StatusMultipleChoices) {
+		return apperr.New(apperr.CodeUnavailable,
+			fmt.Sprintf("HTTP GET %s: status %d", chk.http, status))
+	}
+
 	return nil
 }
 
 // probeTCP opens and closes a connection to addr.
 func (e *engine) probeTCP(ctx context.Context, addr string) error {
-	var dialer interfaces.Dialer = &net.Dialer{}
+	var dialer interfaces.Dialer = new(net.Dialer)
+
 	if e.deps.Dialer != nil {
 		dialer = e.deps.Dialer
 	}
+
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "TCP connect "+addr)
 	}
+
 	_ = conn.Close()
+
 	return nil
 }
 
 // probeExec runs chk's command line from the root and checks its exit and stdout.
-func (e *engine) probeExec(ctx context.Context, chk check) error {
-	r := e.deps.Runner.RunBufferedWithEnv(
+func (e *engine) probeExec(ctx context.Context, chk *check) error {
+	cmdResult := e.deps.Runner.RunBufferedWithEnv(
 		ctx,
 		e.deps.Root,
 		nil,
 		chk.exec[0],
 		chk.exec[1:]...)
 	line := strings.Join(chk.exec, " ")
-	out := strings.TrimSpace(string(r.Stdout) + string(r.Stderr))
-	if r.Err != nil {
-		return apperr.Wrap(r.Err, apperr.CodeUnavailable,
+	out := strings.TrimSpace(string(cmdResult.Stdout) + string(cmdResult.Stderr))
+
+	if cmdResult.Err != nil {
+		return apperr.Wrap(cmdResult.Err, apperr.CodeUnavailable,
 			fmt.Sprintf("%s (output: %s)", line, out))
 	}
-	if !strings.Contains(string(r.Stdout), chk.contains) {
+
+	if !strings.Contains(string(cmdResult.Stdout), chk.contains) {
 		return apperr.New(apperr.CodeUnavailable, fmt.Sprintf(
 			"%s: output does not contain %q (output: %s)", line, chk.contains, out))
 	}
+
 	return nil
 }
 
@@ -197,78 +237,118 @@ func (e *engine) probeExec(ctx context.Context, chk check) error {
 // a status that is not a number and a duration that does not parse.
 func (c *compiled) check(
 	ctx context.Context,
-	p *types.ProcProbe,
+	procProbe *types.ProcProbe,
 	vars Vars,
 ) (check, error) {
 	var chk check
-	texts := []struct {
-		dst *string
-		src string
-	}{
-		{&chk.http, p.HTTP},
-		{&chk.tcp, p.TCP},
-		{&chk.contains, p.Contains},
-		{&chk.hint, p.Hint},
-	}
-	for _, t := range texts {
-		v, err := text(t.src, vars)
-		if err != nil {
-			return chk, err
-		}
-		*t.dst = v
-	}
-	argv, err := c.args(ctx, p.Exec, vars)
+
+	err := probeTexts(&chk, procProbe, vars)
 	if err != nil {
 		return chk, err
 	}
+
+	argv, err := c.args(ctx, procProbe.Exec, vars)
+	if err != nil {
+		return chk, err
+	}
+
 	chk.exec = argv
+
+	if probeKinds(&chk) != 1 {
+		return chk, apperr.New(apperr.CodeInvalidInput,
+			"a probe expands to exactly one of http, tcp, exec")
+	}
+
+	err = probeSchedule(&chk, procProbe, vars)
+	if err != nil {
+		return chk, err
+	}
+
+	return chk, nil
+}
+
+// probeTexts expands the probe's text fields into chk.
+func probeTexts(chk *check, procProbe *types.ProcProbe, vars Vars) error {
+	for _, item := range []struct {
+		dst *string
+		src string
+	}{
+		{&chk.http, procProbe.HTTP},
+		{&chk.tcp, procProbe.TCP},
+		{&chk.contains, procProbe.Contains},
+		{&chk.hint, procProbe.Hint},
+	} {
+		v, err := text(item.src, vars)
+		if err != nil {
+			return err
+		}
+
+		*item.dst = v
+	}
+
+	return nil
+}
+
+// probeKinds counts which of http, tcp and exec the expanded probe set.
+func probeKinds(chk *check) int {
 	kinds := 0
+
 	for _, set := range []bool{chk.http != "", chk.tcp != "", len(chk.exec) > 0} {
 		if set {
 			kinds++
 		}
 	}
-	if kinds != 1 {
-		return chk, apperr.New(apperr.CodeInvalidInput,
-			"a probe expands to exactly one of http, tcp, exec")
-	}
-	if err := probeSchedule(&chk, p, vars); err != nil {
-		return chk, err
-	}
-	return chk, nil
+
+	return kinds
 }
 
 // probeSchedule expands p's status and retry schedule into chk.
-func probeSchedule(chk *check, p *types.ProcProbe, vars Vars) error {
-	status, err := text(p.Status, vars)
+func probeSchedule(chk *check, procProbe *types.ProcProbe, vars Vars) error {
+	status, err := text(procProbe.Status, vars)
 	if err != nil {
 		return err
 	}
+
 	if status != "" {
-		if chk.status, err = strconv.Atoi(status); err != nil {
+		chk.status, err = strconv.Atoi(status)
+		if err != nil {
 			return apperr.Wrap(err, apperr.CodeInvalidInput, "probe status "+status)
 		}
 	}
-	for _, d := range []struct {
+
+	for _, item := range []struct {
 		dst *time.Duration
 		src string
 		def time.Duration
 	}{
-		{&chk.timeout, p.Timeout, 0},
-		{&chk.delay, p.Delay, defaultProbeDelay},
-		{&chk.maxDelay, p.MaxDelay, defaultProbeMaxDelay},
+		{&chk.timeout, procProbe.Timeout, 0},
+		{&chk.delay, procProbe.Delay, defaultProbeDelay},
+		{&chk.maxDelay, procProbe.MaxDelay, defaultProbeMaxDelay},
 	} {
-		v, err := text(d.src, vars)
+		*item.dst, err = probeDuration(item.src, item.def, vars)
 		if err != nil {
 			return err
 		}
-		*d.dst = d.def
-		if v == "" {
-			continue
-		}
-		if *d.dst, err = time.ParseDuration(v); err != nil {
-			return apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+v)
-		}
 	}
+
 	return nil
+}
+
+// probeDuration expands and parses a duration; an empty value is def.
+func probeDuration(src string, def time.Duration, vars Vars) (time.Duration, error) {
+	fileText, err := text(src, vars)
+	if err != nil {
+		return def, err
+	}
+
+	if fileText == "" {
+		return def, nil
+	}
+
+	d, err := time.ParseDuration(fileText)
+	if err != nil {
+		return def, apperr.Wrap(err, apperr.CodeInvalidInput, "probe duration "+fileText)
+	}
+
+	return d, nil
 }

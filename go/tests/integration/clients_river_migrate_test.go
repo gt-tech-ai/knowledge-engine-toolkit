@@ -1,6 +1,6 @@
 //go:build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -26,19 +26,28 @@ import (
 // What it tests:
 //   - river.Migrate(ctx, dsn) creates the river_job and river_leader tables.
 func TestRiverMigrate_CreatesRiverSchema(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
-	db, err := postgres.NewTestDatabase(ctx)
+	testDatabase, err := postgres.NewTestDatabase(ctx)
 	require.NoError(t, err, "start test database")
-	defer db.Close(ctx)
 
-	require.NoError(t, riverclient.Migrate(ctx, db.GetDSN()), "apply river schema")
+	defer testDatabase.Close(ctx)
 
-	conn, err := sql.Open("pgx", db.GetDSN())
+	require.NoError(
+		t,
+		riverclient.Migrate(ctx, testDatabase.GetDSN()),
+		"apply river schema",
+	)
+
+	conn, err := sql.Open("pgx", testDatabase.GetDSN())
 	require.NoError(t, err)
-	defer conn.Close()
+
+	defer func() { _ = conn.Close() }()
 
 	for _, table := range []string{"river_job", "river_leader"} {
 		var exists bool
+
 		row := conn.QueryRowContext(
 			ctx,
 			`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = $1)`,

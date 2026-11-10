@@ -1,4 +1,6 @@
-"""Config-selected email transport backends (SES / SMTP / noop) + the ``new_email_from_config`` factory.
+"""Config-selected email transport backends and their factory.
+
+SES, SMTP and noop, built by ``new_email_from_config``.
 
 The client-package shape: ``builder.py`` at the top selects a backend from ``kind``; each
 backend lives in its own subpackage behind the ``core.interfaces.email.EmailSender`` port.

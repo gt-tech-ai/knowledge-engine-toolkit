@@ -10,20 +10,24 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/system"
 )
 
+// listBaseArgs sizes the fixed arguments of the file-listing command.
+const listBaseArgs = 5
+
 // StagedFiles returns root-relative paths of staged files matching the given
 // path patterns. It uses git diff --cached --name-only --diff-filter=ACM to
 // list only added, copied, or modified files (excluding deletions).
 func StagedFiles(
 	ctx context.Context,
-	r system.CommandRunner,
+	commandRunner system.CommandRunner,
 	root string,
 	patterns ...string,
 ) ([]string, error) {
-	args := make([]string, 0, 5+len(patterns))
+	args := make([]string, 0, listBaseArgs+len(patterns))
+
 	args = append(args, "diff", "--cached", "--name-only", "--diff-filter=ACM", "--")
 	args = append(args, patterns...)
 
-	result := r.RunBuffered(ctx, root, "git", args...)
+	result := commandRunner.RunBuffered(ctx, root, "git", args...)
 	if result.Err != nil {
 		return nil, result.Err
 	}
@@ -32,19 +36,22 @@ func StagedFiles(
 	if raw == "" {
 		return nil, nil
 	}
+
 	return strings.Split(raw, "\n"), nil
 }
 
 // StageFiles runs git add on the given paths.
 func StageFiles(
 	ctx context.Context,
-	r system.CommandRunner,
+	commandRunner system.CommandRunner,
 	root string,
 	paths ...string,
 ) error {
 	if len(paths) == 0 {
 		return nil
 	}
+
 	args := append([]string{"add", "--"}, paths...)
-	return r.Run(ctx, root, "git", args...)
+
+	return commandRunner.Run(ctx, root, "git", args...)
 }

@@ -16,59 +16,132 @@ import (
 // Allow pattern matches the line too.
 func matchCheck(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	r *types.GuardRow,
+	codebase interfaces.Codebase,
+	guardRow *types.GuardRow,
 	only int,
 ) ([]types.Finding, error) {
-	require, err := patterns(r.Require, r.Literal)
+	set, err := compileMatchSet(guardRow, only)
 	if err != nil {
 		return nil, err
 	}
-	if only >= 0 {
-		require = require[only : only+1]
-	}
-	forbid, err := patterns(r.Forbid, r.Literal)
-	if err != nil {
-		return nil, err
-	}
-	allow, err := patterns(r.Allow, r.Literal)
-	if err != nil {
-		return nil, err
-	}
-	fs, missing, err := files(ctx, cb, r)
+
+	currentFiles, missing, err := files(ctx, codebase, guardRow)
 	if err != nil || missing != nil {
 		return missing, err
 	}
+
 	var out []types.Finding
-	for _, f := range fs {
-		text, err := cb.Text(ctx, f.Path)
+
+	for _, file := range currentFiles {
+		text, err := codebase.Text(ctx, file.Path)
 		if err != nil {
 			return nil, err
 		}
-		lines := active(f.Path, text.Lines(), r.SkipComments)
-		for _, re := range require {
-			if !slices.ContainsFunc(
-				lines,
-				func(l line) bool { return re.MatchString(l.text) },
-			) {
-				out = append(out, types.Finding{
-					File: f.Path, Rule: "require",
-					Message: f.Path + " does not contain " + show(re, r.Literal),
-				})
-			}
-		}
-		for _, re := range forbid {
-			for _, l := range lines {
-				if re.MatchString(l.text) && !matchesAny(allow, l.text) {
-					out = append(out, types.Finding{
-						File: f.Path, Line: l.n, Rule: "forbid",
-						Message: "contains " + show(re, r.Literal),
-					})
-				}
-			}
+
+		lines := active(text.Lines(), skippedPrefixes(guardRow, file.Path))
+
+		out = append(out, set.requireFindings(file.Path, lines, formOf(guardRow))...)
+		out = append(out, set.forbidFindings(file.Path, lines, formOf(guardRow))...)
+	}
+
+	return out, nil
+}
+
+// matchSet is a match row's compiled patterns.
+type matchSet struct {
+	// require must each appear in a file.
+	require []*regexp.Regexp
+
+	// forbid must not appear on a line.
+	forbid []*regexp.Regexp
+
+	// allow excuses a line a forbid pattern hit.
+	allow []*regexp.Regexp
+}
+
+// compileMatchSet compiles the row's patterns; only >= 0 narrows require to that one.
+func compileMatchSet(guardRow *types.GuardRow, only int) (*matchSet, error) {
+	require, err := patterns(guardRow.Require, formOf(guardRow))
+	if err != nil {
+		return nil, err
+	}
+
+	if only >= 0 {
+		require = require[only : only+1]
+	}
+
+	forbid, err := patterns(guardRow.Forbid, formOf(guardRow))
+	if err != nil {
+		return nil, err
+	}
+
+	allow, err := patterns(guardRow.Allow, formOf(guardRow))
+	if err != nil {
+		return nil, err
+	}
+
+	return &matchSet{require: require, forbid: forbid, allow: allow}, nil
+}
+
+// requireFindings reports each required pattern no line of the file matches.
+func (s *matchSet) requireFindings(
+	file string,
+	lines []line,
+	form patternForm,
+) []types.Finding {
+	var out []types.Finding
+
+	for _, pattern := range s.require {
+		found := slices.ContainsFunc(
+			lines,
+			func(l line) bool { return pattern.MatchString(l.text) },
+		)
+		if !found {
+			out = append(out, types.Finding{
+				File:    file,
+				Rule:    "require",
+				Message: file + " does not contain " + form.show(pattern),
+				Check:   "",
+				Line:    0,
+			})
 		}
 	}
-	return out, nil
+
+	return out
+}
+
+// forbidFindings reports each line a forbidden pattern hits and no allow excuses.
+func (s *matchSet) forbidFindings(
+	file string,
+	lines []line,
+	form patternForm,
+) []types.Finding {
+	out := make([]types.Finding, 0, len(s.forbid))
+
+	for _, re := range s.forbid {
+		out = append(out, s.forbiddenLines(re, file, lines, form)...)
+	}
+
+	return out
+}
+
+// forbiddenLines reports the lines one forbidden pattern hits.
+func (s *matchSet) forbiddenLines(
+	pattern *regexp.Regexp, file string, lines []line, form patternForm,
+) []types.Finding {
+	var out []types.Finding
+
+	for _, l := range lines {
+		if pattern.MatchString(l.text) && !matchesAny(s.allow, l.text) {
+			out = append(out, types.Finding{
+				File: file, Line: l.n, Rule: "forbid",
+				Message: "contains " + form.show(pattern),
+				Check:   "",
+			})
+		}
+	}
+
+	return out
 }
 
 // matchesAny reports whether one of res matches s.
@@ -88,19 +161,32 @@ type line struct {
 	n int
 }
 
-// active returns text's lines, without full-line comments when skip is set.
-func active(file string, text []string, skip bool) []line {
-	prefixes := commentPrefixes(file)
+// skippedPrefixes is the comment markers whose lines the row ignores in file, or none
+// when the row reads comments too.
+func skippedPrefixes(guardRow *types.GuardRow, file string) []string {
+	if !guardRow.SkipComments {
+		return nil
+	}
+
+	return commentPrefixes(file)
+}
+
+// active returns text's lines, without the full-line comments that start with a prefix.
+func active(text, prefixes []string) []line {
 	out := make([]line, 0, len(text))
-	for i, t := range text {
-		trimmed := strings.TrimSpace(t)
-		if skip && slices.ContainsFunc(prefixes, func(p string) bool {
+
+	for index, fileText := range text {
+		trimmed := strings.TrimSpace(fileText)
+
+		if slices.ContainsFunc(prefixes, func(p string) bool {
 			return strings.HasPrefix(trimmed, p)
 		}) {
 			continue
 		}
-		out = append(out, line{text: t, n: i + 1})
+
+		out = append(out, line{text: fileText, n: index + 1})
 	}
+
 	return out
 }
 
@@ -109,6 +195,7 @@ func active(file string, text []string, skip bool) []line {
 func commentPrefixes(file string) []string {
 	base := path.Base(file)
 	ext := path.Ext(file)
+
 	switch {
 	case ext == ".yaml", ext == ".yml", ext == ".sh", base == "Dockerfile",
 		strings.HasPrefix(base, "Dockerfile."), strings.HasSuffix(base, ".Dockerfile"):
@@ -118,25 +205,38 @@ func commentPrefixes(file string) []string {
 	case ext == ".alloy":
 		return []string{"//"}
 	}
+
 	return nil
 }
 
-// patterns compiles ps, quoting each first when literal.
-func patterns(ps []string, literal bool) ([]*regexp.Regexp, error) {
-	if !literal {
-		return compileAll(ps)
-	}
-	quoted := make([]string, len(ps))
-	for i, p := range ps {
-		quoted[i] = regexp.QuoteMeta(p)
-	}
-	return compileAll(quoted)
+// patternForm is how a row's patterns are written: as regular expressions or literally.
+type patternForm struct {
+	// quote prepares one pattern for compiling.
+	quote func(string) string
+	// show names a compiled pattern in a finding.
+	show func(*regexp.Regexp) string
 }
 
-// show names a pattern in a finding.
-func show(re *regexp.Regexp, literal bool) string {
-	if literal {
-		return `"` + strings.ReplaceAll(re.String(), `\`, "") + `"`
+// formOf returns the form guardRow writes its patterns in.
+func formOf(guardRow *types.GuardRow) patternForm {
+	if guardRow.Literal {
+		return patternForm{quote: regexp.QuoteMeta, show: func(re *regexp.Regexp) string {
+			return `"` + strings.ReplaceAll(re.String(), `\`, "") + `"`
+		}}
 	}
-	return "/" + re.String() + "/"
+
+	return patternForm{
+		quote: func(pattern string) string { return pattern },
+		show:  func(re *regexp.Regexp) string { return "/" + re.String() + "/" },
+	}
+}
+
+// patterns compiles items in form.
+func patterns(items []string, form patternForm) ([]*regexp.Regexp, error) {
+	quoted := make([]string, len(items))
+	for i, item := range items {
+		quoted[i] = form.quote(item)
+	}
+
+	return compileAll(quoted)
 }

@@ -26,29 +26,34 @@ import (
 //     explicit --source winget appended after the method's own args.
 func TestClientsToolchainInstaller_Install_WingetAddsNonInteractiveFlags(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
-	r.EXPECT().Run(
-		gomock.Any(), "/root", "winget",
-		"install", "Foo.Bar",
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Run(
+		gomock.Any(), textRoot, "winget",
+		textInstall, "Foo.Bar",
 		"--source", "winget",
 		"--accept-source-agreements", "--accept-package-agreements",
 	).Return(nil)
 
-	tool := &types.ToolDef{
-		Name: "foo",
-		InstallMethods: map[string]types.InstallMethod{
-			"windows": {Command: "winget", Args: []string{"install", "Foo.Bar"}},
-		},
-	}
+	tool := fixtures.BuildRef(func(row *types.ToolDef) {
+		row.Name = "foo"
+		row.InstallMethods = map[string]types.InstallMethod{
+			textWindows: {
+				Command:  "winget",
+				Args:     []string{textInstall, "Foo.Bar"},
+				Download: nil,
+			},
+		}
+	})
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
-		"windows",
+		textWindows,
 		denyPrompter(t),
 		toolchain.WithArch("amd64"),
 	)
-	require.NoError(t, inst.Install(context.Background(), "/root", tool))
+	require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 }
 
 // TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles verifies the
@@ -65,11 +70,14 @@ func TestClientsToolchainInstaller_Install_WingetAddsNonInteractiveFlags(t *test
 //     GOTOOLCHAIN=local, GOARCH=amd64, and CGO_ENABLED=0 in the environment.
 func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
 
 	var gotEnv, gotArgs []string
-	r.EXPECT().RunWithEnv(gomock.Any(), "/root", gomock.Any(), "go", gomock.Any()).
+
+	commandRunner.EXPECT().
+		RunWithEnv(gomock.Any(), textRoot, gomock.Any(), textGoLower, gomock.Any()).
 		DoAndReturn(func(
 			_ context.Context,
 			_ string,
@@ -78,26 +86,31 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 			args ...string,
 		) error {
 			gotEnv, gotArgs = env, args
+
 			return nil
 		})
 
-	tool := &types.ToolDef{
-		Name: "x",
-		InstallMethods: map[string]types.InstallMethod{
-			"all": {Command: "go", Args: []string{"install", "pkg@v1"}},
-		},
-	}
+	tool := fixtures.BuildRef(func(row *types.ToolDef) {
+		row.Name = textX
+		row.InstallMethods = map[string]types.InstallMethod{
+			textAll: {
+				Command:  textGoLower,
+				Args:     []string{textInstall, textPkgV1},
+				Download: nil,
+			},
+		}
+	})
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
-		"windows",
+		textWindows,
 		denyPrompter(t),
 		toolchain.WithArch("arm64"),
 	)
-	require.NoError(t, inst.Install(context.Background(), "/root", tool))
+	require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 
-	assert.Equal(t, []string{"install", "-p", "1", "pkg@v1"}, gotArgs)
-	assert.Contains(t, gotEnv, "GOTOOLCHAIN=local")
+	assert.Equal(t, []string{textInstall, "-p", "1", textPkgV1}, gotArgs)
+	assert.Contains(t, gotEnv, textGotoolchainLocal)
 	assert.Contains(t, gotEnv, "GOARCH=amd64")
 	assert.Contains(t, gotEnv, "CGO_ENABLED=0")
 }
@@ -116,34 +129,45 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 //     mock with no powershell expectation fails if the native path is taken.
 func TestClientsToolchainInstaller_Install_WindowsPrefersGoInstall(t *testing.T) {
 	t.Parallel()
+
 	ctrl := gomock.NewController(t)
-	r := mocks.NewMockCommandRunner(ctrl) // strict: only the go-install call is allowed
-	r.EXPECT().
+	commandRunner := mocks.NewMockCommandRunner(
+		ctrl,
+	) // strict: only the go-install call is allowed
+	commandRunner.EXPECT().
 		RunWithEnv(
 			gomock.Any(),
-			"/root",
-			[]string{"GOTOOLCHAIN=local"},
-			"go",
-			"install",
-			"pkg@v1",
+			textRoot,
+			[]string{textGotoolchainLocal},
+			textGoLower,
+			textInstall,
+			textPkgV1,
 		).
 		Return(nil)
 
-	tool := &types.ToolDef{
-		Name: "x",
-		InstallMethods: map[string]types.InstallMethod{
-			"windows": {Command: "powershell", Args: []string{"-c", "x"}},
-			"all":     {Command: "go", Args: []string{"install", "pkg@v1"}},
-		},
-	}
+	tool := fixtures.BuildRef(func(row *types.ToolDef) {
+		row.Name = textX
+		row.InstallMethods = map[string]types.InstallMethod{
+			textWindows: {
+				Command:  textPowershell,
+				Args:     []string{"-c", textX},
+				Download: nil,
+			},
+			textAll: {
+				Command:  textGoLower,
+				Args:     []string{textInstall, textPkgV1},
+				Download: nil,
+			},
+		}
+	})
 	inst := toolchain.NewInstaller(
-		r,
+		commandRunner,
 		fixtures.NopLogger(),
-		"windows",
+		textWindows,
 		denyPrompter(t),
 		toolchain.WithArch("amd64"),
 	)
-	require.NoError(t, inst.Install(context.Background(), "/root", tool))
+	require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 }
 
 // TestClientsToolchainClassifyWingetExit maps the winget HRESULT exit codes.
@@ -160,10 +184,10 @@ func TestClientsToolchainClassifyWingetExit(t *testing.T) {
 	t.Parallel()
 
 	success := map[int]string{
-		int(uint32(0x8A15002B)): "already installed, no update available",
-		int(uint32(0x8A150061)): "package already installed",
-		int(uint32(0x8A15010D)): "another version already installed",
-		int(uint32(0x8A15004F)): "upgrade version not newer than installed",
+		int(uint32(uint32Arg0x8A15002B)): "already installed, no update available",
+		int(uint32(uint32Arg0x8A)):       "package already installed",
+		int(uint32(uint32Arg0x8A15010D)): "another version already installed",
+		int(uint32(uint32Arg0x8A15004F)): "upgrade version not newer than installed",
 	}
 	for code, want := range success {
 		desc, ok := toolchain.ClassifyWingetExit(code)
@@ -171,8 +195,35 @@ func TestClientsToolchainClassifyWingetExit(t *testing.T) {
 		assert.Equal(t, want, desc)
 	}
 
-	for _, code := range []int{0, 1, int(uint32(0x8A150001)), int(uint32(0x8A150008))} {
+	for _, code := range []int{
+		0, 1, int(uint32(uint32Arg0x8AExit)),
+		int(uint32(uint32Arg0x8AWingetExit)),
+	} {
 		_, ok := toolchain.ClassifyWingetExit(code)
 		assert.Falsef(t, ok, "code %#x is not success-like", code)
 	}
 }
+
+const (
+	// uint32Arg0x8A is argument 1 of uint32 in TestClientsToolchainClassifyWingetExit.
+	uint32Arg0x8A = 0x8A150061
+
+	// uint32Arg0x8AExit is argument 1 of uint32 in
+	// TestClientsToolchainClassifyWingetExit.
+	uint32Arg0x8AExit = 0x8A150001
+
+	// uint32Arg0x8AWingetExit is argument 1 of uint32 in
+	// TestClientsToolchainClassifyWingetExit.
+	uint32Arg0x8AWingetExit = 0x8A150008
+)
+
+const (
+	// uint32Arg0x8A15002B is the uint32Arg value 0x8A15002B.
+	uint32Arg0x8A15002B = 0x8A15002B
+
+	// uint32Arg0x8A15004F is the uint32Arg value 0x8A15004F.
+	uint32Arg0x8A15004F = 0x8A15004F
+
+	// uint32Arg0x8A15010D is the uint32Arg value 0x8A15010D.
+	uint32Arg0x8A15010D = 0x8A15010D
+)

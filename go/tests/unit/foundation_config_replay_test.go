@@ -26,15 +26,22 @@ func TestReplayConfigDefaults(t *testing.T) {
 	t.Parallel()
 
 	c := infra.DefaultReplayConfig()
-	assert.Equal(t, 100, c.MaxSize)
+	assert.Equal(t, wantMaxSize, c.MaxSize)
 	assert.Equal(t, 5*time.Minute, c.TTL)
 	require.NoError(t, c.Validate())
 
 	badSize := infra.DefaultReplayConfig()
+
 	badSize.MaxSize = 0
 	require.Error(t, badSize.Validate(), "a non-positive max_size must be rejected")
 
 	badTTL := infra.DefaultReplayConfig()
+
 	badTTL.TTL = 0
 	assert.Error(t, badTTL.Validate(), "a non-positive ttl must be rejected")
 }
+
+const (
+	// wantMaxSize is the expected max size.
+	wantMaxSize = 100
+)

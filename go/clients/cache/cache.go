@@ -13,7 +13,14 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
+
+// defaultEntryTTL is how long an entry lives when the caller names no TTL.
+const defaultEntryTTL = 5 * time.Minute
+
+// defaultOpTimeout is the deadline of one cache operation.
+const defaultOpTimeout = 500 * time.Millisecond
 
 const (
 	// KindStub misses every Get and drops every write (the default).
@@ -87,7 +94,14 @@ type Deps struct {
 
 // DefaultConfig returns the stub kind, a 5-minute default TTL and a 500ms op timeout.
 func DefaultConfig() Config {
-	return Config{DefaultTTL: 5 * time.Minute, OpTimeout: 500 * time.Millisecond}
+	return Config{
+		DefaultTTL: defaultEntryTTL,
+		OpTimeout:  defaultOpTimeout,
+		Kind:       "",
+		Name:       "",
+		Redis:      stdx.Zero[RedisConfig](),
+		Memory:     stdx.Zero[MemoryConfig](),
+	}
 }
 
 // kinds is the cache's backend table.
@@ -122,15 +136,18 @@ func kinds() client.Kinds[Config, Deps, interfaces.ByteCache] {
 				return memory.New(cfg.Memory.MaxEntries, cfg.DefaultTTL, time.Now), nil
 			},
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
 // NewFromConfig builds the cache cfg.Kind selects and runs it through the client tier,
 // without I/O. An unknown kind is CodeInvalidInput.
+// cfg must not be nil.
 func NewFromConfig(
 	ctx context.Context,
-	cfg Config,
+	cfg *Config,
 	deps Deps,
 ) (interfaces.ByteCache, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, *cfg, deps, deps.Decorations, cfg.Name)
 }

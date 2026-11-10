@@ -44,7 +44,7 @@ func (m *MockAnalyticsStore) EXPECT() *MockAnalyticsStoreMockRecorder {
 }
 
 // Aggregate mocks base method.
-func (m *MockAnalyticsStore) Aggregate(ctx context.Context, q types.AggregateQuery) (interfaces.RowStream, error) {
+func (m *MockAnalyticsStore) Aggregate(ctx context.Context, q *types.AggregateQuery) (interfaces.RowStream, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Aggregate", ctx, q)
 	ret0, _ := ret[0].(interfaces.RowStream)

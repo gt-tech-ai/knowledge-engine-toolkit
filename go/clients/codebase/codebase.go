@@ -11,10 +11,11 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/fs"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/git"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/memory"
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	views "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 const (
@@ -62,7 +63,9 @@ type Deps struct {
 }
 
 // DefaultConfig returns the memory kind.
-func DefaultConfig() Config { return Config{} }
+func DefaultConfig() Config {
+	return stdx.Zero[Config]()
+}
 
 // kinds is the codebase source table.
 func kinds() client.Kinds[Config, Deps, interfaces.Codebase] {
@@ -71,50 +74,56 @@ func kinds() client.Kinds[Config, Deps, interfaces.Codebase] {
 		Default:  KindMemory,
 		Decorate: Decorate,
 		Backends: map[client.Kind]client.Backend[Config, Deps, interfaces.Codebase]{
-			KindMemory: newMemory,
-			KindFS:     newFS,
-			KindGit:    newGit,
+			KindMemory: client.RefDeps(newMemory),
+			KindFS:     client.RefDeps(newFS),
+			KindGit:    client.RefDeps(newGit),
 		},
+		Options:    nil,
+		AtMostOnce: nil,
 	}
 }
 
 // newMemory builds the memory kind over Deps.Files.
-func newMemory(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, error) {
+func newMemory(_ context.Context, cfg Config, deps *Deps) (interfaces.Codebase, error) {
 	return compose(memory.New(deps.Files), cfg, deps), nil
 }
 
 // newFS builds the plain-directory kind at Config.Root.
-func newFS(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, error) {
+func newFS(_ context.Context, cfg Config, deps *Deps) (interfaces.Codebase, error) {
 	if cfg.Root == "" {
 		return nil, apperr.New(apperr.CodeInvalidInput, "codebase fs: no root")
 	}
+
 	return compose(fs.New(cfg.Root), cfg, deps), nil
 }
 
 // newGit builds the git working-tree kind at Config.Root over Deps.Runner.
-func newGit(_ context.Context, cfg Config, deps Deps) (interfaces.Codebase, error) {
+func newGit(_ context.Context, cfg Config, deps *Deps) (interfaces.Codebase, error) {
 	if cfg.Root == "" || deps.Runner == nil {
 		return nil, apperr.New(apperr.CodeInvalidInput,
 			"codebase git: needs a root and a command runner")
 	}
+
 	return compose(git.New(cfg.Root, deps.Runner), cfg, deps), nil
 }
 
 // compose builds the views over src on the run's snapshot.
-func compose(src interfaces.CodebaseSource, cfg Config, deps Deps) interfaces.Codebase {
+func compose(src interfaces.CodebaseSource, cfg Config, deps *Deps) interfaces.Codebase {
 	snap := deps.Snapshot
 	if snap == nil {
 		snap = views.NewSnapshot(cfg.Root)
 	}
+
 	return views.New(src, snap, deps.Renderer)
 }
 
 // NewFromConfig builds the codebase cfg.Kind selects and runs it through the client tier.
 // An unknown kind, or a kind missing its root or runner, is CodeInvalidInput.
+// deps must not be nil.
 func NewFromConfig(
 	ctx context.Context,
 	cfg Config,
-	deps Deps,
+	deps *Deps,
 ) (interfaces.Codebase, error) {
-	return kinds().Build(ctx, cfg.Kind, cfg, deps, deps.Decorations, cfg.Name)
+	return kinds().Build(ctx, cfg.Kind, cfg, *deps, deps.Decorations, cfg.Name)
 }

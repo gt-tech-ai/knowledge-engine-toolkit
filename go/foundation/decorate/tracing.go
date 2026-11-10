@@ -36,17 +36,24 @@ func NewTracing(
 // WrapOp runs next inside the operation's span.
 func (m tracingMW) WrapOp(
 	ctx context.Context,
-	op string,
+	operation string,
 	next func(context.Context) error,
 ) error {
-	ctx, span := m.tracer.Start(ctx, m.name+"."+op, interfaces.WithSpanKind(m.kind))
+	ctx, span := m.tracer.Start(
+		ctx,
+		m.name+"."+operation,
+		interfaces.WithSpanKind(m.kind),
+	)
 	defer span.End()
+
 	span.SetAttribute(m.tier+".name", m.name)
-	span.SetAttribute(m.tier+".operation", op)
+	span.SetAttribute(m.tier+".operation", operation)
+
 	err := next(ctx)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(interfaces.SpanStatusError, err.Error())
 	}
+
 	return err
 }

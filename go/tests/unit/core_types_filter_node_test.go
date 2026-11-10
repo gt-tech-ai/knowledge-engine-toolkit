@@ -9,8 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
 // TestFilterNode_JSONRoundTripsGrammar tests that the FilterNode codec reads and writes
@@ -44,22 +45,27 @@ func TestFilterNode_JSONRoundTripsGrammar(t *testing.T) {
 		`{"$or": [ {"$eq": {"status": "indexed"}}, {"$and": [{"$eq": {"name": "a"}}]} ]}`,
 		`{"$and": []}`,
 	}
-	for _, in := range inputs {
+	for _, text := range inputs {
 		var n types.FilterNode
-		require.NoError(t, json.Unmarshal([]byte(in), &n), in)
+
+		require.NoError(t, json.Unmarshal([]byte(text), &n), text)
+
 		out, err := json.Marshal(n)
-		require.NoError(t, err, in)
+		require.NoError(t, err, text)
+
 		var want bytes.Buffer
-		require.NoError(t, json.Compact(&want, []byte(in)))
-		assert.Equal(t, want.String(), string(out), in)
+
+		require.NoError(t, json.Compact(&want, []byte(text)))
+		assert.Equal(t, want.String(), string(out), text)
 	}
 
-	var n types.FilterNode
-	require.NoError(t, json.Unmarshal([]byte(`{"$lt": {"page_count": 12}}`), &n))
-	require.NotNil(t, n.Clause)
+	var filterNode types.FilterNode
+
+	require.NoError(t, json.Unmarshal([]byte(`{"$lt": {"page_count": 12}}`), &filterNode))
+	require.NotNil(t, filterNode.Clause)
 	assert.Equal(t, types.FilterNodeClause{
-		Field: "page_count", Op: types.OpLt, Value: json.Number("12"),
-	}, *n.Clause)
+		Field: textPageCount, Op: types.OpLt, Value: json.Number("12"),
+	}, *filterNode.Clause)
 }
 
 // TestFilterNode_RejectsTwoArms tests that a node setting more than one arm, or JSON
@@ -77,22 +83,24 @@ func TestFilterNode_RejectsTwoArms(t *testing.T) {
 	t.Parallel()
 
 	both := types.FilterNode{
-		Clause: &types.FilterNodeClause{Field: "name", Op: types.OpEq, Value: "a"},
-		And:    []types.FilterNode{{}},
+		Clause: &types.FilterNodeClause{Field: textName, Op: types.OpEq, Value: textA},
+		And:    []types.FilterNode{stdx.Zero[types.FilterNode]()},
+		Or:     nil,
 	}
 	_, err := json.Marshal(both)
 	require.Error(t, err)
-	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "got %v", err)
+	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), textGotV, err)
 
-	for name, in := range map[string]string{
-		"unknown operator":  `{"$regex": {"name": "x"}}`,
+	for name, text := range map[string]string{
+		textUnknownOperator: `{"$regex": {"name": "x"}}`,
 		"two operator keys": `{"$eq": {"name": "a"}, "$ne": {"name": "b"}}`,
 		"two body fields":   `{"$eq": {"name": "a", "status": "b"}}`,
 		"non-array group":   `{"$or": {"$eq": {"name": "a"}}}`,
 		"non-object node":   `["$eq"]`,
 	} {
 		var n types.FilterNode
-		err := json.NewDecoder(strings.NewReader(in)).Decode(&n)
+
+		err := json.NewDecoder(strings.NewReader(text)).Decode(&n)
 		require.Error(t, err, name)
 		assert.True(t, apperr.Is(err, apperr.CodeInvalidInput), "%s: got %v", name, err)
 	}

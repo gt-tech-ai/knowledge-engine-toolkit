@@ -1,8 +1,8 @@
 """In-process message broker shared by a memory publisher + subscriber pair.
 
-``InMemoryBroker`` holds one ``asyncio.Queue`` per topic. It is a plain object, NOT module-global
-state: a publisher and subscriber connect only when handed the SAME broker instance, so two
-unrelated brokers (e.g. in parallel tests) are fully isolated.
+``InMemoryBroker`` holds one ``asyncio.Queue`` per topic. It is a plain object, NOT
+module-global state: a publisher and subscriber connect only when handed the SAME broker
+instance, so two unrelated brokers (e.g. in parallel tests) are fully isolated.
 """
 
 from __future__ import annotations
@@ -22,7 +22,15 @@ class InMemoryBroker:
         self._queues: dict[str, asyncio.Queue[Message]] = {}
 
     def queue(self, topic: str) -> asyncio.Queue[Message]:
-        """Return the queue for ``topic``, creating it on first use."""
+        """Return the queue for ``topic``, creating it on first use.
+
+        Args:
+            topic: The topic.
+
+        Returns:
+            The queue for ``topic``, creating it on first use.
+
+        """
         existing = self._queues.get(topic)
         if existing is not None:
             return existing

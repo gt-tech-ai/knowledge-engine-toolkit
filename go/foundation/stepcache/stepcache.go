@@ -10,8 +10,9 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
+	"path/filepath"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
@@ -52,7 +53,8 @@ type Config struct {
 
 // NewFromConfig builds the cache cfg.Kind selects. An unknown kind, or KindDir with no
 // Dir, is CodeInvalidInput. It does no I/O: a dir cache derives its salt on first use.
-func NewFromConfig(cfg Config) (interfaces.StepCache, error) {
+// cfg must not be nil.
+func NewFromConfig(cfg *Config) (interfaces.StepCache, error) {
 	switch cfg.Kind {
 	case "", KindOff:
 		return off{}, nil
@@ -60,6 +62,7 @@ func NewFromConfig(cfg Config) (interfaces.StepCache, error) {
 		if cfg.Dir == "" {
 			return nil, apperr.New(apperr.CodeInvalidInput, "stepcache dir: no directory")
 		}
+
 		return newDir(cfg), nil
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput,
@@ -70,44 +73,53 @@ func NewFromConfig(cfg Config) (interfaces.StepCache, error) {
 // Key is the hex SHA-256 of a step's inputs, its tool's version and its arguments. Each
 // field is length-prefixed, so no two different field lists share a key.
 func Key(inputs []byte, toolVersion string, args []string) string {
-	h := sha256.New()
-	field := func(b []byte) {
+	hash := sha256.New()
+	field := func(data []byte) {
 		var n [8]byte
-		binary.BigEndian.PutUint64(n[:], uint64(len(b)))
-		h.Write(n[:])
-		h.Write(b)
+
+		binary.BigEndian.PutUint64(n[:], uint64(len(data)))
+
+		_, _ = hash.Write(n[:])
+		_, _ = hash.Write(data)
 	}
 	field(inputs)
 	field([]byte(toolVersion))
+
 	for _, a := range args {
 		field([]byte(a))
 	}
-	return hex.EncodeToString(h.Sum(nil))
+
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 // Digest is the SHA-256 of the paths and contents of the files sel selects in cb, in
 // path order: the inputs part of a step's Key.
+// sel must not be nil.
 func Digest(
 	ctx context.Context,
-	cb interfaces.Codebase,
-	sel types.FileSelector,
+	codebase interfaces.Codebase,
+	sel *types.FileSelector,
 ) ([]byte, error) {
-	files, err := cb.Files(ctx, sel)
+	files, err := codebase.Files(ctx, sel)
 	if err != nil {
 		return nil, err
 	}
-	h := sha256.New()
-	for _, f := range files {
-		text, err := cb.Text(ctx, f.Path)
+
+	hash := sha256.New()
+
+	for _, file := range files {
+		text, err := codebase.Text(ctx, file.Path)
 		if err != nil {
 			return nil, err
 		}
-		h.Write([]byte(f.Path))
-		h.Write([]byte{0})
-		h.Write(text.Bytes)
-		h.Write([]byte{0})
+
+		_, _ = hash.Write([]byte(file.Path))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write(text.Bytes)
+		_, _ = hash.Write([]byte{0})
 	}
-	return h.Sum(nil), nil
+
+	return hash.Sum(nil), nil
 }
 
 // BinarySalt is the hex SHA-256 of the running executable: the Config.Salt that ties
@@ -117,14 +129,20 @@ func BinarySalt() (string, error) {
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: locate executable")
 	}
-	f, err := os.Open(exe)
+
+	file, err := os.Open(filepath.Clean(exe))
 	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: open "+exe)
 	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+
+	defer func() { _ = file.Close() }()
+
+	hash := sha256.New()
+
+	_, err = io.Copy(hash, file)
+	if err != nil {
 		return "", apperr.Wrap(err, apperr.CodeInternal, "stepcache: read "+exe)
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }

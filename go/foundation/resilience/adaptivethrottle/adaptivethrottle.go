@@ -13,9 +13,15 @@ import (
 	"math/rand/v2"
 	"sync"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
+
+// defaultK is the default accepts multiplier.
+const defaultK = 2.0
+
+// defaultDecay is the default per-window decay.
+const defaultDecay = 0.98
 
 // ErrThrottled is returned when the throttler sheds a request locally without calling op.
 var ErrThrottled = apperr.New(
@@ -40,7 +46,7 @@ type Config struct {
 
 // DefaultConfig returns SRE-typical throttler defaults.
 func DefaultConfig() Config {
-	return Config{K: 2.0, Decay: 0.98}
+	return Config{K: defaultK, Decay: defaultDecay, Rand: nil}
 }
 
 // Throttler is the SRE client-side adaptive throttler.
@@ -79,44 +85,59 @@ func (disabledThrottler) RejectionProbability() float64 { return 0 }
 
 // New creates a Throttler from cfg, coercing out-of-range K/Decay to their defaults.
 func New(cfg Config) *Throttler {
-	k := cfg.K
-	if k <= 0 {
-		k = 2.0
+	amount := cfg.K
+	if amount <= 0 {
+		amount = defaultAmount
 	}
+
 	decay := cfg.Decay
 	if decay <= 0 || decay > 1 {
-		decay = 0.98
+		decay = defaultDecay
 	}
-	r := cfg.Rand
-	if r == nil {
-		r = rand.Float64
+
+	callback := cfg.Rand
+	if callback == nil {
+		callback = rand.Float64
 	}
-	return &Throttler{k: k, decay: decay, rand: r}
+
+	return &Throttler{
+		k:        amount,
+		decay:    decay,
+		rand:     callback,
+		requests: 0,
+		accepts:  0,
+		mu:       sync.Mutex{},
+	}
 }
 
 // Do runs op unless the throttler sheds it locally, in which case it returns ErrThrottled
 // WITHOUT invoking op. A success feeds the accept window; every attempt (shed or allowed)
 // feeds the request window, so a sustained backend failure raises the rejection
 // probability and a recovery lowers it.
-func (t *Throttler) Do(_ context.Context, op func() error) error {
+func (t *Throttler) Do(_ context.Context, operation func() error) error {
 	t.mu.Lock()
+
 	// Age the window, then decide from the pre-attempt ratio so a cold start (0/0) never
 	// sheds.
 	t.requests *= t.decay
 	t.accepts *= t.decay
-	shed := t.rand() < t.rejectionProbability()
+
+	shed := t.rand() < t.rejectionChance()
 	t.requests++ // this attempt counts as a request whether shed or allowed
 	t.mu.Unlock()
 
 	if shed {
 		return ErrThrottled
 	}
-	err := op()
+
+	err := operation()
 	if err == nil {
 		t.mu.Lock()
+
 		t.accepts++
 		t.mu.Unlock()
 	}
+
 	return err
 }
 
@@ -125,11 +146,12 @@ func (t *Throttler) Do(_ context.Context, op func() error) error {
 func (t *Throttler) RejectionProbability() float64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.rejectionProbability()
+
+	return t.rejectionChance()
 }
 
-// rejectionProbability is the SRE formula max(0, (requests − K·accepts) / (requests +
+// rejectionChance is the SRE formula max(0, (requests − K·accepts) / (requests +
 // 1)); the caller holds t.mu.
-func (t *Throttler) rejectionProbability() float64 {
+func (t *Throttler) rejectionChance() float64 {
 	return math.Max(0, (t.requests-t.k*t.accepts)/(t.requests+1))
 }

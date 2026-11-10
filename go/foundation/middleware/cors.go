@@ -1,8 +1,3 @@
-// Package middleware provides composable HTTP middleware for Go services.
-//
-// Each middleware follows the func(http.Handler) http.Handler pattern and
-// can be chained using Chain(). Configuration structs expose a Default*Config()
-// constructor with sensible development defaults.
 package middleware
 
 import (
@@ -35,7 +30,7 @@ type CORSConfig struct {
 // DefaultCORSConfig returns permissive CORS defaults suitable for development.
 func DefaultCORSConfig() CORSConfig {
 	return CORSConfig{
-		AllowOrigins:   []string{"*"},
+		AllowOrigins:   []string{textStar},
 		AllowMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:   []string{"Authorization", "Content-Type", "X-Request-ID"},
 		ExposedHeaders: []string{"traceresponse"},
@@ -48,43 +43,69 @@ func DefaultCORSConfig() CORSConfig {
 // OPTIONS requests with 204 No Content. When AllowOrigins is ["*"], all
 // origins are permitted (no Vary header).
 func CORS(cfg *CORSConfig) Middleware {
-	methods := strings.Join(cfg.AllowMethods, ", ")
-	headers := strings.Join(cfg.AllowHeaders, ", ")
-	exposed := strings.Join(cfg.ExposedHeaders, ", ")
+	methods := strings.Join(cfg.AllowMethods, textCommaSpace)
+	headers := strings.Join(cfg.AllowHeaders, textCommaSpace)
+	exposed := strings.Join(cfg.ExposedHeaders, textCommaSpace)
 
 	// Build a set for O(1) origin lookup
-	allowAll := len(cfg.AllowOrigins) == 1 && cfg.AllowOrigins[0] == "*"
+	policy := originPolicy{
+		allowAll: len(cfg.AllowOrigins) == 1 && cfg.AllowOrigins[0] == textStar,
+		allowed:  nil,
+	}
 	originSet := make(map[string]struct{}, len(cfg.AllowOrigins))
+
 	for _, o := range cfg.AllowOrigins {
 		originSet[o] = struct{}{}
 	}
 
+	policy.allowed = originSet
+
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
+		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			header := writer.Header()
 
-			if allowAll {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-			} else if origin != "" {
-				if _, ok := originSet[origin]; ok {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-					w.Header().Set("Vary", "Origin")
-				}
-			}
+			policy.apply(header, request.Header.Get("Origin"))
+			header.Set("Access-Control-Allow-Methods", methods)
+			header.Set("Access-Control-Allow-Headers", headers)
+			setExposeHeaders(header, exposed)
+			header.Set("Access-Control-Max-Age", cfg.MaxAge)
 
-			w.Header().Set("Access-Control-Allow-Methods", methods)
-			w.Header().Set("Access-Control-Allow-Headers", headers)
-			if exposed != "" {
-				w.Header().Set("Access-Control-Expose-Headers", exposed)
-			}
-			w.Header().Set("Access-Control-Max-Age", cfg.MaxAge)
+			if request.Method == http.MethodOptions {
+				writer.WriteHeader(http.StatusNoContent)
 
-			if r.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(writer, request)
 		})
+	}
+}
+
+// originPolicy says which request origins may read a response.
+type originPolicy struct {
+	// allowed is the set of permitted origins.
+	allowed map[string]struct{}
+	// allowAll permits every origin, answering with a wildcard.
+	allowAll bool
+}
+
+// apply answers with a wildcard, or echoes an allowed request origin.
+func (p originPolicy) apply(header http.Header, origin string) {
+	if p.allowAll {
+		header.Set("Access-Control-Allow-Origin", textStar)
+
+		return
+	}
+
+	if _, ok := p.allowed[origin]; ok && origin != "" {
+		header.Set("Access-Control-Allow-Origin", origin)
+		header.Set("Vary", "Origin")
+	}
+}
+
+// setExposeHeaders sets the header only when headers are exposed.
+func setExposeHeaders(h http.Header, exposed string) {
+	if exposed != "" {
+		h.Set("Access-Control-Expose-Headers", exposed)
 	}
 }

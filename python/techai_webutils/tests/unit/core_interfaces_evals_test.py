@@ -1,4 +1,7 @@
-"""Unit tests for the eval contracts: ``EvalCase``, ``GradeResult`` and the eval value types."""
+"""Unit tests for the eval contracts: ``EvalCase`` and ``GradeResult``.
+
+They also cover the eval value types.
+"""
 
 from __future__ import annotations
 
@@ -8,8 +11,8 @@ import pytest
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.dataset import EvalCase
-from techai_webutils.core.interfaces.evaluator import EvalOutput, EvalReport, EvalResult
-from techai_webutils.core.interfaces.grader import GradeResult
+from techai_webutils.core.interfaces.evaluator import EvalReport, EvalResult
+from techai_webutils.core.interfaces.grader import EvalOutput, GradeResult
 
 
 def test_eval_case_rejects_empty_id_with_invalid_input() -> None:
@@ -24,7 +27,7 @@ def test_eval_case_rejects_empty_id_with_invalid_input() -> None:
       - a case with an id keeps its inputs, expected values and metadata as given
     """
     with pytest.raises(AppError) as caught:
-        EvalCase(id="", inputs={"query": "q"}, expected={}, metadata={})
+        _ = EvalCase(id="", inputs={"query": "q"}, expected={}, metadata={})
 
     assert caught.value.code is ErrorCode.INVALID_INPUT
     case = EvalCase(
@@ -38,12 +41,12 @@ def test_eval_value_types_are_frozen() -> None:
     """Test that the eval value types are immutable.
 
     **Why this test is important:**
-      - A case, an output and a grade flow through the dataset, the graders and the report;
-        a mutation between them would grade one answer and report another.
+      - A case, an output and a grade flow through the dataset, the graders and the
+        report; a mutation between them would grade one answer and report another.
 
     **What it tests:**
-      - assigning a field on ``EvalCase``, ``EvalOutput``, ``GradeResult``, ``EvalResult`` or
-        ``EvalReport`` raises ``FrozenInstanceError``
+      - assigning a field on ``EvalCase``, ``EvalOutput``, ``GradeResult``, ``EvalResult``
+        or ``EvalReport`` raises ``FrozenInstanceError``
     """
     grade = GradeResult(grader="g", score=1.0, passed=True, rationale="ok")
     values: list[object] = [
@@ -61,6 +64,7 @@ def test_eval_value_types_are_frozen() -> None:
     ]
 
     for value in values:
-        field = dataclasses.fields(value)[0].name  # pyright: ignore[reportArgumentType]
+        assert dataclasses.is_dataclass(value)
+        field = dataclasses.fields(value)[0].name
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(value, field, None)

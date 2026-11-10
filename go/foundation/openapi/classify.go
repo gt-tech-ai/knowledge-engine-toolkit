@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 )
 
 // Role is the JSON:API operation role a REST RPC is classified into. It is the
@@ -74,8 +74,9 @@ var pathParamSegment = regexp.MustCompile(`^\{[^/{}]+\}$`)
 // operation, and — for POST — between a create on a collection path and an
 // ambiguous specific-instance POST.
 func pathEndsInParam(pathTemplate string) bool {
-	trimmed := strings.TrimRight(pathTemplate, "/")
-	last := trimmed[strings.LastIndex(trimmed, "/")+1:]
+	trimmed := strings.TrimRight(pathTemplate, textSlash)
+	last := trimmed[strings.LastIndex(trimmed, textSlash)+1:]
+
 	return pathParamSegment.MatchString(last)
 }
 
@@ -97,39 +98,67 @@ func pathEndsInParam(pathTemplate string) bool {
 // A POST returning a resource on a specific-instance path is intentionally an
 // error: it is ambiguous between an idempotent create and an instance action, so
 // the author must add the (jsonapi.v1.operation){action} marker or restructure.
-func Classify(b Binding) (Role, error) {
-	hasResource := b.SingleKey != "" || b.CollectionKey != ""
-
-	switch strings.ToUpper(b.HTTPMethod) {
-	case "DELETE":
-		return RoleDelete, nil
-	case "PUT", "PATCH":
-		return RoleUpdate, nil
-	case "GET":
-		switch {
-		case pathEndsInParam(b.PathTemplate):
-			return RoleGetOne, nil
-		case b.CollectionKey != "":
-			return RoleList, nil
-		case b.SingleKey != "":
-			return RoleGetOne, nil
-		}
-	case "POST":
-		switch {
-		case b.Action:
-			return RoleAction, nil
-		case hasResource && !pathEndsInParam(b.PathTemplate):
-			return RoleCreate, nil
-		}
+// b must not be nil.
+func Classify(b *Binding) (Role, error) {
+	role := roleForMethod(b)
+	if role == "" {
+		return "", unclassifiable(b)
 	}
 
-	return "", unclassifiable(b)
+	return role, nil
+}
+
+// roleForMethod dispatches on the HTTP verb; "" means no role applies, which keeps
+// the single error path in Classify.
+func roleForMethod(binding *Binding) Role {
+	switch strings.ToUpper(binding.HTTPMethod) {
+	case "DELETE":
+		return RoleDelete
+	case "PUT", "PATCH":
+		return RoleUpdate
+	case "GET":
+		return roleForGet(binding)
+	case "POST":
+		return roleForPost(binding)
+	default:
+		return ""
+	}
+}
+
+// roleForGet separates fetching one resource from listing a collection; a trailing
+// path parameter wins over the response keys.
+func roleForGet(binding *Binding) Role {
+	switch {
+	case pathEndsInParam(binding.PathTemplate):
+		return RoleGetOne
+	case binding.CollectionKey != "":
+		return RoleList
+	case binding.SingleKey != "":
+		return RoleGetOne
+	default:
+		return ""
+	}
+}
+
+// roleForPost separates an action from a create; a resource returned on a
+// specific-instance path is left unclassified because it is ambiguous.
+func roleForPost(binding *Binding) Role {
+	hasResource := binding.SingleKey != "" || binding.CollectionKey != ""
+
+	switch {
+	case binding.Action:
+		return RoleAction
+	case hasResource && !pathEndsInParam(binding.PathTemplate):
+		return RoleCreate
+	default:
+		return ""
+	}
 }
 
 // unclassifiable builds the coded, RPC-naming error Classify returns when it
 // cannot derive a role. The message names the RPC, method, and path so the
 // generator/gate failure points at the exact contract to fix.
-func unclassifiable(b Binding) error {
+func unclassifiable(b *Binding) error {
 	return apperr.InvalidInput(fmt.Sprintf(
 		"cannot classify JSON:API role for RPC %q (method=%s path=%s): "+
 			"needs a resource response or a (jsonapi.v1.operation){action} marker",

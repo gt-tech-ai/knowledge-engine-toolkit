@@ -8,7 +8,7 @@ inspectable output without AWS. Selected by config (``LlmConfig.kind = stub``).
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.llm import (
     LLMProvider,
@@ -28,7 +28,15 @@ _STUB_MODEL = "stub-llm"
 
 
 def _last_user_message(messages: list[LLMMessage]) -> str:
-    """Return the content of the last user-role message (empty if none)."""
+    """Return the content of the last user-role message (empty if none).
+
+    Args:
+        messages: The conversation.
+
+    Returns:
+        The content of the last user-role message (empty if none).
+
+    """
     for message in reversed(messages):
         if message.role == "user":
             return message.content
@@ -36,17 +44,37 @@ def _last_user_message(messages: list[LLMMessage]) -> str:
 
 
 def _input_tokens(messages: list[LLMMessage]) -> int:
-    """Count prompt tokens as whitespace-delimited words across every message (deterministic)."""
+    """Count prompt tokens as whitespace-delimited words in every message.
+
+    The count is deterministic.
+
+    Args:
+        messages: The conversation.
+
+    Returns:
+        The word count across all messages.
+
+    """
     return sum(len(m.content.split()) for m in messages)
 
 
 async def _token_stream(
     text: str, usage: StreamUsage
 ) -> AsyncIterator[str | StreamUsage]:
-    """Yield ``text`` token-by-token (whitespace-delimited, trailing space preserved), then ``usage``.
+    """Yield ``text`` token by token, then ``usage``.
 
-    Each token first yields to the event loop, like a real network stream, so a consumer that
-    cancels mid-stream is exercised the same way it is against a real provider.
+    Tokens are whitespace-delimited; trailing space is kept.
+
+    Each token first yields to the event loop, like a real network stream, so a consumer
+    that cancels mid-stream is exercised the same way it is against a real provider.
+
+    Args:
+        text: The answer.
+        usage: The usage yielded last.
+
+    Yields:
+        ``text`` token-by-token (whitespace-delimited, trailing space preserved).
+
     """
     for token in text.split(" "):
         if token:
@@ -55,18 +83,34 @@ async def _token_stream(
     yield usage
 
 
+@final
 class StubLlmProvider(NoOpAsyncResource, LLMProvider):
     """LLMProvider that echoes the last user message (deterministic dev behavior)."""
 
     def __init__(self, model: str = _STUB_MODEL) -> None:
-        """Bind the reported model name."""
+        """Bind the reported model name.
+
+        Args:
+            model: The model name to report.
+
+        """
         self._model = model
 
     @override
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
-        """Return the last user message verbatim as the completion."""
+        """Return the last user message verbatim as the completion.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
+
+        Returns:
+            The last user message verbatim as the completion.
+
+        """
         answer = _last_user_message(messages)
         return LLMResponse(
             content=answer,
@@ -80,14 +124,32 @@ class StubLlmProvider(NoOpAsyncResource, LLMProvider):
     async def stream(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str]:
-        """Return an async iterator streaming the last user message token-by-token."""
+        """Return an async iterator streaming the last user message token-by-token.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            An async iterator streaming the last user message token-by-token.
+
+        """
         return text_only(await self.stream_with_usage(messages, config))
 
     @override
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Stream the last user message token-by-token, then a word-count ``StreamUsage``."""
+        """Stream the last user message token-by-token, then a word-count ``StreamUsage``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            The token stream, ending with the usage.
+
+        """
         answer = _last_user_message(messages)
         usage = StreamUsage(
             model=self._model,
@@ -99,5 +161,10 @@ class StubLlmProvider(NoOpAsyncResource, LLMProvider):
 
     @override
     def model_name(self) -> str:
-        """Return the stub model identifier."""
+        """Return the stub model identifier.
+
+        Returns:
+            The stub model identifier.
+
+        """
         return self._model

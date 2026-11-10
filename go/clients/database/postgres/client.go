@@ -6,7 +6,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx database/sql driver registration
 
-	apperr "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/errors"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
 )
@@ -31,25 +31,31 @@ var _ interfaces.DatabasePool = (*Client)(nil)
 // until Start. It is the PostgreSQL backend constructor the database tier's
 // NewFromConfig selects for KindPostgres.
 func New(cfg *infra.DatabaseConfig) *Client {
-	return &Client{cfg: cfg}
+	return &Client{cfg: cfg, db: nil}
 }
 
 // Start opens the pool from config, applies the pool sizing, and pings to fail fast
 // at the composition root rather than on the first query.
 func (c *Client) Start(ctx context.Context) error {
-	db, err := sql.Open("pgx", c.cfg.DSN())
+	value, err := sql.Open("pgx", c.cfg.DSN())
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "open database")
 	}
-	db.SetMaxOpenConns(c.cfg.MaxConnections)
-	db.SetMaxIdleConns(c.cfg.MaxIdleConnections)
-	db.SetConnMaxLifetime(c.cfg.ConnectionMaxLifetime)
-	db.SetConnMaxIdleTime(c.cfg.ConnMaxIdleTime)
-	if err := Ping(ctx, db); err != nil {
-		_ = db.Close()
+
+	value.SetMaxOpenConns(c.cfg.MaxConnections)
+	value.SetMaxIdleConns(c.cfg.MaxIdleConnections)
+	value.SetConnMaxLifetime(c.cfg.ConnectionMaxLifetime)
+	value.SetConnMaxIdleTime(c.cfg.ConnMaxIdleTime)
+
+	err = Ping(ctx, value)
+	if err != nil {
+		_ = value.Close()
+
 		return err
 	}
-	c.db = db
+
+	c.db = value
+
 	return nil
 }
 
@@ -62,6 +68,7 @@ func (c *Client) Stop(_ context.Context) error {
 			"close postgres pool",
 		)
 	}
+
 	return nil
 }
 
@@ -70,6 +77,7 @@ func (c *Client) Liveness(_ context.Context) error {
 	if c.db == nil {
 		return apperr.Internal("database pool not started")
 	}
+
 	return nil
 }
 
@@ -78,6 +86,7 @@ func (c *Client) Readiness(ctx context.Context) error {
 	if c.db == nil {
 		return apperr.Internal("database pool not started")
 	}
+
 	return Ping(ctx, c.db)
 }
 

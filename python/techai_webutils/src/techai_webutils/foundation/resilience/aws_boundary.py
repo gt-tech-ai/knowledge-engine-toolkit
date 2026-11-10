@@ -1,10 +1,11 @@
 """Shared botocore client-boundary error translation (ARCHITECTURE.md#error-codes).
 
-Maps a raw botocore ``ClientError`` / ``BotoCoreError`` raised by an AWS SDK call into a coded
-``AppError`` at the client boundary, so a throttle or a transient 5xx surfaces as a transient
-``AppError`` the client tier's retry layer can retry and the transport edges map to UNAVAILABLE — instead of a raw SDK error escaping the retry loop. It lives in foundation (which
-every client imports downward) so the AWS clients share ONE boundary rather than a lateral
-clients→clients import; ``grpc_boundary`` is its gRPC sibling.
+Maps a raw botocore ``ClientError`` / ``BotoCoreError`` raised by an AWS SDK call into a
+coded ``AppError`` at the client boundary, so a throttle or a transient 5xx surfaces as a
+transient ``AppError`` the client tier's retry layer can retry and the transport edges map
+to UNAVAILABLE — instead of a raw SDK error escaping the retry loop. It lives in
+foundation (which every client imports downward) so the AWS clients share ONE boundary
+rather than a lateral clients→clients import; ``grpc_boundary`` is its gRPC sibling.
 """
 
 from __future__ import annotations
@@ -13,9 +14,9 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from techai_webutils.core.errors import AppError, ErrorCode
 
-# ClientError codes worth a retry — throttling, transient 5xx, and model-side timeouts. Everything
-# else (access-denied, ResourceNotFound for a legacy/unavailable model or index, validation) is a
-# terminal misconfiguration/permission error.
+# ClientError codes worth a retry — throttling, transient 5xx, and model-side timeouts.
+# Everything else (access-denied, ResourceNotFound for a legacy/unavailable model or
+# index, validation) is a terminal misconfiguration/permission error.
 _TRANSIENT_CODES = frozenset({
     "ThrottlingException",
     "ServiceUnavailableException",
@@ -34,14 +35,25 @@ _TOO_MANY_REQUESTS_STATUS = 429
 def botocore_error_to_app_error(
     exc: ClientError | BotoCoreError, operation: str
 ) -> AppError:
-    """Map a botocore failure of ``operation`` (e.g. ``"bedrock retrieve"``) to a coded ``AppError``.
+    """Map a botocore failure of ``operation`` to a coded ``AppError``.
 
-    A ``ClientError`` is classified by its error code / HTTP status — throttling / 429 / 5xx /
-    model-timeout → ``UNAVAILABLE`` (transient, retryable); everything else (access-denied,
-    ``ResourceNotFound``, validation) → ``INTERNAL`` (terminal). Any other ``BotoCoreError``
-    (connect/read timeout, endpoint failure) → ``UNAVAILABLE``. The SDK error is kept as the cause.
-    Raw botocore exceptions must not cross a client boundary: the resilience decorators and the
-    transport status mapping derive their behaviour from the ``ErrorCode``.
+    E.g. ``"bedrock retrieve"``.
+
+    A ``ClientError`` is classified by its error code / HTTP status — throttling / 429 /
+    5xx / model-timeout → ``UNAVAILABLE`` (transient, retryable); everything else
+    (access-denied, ``ResourceNotFound``, validation) → ``INTERNAL`` (terminal). Any other
+    ``BotoCoreError`` (connect/read timeout, endpoint failure) → ``UNAVAILABLE``. The SDK
+    error is kept as the cause. Raw botocore exceptions must not cross a client boundary:
+    the resilience decorators and the transport status mapping derive their behaviour from
+    the ``ErrorCode``.
+
+    Args:
+        exc: The SDK's error.
+        operation: The failed call, named in the message (e.g. ``bedrock retrieve``).
+
+    Returns:
+        The coded error.
+
     """
     if isinstance(exc, ClientError):
         err = exc.response.get("Error", {})

@@ -30,15 +30,17 @@ class LLMResponse:
     output_tokens: int
     """Tokens produced in the completion (for cost/usage accounting)."""
     finish_reason: str  # "stop", "length", "tool_use"
-    """Why generation stopped: ``stop`` (natural end), ``length`` (token cap), or ``tool_use``."""
+    """Why generation stopped: ``stop`` (natural end), ``length`` (token cap), or
+    ``tool_use``."""
 
 
 @dataclass(frozen=True)
 class StreamUsage:
     """Token usage reported at the end of a streamed completion.
 
-    The final item of ``LLMProvider.stream_with_usage``, mirroring Bedrock's ``metadata`` event and
-    OpenAI's ``include_usage`` chunk: a streamed generation knows its token counts only once it ends.
+    The final item of ``LLMProvider.stream_with_usage``, mirroring Bedrock's ``metadata``
+    event and OpenAI's ``include_usage`` chunk: a streamed generation knows its token
+    counts only once it ends.
     """
 
     model: str
@@ -48,14 +50,25 @@ class StreamUsage:
     output_tokens: int
     """Tokens produced in the completion."""
     finish_reason: str
-    """Why generation stopped, in the provider's vocabulary (e.g. ``stop``, ``length``, ``end_turn``)."""
+    """Why generation stopped, in the provider's vocabulary (e.g. ``stop``, ``length``,
+    ``end_turn``)."""
 
 
 async def text_only(items: AsyncIterator[str | StreamUsage]) -> AsyncIterator[str]:
-    """Re-yield only the text deltas of a ``stream_with_usage`` iterator, dropping its ``StreamUsage``.
+    """Re-yield only the text deltas of a ``stream_with_usage`` iterator.
 
-    A provider that implements ``stream_with_usage`` natively implements ``stream()`` as this filter,
-    so the text-only API and the usage-aware API share one transport path.
+    Its ``StreamUsage`` is dropped.
+
+    A provider that implements ``stream_with_usage`` natively implements ``stream()`` as
+    this filter, so the text-only API and the usage-aware API share one transport path.
+
+    Args:
+        items: A ``stream_with_usage`` iterator: text deltas, then an optional usage
+            report.
+
+    Yields:
+        Each text delta.
+
     """
     async for item in items:
         if isinstance(item, str):
@@ -63,7 +76,15 @@ async def text_only(items: AsyncIterator[str | StreamUsage]) -> AsyncIterator[st
 
 
 async def _without_usage(text: AsyncIterator[str]) -> AsyncIterator[str | StreamUsage]:
-    """Re-yield a text stream as a ``stream_with_usage`` stream that reports no usage."""
+    """Re-yield a text stream as a ``stream_with_usage`` stream that reports no usage.
+
+    Args:
+        text: A plain text-delta stream.
+
+    Yields:
+        Each text delta, with no usage item.
+
+    """
     async for delta in text:
         yield delta
 
@@ -87,16 +108,26 @@ class LLMConfig:
 class LLMProvider(ManagedResource, ABC):
     """Abstract LLM provider for text generation and conversation.
 
-    Composes ``ManagedResource`` (ARCHITECTURE.md#interface-composition): a provider may own an async
-    SDK client (the Bedrock backend does), so it is an async context manager — ``__aenter__`` opens
-    lazily on first use, ``__aexit__`` releases it.
+    Composes ``ManagedResource`` (ARCHITECTURE.md#interface-composition): a provider may
+    own an async SDK client (the Bedrock backend does), so it is an async context manager
+    — ``__aenter__`` opens lazily on first use, ``__aexit__`` releases it.
     """
 
     @abstractmethod
     async def complete(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> LLMResponse:
-        """Generate a completion for the given message history."""
+        """Generate a completion for the given message history.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings (model, temperature, token limit); ``None`` uses the
+                provider's defaults.
+
+        Returns:
+            The completion text, the model that produced it and its token usage.
+
+        """
 
     @abstractmethod
     async def stream(
@@ -104,21 +135,46 @@ class LLMProvider(ManagedResource, ABC):
     ) -> AsyncIterator[str]:
         """Stream a completion token-by-token.
 
-        Returns an async iterator; callers ``await`` this to obtain it, then ``async for``.
+        Returns an async iterator; callers ``await`` this to obtain it, then ``async
+        for``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            An iterator over the completion's text deltas.
+
         """
 
     async def stream_with_usage(
         self, messages: list[LLMMessage], config: LLMConfig | None = None
     ) -> AsyncIterator[str | StreamUsage]:
-        """Stream a completion whose final item, when the provider reports usage, is a ``StreamUsage``.
+        """Stream a completion.
 
-        Awaited to obtain the iterator, like ``stream()``. Every other item is a text delta. The
-        default re-yields ``stream()`` and reports no usage, so a provider that predates this method
-        stays valid; providers that know their streamed usage override it and implement ``stream()``
-        as ``text_only(await self.stream_with_usage(...))``.
+        Its final item is a ``StreamUsage`` when the provider reports usage.
+
+        Awaited to obtain the iterator, like ``stream()``. Every other item is a text
+        delta. The default re-yields ``stream()`` and reports no usage, so a provider that
+        predates this method stays valid; providers that know their streamed usage
+        override it and implement ``stream()`` as ``text_only(await
+        self.stream_with_usage(...))``.
+
+        Args:
+            messages: The conversation so far, oldest first.
+            config: Per-call settings; ``None`` uses the provider's defaults.
+
+        Returns:
+            The stream, ending with the usage when reported.
+
         """
         return _without_usage(await self.stream(messages, config))
 
     @abstractmethod
     def model_name(self) -> str:
-        """Return the default model identifier for this provider."""
+        """Return the default model identifier for this provider.
+
+        Returns:
+            The model identifier calls use when ``config`` names none.
+
+        """

@@ -1,7 +1,8 @@
 """``Grader`` — scores one system output against one eval case.
 
-Graders are the unit an ``Evaluator`` aggregates. Only the contract and a ``stub`` grader live in
-the toolkit today; code and LLM-judge graders arrive with their own ``Kind`` tier.
+Graders are the unit an ``Evaluator`` aggregates; ``EvalOutput`` is what they grade. Only
+the contract and a ``stub`` grader live in the toolkit today; code and LLM-judge graders
+arrive with their own ``Kind`` tier.
 """
 
 from __future__ import annotations
@@ -12,7 +13,21 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.dataset import EvalCase
-    from techai_webutils.core.interfaces.evaluator import EvalOutput
+
+
+@dataclass(frozen=True, slots=True)
+class EvalOutput:
+    """What the system under test produced for one case."""
+
+    answer: str
+    """The generated answer text."""
+    citations: tuple[str, ...]
+    """Ids of the sources the answer cites, in order."""
+    trace_id: str
+    """The OTel trace id of the run (links a result to its trace)."""
+    retrieved: tuple[str, ...] = ()
+    """Ids of the documents retrieval ranked for the case, best first (ranking
+    graders)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,4 +49,13 @@ class Grader(ABC):
 
     @abstractmethod
     async def grade(self, case: EvalCase, output: EvalOutput) -> GradeResult:
-        """Return this grader's verdict on ``output`` for ``case``."""
+        """Return this grader's verdict on ``output`` for ``case``.
+
+        Args:
+            case: The eval case the output answers.
+            output: What the system under test produced for ``case``.
+
+        Returns:
+            This grader's score, pass/fail and rationale.
+
+        """
