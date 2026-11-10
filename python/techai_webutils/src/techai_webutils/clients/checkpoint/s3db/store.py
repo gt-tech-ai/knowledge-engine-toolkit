@@ -28,7 +28,7 @@ from techai_webutils.clients.checkpoint.s3db.layout import (
     encode,
     key_of,
 )
-from techai_webutils.core.errors import ConflictError
+from techai_webutils.core.errors import ConflictError, InvalidInputError
 from techai_webutils.core.interfaces.checkpoint import (
     CheckpointKey,
     CheckpointStore,
@@ -107,7 +107,7 @@ class S3DbCheckpointStore(CheckpointStore):
             header, payload = await asyncio.to_thread(decode, body)
             version = int(str(header["format_version"]))
             segments = int(str(header.get("segments", 0)))
-        except (OSError, ValueError, TypeError, KeyError):
+        except (OSError, ValueError, KeyError, InvalidInputError):
             logger.warning(
                 "checkpoint %s is corrupt; treating it as a miss", name, exc_info=True
             )

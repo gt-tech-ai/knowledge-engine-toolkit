@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, override
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.hedger import Hedger
 
 if TYPE_CHECKING:
@@ -122,10 +123,10 @@ def hedger_from_config(config: HedgeConfig) -> Hedger:
         config: Selects the backend and carries its settings.
 
     Returns:
-        A ``Hedger`` from config; raise ``ValueError`` on an unknown kind.
+        The ``Hedger`` ``config.kind`` selects.
 
     Raises:
-        ValueError: Unknown hedger kind: ``config.kind``.
+        AppValueError: An unknown kind (``INVALID_INPUT``).
 
     """
     if config.kind == HedgeKind.DISABLED:
@@ -133,4 +134,4 @@ def hedger_from_config(config: HedgeConfig) -> Hedger:
     if config.kind == HedgeKind.DELAY:
         return DelayHedger(config.delay_seconds)
     msg = f"unknown hedger kind: {config.kind}"
-    raise ValueError(msg)
+    raise AppValueError(msg)

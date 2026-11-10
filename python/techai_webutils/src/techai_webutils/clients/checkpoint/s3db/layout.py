@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, cast
 import zstandard
 
 from techai_webutils.clients.checkpoint.config import CheckpointCompression
+from techai_webutils.core.errors import AppTypeError, AppValueError
 from techai_webutils.core.interfaces.checkpoint import CheckpointKey, Stage
 
 if TYPE_CHECKING:
@@ -207,7 +208,7 @@ def decompress(body: bytes) -> bytes:
     A callee raises ``OSError``: A gzip stream is corrupt.
 
     Raises:
-        ValueError: A zstd frame is corrupt.
+        AppValueError: A zstd frame is corrupt.
 
     """
     if body.startswith(_ZSTD_MAGIC):
@@ -215,7 +216,7 @@ def decompress(body: bytes) -> bytes:
             return zstandard.decompress(body)
         except zstandard.ZstdError as err:
             msg = "checkpoint object is a corrupt zstd frame"
-            raise ValueError(msg) from err
+            raise AppValueError(msg) from err
     return gzip.decompress(body)
 
 
@@ -242,7 +243,8 @@ def encode(
 def decode(body: bytes) -> tuple[dict[str, object], bytes]:
     """Split an envelope into its header and payload.
 
-    A callee raises ``OSError``: The gzip stream is corrupt.
+    A callee raises ``OSError`` (the gzip stream is corrupt) or ``ValueError`` (the
+    header is not JSON).
 
     Args:
         body: The compressed envelope.
@@ -251,19 +253,18 @@ def decode(body: bytes) -> tuple[dict[str, object], bytes]:
         The header fields and the payload bytes.
 
     Raises:
-        ValueError: The body has no header line, the header is not JSON, or a zstd frame
-            is corrupt.
-        TypeError: The header is not a JSON object.
+        AppValueError: The body has no header line, or a zstd frame is corrupt.
+        AppTypeError: The header is not a JSON object.
 
     """
     raw = decompress(body)
     line, sep, payload = raw.partition(b"\n")
     if not sep:
         msg = "checkpoint envelope has no header line"
-        raise ValueError(msg)
+        raise AppValueError(msg)
     header = cast("object", json.loads(line))
     if not isinstance(header, dict):
         msg = "checkpoint envelope header is not an object"
-        raise TypeError(msg)
+        raise AppTypeError(msg)
     fields = cast("dict[object, object]", header)
     return {str(k): v for k, v in fields.items()}, payload

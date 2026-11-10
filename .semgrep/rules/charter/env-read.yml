@@ -26,8 +26,8 @@ rules:
       exclude:
         # Config tier — the sanctioned home for env binding.
         - "**/config/**"
-        # Sanctioned env primitive: helpers.OrDefault.
-        - "**/helpers/env.go"
+        # Sanctioned env primitive: stdx.OrDefault.
+        - "**/stdx/env.go"
         # Subprocess env passthrough (os.Environ to inherit the parent env for exec).
         - "**/foundation/system/runner.go"
         # The process Supervisor passes the parent env through to the processes it starts.

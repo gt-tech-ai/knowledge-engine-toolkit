@@ -13,6 +13,7 @@ from typing import cast
 
 import pytest
 
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.resilience.hedge import (
     DelayHedger,
     DisabledHedger,
@@ -118,11 +119,11 @@ def test_hedger_from_config_unknown_kind_raises() -> None:
           policy silently; failing loudly surfaces the config error at startup.
 
     What it tests:
-        - ``hedger_from_config`` raises ``ValueError`` for a kind outside the enum.
+        - ``hedger_from_config`` raises ``AppValueError`` for a kind outside the enum.
     """
     bad = HedgeConfig(kind=cast("HedgeKind", cast("object", "bogus")), delay_seconds=0.05)
 
-    with pytest.raises(ValueError, match="unknown hedger kind"):
+    with pytest.raises(AppValueError, match="unknown hedger kind"):
         _ = hedger_from_config(bad)
 
 

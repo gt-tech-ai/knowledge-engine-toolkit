@@ -133,7 +133,7 @@ func (g *jobGroup) fireUndelivered(stepResults types.StepResults, delivered int)
 	g.obsMu.Lock()
 	defer g.obsMu.Unlock()
 
-	for _, r := range stepResults[delivered:] {
-		g.obs.OnStepComplete(&r)
+	for i := delivered; i < len(stepResults); i++ {
+		g.obs.OnStepComplete(&stepResults[i])
 	}
 }

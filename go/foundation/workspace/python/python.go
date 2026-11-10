@@ -15,9 +15,10 @@ import (
 // Packages discovers Python packages by walking each of roots (repository-relative
 // directories) of the repository fsys for directories containing a
 // pyproject.toml (a missing root is skipped; a Go-only tool directory has no
-// pyproject.toml, so it contributes nothing). Paths are returned relative to the root
-// (e.g. "libs/python/shelf"). An optional filter excludes packages by relative path
-// (return false to skip).
+// pyproject.toml, so it contributes nothing). A package's subdirectories are not
+// searched. Paths are returned relative to the root (e.g. "libs/python/shelf"), in
+// lexical walk order. An optional filter excludes packages by relative path (return
+// false to skip).
 func Packages(
 	fsys fs.FS,
 	roots []string,
@@ -25,90 +26,115 @@ func Packages(
 ) ([]string, error) {
 	var packages []string
 
-	for _, searchDir := range roots {
-		entries, err := fs.ReadDir(fsys, searchDir)
-		if apperr.StdIs(err, fs.ErrNotExist) {
-			continue
-		}
-
+	for _, root := range roots {
+		err := fs.WalkDir(
+			fsys,
+			root,
+			func(dir string, entry fs.DirEntry, err error) error {
+				return visit(fsys, root, dir, entry, err, filter, &packages)
+			},
+		)
 		if err != nil {
-			return nil, apperr.Wrap(err, apperr.CodeInternal, "read directory "+searchDir)
-		}
-
-		err = scanSubdirs(fsys, searchDir, entries, filter, &packages)
-		if err != nil {
-			return nil, err
+			return nil, apperr.Wrap(
+				err,
+				apperr.CodeInternal,
+				"find python packages under "+root,
+			)
 		}
 	}
 
 	return packages, nil
 }
 
-// scanSubdirs searches each directory entry of dir for pyproject directories.
-func scanSubdirs(
+// visit handles one entry of the walk under root: the root itself goes to visitRoot, an
+// unreadable directory is CodeInternal, and a directory below root holding a
+// pyproject.toml is recorded (when filter allows it) and not descended into.
+func visit(
 	fsys fs.FS,
-	dir string,
-	entries []fs.DirEntry,
+	root, dir string,
+	entry fs.DirEntry,
+	err error,
 	filter func(string) bool,
 	out *[]string,
 ) error {
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		err := findPyprojectDirs(fsys, path.Join(dir, entry.Name()), filter, out)
-		if err != nil {
-			return err
-		}
+	if dir == root {
+		return visitRoot(dir, entry, err)
 	}
 
-	return nil
-}
-
-// findPyprojectDirs recursively finds directories of fsys containing pyproject.toml
-// under dir and appends their paths to out.
-func findPyprojectDirs(
-	fsys fs.FS,
-	dir string,
-	filter func(string) bool,
-	out *[]string,
-) error {
-	pyproject := path.Join(dir, "pyproject.toml") // nosemgrep: use-filepath-join
-
-	_, err := fs.Stat(fsys, pyproject)
-	if err == nil {
-		if filter == nil || filter(dir) {
-			*out = append(*out, dir)
-		}
-
-		return nil
-	}
-
-	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return apperr.Wrap(err, apperr.CodeInternal, "read directory "+dir)
 	}
 
-	return scanSubdirs(fsys, dir, entries, filter, out)
+	if !entry.IsDir() || !hasPyproject(fsys, dir) {
+		return nil
+	}
+
+	if filter == nil || filter(dir) {
+		*out = append(*out, dir)
+	}
+
+	return fs.SkipDir
+}
+
+// visitRoot handles the walk's root: a missing root ends the walk with nothing found,
+// and an unreadable root or one that is not a directory is CodeInternal.
+func visitRoot(dir string, entry fs.DirEntry, err error) error {
+	switch {
+	case apperr.StdIs(err, fs.ErrNotExist):
+		return fs.SkipAll
+	case err != nil:
+		return apperr.Wrap(err, apperr.CodeInternal, "read directory "+dir)
+	case !entry.IsDir():
+		return apperr.New(apperr.CodeInternal, "read directory "+dir+": not a directory")
+	default:
+		return nil
+	}
+}
+
+// hasPyproject reports whether the directory dir of fsys holds a pyproject.toml. The
+// lookup goes through fs.Sub, so an fs.FS path is never assembled by hand.
+func hasPyproject(fsys fs.FS, dir string) bool {
+	sub, err := fs.Sub(fsys, dir)
+	if err != nil {
+		return false
+	}
+
+	_, err = fs.Stat(sub, "pyproject.toml")
+
+	return err == nil
 }
 
 // ModuleName is the importable module of a src-layout package directory pkgDir of the
 // repository fsys: the first real directory under <pkgDir>/src/ (shelf/src/shelf →
 // "shelf"), skipping build artifacts; the directory's base name without a src/ layout.
 func ModuleName(fsys fs.FS, pkgDir string) string {
-	src := path.Join(pkgDir, "src") // nosemgrep: use-filepath-join
-
-	entries, err := fs.ReadDir(fsys, src)
-	if err == nil {
-		for _, e := range entries {
-			name := e.Name()
-			if e.IsDir() && name != "__pycache__" &&
-				!strings.HasSuffix(name, ".egg-info") {
-				return name
-			}
-		}
+	if name, ok := srcModule(fsys, pkgDir); ok {
+		return name
 	}
 
 	return path.Base(pkgDir)
+}
+
+// srcModule returns the first real directory under <pkgDir>/src/ of fsys, skipping
+// __pycache__ and *.egg-info build artifacts; ok is false when there is none or src/
+// cannot be read.
+func srcModule(fsys fs.FS, pkgDir string) (string, bool) {
+	pkg, err := fs.Sub(fsys, pkgDir)
+	if err != nil {
+		return "", false
+	}
+
+	entries, err := fs.ReadDir(pkg, "src")
+	if err != nil {
+		return "", false
+	}
+
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() && name != "__pycache__" && !strings.HasSuffix(name, ".egg-info") {
+			return name, true
+		}
+	}
+
+	return "", false
 }

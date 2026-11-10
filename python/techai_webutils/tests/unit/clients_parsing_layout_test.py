@@ -182,6 +182,12 @@ def _allocate_too_much() -> None:
     raise MemoryError(msg)
 
 
+_CHILD_TIMEOUT_SECONDS = 180
+"""The parse deadline these tests give each child: a fresh interpreter importing Docling
+takes tens of seconds on a loaded machine, and these tests pin the bounded-child path,
+not the deadline (``parse_timeout`` would otherwise read as a parse failure)."""
+
+
 def _layout(convert: Callable[[str, LayoutOptions], DoclingDocument]) -> LayoutParser:
     """Build the layout parser through the factory with an injected converter.
 
@@ -193,7 +199,8 @@ def _layout(convert: Callable[[str, LayoutOptions], DoclingDocument]) -> LayoutP
 
     """
     parser = parser_from_config(
-        ParserConfig(kind=ParserKind.LAYOUT, timeout_seconds=60), convert=convert
+        ParserConfig(kind=ParserKind.LAYOUT, timeout_seconds=_CHILD_TIMEOUT_SECONDS),
+        convert=convert,
     )
     assert isinstance(parser, LayoutParser)
     return parser
@@ -296,7 +303,7 @@ async def test_out_of_memory_parse_fails_with_the_coded_memory_error() -> None:
         keeps the ``parse_isolation_failed`` prefix
     """
     with pytest.raises(IsolationMemoryError):
-        run_isolated(_allocate_too_much, timeout_seconds=30)
+        run_isolated(_allocate_too_much, timeout_seconds=_CHILD_TIMEOUT_SECONDS)
 
     parsed = await _layout(convert_out_of_memory).parse(_PDF, filename="big.pdf")
 

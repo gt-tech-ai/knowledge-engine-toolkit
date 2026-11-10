@@ -20,7 +20,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, cast
 
 from techai_webutils.core.domain.document_ir import blocks_from_json, blocks_to_json
-from techai_webutils.core.errors import AppValueError, InvalidInputError
+from techai_webutils.core.errors import AppTypeError, AppValueError, InvalidInputError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -248,12 +248,12 @@ def _attributes(raw: object) -> dict[str, str]:
         Each key and value as a string.
 
     Raises:
-        TypeError: ``raw`` is not a dict; the caller codes it ``INVALID_INPUT``.
+        AppTypeError: ``raw`` is not a dict.
 
     """
     if not isinstance(raw, dict):
         msg = f"attributes must be a mapping, got {type(raw).__name__}"
-        raise TypeError(msg)
+        raise AppTypeError(msg)
     return {str(k): str(v) for k, v in cast("dict[object, object]", raw).items()}
 
 

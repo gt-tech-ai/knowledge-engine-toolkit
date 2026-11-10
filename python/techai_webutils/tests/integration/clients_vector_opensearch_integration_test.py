@@ -35,7 +35,7 @@ from techai_webutils.clients.vector.opensearch.index_admin import (
     count_org_documents,
     delete_unaliased_index,
 )
-from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.errors import AppError, AppValueError
 from techai_webutils.core.interfaces.sink import ChunkPayload, SinkDocument
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
@@ -576,7 +576,8 @@ async def test_bulk_ingest_mode_is_restored_on_every_domain_after_a_failed_backf
         refresh and replicas back at their recorded values (``2s`` set beforehand)
       - a second ``end_bulk_ingest`` is a no-op
       - when one domain's restore fails (its index is gone), the other domain is still
-        restored and the failure is raised
+        restored and one coded ``AppError`` is raised, the domain's ``NotFoundError`` its
+        cause
 
     Args:
         client: A client on the first domain.
@@ -621,8 +622,9 @@ async def test_bulk_ingest_mode_is_restored_on_every_domain_after_a_failed_backf
 
     await store.begin_bulk_ingest(index)
     await client_b.indices.delete(index=index)
-    with pytest.raises(NotFoundError):
+    with pytest.raises(AppError, match="failed on 1 domain") as failed:
         await store.end_bulk_ingest(index)
+    assert isinstance(failed.value.__cause__, NotFoundError)
     assert (await _settings(client, index))["refresh_interval"] == "2s"
 
 

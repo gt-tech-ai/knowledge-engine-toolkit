@@ -103,15 +103,19 @@ func DefaultDatabaseConfig() DatabaseConfig {
 func (c *DatabaseConfig) DSN() string {
 	host := strings.TrimSuffix(strings.TrimPrefix(c.Host, "["), "]")
 
-	var sdkURL url.URL
-
-	sdkURL.Scheme = "postgres"
-	sdkURL.User = url.UserPassword(c.User, c.Password)
-	sdkURL.Host = net.JoinHostPort(host, strconv.Itoa(c.Port))
-	sdkURL.Path = "/" + c.Database
-	sdkURL.RawQuery = url.Values{"sslmode": {c.SSLMode}}.Encode()
-
-	dsn := sdkURL
+	dsn := url.URL{
+		Scheme:      "postgres",
+		Opaque:      "",
+		User:        url.UserPassword(c.User, c.Password),
+		Host:        net.JoinHostPort(host, strconv.Itoa(c.Port)),
+		Path:        "/" + c.Database,
+		Fragment:    "",
+		RawQuery:    url.Values{"sslmode": {c.SSLMode}}.Encode(),
+		RawPath:     "",
+		RawFragment: "",
+		ForceQuery:  false,
+		OmitHost:    false,
+	}
 
 	return dsn.String()
 }

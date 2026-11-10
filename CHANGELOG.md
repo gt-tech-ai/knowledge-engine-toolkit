@@ -431,6 +431,13 @@ Python: `techai-webutils` 0.10.0.
 ### Changed
 
 - Python: **breaking.** Errors cross more client boundaries coded:
+  - `hedger_from_config` raises `AppValueError` (`INVALID_INPUT`) for an unknown kind, not
+    `ValueError`.
+  - The s3db checkpoint envelope's `decode` raises `AppValueError` (no header line, a corrupt
+    zstd frame) and `AppTypeError` (a header that is not an object); the store still reads a
+    corrupt checkpoint as a miss.
+  - `parsed_from_json` codes an `attributes` field that is not a mapping `INVALID_INPUT`, like
+    every other malformed field.
   - `RedisCache` in `FailureMode.ERROR` raises `UnavailableError` (the Redis error as its cause)
     instead of the raw Redis or socket error.
   - `BedrockKnowledgeBaseIngestor` start and stop code an unmapped `ClientError` through

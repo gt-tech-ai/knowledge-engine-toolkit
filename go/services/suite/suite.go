@@ -99,9 +99,9 @@ func Select(sRef *types.Suite, catalog []Entry, flags []string) ([]Entry, error)
 
 	var out []Entry
 
-	for _, e := range catalog {
-		if selected(&suite, &e, sels, mods, flags) {
-			out = append(out, e)
+	for i := range catalog {
+		if selected(&suite, &catalog[i], sels, mods, flags) {
+			out = append(out, catalog[i])
 		}
 	}
 
