@@ -261,7 +261,6 @@ class RealRayRuntime:
             options.task_memory_bytes, options.task_num_cpus
         )
         """Ray ``.options`` for every task: the declared memory and CPUs that are set."""
-        self._started = False
         # The mapper is put into the object store ONCE per session and reused across a
         # batch's items. ``_cached_fn`` holds a STRONG reference so the identity check
         # (``fn is _cached_fn``) can never be fooled by ``id()`` reuse after a GC — a
@@ -273,11 +272,7 @@ class RealRayRuntime:
         ref."""
 
     def _forget_session(self) -> None:
-        """Drop everything that belongs to the current session.
-
-        The started flag and the cached mapper.
-        """
-        self._started = False
+        """Drop everything that belongs to the current session: the cached mapper."""
         self._cached_fn = None
         self._mapper_ref = None
         self._mapper_session = None
@@ -346,7 +341,6 @@ class RealRayRuntime:
         in the process.
         """
         if ray.is_initialized():
-            self._started = True
             return
         self._forget_session()
         await asyncio.to_thread(_clear_stale_client)
@@ -366,7 +360,6 @@ class RealRayRuntime:
             # job.
             await self._reset()
             raise
-        self._started = True
 
     async def submit[T](
         self, fn: Callable[[T], Awaitable[StepResult]], item: T

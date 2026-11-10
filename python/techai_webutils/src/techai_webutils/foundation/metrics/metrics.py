@@ -151,7 +151,7 @@ class PrometheusMetricsProvider(MetricsProvider):
             labels or [],
             lambda: Counter(name, help_text, labels or [], registry=self._registry),
         )
-        return _PrometheusCounter(c, labels or [])
+        return _PrometheusCounter(c)
 
     @override
     def histogram(
@@ -182,7 +182,7 @@ class PrometheusMetricsProvider(MetricsProvider):
             labels or [],
             build,
         )
-        return _PrometheusHistogram(h, labels or [])
+        return _PrometheusHistogram(h)
 
     @override
     def gauge(
@@ -200,17 +200,16 @@ class PrometheusMetricsProvider(MetricsProvider):
             labels or [],
             lambda: Gauge(name, help_text, labels or [], registry=self._registry),
         )
-        return _PrometheusGauge(g, labels or [])
+        return _PrometheusGauge(g)
 
 
 @final
 class _PrometheusCounter(MetricCounter):
     """Adapter wrapping a prometheus_client Counter behind MetricCounter."""
 
-    def __init__(self, inner: Counter, label_names: list[str]) -> None:
-        """Wrap the prometheus Counter and remember its label names."""
+    def __init__(self, inner: Counter) -> None:
+        """Wrap the prometheus Counter."""
         self._inner = inner
-        self._label_names = label_names
 
     @override
     def inc(self, value: float = 1.0, **labels: str) -> None:
@@ -225,10 +224,9 @@ class _PrometheusCounter(MetricCounter):
 class _PrometheusHistogram(MetricHistogram):
     """Adapter wrapping a prometheus_client Histogram behind MetricHistogram."""
 
-    def __init__(self, inner: Histogram, label_names: list[str]) -> None:
-        """Wrap the prometheus Histogram and remember its label names."""
+    def __init__(self, inner: Histogram) -> None:
+        """Wrap the prometheus Histogram."""
         self._inner = inner
-        self._label_names = label_names
 
     @override
     def observe(self, value: float, **labels: str) -> None:
@@ -259,10 +257,9 @@ class _PrometheusHistogram(MetricHistogram):
 class _PrometheusGauge(MetricGauge):
     """Adapter wrapping a prometheus_client Gauge behind MetricGauge."""
 
-    def __init__(self, inner: Gauge, label_names: list[str]) -> None:
-        """Wrap the prometheus Gauge and remember its label names."""
+    def __init__(self, inner: Gauge) -> None:
+        """Wrap the prometheus Gauge."""
         self._inner = inner
-        self._label_names = label_names
 
     @override
     def set(self, value: float, **labels: str) -> None:

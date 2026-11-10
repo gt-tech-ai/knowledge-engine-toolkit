@@ -115,18 +115,12 @@ class RetrievalConfig:
     Bedrock Knowledge Base scores run lower than a local vector store's, so the 0.5
     default can drop strong Bedrock matches — so set it per engine kind. ``None`` is
     rejected (there is no per-kind default)."""
-    # Local vector stack (``kind == QDRANT``): a Qdrant store fed by an Ollama embedder;
-    # ignored by the stub/bedrock kinds. Hosts default to localhost.
-    vector_url: str = "http://localhost:6333"
-    """Qdrant HTTP endpoint the dev engine reads/writes points from."""
+    # Local vector stack (``kind == QDRANT``): the caller injects the embedder and the
+    # store; these name what they read. Ignored by the stub/bedrock kinds.
     vector_collection: str = "documents"
     """Qdrant collection name holding the document embeddings."""
-    embedding_host: str = "http://localhost:11434"
-    """Ollama host serving the embedding model."""
     embedding_model: str = "nomic-embed-text"
     """Embedding model name requested from Ollama."""
-    embedding_dimension: int = 768
-    """Vector dimensionality of ``embedding_model`` (must match the Qdrant collection)."""
     fusion: FusionConfig = field(default_factory=FusionConfig)
     """How a store with keyword search fuses its k-NN and BM25 rankings
     (``opensearch``)."""

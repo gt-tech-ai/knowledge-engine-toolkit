@@ -2,23 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from techai_webutils.controllers.base import BaseController
-
-
-@dataclass
-class SampleRequest:
-    """A request DTO the handler-builder tests decode."""
-
-    input: str
-
-
-@dataclass
-class SampleResponse:
-    """A response DTO the handler-builder tests encode."""
-
-    output: str
 
 
 class TestBaseController:

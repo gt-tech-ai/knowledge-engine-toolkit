@@ -484,10 +484,7 @@ class TestKnowledgeBaseFactory:
         kb = new_knowledge_base_from_config(
             KnowledgeBaseConfig(
                 kind=KnowledgeBaseKind.VECTOR,
-                vector_url="http://qdrant:6333",
                 collection="documents",
-                embedding_host="http://ollama:11434",
-                embedding_dimension=768,
             ),
             embedder=_embedder(dimension=768),
             store=_store(dimension=768),

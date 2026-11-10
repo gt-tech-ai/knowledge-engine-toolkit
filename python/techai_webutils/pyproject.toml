@@ -13,13 +13,15 @@ authors = [
 requires-python = ">= 3.12"
 dependencies = [
     "aiobotocore>=3.5.0",
+    # botocore: imported directly for its exception types (ClientError, BotoCoreError) at the AWS
+    # boundary; aiobotocore bounds the version from above.
+    "botocore>=1.43.0",
     # aiohttp: the health + metrics HTTP app a gRPC server serves beside its port
     # (controllers/health); also aiobotocore's transport.
     "aiohttp>=3.14.3",
     # aiosmtplib: async SMTP send for the SMTP email backend (clients/email/smtp); lazy-imported by
     # new_email_from_config only on the SMTP path. Peer of aiobotocore (the SES backend's transport).
     "aiosmtplib>=3.0.0",
-    "fastapi>=0.136.0",
     "grpcio>=1.80.0",
     "grpcio-health-checking>=1.80.0",
     "grpcio-reflection>=1.80.0",
@@ -35,8 +37,9 @@ dependencies = [
     "redis>=7.4.0",
     "structlog>=25.5.0",
     "tenacity>=9.1.4",
-    "uvicorn>=0.48.0",
     "protovalidate>=2.0.0,<3",
+    # protobuf: imported directly (google.protobuf.message.Message) by the gRPC edge interceptors.
+    "protobuf>=7.36.0",
     # zstandard: the `zstd` compression of the s3db checkpoint store; reads detect it from the bytes.
     "zstandard>=0.25.0",
 ]
@@ -171,6 +174,15 @@ dev = [
     # docling-core (Docling's document schema, no torch) so the `layout` parser's block mapping is
     # typed and tested against real DoclingDocuments; full Docling stays in the `layout` extra.
     "docling-core>=2.106.0",
+    # starlette types the FastAPI/Starlette HTTP middleware adapter (imported for type checking
+    # only) and its tests; a consumer serving FastAPI or Starlette brings its own.
+    "starlette>=1.6.0",
+    # Hygiene gates, pinned to the product's versions: dead code, dependency declarations,
+    # docstring/signature agreement and docstring coverage (CONTRIBUTING.md#local-checks).
+    "vulture==2.16",
+    "deptry==0.25.1",
+    "pydoclint==0.12.0",
+    "interrogate==1.7.0",
 ]
 
 [tool.pytest.ini_options]
@@ -343,6 +355,106 @@ reportUnknownVariableType = "none"
 reportUnknownParameterType = "none"
 reportUnknownLambdaType = "none"
 reportAttributeAccessIssue = "none"
+
+# Dead code (vulture over src and tests). Genuinely dead code is deleted; each entry below is
+# a false positive vulture structurally cannot resolve. KE is a library: its contracts, value
+# types and config are read or implemented by consumers vulture never scans.
+[tool.vulture]
+ignore_decorators = [
+  "@pytest.fixture", # pytest injects fixtures by parameter name, never by a call
+  "@overload",       # typing overload stubs describe the one implementation below them
+  "@override",       # an override is called through its base contract or framework
+]
+ignore_names = [
+  # unittest.mock and pytest: attributes and hooks the framework reads
+  "side_effect", "return_value", "pytestmark", "pytest_*",
+  # names a type-only import binds for a cast("...") string vulture does not parse
+  "_Lazy*", "_CostAwareRanker", "EncodableT", "FieldT", "ClientCreatorContext",
+  "DockerClient", "EntityRuler",
+  # private Protocols describing an SDK object, used only in cast("...") strings, and the
+  # SDK attributes they declare or set
+  "_SesSession", "_AwsSession", "_DetectorBuilders", "_InputFormats", "_PdfOptions",
+  "_TokenizerFiles", "_ClientRegistry", "_TitledApp", "page_id", "force_full_page_ocr",
+  "page_range", "add_special_tokens", "sequence", "max_length", "__call__",
+  # TypedDict keys of AWS / Ollama wire requests and responses, read by subscript
+  "modelId", "contentType", "knowledgeBaseId", "dataSourceId", "clientToken",
+  "ingestionJobId", "nextToken", "documentIdentifiers", "inputTokens", "outputTokens",
+  "stopReason", "contentBlockDelta", "messageStop", "prompt_eval_count", "eval_count",
+  "retrievalQuery", "retrievalConfiguration", "piiEntities", "regexes", "customWords",
+  "managedWordLists", "contentPolicy", "topicPolicy", "sensitiveInformationPolicy",
+  "wordPolicy", "_ApplyGuardrailResponse", "assessments", "BeginOffset", "EndOffset",
+  "Type", "_DetectPiiResponse", "Entities",
+  # AwsClientKwargs keys, unpacked into an aiobotocore create_client call
+  "endpoint_url", "region_name", "aws_access_key_id", "aws_secret_access_key",
+  "aws_session_token",
+  # core contracts: methods a consumer implements or calls, and value-type fields and enum
+  # members a consumer reads (core/interfaces, core/types)
+  "s3_key", "trust_level", "classification", "ENRICH", "INDEX", "format_version",
+  "artifact_key", "get_states", "heartbeat", "start_offset", "end_offset",
+  "supported_types", "chunk_size", "overlap", "dataset_version", "pass_rate",
+  "mean_score", "per_grader", "regressions", "rationale", "status_reason", "file_name",
+  "error_message", "documents_added", "documents_updated", "documents_removed",
+  "chunks_created", "sync", "liveness", "readiness", "escalated", "OpService", "commit",
+  "rollback", "intent_type", "keywords", "is_healthy", "startup", "health_check",
+  "last_modified", "max_output", "LOW", "HIGH", "TRIMMED", "MINIMAL", "vision",
+  "long_context", "reasoning", "complexity", "max_cost_usd", "escalation_reason",
+  "stickiness_key", "planner_version",
+  # public client API a consumer calls (Go parity: client.AtMostOnce, Server reflection,
+  # Decorations.VerifyExplicit) and the no-op DLQ backend a consumer selects
+  "at_most_once", "enable_reflection", "verify_explicit", "NoopDeadLetterBackend",
+  # enum members selected by config value, never named in code
+  "NDCG", "PERSON",
+  # config fields a consumer sets and reads: the settings mixins' fields, the routed
+  # catalog's capability settings, the caller-consumed actor pool size, the decoration
+  # tiers read by name, and the Go-only breaker field kept in the shared schema
+  "database_*", "redis_password", "server_*_timeout", "storage_s3_*", "messaging_sqs_*",
+  "observability_*", "json_mode", "actor_pool_size", "workflows", "gates", "min_requests",
+  # test contracts whose methods the tier base reads as operations by reflection
+  "find_by_email", "refund", "command", "crash", "_helper",
+]
+
+# deptry checks that every import is a declared dependency and every dependency is imported.
+[tool.deptry]
+# techai_webutils is this package's own top-level module (the wheel built from src/), not a
+# third-party import.
+known_first_party = ["techai_webutils"]
+
+[tool.deptry.per_rule_ignores]
+# DEP002 (declared but not imported): deptry reads import statements only, and each of these is
+# loaded with importlib.import_module inside the Kind or code path that needs it, so a process
+# that never selects that backend never pays its import cost (ruff PLC0415 forbids the in-function
+# `import` statement instead).
+DEP002 = [
+    "grpcio-reflection",        # controllers/grpc/server.py: server reflection, when enabled
+    "protovalidate",            # controllers/grpc/interceptors/edge.py: request validation
+    "markitdown",               # clients/parsing/isolated: the `isolated` parser (`parsing` extra)
+    "pymupdf",                  # clients/parsing/{isolated,layout}: PDF page access (`parsing` extra)
+    "fasttext-predict",         # clients/language/fasttext: the `fasttext` identifier (extra)
+    "lingua-language-detector", # clients/language/lingua: the `lingua` identifier (extra)
+    "docling",                  # clients/parsing/layout: the `layout` parser (extra)
+    "tokenizers",               # clients/tokenizer: the `huggingface` TokenCounter (extra)
+]
+
+# Docstring coverage, at 100% of the in-scope surface (the product's settings).
+[tool.interrogate]
+fail-under = 100
+ignore-init-module = true      # an empty package __init__.py carries no module docstring
+ignore-init-method = true      # __init__ intent lives in the class docstring
+ignore-semiprivate = true      # single-underscore helpers are exempt; the exported surface is enforced
+ignore-nested-functions = true # closures and inline test generators are trivial
+ignore-nested-classes = true   # inline test-local classes are trivial
+
+# Docstrings agree with their signatures and bodies: Args, Returns, Yields and Raises sections,
+# and each class attribute's trailing docstring (the product's `search check docs` options).
+[tool.pydoclint]
+style = "google"
+require-inline-class-var-docs = true
+skip-checking-short-docstrings = false
+allow-init-docstring = true
+arg-type-hints-in-docstring = false
+check-return-types = false
+check-yield-types = false
+quiet = true
 
 [tool.uv.build-backend]
 module-name = "techai_webutils"

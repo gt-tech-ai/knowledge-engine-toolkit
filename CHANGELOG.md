@@ -10,6 +10,9 @@ Python: `techai-webutils` 0.9.5.
 
 ### Added
 
+- Python gates `vulture src tests` (dead code) and `deptry src` (imports match declared
+  dependencies) in CI; vulture, deptry, pydoclint and interrogate are pinned in the dev group at
+  the product's versions.
 - Python `ParsedDocument.attributes`: source facts a later stage reads, round-tripped in the parse
   artifact (the format version is unchanged; a payload without the key reads as empty).
 - Python `PiiKind.PERSON`, for a consumer that adds names from an NER model; `find_pii` never
@@ -540,6 +543,12 @@ Python: `techai-webutils` 0.9.5.
     `clients.semantic_cache`); `clients.decorators` no longer exports them.
   - `foundation.resilience.sqs_dlq.SqsDeadLetterBackend` takes any `SqsQueueTarget` (a
     `queue_url` and `client_kwargs()`); `clients.messaging.SQSConfig` satisfies it unchanged.
+  - Removed runtime dependencies nothing imports: `uvicorn` and `fastapi` (the FastAPI middleware
+    adapter only types against `starlette`, now a dev dependency). A consumer serving FastAPI
+    declares it itself. `botocore` and `protobuf`, imported directly, are now declared.
+  - Removed config fields nothing reads: `RetrievalConfig` and `KnowledgeBaseConfig` lose
+    `vector_url`, `embedding_host` and `embedding_dimension` (the caller injects the embedder and
+    store), and `GatewayConfig` loses the reserved `allow_byo_endpoint` / `allow_byo_key`.
   - Import cycles between a factory and its backends are gone (basedpyright all-mode reports
     them). `SemanticCacheConfig` / `SemanticCacheKind` moved to `clients.semantic_cache.config`,
     `TokenLedgerConfig` / `TokenLedgerKind` to `clients.token_ledger.config`, and

@@ -35,7 +35,7 @@ jobs:
         run: go tool cover -func=cover.out | tail -1
 
   python:
-    name: Python — ruff · basedpyright · import-linter · unit
+    name: Python — ruff · basedpyright · import-linter · vulture · deptry · unit
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,6 +56,10 @@ jobs:
         run: uv run basedpyright
       - name: import-linter (layers + client-family independence)
         run: uv run lint-imports
+      - name: vulture (dead code)
+        run: uv run vulture src tests
+      - name: deptry (imports match declared dependencies)
+        run: uv run deptry src
       - name: pytest (unit — 90% coverage of the unit surface)
         run: uv run pytest -m "not integration"
 

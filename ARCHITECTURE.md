@@ -537,6 +537,31 @@ own (`connect.Code`, gRPC codes, `reflect.Kind`, Alloy tokens).
 Test tables are built with `fixtures.Build` and `fixtures.BuildRef`, so `exhaustruct_v5` holds
 in tests without spelling every zero field.
 
+### Static analysis (Python)
+
+`python/techai_webutils/pyproject.toml` configures every tool; `src` and `tests` carry no
+`noqa`, `type: ignore`, `pyright: ignore` or `pragma: no cover`. ruff selects `ALL` with
+preview rules; basedpyright runs in `all` mode over `src` and `tests`; vulture reads both trees
+and deptry reads `src`. pydoclint and interrogate are configured at the product's settings and
+pinned, but not yet gated: the `Args:` sections they require are still being written. Versions
+are pinned in the dev group.
+
+The only exceptions:
+
+| Tool | Setting | Why |
+| --- | --- | --- |
+| ruff | `missing-trailing-comma` off | Conflicts with `ruff format`. |
+| ruff | `missing-copyright-notice` off | The repo carries no per-file copyright headers. |
+| ruff | `incorrect-blank-line-before-class` off | Mutually exclusive with D211. |
+| ruff | `multi-line-summary-second-line` off | Mutually exclusive with D212. |
+| ruff | `assert` off in `tests/**` | Pytest asserts are the test idiom. |
+| basedpyright | `reportImplicitStringConcatenation` off | Implicit concatenation is how a long message wraps; ruff's ISC rules catch the accidental kind. |
+| basedpyright | `tests` environment: the five `reportUnknown*` rules and `reportAttributeAccessIssue` off | `unittest.mock` doubles and pytest fixtures are untyped by design. |
+| vulture | `ignore_decorators`: `@pytest.fixture`, `@overload`, `@override` | Called by injection, describe one implementation, or are called through a base. |
+| vulture | `ignore_names`, grouped by reason in `pyproject.toml` | Names read by a framework, bound only for `cast("...")` strings, wire `TypedDict` keys read by subscript, or contract, config and API members consumers use. |
+| deptry | `DEP002` for eight lazily imported packages | Loaded with `importlib.import_module` inside the backend that needs them, which deptry cannot see. |
+| interrogate | `ignore-init-module`, `ignore-init-method`, `ignore-semiprivate`, `ignore-nested-functions`, `ignore-nested-classes` | The product's settings: the documented surface is the exported one. |
+
 ## Error codes
 
 Every error crossing a package boundary carries an `ErrorCode`. The codes (`NOT_FOUND`,

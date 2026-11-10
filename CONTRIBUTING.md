@@ -69,6 +69,8 @@ uv run ruff check .
 uv run ruff format --check .
 uv run basedpyright
 uv run lint-imports                 # layers + client-family independence
+uv run vulture src tests            # dead code
+uv run deptry src                   # imports match declared dependencies
 uv run pytest -m "not integration"   # 90% coverage gate
 uv run pytest -m integration --cov-fail-under=0   # needs Docker
 ```

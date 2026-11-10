@@ -301,11 +301,8 @@ class TestQdrantFactoryBranch:
         config = RetrievalConfig(
             kind=RetrievalKind.QDRANT,
             min_score=0.0,
-            vector_url="http://qdrant:6333",
             vector_collection="documents",
-            embedding_host="http://ollama:11434",
             embedding_model="nomic-embed-text",
-            embedding_dimension=768,
         )
         engine = new_retrieval_engine_from_config(
             config,

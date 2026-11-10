@@ -46,7 +46,6 @@ class SemaphoreBulkhead(Bulkhead):
 
         """
         self._semaphore = asyncio.Semaphore(max_concurrent)
-        self._max_concurrent = max_concurrent
 
     @override
     async def execute(self, fn: Callable[[], Awaitable[object]]) -> object:

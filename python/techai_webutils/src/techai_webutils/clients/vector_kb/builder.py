@@ -39,17 +39,11 @@ class KnowledgeBaseConfig:
 
     kind: KnowledgeBaseKind = KnowledgeBaseKind.VECTOR
     """Selects the KnowledgeBase implementation (only ``vector`` ships today)."""
-    vector_url: str = "http://localhost:6333"
-    """Qdrant HTTP endpoint the chunks are upserted into."""
     collection: str = "documents"
     """Qdrant collection name (shared with the retrieval engine so indexed docs are
     queryable)."""
-    embedding_host: str = "http://localhost:11434"
-    """Ollama host serving the embedding model."""
     embedding_model: str = "nomic-embed-text"
     """Embedding model name requested from Ollama."""
-    embedding_dimension: int = 768
-    """Vector dimensionality of ``embedding_model`` (must match the Qdrant collection)."""
     embed_concurrency: int = 1
     """Sub-batches embedded and upserted at once (1: one at a time, for a single local
     embedder)."""

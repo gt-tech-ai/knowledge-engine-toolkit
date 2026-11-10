@@ -62,10 +62,6 @@ class GatewayConfig:
     """The provider ``passthrough`` wraps (today's per-step model choice)."""
     routed: RoutedConfig | None = None
     """The ``routed`` kind's configuration."""
-    allow_byo_endpoint: bool = False
-    """Whether a tenant may register its own endpoint (reserved; off)."""
-    allow_byo_key: bool = False
-    """Whether a tenant may bring its own provider key (reserved; off)."""
 
 
 @dataclass(frozen=True, kw_only=True)
