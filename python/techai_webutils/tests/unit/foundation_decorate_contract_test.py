@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
-from typing import Protocol
+from typing import Protocol, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -70,7 +70,7 @@ async def test_each_contract_method_takes_its_own_decoration() -> None:
     """
     logger = MagicMock()
     logged: list[str] = []
-    logger.debug.side_effect = lambda _msg, **fields: logged.append(  # pyright: ignore[reportUnknownLambdaType]
+    cast("MagicMock", logger.debug).side_effect = lambda _msg, **fields: logged.append(
         str(fields.get("operation"))
     )
     decorations = Decorations(
@@ -132,9 +132,9 @@ def test_a_contract_must_have_methods() -> None:
             """Help privately; not an operation."""
 
     with pytest.raises(AppRuntimeError):
-        ops_of(_Empty)
+        _ = ops_of(_Empty)
     with pytest.raises(AppRuntimeError):
-        ServiceBase(_Empty, Decorations(), "api.docs")
+        _ = ServiceBase(_Empty, Decorations(), "api.docs")
     assert ops_of(_Docs) == ["count", "find"]
 
 
@@ -151,14 +151,14 @@ def test_verify_fails_an_override_no_contract_declares() -> None:
     stale = Decorations(
         _with_repositories({"api.docs.rename": decoration.Layers(logging=False)})
     )
-    RepositoryBase(_Docs, stale, "api.docs")
+    _ = RepositoryBase(_Docs, stale, "api.docs")
     with pytest.raises(AppValueError, match=r"api\.docs\.rename"):
         stale.verify("api")
 
     clean = Decorations(
         _with_repositories({"api.docs.find": decoration.Layers(logging=False)})
     )
-    RepositoryBase(_Docs, clean, "api.docs")
+    _ = RepositoryBase(_Docs, clean, "api.docs")
     clean.verify("api")
 
 
@@ -216,7 +216,7 @@ def test_inventory_lists_each_operation_with_its_sources() -> None:
             "api.docs.count": decoration.Layers(timeout=2.0),
         })
     )
-    RepositoryBase(_Docs, decorations, "api.docs")
+    _ = RepositoryBase(_Docs, decorations, "api.docs")
 
     by_name = {r.name: r for r in decorations.inventory()}
     assert {"api.docs", "api.docs.count", "api.docs.find"} <= set(by_name)

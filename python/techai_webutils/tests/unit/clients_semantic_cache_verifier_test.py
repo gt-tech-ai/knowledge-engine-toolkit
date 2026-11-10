@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -13,7 +14,7 @@ from techai_webutils.clients.semantic_cache.verifier import (
     cache_verifier_from_config,
 )
 from techai_webutils.core.errors import AppError, ErrorCode
-from techai_webutils.core.interfaces.llm import LLMProvider, LLMResponse
+from techai_webutils.core.interfaces.llm import LLMMessage, LLMProvider, LLMResponse
 
 
 def _llm(reply: str | None = None, error: Exception | None = None) -> MagicMock:
@@ -87,7 +88,14 @@ async def test_llm_verifier_serves_only_on_a_yes(
     )
 
     assert await verifier.same_question("cached question", "new question") is expected
-    prompt = llm.complete.await_args.args[0][-1].content
+    messages = cast(
+        "list[LLMMessage]",
+        cast(
+            "tuple[object, ...]",
+            cast("MagicMock", cast("AsyncMock", llm.complete).await_args).args,
+        )[0],
+    )
+    prompt = messages[-1].content
     assert "cached question" in prompt
     assert "new question" in prompt
 
@@ -97,7 +105,9 @@ async def test_llm_verifier_serves_only_on_a_yes(
     [(CacheVerifierConfig(kind="llm"), None), (CacheVerifierConfig(kind="oracle"), None)],
     ids=["llm-without-provider", "unknown"],
 )
-def test_verifier_factory_fails_loudly(config: CacheVerifierConfig, llm: object) -> None:
+def test_verifier_factory_fails_loudly(
+    config: CacheVerifierConfig, llm: LLMProvider | None
+) -> None:
     """Test that the factory refuses a verifier it cannot build.
 
     **Why this test is important:**
@@ -108,5 +118,5 @@ def test_verifier_factory_fails_loudly(config: CacheVerifierConfig, llm: object)
       - ``llm`` without a provider and an unknown kind raise ``INVALID_INPUT``
     """
     with pytest.raises(AppError) as caught:
-        cache_verifier_from_config(config, llm=llm)  # pyright: ignore[reportArgumentType]
+        _ = cache_verifier_from_config(config, llm=llm)
     assert caught.value.code is ErrorCode.INVALID_INPUT

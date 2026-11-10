@@ -114,10 +114,10 @@ def test_hedger_from_config_unknown_kind_raises() -> None:
     What it tests:
         - ``hedger_from_config`` raises ``ValueError`` for a kind outside the enum.
     """
-    bad = HedgeConfig(kind=cast("HedgeKind", "bogus"), delay_seconds=0.05)
+    bad = HedgeConfig(kind=cast("HedgeKind", cast("object", "bogus")), delay_seconds=0.05)
 
     with pytest.raises(ValueError, match="unknown hedger kind"):
-        hedger_from_config(bad)
+        _ = hedger_from_config(bad)
 
 
 def test_disabled_is_the_default_kind() -> None:

@@ -257,9 +257,9 @@ async def test_calls_without_an_org_are_refused(client: AsyncOpenSearch) -> None
     )
 
     with pytest.raises(AppValueError):
-        await store.search(collection, [1, 0, 0, 0], 1)
+        _ = await store.search(collection, [1, 0, 0, 0], 1)
     with pytest.raises(AppValueError):
-        await store.count_by_document(collection, "x")
+        _ = await store.count_by_document(collection, "x")
     with pytest.raises(AppValueError):
         await store.upsert(collection, [no_org])
 

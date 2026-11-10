@@ -114,7 +114,7 @@ def test_invalid_sizing_inputs_are_refused(
         ``AppValueError``.
     """
     with pytest.raises(AppValueError):
-        lane_concurrency(
+        _ = lane_concurrency(
             ResourceLimits.unbounded(),
             per_item_bytes=per_item_bytes,
             cap=cap,

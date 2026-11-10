@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -147,7 +147,7 @@ def test_postgres_rejects_unworkable_limits(config: StartBudgetConfig) -> None:
     pool, _ = _pool()
     _, factory = _locks()
     with pytest.raises(AppValueError):
-        start_budget_from_config(config, pool=pool, new_lock=factory)
+        _ = start_budget_from_config(config, pool=pool, new_lock=factory)
 
 
 def test_postgres_needs_pool_and_lock_factory_and_unknown_kind_raises() -> None:
@@ -161,11 +161,11 @@ def test_postgres_needs_pool_and_lock_factory_and_unknown_kind_raises() -> None:
         unknown kind
     """
     with pytest.raises(AppValueError):
-        start_budget_from_config(_CONFIG)
+        _ = start_budget_from_config(_CONFIG)
     bogus = MagicMock(spec=StartBudgetConfig)
     bogus.kind = "bogus"
     with pytest.raises(AppValueError):
-        start_budget_from_config(bogus)
+        _ = start_budget_from_config(bogus)
 
 
 @pytest.mark.asyncio
@@ -193,13 +193,15 @@ async def test_acquire_takes_first_free_slot_and_skips_held_ones() -> None:
     assert first == Slot(binding="a", index=0)
     assert second == Slot(binding="b", index=1)
     assert [c.args[0] for c in factory.call_args_list] == ["acct:0", "acct:1"]
-    stamp = conn.execute.await_args_list[-1]
-    assert stamp.args[0].startswith("UPDATE bedrock_start_rate")
-    assert stamp.args[1] == "acct"
+    stamp = cast("MagicMock", cast("AsyncMock", conn.execute).await_args_list[-1])
+    assert cast("MagicMock", cast("list[object]", stamp.args)[0].startswith)(
+        "UPDATE bedrock_start_rate"
+    )
+    assert cast("list[object]", stamp.args)[1] == "acct"
     assert first is not None
     await budget.release(first)
     await budget.release(first)
-    locks["acct:0"].release.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", locks["acct:0"].release).assert_awaited_once)()
 
 
 @pytest.mark.asyncio
@@ -217,7 +219,7 @@ async def test_acquire_returns_none_when_no_slot_frees_in_time() -> None:
     budget = _budget(pool, factory)
 
     assert await budget.acquire("a") is None
-    conn.execute.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", conn.execute).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -238,8 +240,11 @@ async def test_pacing_past_deadline_frees_the_slot() -> None:
     budget = _budget(pool, factory)
 
     assert await budget.acquire("a") is None
-    locks["acct:0"].release.assert_awaited_once()
-    assert all(not c.args[0].startswith("UPDATE") for c in conn.execute.await_args_list)
+    cast("MagicMock", cast("AsyncMock", locks["acct:0"].release).assert_awaited_once)()
+    assert all(
+        not cast("MagicMock", c.args[0].startswith)("UPDATE")
+        for c in cast("list[object]", cast("AsyncMock", conn.execute).await_args_list)
+    )
 
 
 @pytest.mark.asyncio
@@ -263,6 +268,14 @@ async def test_pacing_waits_then_stamps_and_exit_closes_sessions() -> None:
         pool, factory, replace(_CONFIG, acquire_timeout_seconds=5)
     ) as budget:
         assert await budget.acquire("a") == Slot(binding="a", index=0)
-        assert conn.execute.await_args_list[-1].args[0].startswith("UPDATE")
+        assert cast(
+            "MagicMock",
+            cast(
+                "list[object]",
+                cast("list[object]", cast("AsyncMock", conn.execute).await_args_list)[
+                    -1
+                ].args,
+            )[0].startswith,
+        )("UPDATE")
 
-    locks["acct:0"].__aexit__.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", locks["acct:0"].__aexit__).assert_awaited_once)()

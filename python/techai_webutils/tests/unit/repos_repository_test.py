@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from abc import ABC
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -19,10 +20,12 @@ from techai_webutils.foundation.decorate import Decorations, Deps, Layer
 from techai_webutils.repos import DelegatingRepository, RepositoryBase, tier
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from conftest import Observed
 
 
-class _Users(Repository[Any, Any, Any]):
+class _Users(Repository[str, object, str], ABC):
     """The test repository's contract: CRUD plus one custom query."""
 
     async def find_by_email(self) -> str | None:
@@ -55,8 +58,8 @@ def _retrier() -> MagicMock:
     """
     retrier = MagicMock(spec=Retrier)
 
-    async def retry(op: object) -> object:
-        return await op()  # type: ignore[operator]
+    async def retry(op: Callable[[], Awaitable[object]]) -> object:
+        return await op()
 
     retrier.retry = AsyncMock(side_effect=retry)
     return retrier
@@ -129,7 +132,7 @@ async def test_create_is_never_retried() -> None:
     await repo.get("1")
     await repo.create("e")
 
-    assert retrier.retry.await_count == 1
+    assert (cast("AsyncMock", retrier.retry).await_count) == 1
 
 
 @pytest.mark.asyncio
@@ -148,7 +151,7 @@ async def test_errors_pass_unchanged_and_custom_queries_are_decorated(
         query's result in a ``users.FindByEmail`` span; the base reports its name.
     """
     store = _store()
-    store.get.side_effect = NotFoundError("user", id="1")
+    cast("MagicMock", store.get).side_effect = NotFoundError("user", id="1")
     base = RepositoryBase(
         _Users, Decorations.fixed(Deps(observability=observed.observability)), "users"
     )

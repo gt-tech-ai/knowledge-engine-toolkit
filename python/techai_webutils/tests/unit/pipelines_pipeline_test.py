@@ -144,11 +144,11 @@ async def test_fan_out_runs_stages_concurrently_in_order() -> None:
     both = asyncio.Barrier(2)
 
     async def first(x: int) -> str:
-        await both.wait()
+        _ = await both.wait()
         return f"a{x}"
 
     async def second(x: int) -> str:
-        await both.wait()
+        _ = await both.wait()
         return f"b{x}"
 
     fan = base.fan_out("both", base.stage("a", first), base.stage("b", second))
@@ -158,7 +158,7 @@ async def test_fan_out_runs_stages_concurrently_in_order() -> None:
         "f", base.stage("x", AsyncMock(side_effect=ConflictError("dup")))
     )
     with pytest.raises(ConflictError):
-        await failing.execute(1)
+        _ = await failing.execute(1)
 
 
 def test_wiring_bugs_fail_loud() -> None:
@@ -172,9 +172,9 @@ def test_wiring_bugs_fail_loud() -> None:
     """
     base = PipelineBase(_Stages, Decorations(), "p")
     with pytest.raises(AppValueError):
-        base.stage("s", None)  # type: ignore[arg-type]
+        _ = base.stage("s", None)
     with pytest.raises(AppValueError):
-        base.stage("s", AsyncMock()).then(None)  # type: ignore[arg-type]
+        _ = base.stage("s", AsyncMock()).then(None)
 
 
 def _service() -> MagicMock:

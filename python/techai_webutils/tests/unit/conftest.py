@@ -21,7 +21,7 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -122,7 +122,7 @@ def isolate_config_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     yield
 
     for key in _config_env_names():
-        os.environ.pop(key, None)
+        _ = os.environ.pop(key, None)
     reset_config()
 
 
@@ -218,8 +218,8 @@ def metrics_mock() -> tuple[MagicMock, dict[str, MagicMock]]:
         return instruments.setdefault(name, MagicMock(spec=MetricHistogram))
 
     provider = MagicMock(spec=MetricsProvider)
-    provider.counter.side_effect = _counter
-    provider.histogram.side_effect = _histogram
+    cast("MagicMock", provider.counter).side_effect = _counter
+    cast("MagicMock", provider.histogram).side_effect = _histogram
     return provider, instruments
 
 
@@ -267,10 +267,10 @@ def observed(metrics_mock: tuple[MagicMock, dict[str, MagicMock]]) -> Observed:
     ) -> Generator[TracerSpan]:
         result.spans.append((name, kind, attributes))
         handle = MagicMock(spec=TracerSpan)
-        handle.record_error.side_effect = result.span_errors.append
+        cast("MagicMock", handle.record_error).side_effect = result.span_errors.append
         yield handle
 
-    tracer.span.side_effect = span
+    cast("MagicMock", tracer.span).side_effect = span
     return result
 
 

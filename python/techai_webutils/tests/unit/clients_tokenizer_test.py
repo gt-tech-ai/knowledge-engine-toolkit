@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -56,18 +57,29 @@ def test_huggingface_counter_counts_the_tokenizers_ids_without_special_tokens() 
         of 0, raise ``AppValueError``
     """
     tokenizer = MagicMock()
-    tokenizer.encode.return_value = SimpleNamespace(ids=[1, 2, 3])
+    cast("MagicMock", tokenizer.encode).return_value = SimpleNamespace(ids=[1, 2, 3])
     library = MagicMock()
-    library.Tokenizer.from_file.return_value = tokenizer
+    cast(
+        "MagicMock", cast("MagicMock", library.Tokenizer).from_file
+    ).return_value = tokenizer
     with patch.dict(sys.modules, {"tokenizers": library}):
         counter = token_counter_from_config(
             TokenCounterConfig(kind=TokenCounterKind.HUGGINGFACE, path="/m/tok.json")
         )
         assert counter.count("three words here") == _EXPECTED_COUNT
-    library.Tokenizer.from_file.assert_called_once_with("/m/tok.json")
-    tokenizer.encode.assert_called_once_with("three words here", add_special_tokens=False)
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", cast("MagicMock", library.Tokenizer).from_file
+        ).assert_called_once_with,
+    )("/m/tok.json")
+    cast("MagicMock", cast("MagicMock", tokenizer.encode).assert_called_once_with)(
+        "three words here", add_special_tokens=False
+    )
 
     with pytest.raises(AppValueError):
-        token_counter_from_config(TokenCounterConfig(kind=TokenCounterKind.HUGGINGFACE))
+        _ = token_counter_from_config(
+            TokenCounterConfig(kind=TokenCounterKind.HUGGINGFACE)
+        )
     with pytest.raises(AppValueError):
-        token_counter_from_config(TokenCounterConfig(chars_per_token=0))
+        _ = token_counter_from_config(TokenCounterConfig(chars_per_token=0))

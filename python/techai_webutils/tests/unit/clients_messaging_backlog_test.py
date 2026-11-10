@@ -6,7 +6,7 @@ import asyncio
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -40,7 +40,7 @@ def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
         return gauges.setdefault(name, MagicMock())
 
     metrics = MagicMock()
-    metrics.gauge.side_effect = gauge
+    cast("MagicMock", metrics.gauge).side_effect = gauge
     return metrics, gauges
 
 
@@ -59,7 +59,7 @@ async def test_sqs_backlog_feeds_the_gauges(
         sets ``messaging_backlog_messages{topic="events"}`` to 42, and leaves the age
         gauge unset (SQS has no age attribute).
     """
-    aws_client.get_queue_attributes.return_value = {
+    cast("MagicMock", aws_client.get_queue_attributes).return_value = {
         "Attributes": {"ApproximateNumberOfMessages": "42"}
     }
     metrics, gauges = _metrics()
@@ -69,11 +69,20 @@ async def test_sqs_backlog_feeds_the_gauges(
         backlog = await reporter.report(subscriber, "events")
 
     assert backlog == Backlog(messages=42, oldest_age_seconds=None)
-    aws_client.get_queue_attributes.assert_awaited_once_with(
-        QueueUrl=sqs_config.queue_url, AttributeNames=["ApproximateNumberOfMessages"]
-    )
-    gauges["messaging_backlog_messages"].set.assert_called_once_with(42, topic="events")
-    gauges["messaging_oldest_age_seconds"].set.assert_not_called()
+    cast(
+        "MagicMock",
+        cast("AsyncMock", aws_client.get_queue_attributes).assert_awaited_once_with,
+    )(QueueUrl=sqs_config.queue_url, AttributeNames=["ApproximateNumberOfMessages"])
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", gauges["messaging_backlog_messages"].set
+        ).assert_called_once_with,
+    )(42, topic="events")
+    cast(
+        "MagicMock",
+        cast("MagicMock", gauges["messaging_oldest_age_seconds"].set).assert_not_called,
+    )()
 
 
 @pytest.mark.asyncio
@@ -89,14 +98,19 @@ async def test_a_known_age_sets_the_age_gauge() -> None:
         12.5.
     """
     probe = AsyncMock(spec=BacklogProbe)
-    probe.backlog.return_value = Backlog(messages=3, oldest_age_seconds=12.5)
+    cast("MagicMock", probe.backlog).return_value = Backlog(
+        messages=3, oldest_age_seconds=12.5
+    )
     metrics, gauges = _metrics()
 
-    await BacklogGauges(metrics).report(probe, "events")
+    _ = await BacklogGauges(metrics).report(probe, "events")
 
-    gauges["messaging_oldest_age_seconds"].set.assert_called_once_with(
-        12.5, topic="events"
-    )
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", gauges["messaging_oldest_age_seconds"].set
+        ).assert_called_once_with,
+    )(12.5, topic="events")
 
 
 @pytest.mark.asyncio
@@ -118,12 +132,12 @@ async def test_sqs_backlog_call_is_bounded(
         await asyncio.sleep(10)
         return {}
 
-    aws_client.get_queue_attributes.side_effect = hang
+    cast("MagicMock", aws_client.get_queue_attributes).side_effect = hang
     config = replace(sqs_config, attributes_timeout_seconds=0.01)
 
     async with SQSSubscriber(config) as subscriber:
         with pytest.raises(UnavailableError):
-            await subscriber.backlog("events")
+            _ = await subscriber.backlog("events")
 
 
 @pytest.mark.asyncio
@@ -168,5 +182,8 @@ def test_backlog_probe_matches_go() -> None:
     assert struct is not None
     assert re.findall(r"^\t([A-Z]\w+)\(", probe.group(1), re.MULTILINE) == ["Backlog"]
     go_fields = re.findall(r"^\t([A-Z]\w+) ", struct.group(1), re.MULTILINE)
-    snake = {re.sub(r"(?<!^)([A-Z])", r"_\1", name).lower() for name in go_fields}
+    snake = {
+        re.sub(r"(?<!^)([A-Z])", r"_\1", cast("str", name)).lower()
+        for name in cast("list[object]", go_fields)
+    }
     assert snake == set(Backlog.__dataclass_fields__)

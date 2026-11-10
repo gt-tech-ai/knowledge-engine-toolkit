@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import io
 import json
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from botocore.exceptions import ClientError, EndpointConnectionError  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError, EndpointConnectionError
 
 from techai_webutils.clients.embedding.bedrock import BedrockEmbeddingProvider
 from techai_webutils.clients.embedding.builder import (
@@ -102,10 +103,13 @@ class TestBedrockEmbeddingProvider:
         assert result.embedding == [0.1, 0.2, 0.3]
         assert result.model == _MODEL
         assert result.token_count == _EXPECTED_TOKEN_COUNT
-        kwargs = invoker.invoke_model.call_args.kwargs
+        kwargs = cast(
+            "dict[str, object]",
+            cast("MagicMock", cast("MagicMock", invoker.invoke_model).call_args).kwargs,
+        )
         assert kwargs["modelId"] == _MODEL
         assert kwargs["contentType"] == "application/json"
-        assert json.loads(kwargs["body"]) == {
+        assert json.loads(cast("str | bytes | bytearray", kwargs["body"])) == {
             "inputText": "hello",
             "dimensions": 3,
             "normalize": True,
@@ -131,12 +135,22 @@ class TestBedrockEmbeddingProvider:
         results = await provider.embed_batch(["a", "b"])
 
         assert [r.embedding for r in results] == [[1.0], [2.0]]
-        assert invoker.invoke_model.await_count == _EXPECTED_AWAIT_COUNT
+        assert (
+            cast("AsyncMock", invoker.invoke_model).await_count
+        ) == _EXPECTED_AWAIT_COUNT
         bodies = [
-            json.loads(c.kwargs["body"]) for c in invoker.invoke_model.call_args_list
+            json.loads(cast("str | bytes | bytearray", c.kwargs["body"]))
+            for c in cast(
+                "list[object]", cast("MagicMock", invoker.invoke_model).call_args_list
+            )
         ]
-        assert [b["inputText"] for b in bodies] == ["a", "b"]
-        assert all(b["normalize"] is False for b in bodies)
+        assert [b["inputText"] for b in cast("list[dict[str, object]]", bodies)] == [
+            "a",
+            "b",
+        ]
+        assert all(
+            b["normalize"] is False for b in cast("list[dict[str, object]]", bodies)
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -158,7 +172,7 @@ class TestBedrockEmbeddingProvider:
         )
 
         with pytest.raises(AppError) as exc:
-            await provider.embed("hello")
+            _ = await provider.embed("hello")
 
         assert exc.value.code is ErrorCode.INTERNAL
 
@@ -192,7 +206,7 @@ class TestBedrockEmbeddingProvider:
         provider = BedrockEmbeddingProvider(invoker, model=_MODEL, dimension=3)
 
         with pytest.raises(AppError) as exc:
-            await provider.embed("hello")
+            _ = await provider.embed("hello")
 
         assert exc.value.code is expected
 

@@ -2,7 +2,8 @@
 
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, TypedDict, Unpack
+from dataclasses import replace
+from typing import TypedDict, Unpack, cast
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
@@ -36,6 +37,7 @@ from techai_webutils.core.errors import (
     InternalError,
 )
 from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
+from tests.json_path import dig
 
 _EXPECTED_RETRIEVE_COUNT = 3
 _EXPECTED_FIELDS = 3
@@ -76,7 +78,12 @@ def _bedrock_client(client: AsyncMock) -> Generator[None]:
     so this mocks that SDK boundary rather than reaching into the engine.
     """
     session = MagicMock()
-    session.create_client.return_value.__aenter__.return_value = client
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", cast("MagicMock", session.create_client).return_value
+        ).__aenter__,
+    ).return_value = client
     with patch("aiobotocore.session.get_session", return_value=session):
         yield
 
@@ -88,9 +95,9 @@ def _inner_returning(*passages: RetrievalResult) -> RetrievalEngine:
         A mocked inner RetrievalEngine whose ``retrieve`` returns ``passages``.
 
     """
-    inner = create_autospec(RetrievalEngine, instance=True)
+    inner = cast("object", create_autospec(RetrievalEngine, instance=True))
     inner.retrieve = AsyncMock(return_value=list(passages))
-    return inner
+    return cast("RetrievalEngine", inner)
 
 
 class TestStubRetrievalEngine:
@@ -164,9 +171,15 @@ class TestBedrockIndexRouting:
         """
         engine, client = self._engine("kb-default")
 
-        await engine.retrieve("q", index_id="kb-per-call")
+        _ = await engine.retrieve("q", index_id="kb-per-call")
 
-        assert client.retrieve.await_args.kwargs["knowledgeBaseId"] == "kb-per-call"
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("AsyncMock", client.retrieve).await_args).kwargs,
+            )["knowledgeBaseId"]
+            == "kb-per-call"
+        )
 
     @pytest.mark.asyncio
     async def test_uses_construction_index_when_no_per_call_id(self) -> None:
@@ -182,9 +195,15 @@ class TestBedrockIndexRouting:
         """
         engine, client = self._engine("kb-default")
 
-        await engine.retrieve("q")
+        _ = await engine.retrieve("q")
 
-        assert client.retrieve.await_args.kwargs["knowledgeBaseId"] == "kb-default"
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("AsyncMock", client.retrieve).await_args).kwargs,
+            )["knowledgeBaseId"]
+            == "kb-default"
+        )
 
     @pytest.mark.asyncio
     async def test_raises_when_no_index_configured_or_passed(self) -> None:
@@ -203,8 +222,8 @@ class TestBedrockIndexRouting:
         engine, client = self._engine("")
 
         with pytest.raises(InternalError):
-            await engine.retrieve("q", index_id=None)
-        client.retrieve.assert_not_awaited()
+            _ = await engine.retrieve("q", index_id=None)
+        cast("MagicMock", cast("AsyncMock", client.retrieve).assert_not_awaited)()
 
     @pytest.mark.asyncio
     async def test_raises_on_an_empty_per_call_index_even_with_a_default(self) -> None:
@@ -224,8 +243,8 @@ class TestBedrockIndexRouting:
         engine, client = self._engine("kb-default")
 
         with pytest.raises(InternalError, match="empty"):
-            await engine.retrieve("q", index_id="")
-        client.retrieve.assert_not_awaited()
+            _ = await engine.retrieve("q", index_id="")
+        cast("MagicMock", cast("AsyncMock", client.retrieve).assert_not_awaited)()
 
     @pytest.mark.asyncio
     async def test_maps_a_botocore_failure_to_a_coded_app_error(self) -> None:
@@ -259,7 +278,7 @@ class TestBedrockIndexRouting:
         client.retrieve = AsyncMock(side_effect=throttle)
 
         with pytest.raises(AppError) as excinfo:
-            await engine.retrieve("q")
+            _ = await engine.retrieve("q")
 
         assert excinfo.value.code is ErrorCode.UNAVAILABLE
         assert excinfo.value.is_transient is True
@@ -287,7 +306,7 @@ class TestFilteringRetrievalEngine:
         inner = _inner_returning()
         engine = FilteringRetrievalEngine(inner, [])
 
-        await engine.retrieve("q", top_k=5, filters={"tenant": "t1"}, index_id="kb-x")
+        _ = await engine.retrieve("q", top_k=5, filters={"tenant": "t1"}, index_id="kb-x")
 
         inner.retrieve.assert_awaited_once_with(
             "q", top_k=5, filters={"tenant": "t1"}, index_id="kb-x"
@@ -426,7 +445,7 @@ class TestFilteringRetrievalEngine:
             ranks.
         """
         with pytest.raises(AppValueError, match="ranks"):
-            OrdinalCeiling("level", "max_level", ())
+            _ = OrdinalCeiling("level", "max_level", ())
 
     @staticmethod
     @pytest.mark.asyncio
@@ -485,9 +504,12 @@ class TestFilteringRetrievalEngine:
         )
 
         with patch("techai_webutils.clients.retrieval.filtering.logger") as mock_logger:
-            await engine.retrieve("q", filters={"tenant": "t1"})
+            _ = await engine.retrieve("q", filters={"tenant": "t1"})
 
-        fields = mock_logger.info.call_args.kwargs
+        fields = cast(
+            "dict[str, object]",
+            cast("MagicMock", cast("MagicMock", mock_logger.info).call_args).kwargs,
+        )
         assert fields["retrieved"] == _EXPECTED_FIELDS
         assert fields["kept"] == 1
         assert fields["dropped_by"] == {"MinScore": 1, "MetadataEquals": 1}
@@ -541,7 +563,7 @@ class TestRetrievalFactory:
           - ``RetrievalConfig(min_score=None)`` raises TypeError naming min_score.
         """
         with pytest.raises(AppTypeError, match="min_score"):
-            RetrievalConfig(min_score=None)  # type: ignore[arg-type]
+            _ = RetrievalConfig(min_score=cast("float", cast("object", None)))
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -561,7 +583,7 @@ class TestRetrievalFactory:
         ids=["stub-ignores-store-filter-keys", "bedrock-ignores-stub-passages"],
     )
     def test_logs_a_seam_the_selected_kind_ignores(
-        config: RetrievalConfig, seams: dict[str, Any], unused: list[str]
+        config: RetrievalConfig, seams: dict[str, object], unused: list[str]
     ) -> None:
         """The factory logs a supplied seam that does not apply to the selected kind.
 
@@ -575,11 +597,12 @@ class TestRetrievalFactory:
             the unused seam.
         """
         with patch("techai_webutils.clients.retrieval.builder.logger") as mock_logger:
-            new_retrieval_engine_from_config(
-                config, options=RetrievalEngineDependencies(policies=[], **seams)
+            _ = new_retrieval_engine_from_config(
+                config,
+                options=replace(RetrievalEngineDependencies(policies=[]), **seams),
             )
 
-        mock_logger.info.assert_any_call(
+        cast("MagicMock", cast("MagicMock", mock_logger.info).assert_any_call)(
             "retrieval seams unused by the selected kind",
             kind=str(config.kind),
             seams=unused,
@@ -601,12 +624,12 @@ class TestRetrievalFactory:
             the tenant key.
         """
         with patch("techai_webutils.clients.retrieval.builder.logger") as mock_logger:
-            new_retrieval_engine_from_config(
+            _ = new_retrieval_engine_from_config(
                 RetrievalConfig(kind=RetrievalKind.BEDROCK, knowledge_base_id="kb"),
                 options=RetrievalEngineDependencies(policies=[MetadataEquals("tenant")]),
             )
 
-        mock_logger.warning.assert_any_call(
+        cast("MagicMock", cast("MagicMock", mock_logger.warning).assert_any_call)(
             "retrieval scope policies are not pushed down to the backend",
             kind="bedrock",
             scope_keys=["tenant"],
@@ -626,7 +649,7 @@ class TestRetrievalFactory:
             Retrieve on the configured knowledge base.
         """
         client = AsyncMock()
-        client.retrieve.return_value = {"retrievalResults": []}
+        cast("MagicMock", client.retrieve).return_value = {"retrievalResults": []}
         with _bedrock_client(client):
             engine = new_retrieval_engine_from_config(
                 RetrievalConfig(kind=RetrievalKind.BEDROCK, knowledge_base_id="kb"),
@@ -635,7 +658,13 @@ class TestRetrievalFactory:
 
         assert isinstance(engine, FilteringRetrievalEngine)
         assert await engine.retrieve("q") == []
-        assert client.retrieve.call_args.kwargs["knowledgeBaseId"] == "kb"
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", client.retrieve).call_args).kwargs,
+            )["knowledgeBaseId"]
+            == "kb"
+        )
 
     @staticmethod
     def test_unknown_kind_raises() -> None:
@@ -649,8 +678,8 @@ class TestRetrievalFactory:
           - A bogus kind raises ValueError naming the kind.
         """
         with pytest.raises(AppValueError, match="retrieval kind"):
-            new_retrieval_engine_from_config(
-                RetrievalConfig(kind="bogus"),  # type: ignore[arg-type]
+            _ = new_retrieval_engine_from_config(
+                RetrievalConfig(kind=cast("RetrievalKind", cast("object", "bogus"))),
                 options=RetrievalEngineDependencies(policies=[]),
             )
 
@@ -686,7 +715,7 @@ class TestRetrievalFactory:
         assert [r.document_id for r in results] == ["keep"]
 
     @staticmethod
-    async def _factory_vector_config(config: RetrievalConfig) -> dict[str, Any]:
+    async def _factory_vector_config(config: RetrievalConfig) -> dict[str, object]:
         """Build a Bedrock engine through the factory.
 
         And return the vectorSearchConfiguration it sends.
@@ -696,15 +725,18 @@ class TestRetrievalFactory:
 
         """
         client = AsyncMock()
-        client.retrieve.return_value = {"retrievalResults": []}
+        cast("MagicMock", client.retrieve).return_value = {"retrievalResults": []}
         with _bedrock_client(client):
             engine = new_retrieval_engine_from_config(
                 config, options=RetrievalEngineDependencies(policies=[])
             )
-        await engine.retrieve("q")
-        return client.retrieve.call_args.kwargs["retrievalConfiguration"][
-            "vectorSearchConfiguration"
-        ]
+        _ = await engine.retrieve("q")
+        return cast(
+            "dict[str, object]",
+            cast("MagicMock", cast("MagicMock", client.retrieve).call_args).kwargs[
+                "retrievalConfiguration"
+            ]["vectorSearchConfiguration"],
+        )
 
     @pytest.mark.asyncio
     async def test_bedrock_config_threads_search_type_and_reranker(self) -> None:
@@ -731,9 +763,16 @@ class TestRetrievalFactory:
             )
         )
         assert vsc["overrideSearchType"] == "HYBRID"
-        assert vsc["rerankingConfiguration"]["bedrockRerankingConfiguration"][
-            "modelConfiguration"
-        ]["modelArn"].endswith("/cohere.rerank-v3-5:0")
+        assert cast(
+            "MagicMock",
+            dig(
+                vsc,
+                "rerankingConfiguration",
+                "bedrockRerankingConfiguration",
+                "modelConfiguration",
+                "modelArn",
+            ).endswith,
+        )("/cohere.rerank-v3-5:0")
 
     @pytest.mark.asyncio
     async def test_reranking_kind_none_disables_reranker_even_with_a_model_id(
@@ -774,7 +813,7 @@ class TestRetrievalFactory:
             the injected resolver.
         """
         client = AsyncMock()
-        client.retrieve.return_value = {
+        cast("MagicMock", client.retrieve).return_value = {
             "retrievalResults": [
                 {"content": {"text": "c"}, "score": 0.1, "metadata": {"doc": "d1"}}
             ]
@@ -795,9 +834,12 @@ class TestRetrievalFactory:
 
         results = await engine.retrieve("q", filters={"tenant": "t1"})
 
-        sent = client.retrieve.call_args.kwargs["retrievalConfiguration"][
-            "vectorSearchConfiguration"
-        ]
+        sent = cast(
+            "dict[str, object]",
+            cast("MagicMock", cast("MagicMock", client.retrieve).call_args).kwargs[
+                "retrievalConfiguration"
+            ]["vectorSearchConfiguration"],
+        )
         assert sent["filter"] == {"equals": {"key": "tenant", "value": "t1"}}
         assert [r.document_id for r in results] == ["d1"]
 
@@ -809,7 +851,9 @@ class TestBedrockRetrievalEngineRequest:
     """
 
     @staticmethod
-    async def _vector_config(**engine_kwargs: Unpack[_EngineOptions]) -> dict[str, Any]:
+    async def _vector_config(
+        **engine_kwargs: Unpack[_EngineOptions],
+    ) -> dict[str, object]:
         """Drive engine.retrieve against a mocked client.
 
         And return the vectorSearchConfiguration sent.
@@ -819,16 +863,21 @@ class TestBedrockRetrievalEngineRequest:
 
         """
         client = AsyncMock()
-        client.retrieve.return_value = {"retrievalResults": []}
+        cast("MagicMock", client.retrieve).return_value = {"retrievalResults": []}
         with _bedrock_client(client):
             engine = BedrockRetrievalEngine(
                 options=BedrockRetrievalOptions(
                     region="us-east-1", knowledge_base_id="kb-1", **engine_kwargs
                 )
             )
-        await engine.retrieve("q", top_k=25, filters={"tenant": "t1"})
-        config = client.retrieve.call_args.kwargs["retrievalConfiguration"]
-        return config["vectorSearchConfiguration"]
+        _ = await engine.retrieve("q", top_k=25, filters={"tenant": "t1"})
+        config = cast(
+            "dict[str, object]",
+            cast("MagicMock", cast("MagicMock", client.retrieve).call_args).kwargs[
+                "retrievalConfiguration"
+            ],
+        )
+        return cast("dict[str, object]", config["vectorSearchConfiguration"])
 
     @pytest.mark.asyncio
     async def test_default_request_has_no_filter_override_or_rerank(self) -> None:
@@ -895,11 +944,11 @@ class TestBedrockRetrievalEngineRequest:
             bedrockRerankingConfiguration.modelConfiguration.modelArn.
         """
         vsc = await self._vector_config(reranking_model="cohere.rerank-v3-5:0")
-        rerank = vsc["rerankingConfiguration"]
+        rerank = cast("dict[str, object]", vsc["rerankingConfiguration"])
         assert rerank["type"] == "BEDROCK_RERANKING_MODEL"
-        model_arn = rerank["bedrockRerankingConfiguration"]["modelConfiguration"][
-            "modelArn"
-        ]
+        model_arn = dig(
+            rerank, "bedrockRerankingConfiguration", "modelConfiguration", "modelArn"
+        )
         assert (
             model_arn
             == "arn:aws:bedrock:us-east-1::foundation-model/cohere.rerank-v3-5:0"
@@ -955,7 +1004,9 @@ class TestBedrockRetrieveContract:
 
         """
         client = AsyncMock()
-        client.retrieve.return_value = self._retrieve_payload(*metadatas)
+        cast("MagicMock", client.retrieve).return_value = self._retrieve_payload(
+            *metadatas
+        )
         with _bedrock_client(client):
             engine = BedrockRetrievalEngine(
                 options=BedrockRetrievalOptions(
@@ -1036,13 +1087,13 @@ class TestBedrockRetrieveContract:
             labelled one kept.
         """
         client = AsyncMock()
-        client.retrieve.return_value = self._retrieve_payload(
+        cast("MagicMock", client.retrieve).return_value = self._retrieve_payload(
             {}, {"tenant": "t1", "document_id": "d2"}
         )
         opened = MagicMock()
         opened.__aenter__ = AsyncMock(return_value=client)
         session = MagicMock()
-        session.create_client.return_value = opened
+        cast("MagicMock", session.create_client).return_value = opened
         with patch("aiobotocore.session.get_session", return_value=session):
             engine = new_retrieval_engine_from_config(
                 RetrievalConfig(

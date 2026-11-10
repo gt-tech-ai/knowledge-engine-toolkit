@@ -1,8 +1,13 @@
 """Tests for StorageObject dataclass and StorageClient ABC."""
 
+from typing import TYPE_CHECKING, cast
+
 import pytest
 
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _EXPECTED_SIZE = 1024
 
@@ -58,4 +63,4 @@ class TestStorageClient:
             object-storage methods are abstract
         """
         with pytest.raises(TypeError):
-            StorageClient()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", StorageClient)()

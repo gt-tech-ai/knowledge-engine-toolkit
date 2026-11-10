@@ -9,7 +9,7 @@ import gzip
 import threading
 from datetime import UTC, datetime
 from typing import cast
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
@@ -29,6 +29,7 @@ from techai_webutils.core.interfaces.checkpoint import (
     StageState,
 )
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
+from tests.json_path import dig
 
 _EXPECTED_WRITTEN_COUNT = 2
 _EXPECTED_HEADER = 3
@@ -84,8 +85,8 @@ def _serve(objects: AsyncMock, bodies: dict[str, bytes]) -> None:
     def download(_bucket: str, key: str) -> bytes:
         return bodies[key]
 
-    objects.exists.side_effect = exists
-    objects.download.side_effect = download
+    cast("MagicMock", objects.exists).side_effect = exists
+    cast("MagicMock", objects.download).side_effect = download
 
 
 class TestBuilder:
@@ -132,18 +133,18 @@ class TestBuilder:
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         s3db = CheckpointConfig(kind=CheckpointKind.S3DB, bucket="b")
         with pytest.raises(AppValueError):
-            checkpoint_store_from_config(s3db, state_client=states)
+            _ = checkpoint_store_from_config(s3db, state_client=states)
         with pytest.raises(AppValueError):
-            checkpoint_store_from_config(s3db, object_store=objects)
+            _ = checkpoint_store_from_config(s3db, object_store=objects)
         with pytest.raises(AppValueError):
-            checkpoint_store_from_config(
+            _ = checkpoint_store_from_config(
                 CheckpointConfig(kind=CheckpointKind.S3DB),
                 object_store=objects,
                 state_client=states,
             )
         with pytest.raises(AppValueError):
-            checkpoint_store_from_config(
-                CheckpointConfig(kind=cast("CheckpointKind", "other"))
+            _ = checkpoint_store_from_config(
+                CheckpointConfig(kind=cast("CheckpointKind", cast("object", "other")))
             )
 
 
@@ -172,7 +173,14 @@ class TestS3DbWrite:
 
         await _store(objects, states).put(artifact)
 
-        uploads = {c.args[1]: c.args[2] for c in objects.upload.await_args_list}
+        uploads = {
+            cast("str", cast("list[object]", c.args)[1]): cast(
+                "bytes", cast("list[object]", c.args)[2]
+            )
+            for c in cast(
+                "list[object]", cast("AsyncMock", objects.upload).await_args_list
+            )
+        }
         header, payload = decode(uploads[_ENVELOPE])
         assert payload == b'{"text":"hi"}'
         assert header == {
@@ -183,7 +191,7 @@ class TestS3DbWrite:
         }
         assert uploads[f"{_BASE}.refs/doc-1"] == b""
         assert uploads["checkpoints/refs/org-1/doc-1/c0ffee-parse-abcdef123456"] == b""
-        states.put_state.assert_awaited_once_with(
+        cast("MagicMock", cast("AsyncMock", states.put_state).assert_awaited_once_with)(
             StageState(
                 "org-1",
                 "doc-1",
@@ -213,7 +221,12 @@ class TestS3DbWrite:
 
         await _store(objects, states).put(StageArtifact(_KEY, b"x"))
 
-        written = [c.args[1] for c in objects.upload.await_args_list]
+        written = [
+            cast("list[object]", c.args)[1]
+            for c in cast(
+                "list[object]", cast("AsyncMock", objects.upload).await_args_list
+            )
+        ]
         assert _ENVELOPE not in written
         assert len(written) == _EXPECTED_WRITTEN_COUNT
 
@@ -237,15 +250,20 @@ class TestS3DbWrite:
 
         await _store(objects, states, max_bytes=1024).put(StageArtifact(_KEY, payload))
 
-        uploads = [(c.args[1], c.args[2]) for c in objects.upload.await_args_list]
+        uploads = [
+            (cast("list[object]", c.args)[1], cast("list[object]", c.args)[2])
+            for c in cast(
+                "list[object]", cast("AsyncMock", objects.upload).await_args_list
+            )
+        ]
         names = [name for name, _ in uploads]
         assert names[:4] == [f"{_BASE}.seg-{n}.gz" for n in range(3)] + [_ENVELOPE]
-        assert [len(gzip.decompress(body)) for _, body in uploads[:3]] == [
+        assert [len(gzip.decompress(cast("bytes", body))) for _, body in uploads[:3]] == [
             1024,
             1024,
             452,
         ]
-        header, inline = decode(uploads[3][1])
+        header, inline = decode(cast("bytes", uploads[3][1]))
         assert header["segments"] == _EXPECTED_HEADER
         assert inline == b""
 
@@ -265,7 +283,7 @@ class TestS3DbWrite:
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         part = f"{_BASE}/part-7.json.gz"
         _serve(objects, {part: gzip.compress(b"page")})
-        objects.list_objects.return_value = [
+        cast("MagicMock", objects.list_objects).return_value = [
             _object(f"{_BASE}/part-2.json.gz"),
             _object(part),
         ]
@@ -273,9 +291,19 @@ class TestS3DbWrite:
 
         await store.put_part(_KEY, 7, b"page")
 
-        assert objects.upload.await_args_list[0].args[1] == part
+        assert (
+            cast(
+                "list[object]",
+                cast("list[object]", cast("AsyncMock", objects.upload).await_args_list)[
+                    0
+                ].args,
+            )[1]
+            == part
+        )
         assert await store.parts(_KEY) == frozenset({2, 7})
-        objects.list_objects.assert_awaited_with("ckpt", f"{_BASE}/part-")
+        cast("MagicMock", cast("AsyncMock", objects.list_objects).assert_awaited_with)(
+            "ckpt", f"{_BASE}/part-"
+        )
         assert await store.get_part(_KEY, 7) == b"page"
         assert await store.get_part(_KEY, 8) is None
 
@@ -305,12 +333,33 @@ class TestS3DbCompression:
         await store.put(StageArtifact(_KEY, b"0123456789"))
         await store.put_part(_KEY, 7, b"page")
 
-        written = [c.args for c in objects.upload.await_args_list if c.args[2]]
+        written = [
+            cast("object", c.args)
+            for c in cast(
+                "list[object]", cast("AsyncMock", objects.upload).await_args_list
+            )
+            if cast("list[object]", c.args)[2]
+        ]
         assert len(written) == _EXPECTED_WRITTEN_COUNT_5
-        assert all(args[2].startswith(_ZSTD_MAGIC) for args in written)
-        assert {args[3] for args in written} == {"application/zstd"}
-        assert _ENVELOPE in {args[1] for args in written}
-        _serve(objects, {c.args[1]: c.args[2] for c in objects.upload.await_args_list})
+        assert all(
+            cast("MagicMock", args[2].startswith)(_ZSTD_MAGIC)
+            for args in cast("list[list[object]]", written)
+        )
+        assert {args[3] for args in cast("list[list[object]]", written)} == {
+            "application/zstd"
+        }
+        assert _ENVELOPE in {dig(args, 1) for args in written}
+        _serve(
+            objects,
+            {
+                cast("str", cast("list[object]", c.args)[1]): cast(
+                    "bytes", cast("list[object]", c.args)[2]
+                )
+                for c in cast(
+                    "list[object]", cast("AsyncMock", objects.upload).await_args_list
+                )
+            },
+        )
         stored = await store.get(_KEY)
         assert stored is not None
         assert stored.payload == b"0123456789"
@@ -347,7 +396,17 @@ class TestS3DbCompression:
         first = _store(objects, states, compression=writer)
         await first.put(StageArtifact(_KEY, b"payload"))
         await first.put_part(_KEY, 1, b"page")
-        _serve(objects, {c.args[1]: c.args[2] for c in objects.upload.await_args_list})
+        _serve(
+            objects,
+            {
+                cast("str", cast("list[object]", c.args)[1]): cast(
+                    "bytes", cast("list[object]", c.args)[2]
+                )
+                for c in cast(
+                    "list[object]", cast("AsyncMock", objects.upload).await_args_list
+                )
+            },
+        )
 
         second = _store(objects, states, compression=reader)
         stored = await second.get(_KEY)
@@ -369,7 +428,11 @@ class TestS3DbCompression:
         """
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         with pytest.raises(AppValueError):
-            _store(objects, states, compression=cast("CheckpointCompression", "brotli"))
+            _ = _store(
+                objects,
+                states,
+                compression=cast("CheckpointCompression", cast("object", "brotli")),
+            )
 
 
 class TestS3DbEventLoop:
@@ -413,7 +476,17 @@ class TestS3DbEventLoop:
 
         await store.put(StageArtifact(_KEY, b"0123456789"))
         await store.put_part(_KEY, 7, b"page")
-        _serve(objects, {c.args[1]: c.args[2] for c in objects.upload.await_args_list})
+        _serve(
+            objects,
+            {
+                cast("str", cast("list[object]", c.args)[1]): cast(
+                    "bytes", cast("list[object]", c.args)[2]
+                )
+                for c in cast(
+                    "list[object]", cast("AsyncMock", objects.upload).await_args_list
+                )
+            },
+        )
         stored = await store.get(_KEY)
 
         assert stored is not None
@@ -518,7 +591,7 @@ class TestS3DbRead:
             assert (await store.get(_KEY) is not None) is readable
         _serve(objects, {_ENVELOPE: encode({"format_version": 2}, b"x")})
         with pytest.raises(ConflictError):
-            await store.get(_KEY)
+            _ = await store.get(_KEY)
 
 
 class TestS3DbDelete:
@@ -540,11 +613,11 @@ class TestS3DbDelete:
         objects, states = AsyncMock(spec=StorageClient), AsyncMock()
         ref = "checkpoints/refs/org-1/doc-1/c0ffee-parse-abcdef123456"
         stem = [_object(_ENVELOPE), _object(f"{_BASE}/part-1.json.gz")]
-        objects.list_objects.side_effect = [[_object(ref)], [], stem]
+        cast("MagicMock", objects.list_objects).side_effect = [[_object(ref)], [], stem]
 
         await _store(objects, states).purge("org-1", "doc-1")
 
-        assert objects.delete.await_args_list == [
+        assert cast("object", cast("AsyncMock", objects.delete).await_args_list) == [
             call("ckpt", f"{_BASE}.refs/doc-1"),
             call("ckpt", ref),
             call("ckpt", _ENVELOPE),
@@ -570,14 +643,14 @@ class TestS3DbDelete:
         parse_ref = "checkpoints/refs/org-1/doc-1/c0ffee-parse-abcdef123456"
         chunk_ref = "checkpoints/refs/org-1/doc-1/c0ffee-chunk-0123456789ab"
         other_holder = _object(f"{_BASE}.refs/doc-2")
-        objects.list_objects.side_effect = [
+        cast("MagicMock", objects.list_objects).side_effect = [
             [_object(parse_ref), _object(chunk_ref)],
             [other_holder],
         ]
 
         await _store(objects, states).delete("org-1", "doc-1", [Stage.PARSE])
 
-        assert objects.delete.await_args_list == [
+        assert cast("object", cast("AsyncMock", objects.delete).await_args_list) == [
             call("ckpt", f"{_BASE}.refs/doc-1"),
             call("ckpt", parse_ref),
         ]

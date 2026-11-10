@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -27,10 +28,14 @@ def _domain(index: str | None, model: tuple[str, str] = ("m", "1")) -> MagicMock
 
     """
     client = MagicMock()
-    client.indices.exists_alias = AsyncMock(return_value=index is not None)
-    client.indices.get_alias = AsyncMock(return_value={index: {}} if index else {})
+    cast("MagicMock", client.indices).exists_alias = AsyncMock(
+        return_value=index is not None
+    )
+    cast("MagicMock", client.indices).get_alias = AsyncMock(
+        return_value={index: {}} if index else {}
+    )
     stamp = {"mappings": {"_meta": {"model": model[0], "version": model[1]}}}
-    client.indices.get_mapping = AsyncMock(
+    cast("MagicMock", client.indices).get_mapping = AsyncMock(
         side_effect=lambda **kw: {index: stamp} if kw["index"] == index else {}
     )
     client.update_by_query = AsyncMock(return_value={})
@@ -96,7 +101,7 @@ async def test_multi_domain_store_reads_the_model_where_the_index_lives() -> Non
     assert await org.index_model("docs_o1_m_1") == ("m", "1")
     assert store.configured_model == ("m", "1")
     with pytest.raises(AppValueError, match="no domain holds"):
-        await org.index_model("docs_o1_gone_1")
+        _ = await org.index_model("docs_o1_gone_1")
     with pytest.raises(ConflictError):
         await VectorStoreSink(store, "docs").write(
             _document(model="other"), [ChunkPayload(text="t")], [[0.1, 0.2]]
@@ -120,5 +125,5 @@ async def test_multi_domain_update_metadata_reaches_every_domain() -> None:
         "o1", "d", {"clearance": "public"}
     )
 
-    a.update_by_query.assert_awaited_once()
-    b.update_by_query.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", a.update_by_query).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", b.update_by_query).assert_awaited_once)()

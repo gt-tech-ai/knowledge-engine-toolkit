@@ -64,7 +64,7 @@ class TestRetryBudget:
         """
         budget = RetryBudget(max_retries=5)
         assert budget.remaining() == _EXPECTED_REMAINING
-        budget.consume()
+        _ = budget.consume()
         assert budget.remaining() == _EXPECTED_REMAINING_4
 
     @staticmethod
@@ -81,8 +81,8 @@ class TestRetryBudget:
           - After reset(), remaining() returns to 3
         """
         budget = RetryBudget(max_retries=3)
-        budget.consume()
-        budget.consume()
+        _ = budget.consume()
+        _ = budget.consume()
         assert budget.remaining() == 1
         budget.reset()
         assert budget.remaining() == _EXPECTED_REMAINING_3

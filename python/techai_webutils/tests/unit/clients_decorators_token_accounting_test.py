@@ -116,7 +116,7 @@ def _proxy(
             clock=lambda: _NOW,
         ),
     )
-    return cast("LLMProvider", proxy)
+    return cast("LLMProvider", cast("object", proxy))
 
 
 def _recorded(ledger: MagicMock) -> UsageRecord:
@@ -126,8 +126,11 @@ def _recorded(ledger: MagicMock) -> UsageRecord:
         The one usage ``ledger`` recorded.
 
     """
-    ledger.record.assert_awaited_once()
-    return ledger.record.await_args.args[0]
+    cast("MagicMock", cast("AsyncMock", ledger.record).assert_awaited_once)()
+    return cast(
+        "UsageRecord",
+        cast("MagicMock", cast("AsyncMock", ledger.record).await_args).args[0],
+    )
 
 
 @pytest.mark.asyncio
@@ -144,12 +147,12 @@ async def test_rejects_before_calling_inner_when_over_budget_and_enforced() -> N
     inner, ledger = _llm(), _ledger(_SPENT)
 
     with pytest.raises(QuotaExceededError) as caught:
-        await _proxy(inner, ledger).complete(_MESSAGES)
+        _ = await _proxy(inner, ledger).complete(_MESSAGES)
 
     assert caught.value.code is ErrorCode.RESOURCE_EXHAUSTED
     assert caught.value.details == {"org_id": "org-1", "reason": "budget_exhausted"}
-    inner.complete.assert_not_awaited()
-    ledger.record.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()
+    cast("MagicMock", cast("AsyncMock", ledger.record).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -217,7 +220,7 @@ async def test_records_stream_usage_from_terminal_stream_usage() -> None:
 
     text = [item async for item in await proxy.stream(_MESSAGES)]
     record = _recorded(ledger)
-    ledger.record.reset_mock()
+    cast("MagicMock", cast("MagicMock", ledger.record).reset_mock)()
     full = [item async for item in await proxy.stream_with_usage(_MESSAGES)]
 
     assert text == ["he", "llo"]
@@ -245,26 +248,34 @@ async def test_shadow_mode_serves_and_records_but_never_rejects() -> None:
     )
     proxy = cast(
         "LLMProvider",
-        TokenAccountingProxy(
-            inner,
-            options=TokenAccountingOptions(
-                ledger=ledger,
-                scope=lambda: _SCOPE,
-                prices=_PRICES,
-                policy=BudgetPolicy(enforcement=Enforcement.SHADOW),
-                step="generate",
-                metrics=metrics,
-                clock=lambda: _NOW,
+        cast(
+            "object",
+            TokenAccountingProxy(
+                inner,
+                options=TokenAccountingOptions(
+                    ledger=ledger,
+                    scope=lambda: _SCOPE,
+                    prices=_PRICES,
+                    policy=BudgetPolicy(enforcement=Enforcement.SHADOW),
+                    step="generate",
+                    metrics=metrics,
+                    clock=lambda: _NOW,
+                ),
             ),
         ),
     )
 
-    await proxy.complete(_MESSAGES)
+    _ = await proxy.complete(_MESSAGES)
 
-    inner.complete.assert_awaited_once()
-    _recorded(ledger)
-    counters["ai_budget_would_exceed_total"].inc.assert_called_once_with(1.0, org="org-1")
-    counters["ai_tokens_total"].inc.assert_any_call(
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_awaited_once)()
+    _ = _recorded(ledger)
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", counters["ai_budget_would_exceed_total"].inc
+        ).assert_called_once_with,
+    )(1.0, org="org-1")
+    cast("MagicMock", cast("MagicMock", counters["ai_tokens_total"].inc).assert_any_call)(
         10, org="org-1", workspace="ws-1", model="sonnet", type="input"
     )
 
@@ -289,7 +300,7 @@ async def test_fail_open_ledger_error_still_serves() -> None:
     )
 
     assert response.model == "sonnet"
-    inner.complete.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_awaited_once)()
 
 
 @pytest.mark.asyncio
@@ -307,11 +318,11 @@ async def test_no_scope_is_passthrough() -> None:
     inner.model_name = MagicMock(return_value="sonnet")
     proxy = _proxy(inner, ledger, scope=None)
 
-    await proxy.complete(_MESSAGES)
+    _ = await proxy.complete(_MESSAGES)
 
     assert proxy.model_name() == "sonnet"
-    ledger.check_budget.assert_not_awaited()
-    ledger.record.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", ledger.check_budget).assert_not_awaited)()
+    cast("MagicMock", cast("AsyncMock", ledger.record).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -327,16 +338,16 @@ async def test_cache_hit_records_one_zero_token_usage() -> None:
         ``operation="generate.cache_hit"``, zero tokens and zero cost
     """
     inner, ledger = _llm(), _ledger()
-    response = inner.complete.return_value
+    response = cast("object", cast("MagicMock", inner.complete).return_value)
 
     async def cached(*_args: object, **_kwargs: object) -> LLMResponse:
         await asyncio.sleep(0)
         set_served_from_cache(value=True)
-        return response
+        return cast("LLMResponse", response)
 
     inner.complete = AsyncMock(side_effect=cached)
 
-    await _proxy(inner, ledger).complete(_MESSAGES)
+    _ = await _proxy(inner, ledger).complete(_MESSAGES)
 
     record = _recorded(ledger)
     assert (
@@ -376,7 +387,9 @@ async def test_embedding_calls_record_embed_tokens_and_unpriced_models_record_ze
         ]
     )
 
-    await cast("EmbeddingProvider", _proxy(inner, ledger)).embed_batch(["a", "b"])
+    _ = await cast(
+        "EmbeddingProvider", cast("object", _proxy(inner, ledger))
+    ).embed_batch(["a", "b"])
 
     record = _recorded(ledger)
     assert (
@@ -407,14 +420,14 @@ async def test_hard_ledger_error_rejects_before_inner() -> None:
     inner = _llm()
 
     with pytest.raises(QuotaExceededError) as caught:
-        await _proxy(inner, _ledger(RuntimeError("down"))).complete(_MESSAGES)
-    inner.complete.assert_not_awaited()
-    await _proxy(
+        _ = await _proxy(inner, _ledger(RuntimeError("down"))).complete(_MESSAGES)
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()
+    _ = await _proxy(
         inner, _ledger(RuntimeError("down")), enforcement=Enforcement.SOFT
     ).complete(_MESSAGES)
 
     assert caught.value.details["reason"] == "ledger_error_fail_closed"
-    inner.complete.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_awaited_once)()
 
 
 @pytest.mark.asyncio
@@ -445,14 +458,14 @@ async def test_per_budget_enforces_the_budget_level_under_a_shadow_policy() -> N
                 clock=lambda: _NOW,
             ),
         )
-        return cast("LLMProvider", proxy)
+        return cast("LLMProvider", cast("object", proxy))
 
     served_inner, served_ledger = _llm(), _ledger(soft_spent)
-    await wrap(served_inner, served_ledger, per_budget=False).complete(_MESSAGES)
+    _ = await wrap(served_inner, served_ledger, per_budget=False).complete(_MESSAGES)
     refused_inner, refused_ledger = _llm(), _ledger(soft_spent)
     with pytest.raises(QuotaExceededError):
-        await wrap(refused_inner, refused_ledger, per_budget=True).complete(_MESSAGES)
+        _ = await wrap(refused_inner, refused_ledger, per_budget=True).complete(_MESSAGES)
 
-    served_inner.complete.assert_awaited_once()
-    refused_inner.complete.assert_not_awaited()
-    refused_ledger.record.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", served_inner.complete).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", refused_inner.complete).assert_not_awaited)()
+    cast("MagicMock", cast("AsyncMock", refused_ledger.record).assert_not_awaited)()

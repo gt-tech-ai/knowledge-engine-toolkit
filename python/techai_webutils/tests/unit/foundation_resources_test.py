@@ -34,9 +34,9 @@ def _cgroup(root: Path, *, cpu_max: str | None, memory_max: str | None) -> Path:
 
     """
     if cpu_max is not None:
-        (root / "cpu.max").write_text(f"{cpu_max}\n")
+        _ = (root / "cpu.max").write_text(f"{cpu_max}\n")
     if memory_max is not None:
-        (root / "memory.max").write_text(f"{memory_max}\n")
+        _ = (root / "memory.max").write_text(f"{memory_max}\n")
     return root
 
 
@@ -117,7 +117,7 @@ class TestCgroupProbe:
           - ``cpu.max = "200000 100000"`` reports 2.0 CPU; ``memory.max = 4 GiB`` reports
             4 GiB.
         """
-        _cgroup(tmp_path, cpu_max="200000 100000", memory_max=str(4 * _GIB))
+        _ = _cgroup(tmp_path, cpu_max="200000 100000", memory_max=str(4 * _GIB))
 
         assert _cgroup_probe(tmp_path).limits() == ResourceLimits(
             cpu=2.0, memory_bytes=4 * _GIB
@@ -135,7 +135,7 @@ class TestCgroupProbe:
           - ``cpu.max = "max 100000"`` and ``memory.max = "max"`` report
             ``os.cpu_count()`` CPUs and the host's physical memory.
         """
-        _cgroup(tmp_path, cpu_max="max 100000", memory_max="max")
+        _ = _cgroup(tmp_path, cpu_max="max 100000", memory_max="max")
 
         limits = _cgroup_probe(tmp_path).limits()
 
@@ -185,10 +185,10 @@ class TestCgroupProbe:
           - A missing or unparsable ``cpu.max`` or ``memory.max`` with ``required=True``
             raises ``UnavailableError`` (code ``UNAVAILABLE``).
         """
-        _cgroup(tmp_path, cpu_max=cpu_max, memory_max=memory_max)
+        _ = _cgroup(tmp_path, cpu_max=cpu_max, memory_max=memory_max)
 
         with pytest.raises(UnavailableError) as raised:
-            _cgroup_probe(tmp_path, required=True).limits()
+            _ = _cgroup_probe(tmp_path, required=True).limits()
         assert raised.value.code is ErrorCode.UNAVAILABLE
 
 
@@ -202,6 +202,6 @@ def test_unknown_kind_fails_loudly() -> None:
       - ``resource_probe_from_config`` with an unknown kind raises ``AppValueError``.
     """
     with pytest.raises(AppValueError, match="unknown resource probe kind"):
-        resource_probe_from_config(
-            ResourceProbeConfig(kind=cast("ResourceProbeKind", "bogus"))
+        _ = resource_probe_from_config(
+            ResourceProbeConfig(kind=cast("ResourceProbeKind", cast("object", "bogus")))
         )

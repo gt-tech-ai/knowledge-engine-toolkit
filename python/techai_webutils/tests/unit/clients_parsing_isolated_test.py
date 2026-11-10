@@ -92,7 +92,7 @@ def _make_pdf(text: str) -> bytes:
 
     """
     doc = pymupdf.open()
-    doc.new_page().insert_text((72, 72), text)
+    _ = doc.new_page().insert_text((72, 72), text)
     return doc.tobytes()
 
 
@@ -126,7 +126,7 @@ class TestRunIsolated:
         """
         start = time.monotonic()
         with pytest.raises(TimeoutError):
-            run_isolated(_sleep_forever, timeout_seconds=0.4)
+            _ = run_isolated(_sleep_forever, timeout_seconds=0.4)
         assert time.monotonic() - start < _EXPECTED_MONOTONIC
 
     @staticmethod
@@ -364,7 +364,7 @@ class TestIsolatedParser:
             PDF format + content preserved.
         """
         pdf = tmp_path / "doc.pdf"
-        pdf.write_bytes(_make_pdf("Isolated path content"))
+        _ = pdf.write_bytes(_make_pdf("Isolated path content"))
         result = await IsolatedParser(timeout_seconds=60).parse_path(
             str(pdf), filename="doc.pdf"
         )
@@ -387,7 +387,7 @@ class TestIsolatedParser:
           - An HTML file on disk parses ok, as HTML, to a Markdown heading.
         """
         page = tmp_path / "p.html"
-        page.write_bytes(b"<html><h1>Hi</h1></html>")
+        _ = page.write_bytes(b"<html><h1>Hi</h1></html>")
         result = await IsolatedParser(timeout_seconds=60).parse_path(
             str(page), filename="p.html"
         )
@@ -444,7 +444,7 @@ class TestScratchHandBack:
         """
         pdf = _make_pdf("scratch hand-back")
         source = tmp_path / "doc.pdf"
-        source.write_bytes(pdf)
+        _ = source.write_bytes(pdf)
         queued: list[object] = []
         real_run_isolated = isolated_module.run_isolated
 

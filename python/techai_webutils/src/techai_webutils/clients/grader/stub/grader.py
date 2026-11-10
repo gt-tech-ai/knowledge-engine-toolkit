@@ -8,7 +8,7 @@ from techai_webutils.core.interfaces.grader import Grader, GradeResult
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.dataset import EvalCase
-    from techai_webutils.core.interfaces.evaluator import EvalOutput
+    from techai_webutils.core.interfaces.grader import EvalOutput
 
 
 class StubGrader(Grader):

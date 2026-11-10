@@ -10,6 +10,8 @@ Run with: pytest tests/python/test_foundation/test_logger_builder.py -v
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from techai_webutils.core.errors import AppValueError
@@ -67,9 +69,9 @@ class TestLoggerBuilder:
         **What it tests:**
           - ValueError is raised for an invalid kind
         """
-        config = LoggerConfig(kind="unknown")  # type: ignore[arg-type]
+        config = LoggerConfig(kind=cast("LoggerKind", cast("object", "unknown")))
         with pytest.raises(AppValueError, match="unknown"):
-            new_logger_from_config(config)
+            _ = new_logger_from_config(config)
 
     @staticmethod
     def test_default_config() -> None:

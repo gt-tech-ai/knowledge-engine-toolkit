@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import httpx
@@ -109,7 +109,7 @@ async def test_complete_maps_the_chat_shape() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/chat/completions"
-        sent.append(json.loads(request.content))
+        sent.append(cast("dict[str, object]", json.loads(request.content)))
         return httpx.Response(
             200,
             json={
@@ -169,7 +169,7 @@ async def test_stream_yields_chunks_in_order_then_usage() -> None:
     )
 
     def handler(request: httpx.Request) -> httpx.Response:
-        sent.append(json.loads(request.content))
+        sent.append(cast("dict[str, object]", json.loads(request.content)))
         return httpx.Response(200, content=body)
 
     provider = _provider(handler)
@@ -240,9 +240,9 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
     provider = _provider(lambda _request: httpx.Response(status, json={}))
 
     with pytest.raises(AppError) as unary:
-        await provider.complete(_MESSAGES)
+        _ = await provider.complete(_MESSAGES)
     with pytest.raises(AppError) as streamed:
-        await _collect(await provider.stream_with_usage(_MESSAGES))
+        _ = await _collect(await provider.stream_with_usage(_MESSAGES))
 
     assert unary.value.code is code
     assert streamed.value.code is code
@@ -281,4 +281,4 @@ def test_factory_builds_the_kind_and_requires_a_model() -> None:
     }
     assert "sk-test" not in repr(config)
     with pytest.raises(AppValueError):
-        new_llm_from_config(LlmConfig(kind=LlmKind.OPENAI_COMPATIBLE))
+        _ = new_llm_from_config(LlmConfig(kind=LlmKind.OPENAI_COMPATIBLE))

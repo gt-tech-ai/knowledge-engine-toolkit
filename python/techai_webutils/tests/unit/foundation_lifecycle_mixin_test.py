@@ -3,7 +3,8 @@
 (NoOpAsyncResource + DelegatingAsyncResource).
 """
 
-from unittest.mock import AsyncMock
+from typing import cast, final
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -18,6 +19,7 @@ class _Backend(NoOpAsyncResource):
     """A stateless backend that mixes in the no-op lifecycle."""
 
 
+@final
 class _Decorator(DelegatingAsyncResource[ManagedResource]):
     """A decorator that mixes in the delegating lifecycle.
 
@@ -25,7 +27,7 @@ class _Decorator(DelegatingAsyncResource[ManagedResource]):
     """
 
     def __init__(self, inner: ManagedResource) -> None:
-        self._inner = inner
+        super().__init__(inner)
 
 
 class TestNoOpAsyncResource:
@@ -113,10 +115,10 @@ class TestDelegatingAsyncResource:
             inner and returns the inner's suppression decision.
         """
         inner = AsyncMock()
-        inner.__aexit__.return_value = True  # inner elects to suppress
+        cast("MagicMock", inner.__aexit__).return_value = True  # inner elects to suppress
         decorator = _Decorator(inner)
         async with decorator as entered:
             assert entered is decorator
-            inner.__aenter__.assert_awaited_once()
-        inner.__aexit__.assert_awaited_once()
+            cast("MagicMock", cast("AsyncMock", inner.__aenter__).assert_awaited_once)()
+        cast("MagicMock", cast("AsyncMock", inner.__aexit__).assert_awaited_once)()
         assert await decorator.__aexit__(ValueError, ValueError("x"), None) is True

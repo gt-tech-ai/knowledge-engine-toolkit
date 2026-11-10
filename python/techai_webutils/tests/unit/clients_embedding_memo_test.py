@@ -30,19 +30,19 @@ async def test_embedding_classifier_embeds_query_once_per_request() -> None:
       - the memo reports the inner provider's model and dimension
     """
     inner = StubEmbeddingProvider("stub-embed", 4)
-    inner.embed = AsyncMock(wraps=inner.embed)  # type: ignore[method-assign]
+    inner.embed = AsyncMock(wraps=inner.embed)
     memo = MemoizedEmbedding(inner)
 
     async def request() -> None:
         reset_embedding_memo()
-        await memo.embed("q")
+        _ = await memo.embed("q")
 
     reset_embedding_memo()
     first, second = await memo.embed("q"), await memo.embed("q")
     await asyncio.create_task(request())
-    await memo.embed("q")
+    _ = await memo.embed("q")
     reset_embedding_memo()
-    await memo.embed("q")
+    _ = await memo.embed("q")
 
     assert first == second
     assert inner.embed.await_count == _EXPECTED_AWAIT_COUNT

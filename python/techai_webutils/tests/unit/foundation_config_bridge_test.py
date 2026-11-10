@@ -11,6 +11,7 @@ import logging
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import ClassVar
 
 import pytest
 import yaml
@@ -49,7 +50,7 @@ def test_initialize_config_sets_env_vars_from_yaml(
     # Arrange: Create temp config directory with YAML
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: test-db-host
   port: 5555
@@ -92,7 +93,7 @@ def test_initialize_config_merges_environment_overlay(
       - A base-only key survives; a deeply nested key is exported.
     """
     with TemporaryDirectory() as tmpdir:
-        (Path(tmpdir) / "base.yaml").write_text("""
+        _ = (Path(tmpdir) / "base.yaml").write_text("""
 retrieval:
   llm:
     kind: stub
@@ -100,7 +101,7 @@ retrieval:
   kb:
     kind: stub
 """)
-        (Path(tmpdir) / "staging.yaml").write_text("""
+        _ = (Path(tmpdir) / "staging.yaml").write_text("""
 retrieval:
   llm:
     kind: bedrock
@@ -139,7 +140,7 @@ def test_initialize_config_env_var_precedence(monkeypatch: pytest.MonkeyPatch) -
     # Arrange
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: yaml-host
   port: 5432
@@ -205,7 +206,7 @@ def test_initialize_config_idempotency(monkeypatch: pytest.MonkeyPatch) -> None:
     # Arrange
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: first-host
 """)
@@ -245,7 +246,7 @@ def test_reset_config_clears_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
     # Arrange
     with TemporaryDirectory() as tmpdir:
         config_file = Path(tmpdir) / "base.yaml"
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: first-run
 """)
@@ -258,7 +259,7 @@ database:
         reset_config()
 
         # Modify YAML
-        config_file.write_text("""
+        _ = config_file.write_text("""
 database:
   host: second-run
 """)
@@ -331,8 +332,8 @@ def test_initialize_config_uses_consumer_prefix_and_env_selector(
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.setenv("MYAPP_ENV", "staging")
     with TemporaryDirectory() as tmpdir:
-        (Path(tmpdir) / "base.yaml").write_text("widget:\n  size: 3\n  color: red\n")
-        (Path(tmpdir) / "staging.yaml").write_text("widget:\n  size: 7\n")
+        _ = (Path(tmpdir) / "base.yaml").write_text("widget:\n  size: 3\n  color: red\n")
+        _ = (Path(tmpdir) / "staging.yaml").write_text("widget:\n  size: 7\n")
         try:
             initialize_config(tmpdir, env_prefix="MYAPP", env_selectors=("MYAPP_ENV",))
 
@@ -341,7 +342,7 @@ def test_initialize_config_uses_consumer_prefix_and_env_selector(
             assert "WIDGET_SIZE" not in os.environ
         finally:
             for key in ("MYAPP_WIDGET_SIZE", "MYAPP_WIDGET_COLOR"):
-                os.environ.pop(key, None)
+                _ = os.environ.pop(key, None)
             reset_config()
 
 
@@ -350,9 +351,9 @@ def _write_widget_config(tmpdir: str, overlays: dict[str, str] | None = None) ->
 
     (``kebridge.size: 3``, ``kebridge.color: red``) plus any named overlays.
     """
-    (Path(tmpdir) / "base.yaml").write_text("kebridge:\n  size: 3\n  color: red\n")
+    _ = (Path(tmpdir) / "base.yaml").write_text("kebridge:\n  size: 3\n  color: red\n")
     for env, body in (overlays or {}).items():
-        (Path(tmpdir) / f"{env}.yaml").write_text(body)
+        _ = (Path(tmpdir) / f"{env}.yaml").write_text(body)
 
 
 @pytest.mark.parametrize("prefix", ["MYAPP", "MYAPP_"])
@@ -376,14 +377,14 @@ def test_initialize_config_prefix_round_trips_into_a_prefixed_settings_class(
     """
 
     class _AppSettings(DatabaseSettings):
-        model_config = SettingsConfigDict(
+        model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
             env_prefix="MYAPP_", frozen=True, extra="ignore"
         )
 
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     with TemporaryDirectory() as tmpdir:
-        (Path(tmpdir) / "base.yaml").write_text(
+        _ = (Path(tmpdir) / "base.yaml").write_text(
             "database:\n  host: yaml-db\n  port: 6543\n"
         )
 
@@ -457,7 +458,7 @@ def test_initialize_config_defaults_export_unprefixed_names_from_the_app_env_ove
             assert os.environ.get("KEBRIDGE_COLOR") == "red"
         finally:
             for key in ("KEBRIDGE_SIZE", "KEBRIDGE_COLOR"):
-                os.environ.pop(key, None)
+                _ = os.environ.pop(key, None)
 
 
 @pytest.mark.parametrize(
@@ -496,7 +497,7 @@ def test_initialize_config_falls_back_to_environment_then_dev(
             assert os.environ.get("MYAPP_KEBRIDGE_SIZE") == expected_size
         finally:
             for key in ("MYAPP_KEBRIDGE_SIZE", "MYAPP_KEBRIDGE_COLOR"):
-                os.environ.pop(key, None)
+                _ = os.environ.pop(key, None)
 
 
 def test_initialize_config_logs_the_selected_overlay_and_warns_when_it_is_missing(
@@ -531,7 +532,7 @@ def test_initialize_config_logs_the_selected_overlay_and_warns_when_it_is_missin
             assert os.environ.get("MYAPP_KEBRIDGE_SIZE") == "3"
         finally:
             for key in ("MYAPP_KEBRIDGE_SIZE", "MYAPP_KEBRIDGE_COLOR"):
-                os.environ.pop(key, None)
+                _ = os.environ.pop(key, None)
 
 
 def test_initialize_config_strict_raises_on_malformed_yaml_instead_of_continuing() -> (
@@ -552,7 +553,7 @@ def test_initialize_config_strict_raises_on_malformed_yaml_instead_of_continuing
         returns without raising.
     """
     with TemporaryDirectory() as tmpdir:
-        (Path(tmpdir) / "base.yaml").write_text("kebridge: [unclosed\n")
+        _ = (Path(tmpdir) / "base.yaml").write_text("kebridge: [unclosed\n")
 
         with pytest.raises(yaml.YAMLError):
             initialize_config(tmpdir, env_prefix="MYAPP", strict=True)
@@ -590,7 +591,9 @@ def test_export_yaml_sections_exports_structured_sections_as_json(
     monkeypatch.delenv("MYAPP_APP_MISSING", raising=False)
 
     class _Probe(BaseSettings):
-        model_config = SettingsConfigDict(env_prefix="MYAPP_")
+        model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
+            env_prefix="MYAPP_"
+        )
         app_routes: dict[str, dict[str, float]] = Field(default_factory=dict)
         app_missing: dict[str, int] = Field(default_factory=dict)
 

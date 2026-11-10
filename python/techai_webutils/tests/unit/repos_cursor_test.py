@@ -70,7 +70,7 @@ class TestCursorCodec:
           - Non-base64 string raises ValueError with 'invalid cursor' message
         """
         with pytest.raises(AppValueError, match="invalid cursor"):
-            CursorCodec.decode("not-valid-base64!!!")
+            _ = CursorCodec.decode("not-valid-base64!!!")
 
     @staticmethod
     def test_decode_invalid_json() -> None:
@@ -90,7 +90,7 @@ class TestCursorCodec:
         """
         bad = base64.urlsafe_b64encode(b"not json").decode()
         with pytest.raises(AppValueError, match="invalid cursor"):
-            CursorCodec.decode(bad)
+            _ = CursorCodec.decode(bad)
 
     @staticmethod
     def test_decode_missing_id_field() -> None:
@@ -108,7 +108,7 @@ class TestCursorCodec:
         """
         bad = base64.urlsafe_b64encode(json.dumps({"v": "x"}).encode()).decode()
         with pytest.raises(AppValueError, match="invalid cursor"):
-            CursorCodec.decode(bad)
+            _ = CursorCodec.decode(bad)
 
     @staticmethod
     def test_cursor_payload_frozen() -> None:
@@ -126,4 +126,4 @@ class TestCursorCodec:
         """
         payload = CursorPayload(last_id="x")
         with pytest.raises(AttributeError):
-            payload.last_id = "y"  # type: ignore[misc]
+            payload.last_id = "y"

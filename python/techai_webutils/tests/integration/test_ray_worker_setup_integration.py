@@ -64,7 +64,7 @@ async def _handlers_in_a_worker(hook: str | None) -> int:
     ray.cloudpickle.register_pickle_by_value(module)
     try:
         task = ray.remote(_root_handler_count)
-        return await task.remote()  # pyright: ignore[reportUnknownMemberType]
+        return await task.remote()
     finally:
         ray.cloudpickle.unregister_pickle_by_value(module)
         ray.shutdown()

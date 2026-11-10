@@ -10,6 +10,7 @@ Run with: pytest tests/python/test_foundation/test_tracer_builder.py -v
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -74,9 +75,11 @@ class TestTracerBuilder:
         **What it tests:**
           - ValueError raised for invalid kind
         """
-        config = TracerConfig(kind="unknown", service_name="test-svc")  # type: ignore[arg-type]
+        config = TracerConfig(
+            kind=cast("TracerKind", cast("object", "unknown")), service_name="test-svc"
+        )
         with pytest.raises(AppValueError, match="unknown"):
-            new_tracer_from_config(config)
+            _ = new_tracer_from_config(config)
 
     @staticmethod
     def test_default_config() -> None:

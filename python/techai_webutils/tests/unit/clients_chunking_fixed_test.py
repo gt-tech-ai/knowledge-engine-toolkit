@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from techai_webutils.clients.chunking import (
@@ -100,4 +102,6 @@ class TestFixedChunkerFactory:
         (the Go NewFromConfig contract).
         """
         with pytest.raises(AppValueError, match="unknown chunker kind"):
-            chunker_from_config(ChunkerConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = chunker_from_config(
+                ChunkerConfig(kind=cast("ChunkerKind", cast("object", "bogus")))
+            )

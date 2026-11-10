@@ -64,7 +64,7 @@ def test_route_context_and_decision_defaults() -> None:
         False,
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
-        decision.reason = "x"  # pyright: ignore[reportAttributeAccessIssue]
+        decision.reason = "x"
 
 
 @pytest.mark.asyncio

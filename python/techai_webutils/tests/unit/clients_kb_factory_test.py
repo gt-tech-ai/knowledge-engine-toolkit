@@ -1,5 +1,7 @@
 """Tests for the env-aware knowledge-base client factory (stub <-> bedrock)."""
 
+from typing import cast
+
 import pytest
 
 # Imported eagerly (unlike the factory, which lazy-imports it) so the bedrock-selection
@@ -65,7 +67,9 @@ class TestKnowledgeBaseFactory:
           - A bogus kind value raises ValueError naming the kind.
         """
         with pytest.raises(AppValueError, match="knowledge-base kind"):
-            new_kb_ingestor_from_config(KbConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = new_kb_ingestor_from_config(
+                KbConfig(kind=cast("KbKind", cast("object", "bogus")))
+            )
 
     @staticmethod
     @pytest.mark.asyncio

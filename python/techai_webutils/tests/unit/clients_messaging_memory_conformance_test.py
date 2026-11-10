@@ -42,7 +42,7 @@ def _transport() -> Transport:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case", CASES, ids=lambda case: case.__name__)
+@pytest.mark.parametrize("case", CASES, ids=[case.__name__ for case in CASES])
 async def test_memory_kind_conforms(case: Callable[[Transport], Awaitable[None]]) -> None:
     """The memory Kind passes every transport conformance case.
 

@@ -27,7 +27,7 @@ Run with: pytest tests/python/test_foundation/test_logger.py
 import json
 import logging
 from io import StringIO
-from typing import NoReturn
+from typing import NoReturn, cast
 
 import pytest
 
@@ -85,13 +85,13 @@ class TestStructuredLogger:
           - data["key"] equals the bound value "value"
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         logger = get_logger("test")
         logger.info("hello", key="value")
 
         lines = output.getvalue().strip().split("\n")
         assert len(lines) >= 1
-        data = json.loads(lines[-1])
+        data = cast("dict[str, object]", json.loads(lines[-1]))
         # Canonical cross-service schema renames structlog's "event" to "message".
         assert data["message"] == "hello"
         assert data["key"] == "value"
@@ -109,11 +109,13 @@ class TestStructuredLogger:
           - data["correlation_id"] equals "req-123" in the JSON output
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         logger = get_logger("test").bind(correlation_id="req-123")
         logger.info("correlated")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["correlation_id"] == "req-123"
 
     @staticmethod
@@ -129,11 +131,13 @@ class TestStructuredLogger:
           - data["level"] equals "warning" for a warning-level log call
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         logger = get_logger("test")
         logger.warning("a warning")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["level"] == "warning"
 
     @staticmethod
@@ -149,11 +153,11 @@ class TestStructuredLogger:
           - "timestamp" key is present in the JSON output
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         logger = get_logger("test")
         logger.info("timestamped")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast("list[object]", json.loads(output.getvalue().strip().split("\n")[-1]))
         assert "timestamp" in data
 
     @staticmethod
@@ -181,7 +185,7 @@ class TestStructuredLogger:
             logger still reports the requested DEBUG level, so the noise-suppression can't
             accidentally mute real app logs.
         """
-        configure_logging(level="DEBUG")
+        _ = configure_logging(level="DEBUG")
         for name in (
             "botocore",
             "aiobotocore",
@@ -221,7 +225,7 @@ class TestStructlogLoggerDelegation:
             bound field propagates into a later line.
         """
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         log = StructlogLogger(get_logger("test"))
 
         log.debug("d", k=1)
@@ -235,7 +239,7 @@ class TestStructlogLoggerDelegation:
         log.bind(a=2).info("bound")
 
         lines = [json.loads(line) for line in output.getvalue().strip().split("\n")]
-        assert [x["level"] for x in lines] == [
+        assert [x["level"] for x in cast("list[dict[str, object]]", lines)] == [
             "debug",
             "info",
             "warning",
@@ -243,7 +247,14 @@ class TestStructlogLoggerDelegation:
             "error",
             "info",
         ]
-        assert [x["message"] for x in lines] == ["d", "i", "w", "e", "x", "bound"]
+        assert [x["message"] for x in cast("list[dict[str, object]]", lines)] == [
+            "d",
+            "i",
+            "w",
+            "e",
+            "x",
+            "bound",
+        ]
         assert lines[0]["k"] == 1
         assert lines[-1]["a"] == _EXPECTED_LINES
 
@@ -264,8 +275,10 @@ class TestStructlogLoggerDelegation:
         monkeypatch.setattr(mod, "_GIT_SHA", "abc123")
 
         output = StringIO()
-        configure_logging(level="DEBUG", stream=output)
+        _ = configure_logging(level="DEBUG", stream=output)
         get_logger("test").info("deployed")
 
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        data = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
         assert data["git_sha"] == "abc123"

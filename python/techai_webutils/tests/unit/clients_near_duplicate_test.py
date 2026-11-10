@@ -113,7 +113,7 @@ def test_lsh_partition_takes_the_highest_midpoint_not_above_the_threshold() -> N
     assert lsh_partition(128, 0.5) == (32, 4)
     for num_perm, threshold in ((128, 1.0), (128, 0.0), (0, 0.8)):
         with pytest.raises(AppValueError):
-            lsh_partition(num_perm, threshold)
+            _ = lsh_partition(num_perm, threshold)
 
 
 @pytest.mark.asyncio
@@ -143,10 +143,10 @@ async def test_minhash_detector_clusters_near_copies_through_lsh_buckets() -> No
 
     first = await detector.check("org-1:0", "doc-a", _REPORT, ref="hash-a")
     near = await detector.check("org-1:0", "doc-b", copy, ref="hash-b")
-    reads = cache.get.await_count
+    reads = cast("AsyncMock", cache.get).await_count
     other = await detector.check("org-1:0", "doc-c", "An unrelated memo about parking.")
-    unrelated_reads = cache.get.await_count - reads
-    cache.set.reset_mock()
+    unrelated_reads = (cast("AsyncMock", cache.get).await_count) - reads
+    cast("MagicMock", cast("MagicMock", cache.set).reset_mock)()
     again = await detector.check("org-1:0", "doc-b", copy, ref="hash-b")
 
     assert first is not None
@@ -165,7 +165,7 @@ async def test_minhash_detector_clusters_near_copies_through_lsh_buckets() -> No
     assert near.similarity >= _EXPECTED_SIMILARITY
     assert (other.cluster_id, other.is_member) == ("doc-c", False)
     assert again == near
-    cache.set.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", cache.set).assert_not_awaited)()
     assert unrelated_reads <= 1 + 16
 
 
@@ -192,10 +192,15 @@ async def test_noop_detects_nothing_and_a_bad_config_is_refused() -> None:
         (NearDuplicateConfig(kind=NearDuplicateKind.MINHASH), None),
         (NearDuplicateConfig(kind=NearDuplicateKind.MINHASH, ttl_seconds=0), cache),
         (NearDuplicateConfig(kind=NearDuplicateKind.MINHASH, threshold=1.0), cache),
-        (NearDuplicateConfig(kind=cast("NearDuplicateKind", "simhash")), cache),
+        (
+            NearDuplicateConfig(
+                kind=cast("NearDuplicateKind", cast("object", "simhash"))
+            ),
+            cache,
+        ),
     ):
         with pytest.raises(AppValueError):
-            near_duplicate_detector_from_config(config, cache=given_cache)
+            _ = near_duplicate_detector_from_config(config, cache=given_cache)
 
 
 @pytest.mark.asyncio
@@ -230,7 +235,7 @@ async def test_check_computes_the_signature_off_the_event_loop(
     )
     hasher = MagicMock(spec=MinHasher)
     hasher.num_perm = 64
-    hasher.signature.side_effect = signature
+    cast("MagicMock", hasher.signature).side_effect = signature
     cache, _ = _cache()
     detector = MinHashDetector(
         cast("Cache", cache),

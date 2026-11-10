@@ -40,7 +40,6 @@ _ENTITIES = frozenset({ENTITIES})
 _BLOCKS = [TextBlock("Acme opened in Berlin.", "c1"), TextBlock("Nothing here.", "c2")]
 
 
-@Language.component("explode_if_run")
 def _explode_if_run(doc: Doc) -> Doc:
     """Fail when run: proves the annotator disabled every component but ``ner``.
 
@@ -50,6 +49,9 @@ def _explode_if_run(doc: Doc) -> Doc:
     """
     msg = f"a disabled component ran on {doc.text!r}"
     raise AssertionError(msg)
+
+
+_ = Language.component("explode_if_run", func=_explode_if_run)
 
 
 @pytest.fixture
@@ -70,7 +72,7 @@ def pipeline(tmp_path: Path) -> str:
     ])
     # Added after the patterns: the ruler runs the earlier components on each phrase
     # pattern.
-    nlp.add_pipe("explode_if_run")
+    _ = nlp.add_pipe("explode_if_run")
     nlp.to_disk(tmp_path / "pipeline")
     return str(tmp_path / "pipeline")
 
@@ -146,7 +148,7 @@ async def test_gliner_kind_returns_spans_for_the_configured_labels() -> None:
 
     annotations = await annotator.annotate_batch(_BLOCKS, _ENTITIES, "")
 
-    model.predict_entities.assert_any_call(
+    cast("MagicMock", cast("MagicMock", model.predict_entities).assert_any_call)(
         "Acme opened in Berlin.", ["Company", "City"], threshold=0.6
     )
     assert annotations[0].entities == (
@@ -177,7 +179,7 @@ async def test_noop_kind_returns_no_entities_and_refuses_unknown_tasks() -> None
 
     assert [a.entities for a in annotations] == [(), ()]
     with pytest.raises(AppValueError):
-        await annotator.annotate_batch(_BLOCKS, frozenset({"speaker"}), "")
+        _ = await annotator.annotate_batch(_BLOCKS, frozenset({"speaker"}), "")
 
 
 @pytest.mark.asyncio
@@ -211,7 +213,7 @@ async def test_grpc_kind_maps_status_to_coded_errors(
     )
 
     with pytest.raises(AppError) as raised:
-        await annotator.annotate_batch(_BLOCKS, _ENTITIES, "interview")
+        _ = await annotator.annotate_batch(_BLOCKS, _ENTITIES, "interview")
 
     assert raised.value.code is code
     assert raised.value.is_transient is (code is not ErrorCode.INTERNAL)
@@ -239,7 +241,9 @@ async def test_grpc_kind_returns_the_services_checked_annotations() -> None:
 
     annotations = await annotator.annotate_batch(_BLOCKS, _ENTITIES, "interview")
 
-    client.annotate_batch.assert_awaited_once_with(_BLOCKS, _ENTITIES, "interview")
+    cast("MagicMock", cast("AsyncMock", client.annotate_batch).assert_awaited_once_with)(
+        _BLOCKS, _ENTITIES, "interview"
+    )
     assert annotations == reply
 
 
@@ -260,11 +264,11 @@ def test_factory_refuses_what_a_kind_needs() -> None:
         AnnotatorConfig(kind=AnnotatorKind.SPACY),
         AnnotatorConfig(kind=AnnotatorKind.GLINER, labels=("X",)),
         AnnotatorConfig(kind=AnnotatorKind.GRPC),
-        AnnotatorConfig(kind=cast("AnnotatorKind", "bogus")),
+        AnnotatorConfig(kind=cast("AnnotatorKind", cast("object", "bogus"))),
     ):
         with pytest.raises(AppValueError):
-            annotator_from_config(config)
+            _ = annotator_from_config(config)
     with pytest.raises(AppValueError):
-        annotator_from_config(
+        _ = annotator_from_config(
             AnnotatorConfig(kind=AnnotatorKind.GLINER), gliner_model=model
         )

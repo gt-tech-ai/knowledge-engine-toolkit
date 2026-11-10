@@ -10,14 +10,15 @@ lazily.
 from __future__ import annotations
 
 import importlib
-from dataclasses import dataclass
-from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, cast
 
+from techai_webutils.clients.token_ledger.config import (
+    TokenLedgerConfig,
+    TokenLedgerKind,
+)
 from techai_webutils.clients.token_ledger.stub import StubTokenLedger
 from techai_webutils.core.errors import AppError, ErrorCode
-from techai_webutils.core.interfaces.token_ledger import Period
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -29,31 +30,6 @@ if TYPE_CHECKING:
     )
     from techai_webutils.core.interfaces.metrics import MetricsProvider
     from techai_webutils.core.interfaces.token_ledger import TokenLedger
-
-
-class TokenLedgerKind(StrEnum):
-    """The built-in token ledger backends."""
-
-    STUB = "stub"
-    """Allow-all, record-nothing (dev/test; zero infrastructure)."""
-    REDIS = "redis"
-    """Redis counters + a bounded usage stream (the hot path)."""
-
-
-@dataclass(frozen=True, slots=True)
-class TokenLedgerConfig:
-    """Token ledger configuration."""
-
-    kind: str = TokenLedgerKind.STUB
-    """A ``TokenLedgerKind`` value or a key of the injected ``backends``."""
-    window: Period = Period.MONTHLY
-    """The budget window the hot-path counters cover."""
-    redis_prefix: str = "token_ledger"
-    """Key prefix of the Redis counters (``<prefix>:{org}:{workspace}:{window}``)."""
-    stream: str = "token_ledger:usage"
-    """The Redis stream each recorded usage is appended to."""
-    stream_maxlen: int = 1_000_000
-    """Approximate cap on the usage stream length (``XADD MAXLEN ~``)."""
 
 
 _DEFAULT_BACKENDS: Mapping[str, Callable[[TokenLedgerConfig], TokenLedger]] = (

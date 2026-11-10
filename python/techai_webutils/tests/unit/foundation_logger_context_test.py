@@ -42,7 +42,7 @@ def test_log_context_binds_fields_per_task_and_only_inside_the_block() -> None:
         overrides a field and restores it; a line after the block carries none.
     """
     out = StringIO()
-    configure_logging("INFO", stream=out)
+    _ = configure_logging("INFO", stream=out)
     logger = StructlogLogger(get_logger("log-context-test"))
 
     async def handle(doc: str) -> None:
@@ -54,7 +54,7 @@ def test_log_context_binds_fields_per_task_and_only_inside_the_block() -> None:
             logger.info("restored")
 
     async def both() -> None:
-        await asyncio.gather(handle("doc-a"), handle("doc-b"))
+        _ = await asyncio.gather(handle("doc-a"), handle("doc-b"))
 
     asyncio.run(both())
     logger.info("after")

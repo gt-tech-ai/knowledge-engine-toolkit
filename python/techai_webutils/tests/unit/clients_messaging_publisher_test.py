@@ -6,12 +6,13 @@ import asyncio
 from contextlib import AsyncExitStack
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher
 from techai_webutils.core.errors import AppRuntimeError, UnavailableError
+from tests.json_path import dig
 
 if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
@@ -60,8 +61,12 @@ class TestSQSPublisher:
 
         await publisher.publish("events", b'{"type":"test"}')
 
-        mock_client.send_message.assert_called_once()
-        call_kwargs = mock_client.send_message.call_args[1]
+        cast(
+            "MagicMock", cast("MagicMock", mock_client.send_message).assert_called_once
+        )()
+        call_kwargs = cast(
+            "dict[str, object]", cast("MagicMock", mock_client.send_message).call_args[1]
+        )
         assert call_kwargs["QueueUrl"] == sqs_config.queue_url
         assert call_kwargs["MessageBody"] == '{"type":"test"}'
 
@@ -90,9 +95,18 @@ class TestSQSPublisher:
 
         await publisher.publish_batch("events", [b"msg1", b"msg2"])
 
-        mock_client.send_message_batch.assert_called_once()
-        call_kwargs = mock_client.send_message_batch.call_args[1]
-        assert len(call_kwargs["Entries"]) == _EXPECTED_CALL_KWARGS_COUNT
+        cast(
+            "MagicMock",
+            cast("MagicMock", mock_client.send_message_batch).assert_called_once,
+        )()
+        call_kwargs = cast(
+            "dict[str, object]",
+            cast("MagicMock", mock_client.send_message_batch).call_args[1],
+        )
+        assert (
+            len(cast("list[object]", call_kwargs["Entries"]))
+            == _EXPECTED_CALL_KWARGS_COUNT
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -126,7 +140,7 @@ class TestSQSPublisher:
             sent += len(entries)
             return {"Successful": [], "Failed": []}
 
-        aws_client.send_message_batch.side_effect = send
+        cast("MagicMock", aws_client.send_message_batch).side_effect = send
         publisher = await _open(replace(sqs_config, publish_max_in_flight=max_in_flight))
 
         await publisher.publish_batch("events", [b"m"] * 100)
@@ -156,7 +170,7 @@ class TestSQSPublisher:
             "Successful": [{"Id": "0"}],
             "Failed": [{"Id": "1", "Code": "InternalError"}],
         }
-        aws_client.send_message_batch.side_effect = [
+        cast("MagicMock", aws_client.send_message_batch).side_effect = [
             failed,
             {"Successful": [], "Failed": [{"Id": "1", "Code": "InternalError"}]},
         ]
@@ -164,10 +178,16 @@ class TestSQSPublisher:
 
         with pytest.raises(UnavailableError, match="1 of 2"):
             await publisher.publish_batch("events", [b"a", b"b"])
-        resend = aws_client.send_message_batch.await_args_list[1].kwargs["Entries"]
-        assert [e["MessageBody"] for e in resend] == ["b"]
+        resend = cast(
+            "list[object]",
+            cast(
+                "list[object]",
+                cast("AsyncMock", aws_client.send_message_batch).await_args_list,
+            )[1].kwargs["Entries"],
+        )
+        assert [dig(e, "MessageBody") for e in resend] == ["b"]
 
-        aws_client.send_message_batch.side_effect = [
+        cast("MagicMock", aws_client.send_message_batch).side_effect = [
             failed,
             {"Successful": [{"Id": "1"}], "Failed": []},
         ]

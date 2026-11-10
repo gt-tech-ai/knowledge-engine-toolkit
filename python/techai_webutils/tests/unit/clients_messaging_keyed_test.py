@@ -9,8 +9,8 @@ from __future__ import annotations
 import re
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -24,6 +24,7 @@ from techai_webutils.core.interfaces.messaging import (
 )
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations
+from tests.json_path import dig
 
 if TYPE_CHECKING:
     from techai_webutils.clients.messaging.config import SQSConfig
@@ -92,25 +93,38 @@ async def test_sqs_keyed_sends_the_partition_key_attribute(
         ``publish_batch_keyed`` sends 12 items in batches of 10 and 2, each entry with its
         own key; ``ordered_per_key`` is ``False``.
     """
-    aws_client.send_message_batch.return_value = {"Successful": [], "Failed": []}
+    cast("MagicMock", aws_client.send_message_batch).return_value = {
+        "Successful": [],
+        "Failed": [],
+    }
     publisher = await AsyncExitStack().enter_async_context(SQSPublisher(sqs_config))
 
     await publisher.publish_keyed("events", "doc-9", b"x")
     keys = ["even", "odd"] * 6
     await publisher.publish_batch_keyed("events", [(k, b"p") for k in keys])
 
-    attrs = aws_client.send_message.await_args.kwargs["MessageAttributes"]
+    attrs = cast(
+        "dict[str, object]",
+        cast("MagicMock", cast("AsyncMock", aws_client.send_message).await_args).kwargs[
+            "MessageAttributes"
+        ],
+    )
     assert attrs[PARTITION_KEY_ATTRIBUTE] == {
         "DataType": "String",
         "StringValue": "doc-9",
     }
-    assert attrs["topic"]["StringValue"] == "events"
-    calls = aws_client.send_message_batch.await_args_list
-    assert [len(c.kwargs["Entries"]) for c in calls] == [10, 2]
+    assert dig(attrs, "topic", "StringValue") == "events"
+    calls = cast(
+        "object", cast("AsyncMock", aws_client.send_message_batch).await_args_list
+    )
+    assert [
+        len(cast("list[object]", c.kwargs["Entries"]))
+        for c in cast("list[MagicMock]", calls)
+    ] == [10, 2]
     sent = [
-        e["MessageAttributes"][PARTITION_KEY_ATTRIBUTE]["StringValue"]
-        for c in calls
-        for e in c.kwargs["Entries"]
+        dig(e, "MessageAttributes", PARTITION_KEY_ATTRIBUTE, "StringValue")
+        for c in cast("list[MagicMock]", calls)
+        for e in cast("list[dict[str, object]]", c.kwargs["Entries"])
     ]
     assert sent == keys
     assert not publisher.ordered_per_key
@@ -160,7 +174,9 @@ def test_keyed_publisher_matches_go() -> None:
     source = _GO_MESSAGING.read_text(encoding="utf-8")
     body = re.search(r"type KeyedPublisher interface \{(.*?)\n\}", source, re.DOTALL)
     assert body is not None
-    go_methods = set(re.findall(r"^\t([A-Z]\w+)\(", body.group(1), re.MULTILINE))
+    go_methods: set[str] = set(
+        cast("list[str]", re.findall(r"^\t([A-Z]\w+)\(", body.group(1), re.MULTILINE))
+    )
     snake = {re.sub(r"(?<!^)([A-Z])", r"_\1", name).lower() for name in go_methods}
     assert snake == set(KeyedPublisher.__abstractmethods__) - set(
         MessagePublisher.__abstractmethods__

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -18,6 +19,7 @@ from techai_webutils.clients.sink import (
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.sink import ChunkPayload, Sink, SinkDocument
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
+from tests.json_path import dig
 
 _EXPECTED_AWAIT_ARGS_LIST_COUNT = 6
 
@@ -81,7 +83,12 @@ def _uploads(storage: MagicMock) -> dict[str, bytes]:
         Each uploaded key and body.
 
     """
-    return {c.args[1]: c.args[2] for c in storage.upload.await_args_list}
+    return {
+        cast("str", cast("list[object]", c.args)[1]): cast(
+            "bytes", cast("list[object]", c.args)[2]
+        )
+        for c in cast("list[object]", cast("AsyncMock", storage.upload).await_args_list)
+    }
 
 
 @pytest.mark.asyncio
@@ -114,9 +121,12 @@ async def test_three_chunks_write_six_objects_and_a_redelivery_writes_none() -> 
         for suffix in ("", ".metadata.json")
     )
     assert written[f"{_PREFIX}{_VERSION}/0.txt"] == b"alpha"
-    attributes = json.loads(written[f"{_PREFIX}{_VERSION}/0.txt.metadata.json"])[
-        "metadataAttributes"
-    ]
+    attributes = cast(
+        "object",
+        json.loads(written[f"{_PREFIX}{_VERSION}/0.txt.metadata.json"])[
+            "metadataAttributes"
+        ],
+    )
     assert attributes == {
         "classification": "internal",
         "org_id": "o1",
@@ -127,10 +137,15 @@ async def test_three_chunks_write_six_objects_and_a_redelivery_writes_none() -> 
         "section_path": "Intro",
         "entities.ORG": ["Acme", "Initech"],
     }
-    assert all(c.args[0] == "kb-bucket" for c in storage.upload.await_args_list)
-    redelivered.list_objects.assert_awaited_once_with("kb-bucket", _PREFIX)
-    redelivered.upload.assert_not_awaited()
-    redelivered.delete.assert_not_awaited()
+    assert all(
+        cast("list[object]", c.args)[0] == "kb-bucket"
+        for c in cast("list[object]", cast("AsyncMock", storage.upload).await_args_list)
+    )
+    cast(
+        "MagicMock", cast("AsyncMock", redelivered.list_objects).assert_awaited_once_with
+    )("kb-bucket", _PREFIX)
+    cast("MagicMock", cast("AsyncMock", redelivered.upload).assert_not_awaited)()
+    cast("MagicMock", cast("AsyncMock", redelivered.delete).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -149,7 +164,7 @@ async def test_chunk_file_cites_the_chunk_ordinal() -> None:
     await _sink(storage).write(_DOC, [ChunkPayload("alpha", ordinal=5)], None)
 
     sidecar = _uploads(storage)[f"{_PREFIX}{_VERSION}/0.txt.metadata.json"]
-    attributes = json.loads(sidecar)["metadataAttributes"]
+    attributes = cast("dict[str, object]", json.loads(sidecar)["metadataAttributes"])
     assert (attributes["chunk_index"], attributes["chunk_id"]) == (5, "doc1:5")
 
 
@@ -170,8 +185,14 @@ async def test_a_new_version_replaces_the_old_files() -> None:
 
     await _sink(storage).write(_DOC, _CHUNKS, None)
 
-    assert len(storage.upload.await_args_list) == _EXPECTED_AWAIT_ARGS_LIST_COUNT
-    assert sorted(c.args[1] for c in storage.delete.await_args_list) == sorted(old)
+    assert (
+        len(cast("list[object]", cast("AsyncMock", storage.upload).await_args_list))
+        == _EXPECTED_AWAIT_ARGS_LIST_COUNT
+    )
+    assert sorted(
+        cast("str", cast("tuple[object, ...]", c.args)[1])
+        for c in cast("list[object]", cast("AsyncMock", storage.delete).await_args_list)
+    ) == sorted(old)
 
 
 @pytest.mark.asyncio
@@ -194,9 +215,12 @@ async def test_kb_units_pack_contiguous_chunks() -> None:
     written = _uploads(storage)
     assert written[f"{_PREFIX}{_VERSION}/0.txt"] == b"alpha\n\nbeta"
     assert written[f"{_PREFIX}{_VERSION}/1.txt"] == b"gamma"
-    sidecar = json.loads(written[f"{_PREFIX}{_VERSION}/1.txt.metadata.json"])
-    assert sidecar["metadataAttributes"]["chunk_index"] == 1
-    assert "section_path" not in sidecar["metadataAttributes"]
+    sidecar = cast(
+        "dict[str, object]",
+        json.loads(written[f"{_PREFIX}{_VERSION}/1.txt.metadata.json"]),
+    )
+    assert dig(sidecar, "metadataAttributes", "chunk_index") == 1
+    assert "section_path" not in cast("dict[str, object]", sidecar["metadataAttributes"])
 
 
 @pytest.mark.asyncio
@@ -230,7 +254,10 @@ async def test_delete_removes_every_object_and_update_rewrites_only_sidecars() -
     await sink.delete("o1", "doc1")
     await sink.update_metadata("o1", "doc1", {"classification": "secret"})
 
-    assert sorted(c.args[1] for c in storage.delete.await_args_list) == sorted(keys)
+    assert sorted(
+        cast("str", cast("tuple[object, ...]", c.args)[1])
+        for c in cast("list[object]", cast("AsyncMock", storage.delete).await_args_list)
+    ) == sorted(keys)
     rewritten = _uploads(storage)
     assert sorted(rewritten) == sorted(k for k in keys if k.endswith(".metadata.json"))
     assert json.loads(next(iter(rewritten.values())))["metadataAttributes"] == {
@@ -265,7 +292,7 @@ async def test_bedrock_sink_refuses_what_it_cannot_write() -> None:
         ),
     ):
         with pytest.raises(AppValueError):
-            sink_from_config(config, storage=storage)
+            _ = sink_from_config(config, storage=storage)
     sink = _sink(_storage())
     slashed = SinkDocument("o1", "a/b", "c" * 64, "", "")
 

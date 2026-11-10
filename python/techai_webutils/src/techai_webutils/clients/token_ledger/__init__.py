@@ -3,10 +3,10 @@
 A config-selected ``TokenLedger`` plus ``Decimal`` cost arithmetic.
 """
 
-from techai_webutils.clients.token_ledger.builder import (
+from techai_webutils.clients.token_ledger.builder import token_ledger_from_config
+from techai_webutils.clients.token_ledger.config import (
     TokenLedgerConfig,
     TokenLedgerKind,
-    token_ledger_from_config,
 )
 from techai_webutils.foundation.tokens.cost import (
     ModelPrice,

@@ -88,7 +88,7 @@ async def test_recovery_turns_a_failed_run_into_one_fail_result() -> None:
         _META, AsyncMock(side_effect=ConflictError("x"))
     )
     with pytest.raises(ConflictError):
-        await raw.execute()
+        _ = await raw.execute()
 
 
 @pytest.mark.asyncio

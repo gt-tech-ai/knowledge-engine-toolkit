@@ -7,7 +7,7 @@ The end-to-end cases call a generic (bytes-in, bytes-out) service on an in-proce
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn, cast, final
 from unittest.mock import MagicMock
 
 import grpc
@@ -33,7 +33,7 @@ from techai_webutils.foundation.resilience.retrier import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable
+    from collections.abc import AsyncIterator, Awaitable, Callable
 
 _FAKE_CRED_1 = "tok"
 _FAKE_CRED_2 = "t"
@@ -64,6 +64,7 @@ def _decode(data: bytes) -> bytes:
     return data
 
 
+@final
 class _Service:
     """A generic test service recording the metadata of every call."""
 
@@ -106,16 +107,10 @@ class _Service:
 
     async def missing(
         self, _request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
-    ) -> bytes:
-        """Abort NOT_FOUND.
-
-        Returns:
-            Empty bytes, after the abort.
-
-        """
+    ) -> NoReturn:
+        """Abort NOT_FOUND; ``abort`` raises, so this never returns."""
         self._record(context)
         await context.abort(grpc.StatusCode.NOT_FOUND, "no such thing")
-        return b""  # pragma: no cover - abort raises
 
     async def stream(
         self, request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
@@ -134,7 +129,7 @@ class _Service:
 
 async def _serve(
     service: _Service,
-    run: Callable[[grpc.aio.Channel], object],
+    run: Callable[[grpc.aio.Channel], Awaitable[object]],
     base: ClientBase,
     token: str = "",
 ) -> object:
@@ -162,7 +157,7 @@ async def _serve(
         f"127.0.0.1:{port}", interceptors=client_interceptors(base, token)
     )
     try:
-        return await run(channel)  # type: ignore[misc]
+        return await run(channel)
     finally:
         await channel.close()
         await server.stop(None)
@@ -246,7 +241,7 @@ async def test_a_server_status_reaches_the_caller_unchanged() -> None:
         return await channel.unary_unary("/test.Svc/Missing")(b"hi")
 
     with pytest.raises(grpc.aio.AioRpcError) as caught:
-        await _serve(service, run, _retrying())
+        _ = await _serve(service, run, _retrying())
 
     assert caught.value.code() == grpc.StatusCode.NOT_FOUND
     assert caught.value.details() == "no such thing"
@@ -267,14 +262,14 @@ async def test_a_tier_rejection_becomes_the_status_of_its_code() -> None:
       - With an open breaker the call never reaches the server and raises UNAVAILABLE.
     """
     breaker = MagicMock(spec=CircuitBreakerInterface)
-    breaker.__enter__.side_effect = CircuitOpenError("rpc")
+    cast("MagicMock", breaker.__enter__).side_effect = CircuitOpenError("rpc")
     service = _Service()
 
     async def run(channel: grpc.aio.Channel) -> bytes:
         return await channel.unary_unary("/test.Svc/Flaky")(b"hi")
 
     with pytest.raises(grpc.aio.AioRpcError) as caught:
-        await _serve(
+        _ = await _serve(
             service, run, ClientBase.wire(Decorations.fixed(Deps(breaker=breaker)), "rpc")
         )
 
@@ -351,5 +346,7 @@ async def test_new_rpc_channel_from_config_decorates_and_rejects_an_unknown_kind
     assert isinstance(channel, grpc.aio.Channel)
     await channel.close()
     with pytest.raises(AppValueError, match="unknown rpc kind"):
-        new_rpc_channel_from_config(RpcConfig(kind="kafka"))  # type: ignore[arg-type]
+        _ = new_rpc_channel_from_config(
+            RpcConfig(kind=cast("RpcKind", cast("object", "kafka")))
+        )
     assert RpcKind("grpc") is RpcKind.GRPC

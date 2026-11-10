@@ -101,7 +101,7 @@ class TestRetryTransientAsync:
             raise InvalidInputError(msg)
 
         with pytest.raises(InvalidInputError):
-            await call()
+            _ = await call()
         assert attempts == 1
 
     @staticmethod

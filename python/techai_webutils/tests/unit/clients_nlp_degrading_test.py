@@ -56,7 +56,7 @@ async def test_transient_failure_degrades_and_is_counted() -> None:
       - ``nlp_degraded_total`` is incremented by the block count for each requested task
     """
     metrics = MagicMock(spec=MetricsProvider)
-    counter = metrics.counter.return_value
+    counter = cast("object", cast("MagicMock", metrics.counter).return_value)
     annotator = DegradingAnnotator(
         _primary(AppError(ErrorCode.UNAVAILABLE, "breaker open")), metrics=metrics
     )
@@ -64,12 +64,12 @@ async def test_transient_failure_degrades_and_is_counted() -> None:
     annotations = await annotator.annotate_batch(_BLOCKS, _TASKS, "")
 
     assert annotations == [Annotation(degraded=True), Annotation(degraded=True)]
-    metrics.counter.assert_called_once_with(
+    cast("MagicMock", cast("MagicMock", metrics.counter).assert_called_once_with)(
         "nlp_degraded_total",
         "Blocks left unannotated because the NLP backend was unavailable.",
         ["task"],
     )
-    counter.inc.assert_called_once_with(2.0, task=ENTITIES)
+    cast("MagicMock", counter.inc.assert_called_once_with)(2.0, task=ENTITIES)
 
 
 @pytest.mark.asyncio
@@ -100,14 +100,14 @@ async def test_permanent_errors_propagate_and_wait_mode_reraises() -> None:
     )
 
     with pytest.raises(AppValueError):
-        await permanent.annotate_batch(_BLOCKS, _TASKS, "")
+        _ = await permanent.annotate_batch(_BLOCKS, _TASKS, "")
     with pytest.raises(AppError) as waited:
-        await waiting.annotate_batch(_BLOCKS, _TASKS, "")
+        _ = await waiting.annotate_batch(_BLOCKS, _TASKS, "")
     degraded = await degrading.annotate_batch(_BLOCKS, _TASKS, "")
 
     assert waited.value.code is ErrorCode.UNAVAILABLE
     assert all(a.degraded for a in degraded)
     with pytest.raises(AppValueError):
-        annotator_from_config(
-            AnnotatorConfig(on_unavailable=cast("OnUnavailable", "bogus"))
+        _ = annotator_from_config(
+            AnnotatorConfig(on_unavailable=cast("OnUnavailable", cast("object", "bogus")))
         )

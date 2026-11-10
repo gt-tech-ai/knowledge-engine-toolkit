@@ -6,7 +6,7 @@ Failing open to ``local``.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -37,11 +37,11 @@ _CTX = RouteContext(tenant_id="org-1", workspace_id="ws-1", step="generate")
 
 
 def _planner(
-    catalog_raw: dict[str, Any],
-    routes_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
+    routes_raw: dict[str, object],
     transport: object,
     *,
-    raw: dict[str, Any] | None = None,
+    raw: dict[str, object] | None = None,
     metrics: MetricsProvider | None = None,
 ) -> tuple[RoutePlanner, ModelCatalog]:
     """Build an overlord planner over the fixture catalog, failing open to ``local``.
@@ -105,7 +105,7 @@ def _input(catalog: ModelCatalog) -> PlanInput:
 
 @pytest.mark.asyncio
 async def test_overlord_planner_returns_plan_from_stub(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the overlord's plan becomes the ordered endpoint chain.
 
@@ -141,7 +141,7 @@ async def test_overlord_planner_returns_plan_from_stub(
 
 @pytest.mark.asyncio
 async def test_overlord_planner_times_out_to_local(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a slow overlord is abandoned at its timeout.
 
@@ -167,14 +167,17 @@ async def test_overlord_planner_times_out_to_local(
 
     assert result.ordered[0].key == "anthropic/sonnet@use1"
     assert (result.decider, result.reason) == ("local", "planner_fail_open")
-    counters["routed_planner_fail_open_total"].inc.assert_called_once_with(
-        1.0, cause="timeout"
-    )
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", counters["routed_planner_fail_open_total"].inc
+        ).assert_called_once_with,
+    )(1.0, cause="timeout")
 
 
 @pytest.mark.asyncio
 async def test_overlord_planner_unavailable_to_local(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that an unavailable overlord is retried once, then fails open.
 
@@ -191,13 +194,13 @@ async def test_overlord_planner_unavailable_to_local(
 
     result = await planner.plan(_CTX, _input(catalog))
 
-    assert transport.route.await_count == _EXPECTED_AWAIT_COUNT
+    assert (cast("AsyncMock", transport.route).await_count) == _EXPECTED_AWAIT_COUNT
     assert (result.decider, result.reason) == ("local", "planner_fail_open")
 
 
 @pytest.mark.asyncio
 async def test_plan_naming_unoffered_endpoint_is_rejected(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a plan naming a model the request didn't offer is discarded.
 
@@ -226,14 +229,17 @@ async def test_plan_naming_unoffered_endpoint_is_rejected(
 
     assert {ref.model_id for ref in result.ordered} == {"anthropic/sonnet"}
     assert result.reason == "planner_fail_open"
-    counters["routed_planner_fail_open_total"].inc.assert_called_once_with(
-        1.0, cause="routing_plan_invalid"
-    )
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", counters["routed_planner_fail_open_total"].inc
+        ).assert_called_once_with,
+    )(1.0, cause="routing_plan_invalid")
 
 
 @pytest.mark.asyncio
 async def test_planner_attaches_service_token(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that every route call carries the caller's service token.
 
@@ -250,21 +256,30 @@ async def test_planner_attaches_service_token(
     transport = _transport(RoutingPlan(model_id="anthropic/sonnet"))
     planner, catalog = _planner(catalog_raw, routes_raw, transport)
 
-    await planner.plan(_CTX, _input(catalog))
+    _ = await planner.plan(_CTX, _input(catalog))
 
-    request = transport.route.await_args.args[0]
-    kwargs = transport.route.await_args.kwargs
+    request = cast(
+        "MagicMock",
+        cast("MagicMock", cast("AsyncMock", transport.route).await_args).args[0],
+    )
+    kwargs = cast(
+        "object", cast("MagicMock", cast("AsyncMock", transport.route).await_args).kwargs
+    )
     assert kwargs == {"timeout_s": 0.05, "metadata": (("authorization", "Bearer tok"),)}
-    assert (request.org_id, request.workspace_id, request.step) == (
+    assert (
+        cast("object", request.org_id),
+        cast("object", request.workspace_id),
+        cast("object", request.step),
+    ) == (
         "org-1",
         "ws-1",
         "generate",
     )
-    assert request.candidates == catalog.refs
+    assert cast("object", request.candidates) == catalog.refs
 
 
 def test_planner_kind_overlord_requires_target(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the overlord kind fails at boot without a target or a transport.
 
@@ -276,14 +291,14 @@ def test_planner_kind_overlord_requires_target(
       - an empty ``target`` and a missing transport each raise ``INVALID_INPUT``
     """
     with pytest.raises(AppError) as no_target:
-        _planner(
+        _ = _planner(
             catalog_raw,
             routes_raw,
             _transport(),
             raw={"kind": "overlord", "overlord": {"target": ""}},
         )
     with pytest.raises(AppError) as no_transport:
-        _planner(catalog_raw, routes_raw, None)
+        _ = _planner(catalog_raw, routes_raw, None)
 
     assert no_target.value.code is ErrorCode.INVALID_INPUT
     assert no_transport.value.code is ErrorCode.INVALID_INPUT
@@ -291,7 +306,7 @@ def test_planner_kind_overlord_requires_target(
 
 @pytest.mark.asyncio
 async def test_overlord_planner_sends_the_team_and_user(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the plan request carries the routing context's team and user.
 
@@ -317,5 +332,13 @@ async def test_overlord_planner_sends_the_team_and_user(
     _ = await planner.plan(attributed, _input(catalog))
     _ = await planner.plan(_CTX, _input(catalog))
 
-    sent = [call.args[0] for call in transport.route.await_args_list]
-    assert [(r.team_id, r.user_id) for r in sent] == [("team-1", "user-1"), ("", "")]
+    sent = [
+        cast("list[object]", call.args)[0]
+        for call in cast(
+            "list[object]", cast("AsyncMock", transport.route).await_args_list
+        )
+    ]
+    assert [(cast("object", r.team_id), cast("object", r.user_id)) for r in sent] == [
+        ("team-1", "user-1"),
+        ("", ""),
+    ]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
@@ -24,9 +24,10 @@ from techai_webutils.clients.model_gateway.routed.settings import (
     RouteSetting,
 )
 from techai_webutils.core.types.routing import Route
+from tests.json_path import dig
 
 
-def _catalog(raw: dict[str, Any]) -> dict[str, CatalogModelSetting]:
+def _catalog(raw: dict[str, object]) -> dict[str, CatalogModelSetting]:
     """Validate a raw catalog into its typed models.
 
     Returns:
@@ -37,7 +38,7 @@ def _catalog(raw: dict[str, Any]) -> dict[str, CatalogModelSetting]:
 
 
 def test_typed_config_builds_the_same_gateway_as_the_raw_mappings(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the typed catalog.
 
@@ -91,7 +92,7 @@ def test_typed_config_builds_the_same_gateway_as_the_raw_mappings(
     ],
 )
 def test_a_defective_catalog_model_fails_naming_its_path(
-    catalog_raw: dict[str, Any], path: str, patch: dict[str, Any]
+    catalog_raw: dict[str, object], path: str, patch: dict[str, object]
 ) -> None:
     """Test that a bad catalog entry fails validation with the offending path.
 
@@ -104,7 +105,7 @@ def test_a_defective_catalog_model_fails_naming_its_path(
         unknown provider kind, a missing capability and an unknown key each raise
         ``ValidationError`` whose message names the path
     """
-    raw = {**catalog_raw["anthropic/sonnet"], **patch}
+    raw = {**cast("dict[str, object]", catalog_raw["anthropic/sonnet"]), **patch}
 
     with pytest.raises(ValidationError) as excinfo:
         _ = CatalogModelSetting.model_validate(raw)
@@ -116,7 +117,7 @@ def test_a_defective_catalog_model_fails_naming_its_path(
     "raw",
     [{"max_attempts": 0}, {"breaker_recovery_s": 0}, {"planer": {"kind": "local"}}],
 )
-def test_defective_stages_fail_validation(raw: dict[str, Any]) -> None:
+def test_defective_stages_fail_validation(raw: dict[str, object]) -> None:
     """Test that a misspelled stage or an out-of-range bound fails the stages' validation.
 
     **Why this test is important:**
@@ -181,11 +182,11 @@ def test_llm_defaults_fill_only_what_an_endpoint_leaves_unset() -> None:
     })
     defaults = EndpointLlmSetting(kind=LlmKind.BEDROCK, region="us-east-1")
 
-    filled = cast("dict[str, Any]", model.with_llm_defaults(defaults).as_mapping())
+    filled = model.with_llm_defaults(defaults).as_mapping()
 
-    assert [e["llm"] for e in filled["endpoints"]] == [
+    assert [e["llm"] for e in cast("list[dict[str, object]]", filled["endpoints"])] == [
         {"kind": "bedrock", "region": "us-east-1", "model": "m-a"},
         {"kind": "bedrock", "region": "us-west-2", "model": "m-b"},
     ]
     assert model.served_models() == ("m-a", "m-b")
-    assert filled["capabilities"]["json"] is True
+    assert dig(filled, "capabilities", "json") is True

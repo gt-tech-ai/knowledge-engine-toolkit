@@ -1,5 +1,7 @@
 """Tests for Message dataclass and MessagePublisher/MessageConsumer ABCs."""
 
+from typing import TYPE_CHECKING, cast
+
 import pytest
 
 from techai_webutils.core.interfaces.messaging import (
@@ -7,6 +9,9 @@ from techai_webutils.core.interfaces.messaging import (
     MessageConsumer,
     MessagePublisher,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _EXPECTED_TIMESTAMP = 123
 
@@ -73,7 +78,7 @@ class TestMessagePublisher:
             publish_batch() are abstract
         """
         with pytest.raises(TypeError):
-            MessagePublisher()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", MessagePublisher)()
 
 
 class TestMessageConsumer:
@@ -95,4 +100,4 @@ class TestMessageConsumer:
             and close() are abstract
         """
         with pytest.raises(TypeError):
-            MessageConsumer()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", MessageConsumer)()

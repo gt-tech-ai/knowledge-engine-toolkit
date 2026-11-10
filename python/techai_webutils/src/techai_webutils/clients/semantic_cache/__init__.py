@@ -14,9 +14,11 @@ from techai_webutils.clients.semantic_cache.admission import (
     cache_admission_from_config,
 )
 from techai_webutils.clients.semantic_cache.builder import (
+    semantic_cache_from_config,
+)
+from techai_webutils.clients.semantic_cache.config import (
     SemanticCacheConfig,
     SemanticCacheKind,
-    semantic_cache_from_config,
 )
 from techai_webutils.clients.semantic_cache.proxy import (
     SemanticCacheBinding,

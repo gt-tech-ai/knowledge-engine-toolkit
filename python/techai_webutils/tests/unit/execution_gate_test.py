@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast, final
 from unittest.mock import MagicMock
 
 import pytest
@@ -92,25 +93,33 @@ def _recording_observer() -> tuple[MagicMock, list[tuple[str, str]]]:
     """
     events: list[tuple[str, str]] = []
     obs = MagicMock(spec=ExecutionObserver)
-    obs.on_gate_start.side_effect = lambda name, _phases: events.append((
-        "gate_start",
-        name,
-    ))
-    obs.on_phase_start.side_effect = lambda name, _jobs: events.append((
-        "phase_start",
-        name,
-    ))
-    obs.on_phase_complete.side_effect = lambda name, _result, _elapsed: events.append((
-        "phase_complete",
-        name,
-    ))
-    obs.on_gate_complete.side_effect = lambda name, _result, _elapsed: events.append((
-        "gate_complete",
-        name,
-    ))
+    cast("MagicMock", obs.on_gate_start).side_effect = lambda name, _phases: (
+        events.append((
+            "gate_start",
+            name,
+        ))
+    )
+    cast("MagicMock", obs.on_phase_start).side_effect = lambda name, _jobs: (
+        events.append((
+            "phase_start",
+            name,
+        ))
+    )
+    cast("MagicMock", obs.on_phase_complete).side_effect = (
+        lambda name, _result, _elapsed: events.append((
+            "phase_complete",
+            name,
+        ))
+    )
+
+    def on_gate_complete(name: str, _result: object, _elapsed: object) -> None:
+        events.append(("gate_complete", name))
+
+    cast("MagicMock", obs.on_gate_complete).side_effect = on_gate_complete
     return obs, events
 
 
+@final
 class TestRunGate:
     """Tests for the run gate."""
 
@@ -268,6 +277,7 @@ class TestRunGate:
         """
         barrier = asyncio.Barrier(2)
 
+        @final
         class _BarrierJob:
             def __init__(self, name: str) -> None:
                 self._name = name
@@ -276,7 +286,7 @@ class TestRunGate:
                 return JobMeta(name=self._name, group="test")
 
             async def execute(self) -> BatchResult:
-                await barrier.wait()
+                _ = await barrier.wait()
                 return _ok(self._name)
 
         gate = new_gate("g").parallel("p", _BarrierJob("a"), _BarrierJob("b")).build()
@@ -321,7 +331,7 @@ class TestRunGate:
             .build()
         )
         with pytest.raises(RuntimeError, match="kaboom"):
-            await run_gate(gate)
+            _ = await run_gate(gate)
         assert ran == ["good"]
         # Both the phase and the gate lifecycle balance even though a job raised: an
         # observer that pairs on_phase_start/on_phase_complete (or the gate pair) must not

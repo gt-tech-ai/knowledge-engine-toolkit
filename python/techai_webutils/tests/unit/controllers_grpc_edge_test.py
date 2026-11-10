@@ -92,8 +92,14 @@ class TestServiceAuth:
         assert denied is not handler
         context = MagicMock()
         context.abort = AsyncMock()
-        await _unary(denied)("req", context)
-        assert context.abort.await_args.args[0] == grpc.StatusCode.UNAUTHENTICATED
+        _ = await _unary(denied)("req", context)
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("AsyncMock", context.abort).await_args).args,
+            )[0]
+            == grpc.StatusCode.UNAUTHENTICATED
+        )
 
     @pytest.mark.asyncio
     async def test_accepts_both_tokens_of_a_rotation_pair(self) -> None:
@@ -139,7 +145,7 @@ class TestServiceAuth:
         assert isinstance(self._only("secret"), ServiceAuthServerInterceptor)
         for blank in ("", " , "):
             with pytest.raises(AppValueError, match="service token"):
-                service_auth(blank)
+                _ = service_auth(blank)
         assert service_auth("", allow_unauthenticated=True) == []
 
     @pytest.mark.asyncio
@@ -199,9 +205,15 @@ class TestValidatingServerInterceptor:
             patch.object(protovalidate, "validate", side_effect=violation),
             pytest.raises(grpc.aio.AbortError),
         ):
-            await wrapped(empty_pb2.Empty(), context)
+            _ = await wrapped(empty_pb2.Empty(), context)
 
-        assert context.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("AsyncMock", context.abort).await_args).args,
+            )[0]
+            == grpc.StatusCode.INVALID_ARGUMENT
+        )
         handler_fn.assert_not_awaited()
 
     @pytest.mark.asyncio

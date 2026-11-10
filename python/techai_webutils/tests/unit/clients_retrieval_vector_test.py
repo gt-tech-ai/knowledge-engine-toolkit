@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -38,7 +39,7 @@ def _embedder(dimension: int = 3) -> EmbeddingProvider:
 
     """
     embedder = MagicMock(spec=EmbeddingProvider)
-    embedder.dimension.return_value = dimension
+    cast("MagicMock", embedder.dimension).return_value = dimension
     embedder.embed = AsyncMock(
         return_value=EmbeddingResult(embedding=[0.1, 0.2, 0.3], model="m", token_count=0)
     )
@@ -188,7 +189,7 @@ class TestVectorRetrievalEngine:
             embedder, store, collection="documents", filter_keys=("tenant",)
         )
 
-        await engine.retrieve(
+        _ = await engine.retrieve(
             "annual revenue", top_k=5, filters={"tenant": "t1", "max_level": "high"}
         )
 
@@ -251,12 +252,12 @@ class TestVectorRetrievalEngine:
         with patch(
             "techai_webutils.clients.retrieval.vector.engine.logger"
         ) as mock_logger:
-            await engine.retrieve("q", index_id="documents")
-            await engine.retrieve("q")
-            mock_logger.warning.assert_not_called()
-            await engine.retrieve("q", index_id="tenant-b-index")
+            _ = await engine.retrieve("q", index_id="documents")
+            _ = await engine.retrieve("q")
+            cast("MagicMock", cast("MagicMock", mock_logger.warning).assert_not_called)()
+            _ = await engine.retrieve("q", index_id="tenant-b-index")
 
-        mock_logger.warning.assert_called_once_with(
+        cast("MagicMock", cast("MagicMock", mock_logger.warning).assert_called_once_with)(
             "vector retrieval ignores a per-call index_id; it reads one collection",
             index_id="tenant-b-index",
             collection="documents",
@@ -270,7 +271,7 @@ class TestVectorRetrievalEngine:
         (single source of truth).
         """
         with pytest.raises(AppValueError, match="dimension"):
-            VectorRetrievalEngine(
+            _ = VectorRetrievalEngine(
                 _embedder(dimension=768), _store([], dimension=3), "documents"
             )
 
@@ -344,7 +345,7 @@ class TestQdrantFactoryBranch:
         embedder = None if missing == "embedder" else _embedder()
         store = None if missing == "store" else _store([])
         with pytest.raises(AppError) as raised:
-            new_retrieval_engine_from_config(
+            _ = new_retrieval_engine_from_config(
                 RetrievalConfig(kind=RetrievalKind.QDRANT),
                 options=RetrievalEngineDependencies(
                     policies=[], embedder=embedder, store=store

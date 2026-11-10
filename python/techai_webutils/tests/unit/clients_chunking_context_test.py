@@ -101,12 +101,20 @@ async def test_llm_kind_calls_the_model_once_per_chunk_with_the_document() -> No
 
     texts = await contextualizer.contextualize(_DOCUMENT, _CHUNKS)
 
-    assert llm.complete.await_count == _EXPECTED_AWAIT_COUNT
-    messages, config = llm.complete.await_args_list[0].args
-    assert (config.temperature, config.max_tokens) == (0.0, 50)
-    assert _DOCUMENT.text[:20] + "\n</document>" in messages[1].content
-    assert _DOCUMENT.text[:21] not in messages[1].content
-    assert "Revenue grew 12.5%." in messages[1].content
+    assert (cast("AsyncMock", llm.complete).await_count) == _EXPECTED_AWAIT_COUNT
+    messages, config = cast(
+        "tuple[list[object], object]",
+        cast("list[object]", cast("AsyncMock", llm.complete).await_args_list)[0].args,
+    )
+    assert (cast("object", config.temperature), cast("object", config.max_tokens)) == (
+        0.0,
+        50,
+    )
+    assert _DOCUMENT.text[:20] + "\n</document>" in cast(
+        "list[object]", messages[1].content
+    )
+    assert _DOCUMENT.text[:21] not in cast("list[object]", messages[1].content)
+    assert "Revenue grew 12.5%." in cast("list[object]", messages[1].content)
     assert texts == [
         "Q3 results of the 2026 report.\n\nRevenue grew 12.5%.",
         "| Q1 | 10 |\n",
@@ -126,12 +134,14 @@ def test_factory_refuses_what_it_cannot_build() -> None:
     """
     llm = cast("LLMProvider", MagicMock(spec=LLMProvider))
     with pytest.raises(AppValueError):
-        contextualizer_from_config(ContextualizerConfig(kind=ContextualizerKind.LLM))
+        _ = contextualizer_from_config(ContextualizerConfig(kind=ContextualizerKind.LLM))
     with pytest.raises(AppValueError):
-        contextualizer_from_config(
+        _ = contextualizer_from_config(
             ContextualizerConfig(kind=ContextualizerKind.LLM, concurrency=0), llm=llm
         )
     with pytest.raises(AppValueError):
-        contextualizer_from_config(
-            ContextualizerConfig(kind=cast("ContextualizerKind", "summary"))
+        _ = contextualizer_from_config(
+            ContextualizerConfig(
+                kind=cast("ContextualizerKind", cast("object", "summary"))
+            )
         )

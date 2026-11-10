@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping, Sequence
     from decimal import Decimal
 
-    from techai_webutils.clients.model_gateway.builder import RoutedConfig
+    from techai_webutils.clients.model_gateway.routed.config import RoutedConfig
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.fact_publisher import FactPublisher
     from techai_webutils.core.interfaces.llm import (

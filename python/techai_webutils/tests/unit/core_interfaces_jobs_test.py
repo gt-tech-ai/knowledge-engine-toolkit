@@ -1,5 +1,7 @@
 """Tests for Job interfaces and PeriodicJob dataclass."""
 
+from typing import TYPE_CHECKING, cast
+
 import pytest
 
 from techai_webutils.core.interfaces.jobs import (
@@ -10,6 +12,9 @@ from techai_webutils.core.interfaces.jobs import (
     Worker,
     WorkerRegistry,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class TestPeriodicJob:
@@ -68,7 +73,7 @@ class TestJobABCs:
             abstract
         """
         with pytest.raises(TypeError):
-            Job()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", Job)()
 
     @staticmethod
     def test_cannot_instantiate_worker() -> None:
@@ -86,7 +91,7 @@ class TestJobABCs:
           - Instantiating Worker directly raises TypeError because work() is abstract
         """
         with pytest.raises(TypeError):
-            Worker()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", Worker)()
 
     @staticmethod
     def test_cannot_instantiate_job_enqueuer() -> None:
@@ -103,7 +108,7 @@ class TestJobABCs:
             close() are abstract
         """
         with pytest.raises(TypeError):
-            JobEnqueuer()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", JobEnqueuer)()
 
     @staticmethod
     def test_cannot_instantiate_job_scheduler() -> None:
@@ -120,7 +125,7 @@ class TestJobABCs:
             abstract
         """
         with pytest.raises(TypeError):
-            JobScheduler()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", JobScheduler)()
 
     @staticmethod
     def test_cannot_instantiate_worker_registry() -> None:
@@ -137,4 +142,4 @@ class TestJobABCs:
             get() are abstract
         """
         with pytest.raises(TypeError):
-            WorkerRegistry()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", WorkerRegistry)()

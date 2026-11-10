@@ -20,7 +20,7 @@ from techai_webutils.core.domain.document_ir import (
 )
 from techai_webutils.core.errors import AppError
 from techai_webutils.core.interfaces.dataset import EvalCase
-from techai_webutils.core.interfaces.evaluator import EvalOutput
+from techai_webutils.core.interfaces.grader import EvalOutput
 
 _TABLE_TEXT = "| region | total |\n|---|---|\n| EMEA | 10 |"
 """The table's markdown rendering."""
@@ -183,6 +183,6 @@ def test_grader_factory_refuses_unknown_kind_and_aspect() -> None:
         GraderConfig(kind=GraderKind.PARSE, aspect="fonts"),
     ):
         with pytest.raises(AppError):
-            grader_from_config(config)
+            _ = grader_from_config(config)
     with pytest.raises(AppError):
-        GraderConfig(kind=GraderKind.PARSE, aspect="cell_text", pass_score=1.5)
+        _ = GraderConfig(kind=GraderKind.PARSE, aspect="cell_text", pass_score=1.5)

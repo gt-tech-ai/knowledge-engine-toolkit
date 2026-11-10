@@ -43,9 +43,11 @@ def _client(stored: Mapping[str, object] | None = None) -> MagicMock:
     """
     client = MagicMock()
     lookup = stored if stored is not None else {"status": 404, "error": "not found"}
-    client.transport.perform_request = AsyncMock(side_effect=[lookup, {}])
-    client.snapshot.create_repository = AsyncMock()
-    client.snapshot.restore = AsyncMock()
+    cast("MagicMock", client.transport).perform_request = AsyncMock(
+        side_effect=[lookup, {}]
+    )
+    cast("MagicMock", client.snapshot).create_repository = AsyncMock()
+    cast("MagicMock", client.snapshot).restore = AsyncMock()
     return client
 
 
@@ -56,7 +58,7 @@ def _calls(client: MagicMock) -> list[tuple[str, str, dict[str, object]]]:
         Each SM request as ``(method, path, params)``.
 
     """
-    perform = cast("AsyncMock", client.transport.perform_request)
+    perform = cast("AsyncMock", cast("MagicMock", client.transport).perform_request)
     return [(c.args[0], c.args[1], c.kwargs["params"]) for c in perform.call_args_list]
 
 
@@ -83,7 +85,12 @@ async def test_ensure_schedule_creates_leaves_or_updates_the_policy() -> None:
     method, path, _ = _calls(created)[1]
     body = cast(
         "dict[str, dict[str, object]]",
-        created.transport.perform_request.call_args.kwargs["body"],
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock", cast("MagicMock", created.transport).perform_request
+            ).call_args,
+        ).kwargs["body"],
     )
     assert (method, path) == ("POST", "/_plugins/_sm/policies/hourly")
     assert body["creation"]["schedule"] == {
@@ -122,7 +129,7 @@ async def test_latest_is_the_newest_successful_snapshot_holding_the_index() -> N
         - No matching snapshot yields ``None``.
     """
     client = MagicMock()
-    client.snapshot.get = AsyncMock(
+    cast("MagicMock", client.snapshot).get = AsyncMock(
         return_value={
             "snapshots": [
                 {
@@ -186,11 +193,24 @@ async def test_refuses_unusable_inputs_before_any_request() -> None:
         await admin.ensure_schedule(
             SnapshotSchedule(policy="p", cron="0 * * * *", keep=-1), "r"
         )
-    client.snapshot.restore.assert_not_called()
-    client.snapshot.create_repository.assert_not_called()
-    client.transport.perform_request.assert_not_called()
+    cast(
+        "MagicMock",
+        cast("MagicMock", cast("MagicMock", client.snapshot).restore).assert_not_called,
+    )()
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", cast("MagicMock", client.snapshot).create_repository
+        ).assert_not_called,
+    )()
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", cast("MagicMock", client.transport).perform_request
+        ).assert_not_called,
+    )()
 
-    client.cluster.health = AsyncMock(
+    cast("MagicMock", client.cluster).health = AsyncMock(
         return_value={"status": "yellow", "timed_out": True}
     )
     with pytest.raises(AppTimeoutError):

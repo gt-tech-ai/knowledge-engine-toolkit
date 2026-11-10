@@ -176,7 +176,7 @@ def test_factory_fails_loudly_on_unknown_kind() -> None:
     )
     for config in bad:
         with pytest.raises(AppValueError, match="safety") as caught:
-            new_safety_check_from_config(config)
+            _ = new_safety_check_from_config(config)
         assert isinstance(caught.value, AppError)
         assert caught.value.code is ErrorCode.INVALID_INPUT
 

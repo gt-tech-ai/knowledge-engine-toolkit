@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 import httpx
@@ -145,7 +145,7 @@ async def test_http_failures_are_coded(response: httpx.Response, code: ErrorCode
     querier = _querier(lambda _request: response)
 
     with pytest.raises(AppError) as info:
-        await querier.query("q")
+        _ = await querier.query("q")
 
     assert info.value.code is code
 
@@ -172,13 +172,13 @@ async def test_http_transport_failures_and_limits() -> None:
         raise httpx.ConnectError(msg, request=request)
 
     with pytest.raises(AppError) as slow:
-        await _querier(timeout).query("q")
+        _ = await _querier(timeout).query("q")
     with pytest.raises(AppError) as down:
-        await _querier(refused).query("q")
+        _ = await _querier(refused).query("q")
     with pytest.raises(AppValueError):
-        await _querier(lambda _r: _ok("vector", []), max_body_bytes=10).query("q")
+        _ = await _querier(lambda _r: _ok("vector", []), max_body_bytes=10).query("q")
     with pytest.raises(AppValueError):
-        await _querier(lambda _r: _ok("matrix", [])).query_range(
+        _ = await _querier(lambda _r: _ok("matrix", [])).query_range(
             "q", _T0, _T0, timedelta(0)
         )
     empty = await _querier(lambda _r: _ok("matrix", [])).query_range(
@@ -213,9 +213,9 @@ async def test_stub_default_and_factory_errors() -> None:
     assert await stub.query("q") == pytest.approx(0.0)
     assert await stub.query_range("q", _T0, _T0, timedelta(seconds=1)) == []
     with pytest.raises(AppValueError):
-        new_metrics_querier_from_config(PrometheusConfig(kind=PrometheusKind.HTTP))
+        _ = new_metrics_querier_from_config(PrometheusConfig(kind=PrometheusKind.HTTP))
     with pytest.raises(AppValueError):
-        new_metrics_querier_from_config(bogus)
+        _ = new_metrics_querier_from_config(bogus)
     built = new_metrics_querier_from_config(
         PrometheusConfig(kind=PrometheusKind.HTTP, base_url="http://prom")
     )
@@ -235,6 +235,8 @@ def test_python_and_go_method_names_match() -> None:
     source = _GO_INTERFACE.read_text(encoding="utf-8")
     body = re.search(r"type MetricsQuerier interface \{(.*?)\n\}", source, re.DOTALL)
     assert body is not None
-    go_methods = set(re.findall(r"^\t([A-Z]\w+)\(", body.group(1), re.MULTILINE))
+    go_methods: set[str] = set(
+        cast("list[str]", re.findall(r"^\t([A-Z]\w+)\(", body.group(1), re.MULTILINE))
+    )
     snake = {re.sub(r"(?<!^)([A-Z])", r"_\1", name).lower() for name in go_methods}
     assert snake == set(MetricsQuerier.__abstractmethods__)

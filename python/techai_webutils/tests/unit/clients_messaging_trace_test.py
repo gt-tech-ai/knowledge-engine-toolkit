@@ -10,7 +10,7 @@ put in the message's metadata — on the memory broker and on SQS.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -34,6 +34,7 @@ from techai_webutils.core.interfaces.tracer import SpanKind
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps
 from techai_webutils.foundation.tracer import continued, inject
+from tests.json_path import dig, items
 
 if TYPE_CHECKING:
     from conftest import Observed
@@ -146,11 +147,23 @@ async def test_sqs_publisher_sends_the_trace_as_attributes(
             await publisher.publish("events", b"{}")
             await publisher.publish_batch("events", [b"a", b"b"])
 
-    sent = aws_client.send_message.call_args.kwargs["MessageAttributes"]
-    [entry, _] = aws_client.send_message_batch.call_args.kwargs["Entries"]
-    for attributes in (sent, entry["MessageAttributes"]):
-        assert attributes["topic"]["StringValue"] == "events"
-        assert producer in attributes["traceparent"]["StringValue"]
+    sent = cast(
+        "object",
+        cast("MagicMock", cast("MagicMock", aws_client.send_message).call_args).kwargs[
+            "MessageAttributes"
+        ],
+    )
+    [entry, _] = items(
+        cast(
+            "dict[str, object]",
+            cast(
+                "MagicMock", cast("MagicMock", aws_client.send_message_batch).call_args
+            ).kwargs,
+        )["Entries"]
+    )
+    for attributes in (sent, dig(entry, "MessageAttributes")):
+        assert dig(attributes, "topic", "StringValue") == "events"
+        assert producer in str(dig(attributes, "traceparent", "StringValue"))
 
 
 @pytest.mark.asyncio
@@ -173,7 +186,7 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
         inject(carrier)
         producer = _trace_id()
     attributes = {k: {"DataType": "String", "StringValue": v} for k, v in carrier.items()}
-    aws_client.receive_message.return_value = {
+    cast("MagicMock", aws_client.receive_message).return_value = {
         "Messages": [
             {
                 "MessageId": "m",
@@ -203,7 +216,7 @@ async def test_sqs_handler_continues_the_trace_through_the_handler_tier(
 
     assert seen == [producer]
     assert [name for name, _, _ in observed.spans] == ["q.handler.events"]
-    aws_client.delete_message.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", aws_client.delete_message).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -234,8 +247,12 @@ async def test_decorate_runs_publishes_through_the_tier_and_keeps_the_lifecycle(
         await pub.publish("a", b"1")
         await pub.publish_batch("b", [b"2"])
 
-    backend.__aenter__.assert_awaited_once()
-    backend.__aexit__.assert_awaited_once()
-    backend.publish.assert_awaited_once_with("a", b"1")
-    backend.publish_batch.assert_awaited_once_with("b", [b"2"])
+    cast("MagicMock", cast("AsyncMock", backend.__aenter__).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", backend.__aexit__).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", backend.publish).assert_awaited_once_with)(
+        "a", b"1"
+    )
+    cast("MagicMock", cast("AsyncMock", backend.publish_batch).assert_awaited_once_with)(
+        "b", [b"2"]
+    )
     assert [name for name, _, _ in observed.spans] == ["bus.a", "bus.b"]

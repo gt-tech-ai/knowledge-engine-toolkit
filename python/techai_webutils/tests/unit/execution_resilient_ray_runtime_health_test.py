@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import socket
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, final, override
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import grpc
@@ -37,6 +37,7 @@ _EXPECTED_AWAIT_COUNT = 100
 _MODULE = "techai_webutils.execution.executor.resilient_ray_runtime"
 
 
+@final
 class _GrpcFailure(grpc.RpcError):
     """A gRPC error carrying a status code.
 
@@ -47,6 +48,7 @@ class _GrpcFailure(grpc.RpcError):
         super().__init__(code.name)
         self._code = code
 
+    @override
     def code(self) -> grpc.StatusCode:
         """Return the status code.
 
@@ -64,10 +66,10 @@ def _inner() -> MagicMock:
         A generated-mock inner ``RayRuntime``.
 
     """
-    runtime = create_autospec(RayRuntime, instance=True)
+    runtime = cast("object", create_autospec(RayRuntime, instance=True))
     runtime.warm_up = AsyncMock()
     runtime.submit = AsyncMock(return_value=StepResult(name="ok"))
-    return runtime
+    return cast("MagicMock", runtime)
 
 
 def _metrics() -> tuple[MetricsProvider, MagicMock]:
@@ -77,9 +79,9 @@ def _metrics() -> tuple[MetricsProvider, MagicMock]:
         A mocked metrics provider and the counter it hands out.
 
     """
-    counter = create_autospec(MetricCounter, instance=True)
-    metrics = create_autospec(MetricsProvider, instance=True)
-    metrics.counter.return_value = counter
+    counter = cast("MagicMock", create_autospec(MetricCounter, instance=True))
+    metrics = cast("MetricsProvider", create_autospec(MetricsProvider, instance=True))
+    cast("MagicMock", metrics.counter).return_value = counter
     return metrics, counter
 
 
@@ -115,7 +117,7 @@ class TestConnectFailures:
             next successful connect gives 0.
         """
         inner = _inner()
-        inner.warm_up.side_effect = [
+        cast("MagicMock", inner.warm_up).side_effect = [
             *[_GrpcFailure(grpc.StatusCode.NOT_FOUND)] * 3,
             None,
         ]
@@ -139,8 +141,10 @@ class TestConnectFailures:
             "Failed Ray Client connect attempts, by gRPC status.",
             ["reason"],
         )
-        assert counter.inc.call_count == _EXPECTED_CALL_COUNT
-        counter.inc.assert_called_with(1.0, reason="NOT_FOUND")
+        assert (cast("MagicMock", counter.inc).call_count) == _EXPECTED_CALL_COUNT
+        cast("MagicMock", cast("MagicMock", counter.inc).assert_called_with)(
+            1.0, reason="NOT_FOUND"
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -156,7 +160,7 @@ class TestConnectFailures:
             ``reason="UNKNOWN"``.
         """
         inner = _inner()
-        inner.warm_up.side_effect = ConnectionError("refused")
+        cast("MagicMock", inner.warm_up).side_effect = ConnectionError("refused")
         metrics, counter = _metrics()
         runtime = ResilientRayRuntime(
             inner,
@@ -168,7 +172,9 @@ class TestConnectFailures:
         with pytest.raises(RayUnavailableError):
             await runtime.warm_up()
 
-        counter.inc.assert_called_once_with(1.0, reason="UNKNOWN")
+        cast("MagicMock", cast("MagicMock", counter.inc).assert_called_once_with)(
+            1.0, reason="UNKNOWN"
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -186,16 +192,16 @@ class TestConnectFailures:
             before the next), the retry decorator is applied exactly once.
         """
         inner = _inner()
-        inner.submit.side_effect = RayUnavailableError("lost")
+        cast("MagicMock", inner.submit).side_effect = RayUnavailableError("lost")
         applications = MagicMock(side_effect=lambda fn: fn)
         with patch(f"{_MODULE}.retry_transient_async", return_value=applications):
             runtime = ResilientRayRuntime(inner, options=ResilientRayRuntimeOptions())
         for item in range(100):
             with pytest.raises(RayUnavailableError):
-                await runtime.submit(_mapper, item)
+                _ = await runtime.submit(_mapper, item)
 
         assert applications.call_count == 1
-        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT
+        assert (cast("AsyncMock", inner.warm_up).await_count) == _EXPECTED_AWAIT_COUNT
 
 
 @pytest_asyncio.fixture
@@ -207,7 +213,7 @@ async def open_port() -> AsyncIterator[int]:
 
     """
     server = await asyncio.start_server(lambda _r, w: w.close(), "127.0.0.1", 0)
-    port = server.sockets[0].getsockname()[1]
+    port = cast("int", server.sockets[0].getsockname()[1])
     try:
         yield port
     finally:
@@ -224,7 +230,7 @@ def _closed_port() -> int:
     """
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+        return cast("int", sock.getsockname()[1])
 
 
 class TestHeadReachable:
@@ -247,7 +253,7 @@ class TestHeadReachable:
             port.
         """
         inner = _inner()
-        inner.warm_up.side_effect = ConnectionError("stuck")
+        cast("MagicMock", inner.warm_up).side_effect = ConnectionError("stuck")
         runtime = ResilientRayRuntime(
             inner,
             options=ResilientRayRuntimeOptions(
@@ -295,7 +301,7 @@ class TestHeadReachable:
           - ``head_reachable()`` with no ``head_probe_address`` raises ``AppValueError``.
         """
         with pytest.raises(AppValueError, match="head_probe_address"):
-            await ResilientRayRuntime(
+            _ = await ResilientRayRuntime(
                 _inner(), options=ResilientRayRuntimeOptions()
             ).head_reachable()
 

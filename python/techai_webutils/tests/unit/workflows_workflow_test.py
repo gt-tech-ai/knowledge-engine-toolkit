@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,6 +24,8 @@ from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps
 from techai_webutils.workflows import WorkflowBase, tier
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from conftest import Observed
 
 _EXPECTED_EXEC = 2
@@ -66,17 +68,17 @@ def _tx_manager(events: list[str]) -> MagicMock:
     """
     tx = MagicMock(spec=TransactionManager)
 
-    async def with_transaction(fn: object) -> object:
+    async def with_transaction(fn: Callable[[], Awaitable[object]]) -> object:
         events.append("begin")
         try:
-            result = await fn()  # type: ignore[operator]
+            result = await fn()
         except Exception:
             events.append("rollback")
             raise
         events.append("commit")
         return result
 
-    tx.with_transaction.side_effect = with_transaction
+    cast("MagicMock", tx.with_transaction).side_effect = with_transaction
     return tx
 
 
@@ -149,7 +151,7 @@ async def test_recovery_and_timeout() -> None:
     with pytest.raises(ConflictError):
         await base.exec("op", AsyncMock(side_effect=ConflictError("dup")))
     with pytest.raises(AppTimeoutError):
-        await base.exec("op", slow)
+        _ = await base.exec("op", slow)
 
 
 @pytest.mark.asyncio

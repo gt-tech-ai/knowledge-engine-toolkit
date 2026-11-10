@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -31,7 +31,7 @@ async def _metadata_of(
         The delivered message's metadata.
 
     """
-    aws_client.receive_message.return_value = {"Messages": [raw]}
+    cast("MagicMock", aws_client.receive_message).return_value = {"Messages": [raw]}
     received: list[Message] = []
     async with SQSSubscriber(config) as subscriber:
 
@@ -62,7 +62,7 @@ class TestSQSSubscriber:
         """
         sub = SQSSubscriber(sqs_config)
 
-        async def handler(msg: Message) -> None:
+        async def handler(_msg: Message) -> None:
             pass
 
         with pytest.raises(AppRuntimeError, match="not initialized"):
@@ -90,14 +90,16 @@ class TestSQSSubscriber:
                 await subscriber.close()
                 return {"Messages": []}
 
-            aws_client.receive_message.side_effect = receive
+            cast("MagicMock", aws_client.receive_message).side_effect = receive
 
-            async def handler(msg: Message) -> None:
+            async def handler(_msg: Message) -> None:
                 pass
 
             await subscriber.subscribe("topic", handler)
 
-        aws_client.receive_message.assert_awaited_once()
+        cast(
+            "MagicMock", cast("AsyncMock", aws_client.receive_message).assert_awaited_once
+        )()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -178,12 +180,16 @@ class TestSQSSubscriber:
                 await subscriber.close()
                 return {"Messages": []}
 
-            aws_client.receive_message.side_effect = receive
+            cast("MagicMock", aws_client.receive_message).side_effect = receive
             await subscriber.subscribe("events", handler)
 
         handler.assert_not_awaited()
-        aws_client.delete_message.assert_not_awaited()
-        assert aws_client.receive_message.await_count == _EXPECTED_AWAIT_COUNT
+        cast(
+            "MagicMock", cast("AsyncMock", aws_client.delete_message).assert_not_awaited
+        )()
+        assert (
+            cast("AsyncMock", aws_client.receive_message).await_count
+        ) == _EXPECTED_AWAIT_COUNT
 
 
 def _raw(n: int) -> dict[str, object]:
@@ -213,7 +219,7 @@ async def _consume(
                 return {"Messages": []}
             return {"Messages": batch}
 
-        aws_client.receive_message.side_effect = receive
+        cast("MagicMock", aws_client.receive_message).side_effect = receive
         await subscriber.subscribe("events", handler)
 
 
@@ -237,7 +243,10 @@ class TestSQSSubscriberSettleBatch:
             message is handled, ``delete_message_batch`` runs three times with 10, 10 and
             3 receipt handles, and ``delete_message`` never runs.
         """
-        aws_client.delete_message_batch.return_value = {"Successful": [], "Failed": []}
+        cast("MagicMock", aws_client.delete_message_batch).return_value = {
+            "Successful": [],
+            "Failed": [],
+        }
         polls = [
             [_raw(n) for n in range(start, end)]
             for start, end in ((0, 10), (10, 20), (20, 23))
@@ -248,17 +257,25 @@ class TestSQSSubscriberSettleBatch:
 
         assert handler.await_count == _EXPECTED_AWAIT_COUNT_23
         sizes = [
-            len(c.kwargs["Entries"])
-            for c in aws_client.delete_message_batch.await_args_list
+            len(cast("list[object]", c.kwargs["Entries"]))
+            for c in cast(
+                "list[object]",
+                cast("AsyncMock", aws_client.delete_message_batch).await_args_list,
+            )
         ]
         assert sizes == [10, 10, 3]
         handles = {
             entry["ReceiptHandle"]
-            for c in aws_client.delete_message_batch.await_args_list
-            for entry in c.kwargs["Entries"]
+            for c in cast(
+                "list[object]",
+                cast("AsyncMock", aws_client.delete_message_batch).await_args_list,
+            )
+            for entry in cast("list[dict[str, object]]", c.kwargs["Entries"])
         }
         assert handles == {f"r-{n}" for n in range(23)}
-        aws_client.delete_message.assert_not_awaited()
+        cast(
+            "MagicMock", cast("AsyncMock", aws_client.delete_message).assert_not_awaited
+        )()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -274,7 +291,10 @@ class TestSQSSubscriberSettleBatch:
         **What it tests:**
           - Of three messages, the one whose handler raises is not in the batch delete.
         """
-        aws_client.delete_message_batch.return_value = {"Successful": [], "Failed": []}
+        cast("MagicMock", aws_client.delete_message_batch).return_value = {
+            "Successful": [],
+            "Failed": [],
+        }
 
         async def handler(message: Message) -> None:
             await asyncio.sleep(0)
@@ -290,9 +310,16 @@ class TestSQSSubscriberSettleBatch:
         )
 
         [entries] = [
-            c.kwargs["Entries"] for c in aws_client.delete_message_batch.await_args_list
+            cast("dict[str, object]", c.kwargs)["Entries"]
+            for c in cast(
+                "list[object]",
+                cast("AsyncMock", aws_client.delete_message_batch).await_args_list,
+            )
         ]
-        assert {e["ReceiptHandle"] for e in entries} == {"r-0", "r-2"}
+        assert {e["ReceiptHandle"] for e in cast("list[dict[str, object]]", entries)} == {
+            "r-0",
+            "r-2",
+        }
 
     @staticmethod
     @pytest.mark.asyncio
@@ -312,13 +339,15 @@ class TestSQSSubscriberSettleBatch:
             for its receipt handle; when that also raises, ``subscribe`` still returns
             normally.
         """
-        aws_client.delete_message_batch.return_value = {
+        cast("MagicMock", aws_client.delete_message_batch).return_value = {
             "Successful": [{"Id": "0"}],
             "Failed": [
                 {"Id": "1", "Code": "ReceiptHandleIsInvalid", "SenderFault": True}
             ],
         }
-        aws_client.delete_message.side_effect = AppRuntimeError("still failing")
+        cast("MagicMock", aws_client.delete_message).side_effect = AppRuntimeError(
+            "still failing"
+        )
 
         await _consume(
             replace(sqs_config, settle_batch=True),
@@ -327,9 +356,10 @@ class TestSQSSubscriberSettleBatch:
             AsyncMock(),
         )
 
-        aws_client.delete_message.assert_awaited_once_with(
-            QueueUrl=sqs_config.queue_url, ReceiptHandle="r-1"
-        )
+        cast(
+            "MagicMock",
+            cast("AsyncMock", aws_client.delete_message).assert_awaited_once_with,
+        )(QueueUrl=sqs_config.queue_url, ReceiptHandle="r-1")
 
     @staticmethod
     @pytest.mark.asyncio
@@ -347,5 +377,10 @@ class TestSQSSubscriberSettleBatch:
         """
         await _consume(sqs_config, aws_client, [[_raw(0), _raw(1)]], AsyncMock())
 
-        assert aws_client.delete_message.await_count == _EXPECTED_AWAIT_COUNT
-        aws_client.delete_message_batch.assert_not_awaited()
+        assert (
+            cast("AsyncMock", aws_client.delete_message).await_count
+        ) == _EXPECTED_AWAIT_COUNT
+        cast(
+            "MagicMock",
+            cast("AsyncMock", aws_client.delete_message_batch).assert_not_awaited,
+        )()

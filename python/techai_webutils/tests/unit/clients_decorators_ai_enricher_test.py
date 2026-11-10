@@ -7,7 +7,7 @@ with the GenAI semantic attributes, so the OTel span is the only boundary mocked
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -50,14 +50,19 @@ def _messages() -> list[LLMMessage]:
     ]
 
 
-def _attributes(span: MagicMock) -> dict[str, Any]:
+def _attributes(span: MagicMock) -> dict[str, object]:
     """Collect every ``set_attribute(key, value)`` call on the mock span into a dict.
 
     Returns:
         The attributes by key.
 
     """
-    return {c.args[0]: c.args[1] for c in span.set_attribute.call_args_list}
+    return {
+        cast("str", cast("list[object]", c.args)[0]): cast("list[object]", c.args)[1]
+        for c in cast(
+            "list[object]", cast("MagicMock", span.set_attribute).call_args_list
+        )
+    }
 
 
 def _llm(response: LLMResponse) -> MagicMock:
@@ -104,8 +109,12 @@ async def test_ai_span_enricher_stamps_gen_ai_usage_from_llm_response() -> None:
     span = MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            inner, options=AiSpanEnricherOptions(step="generate", capture_content=False)
+        cast(
+            "object",
+            AiSpanEnricher(
+                inner,
+                options=AiSpanEnricherOptions(step="generate", capture_content=False),
+            ),
         ),
     )
 
@@ -122,7 +131,7 @@ async def test_ai_span_enricher_stamps_gen_ai_usage_from_llm_response() -> None:
         "gen_ai.usage.output_tokens": 7,
         "gen_ai.response.finish_reason": "stop",
     }
-    span.end.assert_not_called()
+    cast("MagicMock", cast("MagicMock", span.end).assert_not_called)()
 
 
 @pytest.mark.asyncio
@@ -143,14 +152,17 @@ async def test_ai_span_enricher_maps_provider_class_to_gen_ai_system() -> None:
     span = MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            StubLlmProvider(),
-            options=AiSpanEnricherOptions(step="rewrite", capture_content=False),
+        cast(
+            "object",
+            AiSpanEnricher(
+                StubLlmProvider(),
+                options=AiSpanEnricherOptions(step="rewrite", capture_content=False),
+            ),
         ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
-        await enricher.complete(_messages())
+        _ = await enricher.complete(_messages())
 
     assert GEN_AI_SYSTEM_BY_PROVIDER == {
         "BedrockLlmProvider": "aws.bedrock",
@@ -178,14 +190,17 @@ async def test_enricher_reports_wrapped_system_through_gateway() -> None:
     span = MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            PassthroughGateway(StubLlmProvider()),
-            options=AiSpanEnricherOptions(step="generate", capture_content=False),
+        cast(
+            "object",
+            AiSpanEnricher(
+                PassthroughGateway(StubLlmProvider()),
+                options=AiSpanEnricherOptions(step="generate", capture_content=False),
+            ),
         ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
-        await enricher.complete(_messages())
+        _ = await enricher.complete(_messages())
 
     assert _attributes(span)["gen_ai.system"] == "stub"
 
@@ -226,14 +241,18 @@ async def test_ai_span_enricher_stream_stamps_usage_at_exhaustion() -> None:
     span = MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            inner, options=AiSpanEnricherOptions(step="generate", capture_content=False)
+        cast(
+            "object",
+            AiSpanEnricher(
+                inner,
+                options=AiSpanEnricherOptions(step="generate", capture_content=False),
+            ),
         ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
         iterator = await enricher.stream(_messages())
-        assert span.set_attribute.call_count == 0
+        assert (cast("MagicMock", span.set_attribute).call_count) == 0
         tokens = [t async for t in iterator]
 
     assert tokens == ["Hel", "lo"]
@@ -272,8 +291,12 @@ async def test_ai_span_enricher_stream_with_usage_keeps_usage_and_stamps() -> No
     span = MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            inner, options=AiSpanEnricherOptions(step="generate", capture_content=False)
+        cast(
+            "object",
+            AiSpanEnricher(
+                inner,
+                options=AiSpanEnricherOptions(step="generate", capture_content=False),
+            ),
         ),
     )
 
@@ -319,16 +342,19 @@ async def test_ai_span_enricher_reports_requested_and_served_model() -> None:
     aliased, plain = MagicMock(), MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            _llm(response),
-            options=AiSpanEnricherOptions(step="generate", capture_content=False),
+        cast(
+            "object",
+            AiSpanEnricher(
+                _llm(response),
+                options=AiSpanEnricherOptions(step="generate", capture_content=False),
+            ),
         ),
     )
 
     with patch(_SPAN_SOURCE, return_value=aliased):
-        await enricher.complete(_messages(), LLMConfig(model="nova-alias"))
+        _ = await enricher.complete(_messages(), LLMConfig(model="nova-alias"))
     with patch(_SPAN_SOURCE, return_value=plain):
-        await enricher.complete(_messages())
+        _ = await enricher.complete(_messages())
 
     assert _attributes(aliased)["gen_ai.request.model"] == "nova-alias"
     assert _attributes(aliased)["gen_ai.response.model"] == "nova-lite-v1"
@@ -374,8 +400,12 @@ async def test_ai_span_enricher_stamps_retrieval_shape() -> None:
     span = MagicMock()
     enricher = cast(
         "RetrievalEngine",
-        AiSpanEnricher(
-            inner, options=AiSpanEnricherOptions(step="retrieve", capture_content=False)
+        cast(
+            "object",
+            AiSpanEnricher(
+                inner,
+                options=AiSpanEnricherOptions(step="retrieve", capture_content=False),
+            ),
         ),
     )
 
@@ -383,14 +413,18 @@ async def test_ai_span_enricher_stamps_retrieval_shape() -> None:
         got = await enricher.retrieve("q", top_k=25, filters={"org": "o1"})
 
     assert got is results
-    inner.retrieve.assert_awaited_once_with("q", top_k=25, filters={"org": "o1"})
+    cast("MagicMock", cast("AsyncMock", inner.retrieve).assert_awaited_once_with)(
+        "q", top_k=25, filters={"org": "o1"}
+    )
     assert _attributes(span) == {
         "gen_ai.step": "retrieve",
         "retrieval.top_k": 25,
         "retrieval.result_count": 21,
         "retrieval.document_ids": ",".join(f"doc-{i}" for i in range(20)),
     }
-    assert span.set_attribute.call_args_list[0] == call("gen_ai.step", "retrieve")
+    assert cast("list[object]", cast("MagicMock", span.set_attribute).call_args_list)[
+        0
+    ] == call("gen_ai.step", "retrieve")
 
 
 @pytest.mark.asyncio
@@ -414,16 +448,20 @@ async def test_ai_span_enricher_capture_content_false_records_no_text() -> None:
     span = MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            inner, options=AiSpanEnricherOptions(step="generate", capture_content=False)
+        cast(
+            "object",
+            AiSpanEnricher(
+                inner,
+                options=AiSpanEnricherOptions(step="generate", capture_content=False),
+            ),
         ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
-        await enricher.complete(_messages())
+        _ = await enricher.complete(_messages())
         _ = [t async for t in await enricher.stream(_messages())]
 
-    span.add_event.assert_not_called()
+    cast("MagicMock", cast("MagicMock", span.add_event).assert_not_called)()
 
 
 @pytest.mark.asyncio
@@ -460,16 +498,20 @@ async def test_ai_span_enricher_capture_content_true_redacts_pii() -> None:
     span = MagicMock()
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            inner, options=AiSpanEnricherOptions(step="generate", capture_content=True)
+        cast(
+            "object",
+            AiSpanEnricher(
+                inner,
+                options=AiSpanEnricherOptions(step="generate", capture_content=True),
+            ),
         ),
     )
 
     with patch(_SPAN_SOURCE, return_value=span):
-        await enricher.complete(messages)
+        _ = await enricher.complete(messages)
         _ = [t async for t in await enricher.stream(messages)]
 
-    events = span.add_event.call_args_list
+    events = cast("list[object]", cast("MagicMock", span.add_event).call_args_list)
     assert events[0] == call(
         "gen_ai.content.prompt", {"gen_ai.prompt": "be brief\nmail [REDACTED]"}
     )
@@ -512,18 +554,25 @@ async def test_ai_span_enricher_enrichment_error_does_not_propagate() -> None:
     engine = MagicMock(spec=RetrievalEngine)
     engine.retrieve = AsyncMock(return_value=results)
     span = MagicMock()
-    span.set_attribute.side_effect = RuntimeError("exporter down")
+    cast("MagicMock", span.set_attribute).side_effect = RuntimeError("exporter down")
 
     llm_enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            llm, options=AiSpanEnricherOptions(step="generate", capture_content=True)
+        cast(
+            "object",
+            AiSpanEnricher(
+                llm, options=AiSpanEnricherOptions(step="generate", capture_content=True)
+            ),
         ),
     )
     engine_enricher = cast(
         "RetrievalEngine",
-        AiSpanEnricher(
-            engine, options=AiSpanEnricherOptions(step="retrieve", capture_content=False)
+        cast(
+            "object",
+            AiSpanEnricher(
+                engine,
+                options=AiSpanEnricherOptions(step="retrieve", capture_content=False),
+            ),
         ),
     )
     with patch(_SPAN_SOURCE, return_value=span):

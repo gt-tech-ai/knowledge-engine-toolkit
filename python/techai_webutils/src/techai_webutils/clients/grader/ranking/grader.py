@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from techai_webutils.core.interfaces.dataset import EvalCase
-    from techai_webutils.core.interfaces.evaluator import EvalOutput
+    from techai_webutils.core.interfaces.grader import EvalOutput
 
 EXPECTED_RELEVANT_KEY = "relevant"
 """The eval case's ``expected`` key holding its relevant ids, as a JSON list."""

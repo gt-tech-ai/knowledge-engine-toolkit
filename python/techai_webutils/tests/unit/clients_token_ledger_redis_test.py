@@ -73,7 +73,7 @@ def _client() -> tuple[MagicMock, AsyncMock]:
     """
     script = AsyncMock(return_value=b"1-0")
     client = MagicMock(spec=Redis)
-    client.register_script.return_value = script
+    cast("MagicMock", client.register_script).return_value = script
     return client, script
 
 
@@ -90,7 +90,7 @@ def _pipeline(client: MagicMock, results: list[object]) -> MagicMock:
     pipe.__aenter__ = AsyncMock(return_value=pipe)
     pipe.__aexit__ = AsyncMock(return_value=None)
     pipe.execute = AsyncMock(return_value=results)
-    client.pipeline.return_value = pipe
+    cast("MagicMock", client.pipeline).return_value = pipe
     return pipe
 
 
@@ -120,7 +120,7 @@ async def test_record_runs_single_script_with_scope_key() -> None:
     await ledger.record(_record())
 
     assert isinstance(ledger, RedisTokenLedger)
-    client.register_script.assert_called_once()
+    cast("MagicMock", cast("MagicMock", client.register_script).assert_called_once)()
     script.assert_awaited_once_with(
         keys=["token_ledger:org-1:w-1:2026-10", "token_ledger:usage"],
         args=[
@@ -176,19 +176,19 @@ async def test_record_error_never_raises() -> None:
     script.side_effect = RedisConnectionError("down")
     failed = MagicMock(spec=MetricCounter)
     metrics = MagicMock(spec=MetricsProvider)
-    metrics.counter.return_value = failed
+    cast("MagicMock", metrics.counter).return_value = failed
     ledger = RedisTokenLedger(
         client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS), metrics=metrics
     )
 
     assert await ledger.record(_record()) is None
 
-    metrics.counter.assert_called_once_with(
+    cast("MagicMock", cast("MagicMock", metrics.counter).assert_called_once_with)(
         "token_ledger_record_failed_total",
         "Token usage records that failed to reach the ledger.",
         [],
     )
-    failed.inc.assert_called_once_with()
+    cast("MagicMock", cast("MagicMock", failed.inc).assert_called_once_with)()
 
 
 @pytest.mark.asyncio
@@ -217,9 +217,9 @@ async def test_check_budget_counter_arithmetic() -> None:
     )
 
     within = await ledger.check_budget(_SCOPE)
-    _pipeline(client, [[b"900", b"100", b"0", b"0"], {b"tokens": b"1000"}])
+    _ = _pipeline(client, [[b"900", b"100", b"0", b"0"], {b"tokens": b"1000"}])
     exhausted = await ledger.check_budget(_SCOPE)
-    _pipeline(client, [[None, None, None, None], {}])
+    _ = _pipeline(client, [[None, None, None, None], {}])
     unlimited = await ledger.check_budget(_SCOPE)
 
     assert within == BudgetDecision(
@@ -237,15 +237,19 @@ async def test_check_budget_counter_arithmetic() -> None:
     assert unlimited == BudgetDecision(
         allowed=True, reason="no_limit", remaining_tokens=None, remaining_cost_usd=None
     )
-    pipe.hmget.assert_called_once_with(
+    cast("MagicMock", cast("MagicMock", pipe.hmget).assert_called_once_with)(
         "token_ledger:org-1:w-1:2026-10",
         "input_tokens",
         "output_tokens",
         "embed_tokens",
         "cost_micro_usd",
     )
-    pipe.hgetall.assert_called_once_with("token_ledger:limits:org-1:w-1")
-    client.pipeline.assert_called_with(transaction=False)
+    cast("MagicMock", cast("MagicMock", pipe.hgetall).assert_called_once_with)(
+        "token_ledger:limits:org-1:w-1"
+    )
+    cast("MagicMock", cast("MagicMock", client.pipeline).assert_called_with)(
+        transaction=False
+    )
 
 
 @pytest.mark.asyncio
@@ -262,7 +266,7 @@ async def test_check_budget_fails_open_on_redis_error() -> None:
     """
     client, _ = _client()
     pipe = _pipeline(client, [])
-    pipe.execute.side_effect = RedisConnectionError("down")
+    cast("MagicMock", pipe.execute).side_effect = RedisConnectionError("down")
     ledger = RedisTokenLedger(
         client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS), clock=lambda: _NOW
     )
@@ -302,12 +306,12 @@ async def test_usage_reads_counter_snapshot() -> None:
         clock=lambda: _NOW,
     )
 
-    _pipeline(client, [[b"100", b"20", b"5", b"10800"]])
+    _ = _pipeline(client, [[b"100", b"20", b"5", b"10800"]])
     month = await monthly.usage(_SCOPE, Period.MONTHLY)
     pipe = _pipeline(client, [[b"1", b"1", b"0", b"1"]] * 30)
     rolled = await rolling.usage(_SCOPE, Period.ROLLING_30D)
     with pytest.raises(AppError) as caught:
-        await monthly.usage(_SCOPE, Period.DAILY)
+        _ = await monthly.usage(_SCOPE, Period.DAILY)
 
     assert month == UsageSummary(
         scope=_SCOPE,
@@ -325,7 +329,10 @@ async def test_usage_reads_counter_snapshot() -> None:
         embed_tokens=0,
         cost_usd=Decimal("0.000030"),
     )
-    keys = [c.args[0] for c in pipe.hmget.call_args_list]
+    keys = [
+        cast("list[object]", c.args)[0]
+        for c in cast("list[object]", cast("MagicMock", pipe.hmget).call_args_list)
+    ]
     assert keys[0] == "token_ledger:org-1:w-1:2026-10-09"
     assert keys[-1] == "token_ledger:org-1:w-1:2026-09-10"
     assert len(keys) == _EXPECTED_KEYS_COUNT
@@ -345,7 +352,7 @@ async def test_check_budget_fails_open_on_malformed_limits() -> None:
         "ledger_unavailable_fail_open", None, None)``
     """
     client, _ = _client()
-    _pipeline(client, [[b"1", b"1", b"0", b"1"], {b"tokens": b"lots"}])
+    _ = _pipeline(client, [[b"1", b"1", b"0", b"1"], {b"tokens": b"lots"}])
     ledger = RedisTokenLedger(
         client, TokenLedgerConfig(kind=TokenLedgerKind.REDIS), clock=lambda: _NOW
     )
@@ -382,25 +389,30 @@ async def test_record_rounds_cost_half_even_and_accepts_a_string_window() -> Non
     rolling = RedisTokenLedger(
         client,
         TokenLedgerConfig(
-            kind=TokenLedgerKind.REDIS, window=cast("Period", "rolling_30d")
+            kind=TokenLedgerKind.REDIS,
+            window=cast("Period", cast("object", "rolling_30d")),
         ),
         clock=lambda: _NOW,
     )
 
     await rolling.record(replace(_record(), cost_usd=Decimal("0.0000135")))
     pipe = _pipeline(client, [[b"0", b"0", b"0", b"0"]] * 30)
-    await rolling.usage(_SCOPE, Period.ROLLING_30D)
+    _ = await rolling.usage(_SCOPE, Period.ROLLING_30D)
     with pytest.raises(AppError) as caught:
-        RedisTokenLedger(
+        _ = RedisTokenLedger(
             client,
             TokenLedgerConfig(
-                kind=TokenLedgerKind.REDIS, window=cast("Period", "weekly")
+                kind=TokenLedgerKind.REDIS,
+                window=cast("Period", cast("object", "weekly")),
             ),
         )
 
     assert script.await_args is not None
     assert script.await_args.kwargs["args"][5] == _EXPECTED_KWARGS
-    assert len(pipe.hmget.call_args_list) == _EXPECTED_CALL_ARGS_LIST_COUNT
+    assert (
+        len(cast("list[object]", cast("MagicMock", pipe.hmget).call_args_list))
+        == _EXPECTED_CALL_ARGS_LIST_COUNT
+    )
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
@@ -424,7 +436,7 @@ async def test_check_budget_reports_the_budget_enforcement() -> None:
     )
 
     async def check(limits: dict[bytes, bytes]) -> BudgetDecision:
-        _pipeline(client, [[b"900", b"100", b"0", b"0"], limits])
+        _ = _pipeline(client, [[b"900", b"100", b"0", b"0"], limits])
         return await ledger.check_budget(_SCOPE)
 
     hard = await check({b"tokens": b"1000", b"enforcement": b"hard"})

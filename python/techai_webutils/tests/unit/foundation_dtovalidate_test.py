@@ -49,7 +49,7 @@ def test_leaf_rules_refuse_out_of_bounds_values_as_invalid_input(
     """
     assert callable(check)
     with pytest.raises(InvalidInputError) as excinfo:
-        check()
+        _ = check()
     assert excinfo.value.code == ErrorCode.INVALID_INPUT
     assert str(excinfo.value) == message
 

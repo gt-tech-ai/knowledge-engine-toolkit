@@ -6,7 +6,7 @@ And the query/document prefixes.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import httpx
@@ -67,9 +67,12 @@ def _echo(sent: list[dict[str, object]]) -> Callable[[httpx.Request], httpx.Resp
     """
 
     def handler(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content)
+        body = cast("dict[str, object]", json.loads(request.content))
         sent.append(body)
-        data = [{"index": i, "embedding": _vector(i)} for i in range(len(body["input"]))]
+        data = [
+            {"index": i, "embedding": _vector(i)}
+            for i in range(len(cast("list[object]", body["input"])))
+        ]
         return httpx.Response(
             200, json={"data": data[::-1], "usage": {"prompt_tokens": 7}}
         )
@@ -132,7 +135,7 @@ async def test_status_errors_are_coded(status: int, code: ErrorCode) -> None:
     provider = _provider(lambda _request: httpx.Response(status, json={}))
 
     with pytest.raises(AppError) as raised:
-        await provider.embed("a")
+        _ = await provider.embed("a")
 
     assert raised.value.code is code
     assert raised.value.is_transient is (code is ErrorCode.UNAVAILABLE)
@@ -161,11 +164,11 @@ async def test_timeout_and_bad_vectors_are_coded() -> None:
     missing = {"data": [{"index": 0, "embedding": _vector(0)}]}
 
     with pytest.raises(AppError) as timed_out:
-        await _provider(timeout).embed("a")
+        _ = await _provider(timeout).embed("a")
     with pytest.raises(AppError, match="2-d vector") as wrong_size:
-        await _provider(lambda _r: httpx.Response(200, json=short)).embed("a")
+        _ = await _provider(lambda _r: httpx.Response(200, json=short)).embed("a")
     with pytest.raises(AppError, match="1 vectors for 2 texts") as too_few:
-        await _provider(lambda _r: httpx.Response(200, json=missing)).embed_batch([
+        _ = await _provider(lambda _r: httpx.Response(200, json=missing)).embed_batch([
             "a",
             "b",
         ])
@@ -200,7 +203,9 @@ def test_factory_applies_the_timeout_and_the_bearer_key() -> None:
 
     with patch("techai_webutils.clients.embedding.builder.httpx.AsyncClient") as client:
         provider = new_embedding_from_config(config)
-        new_embedding_from_config(EmbeddingConfig(kind=EmbeddingKind.OPENAI_COMPATIBLE))
+        _ = new_embedding_from_config(
+            EmbeddingConfig(kind=EmbeddingKind.OPENAI_COMPATIBLE)
+        )
 
     assert isinstance(provider, OpenAICompatibleEmbeddingProvider)
     keyed, bare = client.call_args_list
@@ -237,10 +242,10 @@ async def test_query_and_document_prefixes_reach_the_request() -> None:
         inner, query_prefix="query: ", document_prefix="passage: "
     )
 
-    await prefixed.embed("pump", input_type="query")
-    await prefixed.embed_batch(["valve"], input_type="document")
-    await prefixed.embed("seal")
-    await inner.embed("plain", input_type="query")
+    _ = await prefixed.embed("pump", input_type="query")
+    _ = await prefixed.embed_batch(["valve"], input_type="document")
+    _ = await prefixed.embed("seal")
+    _ = await inner.embed("plain", input_type="query")
 
     assert [body["input"] for body in sent] == [
         ["query: pump"],

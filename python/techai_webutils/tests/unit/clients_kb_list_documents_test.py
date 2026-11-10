@@ -22,6 +22,7 @@ from techai_webutils.clients.kb_ingestion.decorators import (
 from techai_webutils.clients.kb_ingestion.mapping import kb_document_from_payload
 from techai_webutils.clients.kb_ingestion.noop.ingestor import StubKnowledgeBaseIngestor
 from techai_webutils.core.interfaces.kb_ingestion import KnowledgeBaseDocument
+from tests.json_path import dig
 
 _EXPECTED_AWAIT_COUNT = 2
 
@@ -122,12 +123,20 @@ class TestBedrockListDocuments:
             ],
         }
         fake_client = AsyncMock()
-        fake_client.list_knowledge_base_documents.side_effect = [page1, page2]
+        cast("MagicMock", fake_client.list_knowledge_base_documents).side_effect = [
+            page1,
+            page2,
+        ]
 
         # The ingestor opens its bedrock-agent client through aiobotocore's session on
         # first use; mock that SDK boundary so the open yields the fake client.
         session = MagicMock()
-        session.create_client.return_value.__aenter__.return_value = fake_client
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock", cast("MagicMock", session.create_client).return_value
+            ).__aenter__,
+        ).return_value = fake_client
         with patch("aiobotocore.session.get_session", return_value=session):
             ingestor = BedrockKnowledgeBaseIngestor(region="us-east-1")
 
@@ -143,12 +152,22 @@ class TestBedrockListDocuments:
             KnowledgeBaseDocument(s3_uri="s3://b/c", status="INDEXED", status_reason=""),
         ]
         assert (
-            fake_client.list_knowledge_base_documents.await_count == _EXPECTED_AWAIT_COUNT
+            cast(
+                "object",
+                cast("AsyncMock", fake_client.list_knowledge_base_documents).await_count,
+            )
+            == _EXPECTED_AWAIT_COUNT
         )
         assert (
-            fake_client.list_knowledge_base_documents.await_args_list[1].kwargs[
-                "nextToken"
-            ]
+            cast(
+                "dict[str, object]",
+                cast(
+                    "list[object]",
+                    cast(
+                        "AsyncMock", fake_client.list_knowledge_base_documents
+                    ).await_args_list,
+                )[1].kwargs,
+            )["nextToken"]
             == "tok2"
         )
 
@@ -217,9 +236,14 @@ class TestIterCohort:
                 ]
             }
 
-        fake_client.get_knowledge_base_documents.side_effect = lookup
+        cast("MagicMock", fake_client.get_knowledge_base_documents).side_effect = lookup
         session = MagicMock()
-        session.create_client.return_value.__aenter__.return_value = fake_client
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock", cast("MagicMock", session.create_client).return_value
+            ).__aenter__,
+        ).return_value = fake_client
         with patch("aiobotocore.session.get_session", return_value=session):
             bedrock = BedrockKnowledgeBaseIngestor(
                 region="us-east-1", cohort_request_interval_seconds=0
@@ -234,13 +258,25 @@ class TestIterCohort:
         ]
 
         assert sorted(d.s3_uri for d in docs) == uris
-        calls = fake_client.get_knowledge_base_documents.await_args_list
-        assert [len(c.kwargs["documentIdentifiers"]) for c in calls] == [10, 10, 5]
-        assert calls[0].kwargs["documentIdentifiers"][0] == {
+        calls = cast(
+            "list[object]",
+            cast("AsyncMock", fake_client.get_knowledge_base_documents).await_args_list,
+        )
+        assert [
+            len(cast("list[object]", c.kwargs["documentIdentifiers"])) for c in calls
+        ] == [10, 10, 5]
+        assert dig(
+            cast("dict[str, object]", calls[0].kwargs), "documentIdentifiers", 0
+        ) == {
             "dataSourceType": "S3",
             "s3": {"uri": "s3://b/00"},
         }
-        fake_client.list_knowledge_base_documents.assert_not_awaited()
+        cast(
+            "MagicMock",
+            cast(
+                "AsyncMock", fake_client.list_knowledge_base_documents
+            ).assert_not_awaited,
+        )()
 
     @staticmethod
     @pytest.mark.asyncio

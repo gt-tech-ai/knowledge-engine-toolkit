@@ -13,8 +13,8 @@ transient error, and ``submit`` connects-then-dispatches without retrying the ta
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import TypedDict
-from unittest.mock import create_autospec
+from typing import TypedDict, cast
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
 
@@ -75,17 +75,19 @@ class TestResilientRayRuntime:
             third, warm_up returns without raising and the inner connect was attempted
             exactly three times.
         """
-        inner = create_autospec(RayRuntime, instance=True)
-        inner.warm_up.side_effect = [
+        inner = cast("object", create_autospec(RayRuntime, instance=True))
+        cast("MagicMock", inner.warm_up).side_effect = [
             RuntimeError("Starting Ray client server failed"),
             RuntimeError("Starting Ray client server failed"),
             None,
         ]
-        runtime = ResilientRayRuntime(inner, options=ResilientRayRuntimeOptions(**_FAST))
+        runtime = ResilientRayRuntime(
+            cast("RayRuntime", inner), options=ResilientRayRuntimeOptions(**_FAST)
+        )
 
         await runtime.warm_up()
 
-        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT
+        assert cast("object", inner.warm_up.await_count) == _EXPECTED_AWAIT_COUNT
 
     @staticmethod
     @pytest.mark.asyncio
@@ -101,10 +103,12 @@ class TestResilientRayRuntime:
           - With the inner connect always failing, warm_up raises UnavailableError (code
             UNAVAILABLE, is_transient) after exactly ``max_attempts`` attempts.
         """
-        inner = create_autospec(RayRuntime, instance=True)
-        inner.warm_up.side_effect = RuntimeError("Starting Ray client server failed")
+        inner = cast("object", create_autospec(RayRuntime, instance=True))
+        cast("MagicMock", inner.warm_up).side_effect = RuntimeError(
+            "Starting Ray client server failed"
+        )
         runtime = ResilientRayRuntime(
-            inner,
+            cast("RayRuntime", inner),
             options=ResilientRayRuntimeOptions(
                 max_attempts=3, base_delay=0.0, max_delay=0.0
             ),
@@ -115,7 +119,7 @@ class TestResilientRayRuntime:
 
         assert excinfo.value.code is ErrorCode.UNAVAILABLE
         assert excinfo.value.is_transient
-        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT
+        assert cast("object", inner.warm_up.await_count) == _EXPECTED_AWAIT_COUNT
 
     @staticmethod
     @pytest.mark.asyncio
@@ -134,22 +138,24 @@ class TestResilientRayRuntime:
           - submit connects via the inner runtime, dispatches the item exactly once, and
             returns the mapper's StepResult.
         """
-        inner = create_autospec(RayRuntime, instance=True)
-        inner.warm_up.side_effect = [None]
+        inner = cast("object", create_autospec(RayRuntime, instance=True))
+        cast("MagicMock", inner.warm_up).side_effect = [None]
 
         async def submit(
             fn: Callable[[int], Awaitable[StepResult]], item: int
         ) -> StepResult:
             return await fn(item)
 
-        inner.submit.side_effect = submit
-        runtime = ResilientRayRuntime(inner, options=ResilientRayRuntimeOptions(**_FAST))
+        cast("MagicMock", inner.submit).side_effect = submit
+        runtime = ResilientRayRuntime(
+            cast("RayRuntime", inner), options=ResilientRayRuntimeOptions(**_FAST)
+        )
 
         result = await runtime.submit(_ok, 5)
 
         assert result.name == "item-5"
-        inner.warm_up.assert_awaited()
-        inner.submit.assert_awaited_once()
+        cast("MagicMock", inner.warm_up.assert_awaited)()
+        cast("MagicMock", inner.submit.assert_awaited_once)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -169,10 +175,12 @@ class TestResilientRayRuntime:
             gets a ``RayUnavailableError`` (the batch-wide cluster-down error, still
             transient).
         """
-        inner = create_autospec(RayRuntime, instance=True)
-        inner.warm_up.side_effect = RuntimeError("Ray head unreachable")
+        inner = cast("object", create_autospec(RayRuntime, instance=True))
+        cast("MagicMock", inner.warm_up).side_effect = RuntimeError(
+            "Ray head unreachable"
+        )
         runtime = ResilientRayRuntime(
-            inner,
+            cast("RayRuntime", inner),
             options=ResilientRayRuntimeOptions(
                 max_attempts=3, base_delay=0.0, max_delay=0.0
             ),
@@ -182,7 +190,7 @@ class TestResilientRayRuntime:
             *(runtime.warm_up() for _ in range(10)), return_exceptions=True
         )
 
-        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT
+        assert cast("object", inner.warm_up.await_count) == _EXPECTED_AWAIT_COUNT
         assert all(isinstance(o, RayUnavailableError) for o in outcomes)
         assert all(isinstance(o, UnavailableError) and o.is_transient for o in outcomes)
 
@@ -203,21 +211,25 @@ class TestResilientRayRuntime:
           - After ``submit`` reports ``RayUnavailableError``, the next ``submit`` connects
             again.
         """
-        inner = create_autospec(RayRuntime, instance=True)
-        inner.submit.return_value = StepResult(name="item")
-        runtime = ResilientRayRuntime(inner, options=ResilientRayRuntimeOptions(**_FAST))
+        inner = cast("object", create_autospec(RayRuntime, instance=True))
+        cast("MagicMock", inner.submit).return_value = StepResult(name="item")
+        runtime = ResilientRayRuntime(
+            cast("RayRuntime", inner), options=ResilientRayRuntimeOptions(**_FAST)
+        )
 
         async def mapper(item: int) -> StepResult:
             await asyncio.sleep(0)
             return StepResult(name=str(item))
 
-        await asyncio.gather(*(runtime.submit(mapper, i) for i in range(10)))
-        assert inner.warm_up.await_count == 1
+        _ = await asyncio.gather(*(runtime.submit(mapper, i) for i in range(10)))
+        assert cast("object", inner.warm_up.await_count) == 1
 
-        inner.submit.side_effect = RayUnavailableError("ray cluster connection lost")
+        cast("MagicMock", inner.submit).side_effect = RayUnavailableError(
+            "ray cluster connection lost"
+        )
         with pytest.raises(RayUnavailableError):
-            await runtime.submit(mapper, 0)
-        inner.submit.side_effect = None
-        await runtime.submit(mapper, 0)
+            _ = await runtime.submit(mapper, 0)
+        cast("MagicMock", inner.submit).side_effect = None
+        _ = await runtime.submit(mapper, 0)
 
-        assert inner.warm_up.await_count == _EXPECTED_AWAIT_COUNT_2
+        assert cast("AsyncMock", inner.warm_up).await_count == _EXPECTED_AWAIT_COUNT_2

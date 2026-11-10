@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -44,7 +43,7 @@ _REQ = RouteRequirements(prompt_tokens=1000, max_tokens=1000)
 _GEN = Route("generate", "anthropic/sonnet")
 
 
-def _catalog(catalog_raw: dict[str, Any]) -> ModelCatalog:
+def _catalog(catalog_raw: dict[str, object]) -> ModelCatalog:
     """Return the fixture catalog.
 
     Returns:
@@ -121,7 +120,7 @@ async def _rank(
     ],
 )
 async def test_cost_aware_orders_by_objective(
-    catalog_raw: dict[str, Any], slo: str, first: str, last: str | None
+    catalog_raw: dict[str, object], slo: str, first: str, last: str | None
 ) -> None:
     """Test that each objective orders endpoints by its own measure.
 
@@ -144,7 +143,7 @@ async def test_cost_aware_orders_by_objective(
 
 @pytest.mark.asyncio
 async def test_cost_aware_drops_candidates_over_hard_caps(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that hard caps drop candidates outright and an empty result is forbidden.
 
@@ -171,7 +170,7 @@ async def test_cost_aware_drops_candidates_over_hard_caps(
     assert rejections["anthropic/sonnet@use1"] == "over_cap"
     assert tight == ["meta/small@local"]
     with pytest.raises(AppError) as caught:
-        await _rank(
+        _ = await _rank(
             catalog, policy=RoutingPolicy(max_cost_per_request=Decimal("0.00001"))
         )
     assert caught.value.code is ErrorCode.FORBIDDEN
@@ -179,7 +178,7 @@ async def test_cost_aware_drops_candidates_over_hard_caps(
 
 @pytest.mark.asyncio
 async def test_cost_aware_biases_cheaper_when_near_budget(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that a tenant near its budget is routed to cheaper endpoints.
 
@@ -207,7 +206,7 @@ async def test_cost_aware_biases_cheaper_when_near_budget(
 
 @pytest.mark.asyncio
 async def test_cost_aware_drops_below_quality_floor_unless_degrade_on_budget(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """A route's quality floor drops weak models unless the tenant allows.
 
@@ -235,7 +234,7 @@ async def test_cost_aware_drops_below_quality_floor_unless_degrade_on_budget(
 
 
 def test_routes_share_the_catalog(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the fixture routes parse against the fixture catalog.
 
@@ -254,7 +253,7 @@ def test_routes_share_the_catalog(
 
 @pytest.mark.asyncio
 async def test_cost_aware_ranks_under_each_requests_own_prices(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that one ranker ranks each request under the price table that request carries.
 
@@ -294,7 +293,7 @@ async def test_cost_aware_ranks_under_each_requests_own_prices(
 
 @pytest.mark.asyncio
 async def test_cost_aware_without_a_table_refuses_an_unpriced_rank(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that a ranker built without prices refuses ``rank``.
 

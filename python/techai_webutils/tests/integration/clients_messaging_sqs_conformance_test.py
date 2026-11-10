@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import aiobotocore.session
 import pytest
@@ -24,6 +24,10 @@ from tests.contract.messaging_conformance import CASES, Transport
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
+    from unittest.mock import MagicMock
+
+    from aiobotocore.session import ClientCreatorContext
+    from types_aiobotocore_sqs import SQSClient
 
     from techai_webutils.clients.messaging.config import SQSConfig
 
@@ -38,11 +42,17 @@ async def _arn(config: SQSConfig, queue_url: str) -> str:
 
     """
     session = aiobotocore.session.get_session()
-    async with session.create_client("sqs", **config.client_kwargs()) as client:
-        resp = await client.get_queue_attributes(
-            QueueUrl=queue_url, AttributeNames=["QueueArn"]
+    async with cast(
+        "ClientCreatorContext[SQSClient]",
+        session.create_client("sqs", **config.client_kwargs()),
+    ) as client:
+        resp = cast(
+            "MagicMock",
+            await cast("MagicMock", client.get_queue_attributes)(
+                QueueUrl=queue_url, AttributeNames=["QueueArn"]
+            ),
         )
-    return resp.get("Attributes", {})["QueueArn"]
+    return cast("str", cast("MagicMock", resp.get)("Attributes", {})["QueueArn"])
 
 
 async def _transport(
@@ -80,7 +90,7 @@ async def _transport(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-@pytest.mark.parametrize("case", CASES, ids=lambda case: case.__name__)
+@pytest.mark.parametrize("case", CASES, ids=[case.__name__ for case in CASES])
 async def test_sqs_kind_conforms(
     sqs_config: SQSConfig,
     make_sqs_queue: Callable[[str, Mapping[str, str] | None], Awaitable[str]],

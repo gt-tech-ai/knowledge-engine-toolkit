@@ -68,7 +68,7 @@ class TestSemaphoreBulkhead:
         blocker = asyncio.Event()
 
         async def blocking_task() -> str:
-            await blocker.wait()
+            _ = await blocker.wait()
             return "blocked"
 
         # Start a task that holds the slot
@@ -76,7 +76,7 @@ class TestSemaphoreBulkhead:
         await asyncio.sleep(0.01)  # Let it acquire the semaphore
 
         with pytest.raises(BulkheadFullError):
-            await bulkhead.try_execute(self._async_task)
+            _ = await bulkhead.try_execute(self._async_task)
 
         blocker.set()
         await task
@@ -107,7 +107,7 @@ class TestSemaphoreBulkhead:
             return "ok"
 
         tasks = [asyncio.create_task(bulkhead.execute(tracked_task)) for _ in range(4)]
-        await asyncio.gather(*tasks)
+        _ = await asyncio.gather(*tasks)
         assert counter["max"] <= _EXPECTED_COUNTER
 
     @staticmethod

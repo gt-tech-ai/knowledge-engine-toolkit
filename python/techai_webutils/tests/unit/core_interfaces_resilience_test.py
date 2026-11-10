@@ -1,5 +1,7 @@
 """Tests for resilience interface ABCs."""
 
+from typing import TYPE_CHECKING, cast
+
 import pytest
 
 from techai_webutils.core.interfaces.bulkhead import Bulkhead
@@ -10,6 +12,9 @@ from techai_webutils.core.interfaces.crud_service import CrudService, ServiceHoo
 from techai_webutils.core.interfaces.rate_limiter import RateLimiter
 from techai_webutils.core.interfaces.retrier import Retrier
 from techai_webutils.core.interfaces.store import Store
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class TestResilienceABCs:
@@ -30,7 +35,7 @@ class TestResilienceABCs:
             execute(), __enter__(), and __exit__() are abstract
         """
         with pytest.raises(TypeError):
-            CircuitBreakerInterface()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", CircuitBreakerInterface)()
 
     @staticmethod
     def test_cannot_instantiate_rate_limiter() -> None:
@@ -47,7 +52,7 @@ class TestResilienceABCs:
             are abstract
         """
         with pytest.raises(TypeError):
-            RateLimiter()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", RateLimiter)()
 
     @staticmethod
     def test_cannot_instantiate_bulkhead() -> None:
@@ -64,7 +69,7 @@ class TestResilienceABCs:
             try_execute() are abstract
         """
         with pytest.raises(TypeError):
-            Bulkhead()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", Bulkhead)()
 
     @staticmethod
     def test_cannot_instantiate_retrier() -> None:
@@ -82,7 +87,7 @@ class TestResilienceABCs:
           - Instantiating Retrier directly raises TypeError because retry() is abstract
         """
         with pytest.raises(TypeError):
-            Retrier()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", Retrier)()
 
 
 class TestOtherABCs:
@@ -103,7 +108,7 @@ class TestOtherABCs:
             delete() are abstract
         """
         with pytest.raises(TypeError):
-            ByteCache()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", ByteCache)()
 
     @staticmethod
     def test_cannot_instantiate_config_loader() -> None:
@@ -120,7 +125,7 @@ class TestOtherABCs:
             get/get_string/get_int/ get_bool/unmarshal are abstract
         """
         with pytest.raises(TypeError):
-            ConfigLoader()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", ConfigLoader)()
 
     @staticmethod
     def test_cannot_instantiate_store() -> None:
@@ -139,7 +144,7 @@ class TestOtherABCs:
             abstract
         """
         with pytest.raises(TypeError):
-            Store()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", Store)()
 
     @staticmethod
     def test_cannot_instantiate_crud_service() -> None:
@@ -157,7 +162,7 @@ class TestOtherABCs:
             get/list/create/update/ delete are abstract
         """
         with pytest.raises(TypeError):
-            CrudService()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", CrudService)()
 
 
 class TestServiceHooks:

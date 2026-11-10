@@ -57,7 +57,7 @@ def test_new_dataset_from_config_returns_backend_per_kind(tmp_path: Path) -> Non
       - ``aiops`` builds whatever the injected ``backends["aiops"]`` factory returns
     """
     path = tmp_path / "cases.jsonl"
-    path.write_text(_LINES)
+    _ = path.write_text(_LINES)
     aiops = MagicMock(spec=Dataset)
     backends = {DatasetKind.AIOPS.value: lambda _config: aiops}
 
@@ -80,12 +80,12 @@ def test_new_dataset_from_config_unknown_kind_raises() -> None:
       - ``aiops`` with no injected backend raises ``AppError(INVALID_INPUT)``
     """
     with pytest.raises(AppValueError, match="unknown dataset kind") as caught:
-        new_dataset_from_config(DatasetConfig(kind="nope"))
+        _ = new_dataset_from_config(DatasetConfig(kind="nope"))
     assert isinstance(caught.value, AppError)
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
     with pytest.raises(AppError) as missing:
-        new_dataset_from_config(DatasetConfig(kind=DatasetKind.AIOPS))
+        _ = new_dataset_from_config(DatasetConfig(kind=DatasetKind.AIOPS))
     assert missing.value.code is ErrorCode.INVALID_INPUT
 
 
@@ -123,7 +123,7 @@ async def test_jsonl_dataset_version_is_content_hash(tmp_path: Path) -> None:
       - the cases parse in file order with ``metadata`` defaulting to empty
     """
     path = tmp_path / "cases.jsonl"
-    path.write_text(_LINES)
+    _ = path.write_text(_LINES)
     dataset = JsonlDataset(str(path))
 
     assert dataset.version() == hashlib.sha256(_LINES.encode()).hexdigest()
@@ -150,19 +150,19 @@ async def test_jsonl_dataset_malformed_line_raises_invalid_input(tmp_path: Path)
       - a missing file raises ``AppError(UNAVAILABLE)``
     """
     bad_json = tmp_path / "bad.jsonl"
-    bad_json.write_text(_LINES + "{not json\n")
+    _ = bad_json.write_text(_LINES + "{not json\n")
     no_id = tmp_path / "no_id.jsonl"
-    no_id.write_text(json.dumps({"inputs": {}}) + "\n")
+    _ = no_id.write_text(json.dumps({"inputs": {}}) + "\n")
     array = tmp_path / "array.jsonl"
-    array.write_text("[1, 2]\n")
+    _ = array.write_text("[1, 2]\n")
     bad_inputs = tmp_path / "bad_inputs.jsonl"
-    bad_inputs.write_text(json.dumps({"id": "c1", "inputs": ["q"]}) + "\n")
+    _ = bad_inputs.write_text(json.dumps({"id": "c1", "inputs": ["q"]}) + "\n")
 
     for path in (bad_json, no_id, array, bad_inputs):
         with pytest.raises(AppError) as caught:
-            await _collect(JsonlDataset(str(path)))
+            _ = await _collect(JsonlDataset(str(path)))
         assert caught.value.code is ErrorCode.INVALID_INPUT
 
     with pytest.raises(AppError) as missing:
-        JsonlDataset(str(tmp_path / "absent.jsonl")).version()
+        _ = JsonlDataset(str(tmp_path / "absent.jsonl")).version()
     assert missing.value.code is ErrorCode.UNAVAILABLE

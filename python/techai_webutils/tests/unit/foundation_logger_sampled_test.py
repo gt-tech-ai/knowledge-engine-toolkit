@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from itertools import cycle
-from typing import NoReturn
-from unittest.mock import create_autospec
+from typing import NoReturn, cast
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
@@ -40,9 +40,9 @@ def test_sampled_logger_keeps_rate_of_success_lines_and_every_problem_line() -> 
       - A logger from ``bind`` binds on the inner logger and samples at the same rate.
       - Rate 1.0 keeps every line; a rate outside 0.0-1.0 is ``InvalidInputError``.
     """
-    inner = create_autospec(Logger, instance=True)
+    inner = cast("object", create_autospec(Logger, instance=True))
     draws = cycle([0.2, 0.7, 0.4, 0.9])
-    log = SampledLogger(inner, 0.5, draw=lambda: next(draws))
+    log = SampledLogger(cast("Logger", inner), 0.5, draw=lambda: next(draws))
 
     for i in range(4):
         log.info("ok", n=i)
@@ -55,23 +55,32 @@ def test_sampled_logger_keeps_rate_of_success_lines_and_every_problem_line() -> 
     except RuntimeError:
         log.exception("crashed")
 
-    assert [c.kwargs["n"] for c in inner.info.call_args_list] == [0, 2]
-    assert [c.kwargs["n"] for c in inner.debug.call_args_list] == [0, 2]
-    assert (inner.warning.call_count, inner.error.call_count) == (1, 1)
-    assert inner.exception.call_count == 1
+    assert [
+        cast("dict[str, object]", c.kwargs)["n"]
+        for c in cast("list[object]", inner.info.call_args_list)
+    ] == [0, 2]
+    assert [
+        cast("dict[str, object]", c.kwargs)["n"]
+        for c in cast("list[object]", inner.debug.call_args_list)
+    ] == [0, 2]
+    assert (
+        cast("object", inner.warning.call_count),
+        cast("object", inner.error.call_count),
+    ) == (1, 1)
+    assert cast("object", inner.exception.call_count) == 1
 
-    bound_inner = create_autospec(Logger, instance=True)
-    inner.bind.return_value = bound_inner
+    bound_inner = cast("object", create_autospec(Logger, instance=True))
+    cast("MagicMock", inner.bind).return_value = bound_inner
     bound = log.bind(document_id="d")
     for _ in range(4):
         bound.info("ok")
-    inner.bind.assert_called_once_with(document_id="d")
-    assert bound_inner.info.call_count == _EXPECTED_CALL_COUNT
+    cast("MagicMock", inner.bind.assert_called_once_with)(document_id="d")
+    assert cast("object", bound_inner.info.call_count) == _EXPECTED_CALL_COUNT
 
-    every = create_autospec(Logger, instance=True)
-    full = SampledLogger(every, 1.0, draw=lambda: 0.99)
+    every = cast("object", create_autospec(Logger, instance=True))
+    full = SampledLogger(cast("Logger", every), 1.0, draw=lambda: 0.99)
     for _ in range(3):
         full.info("ok")
-    assert every.info.call_count == _EXPECTED_CALL_COUNT_3
+    assert cast("object", every.info.call_count) == _EXPECTED_CALL_COUNT_3
     with pytest.raises(InvalidInputError):
-        SampledLogger(inner, 1.5)
+        _ = SampledLogger(cast("Logger", inner), 1.5)

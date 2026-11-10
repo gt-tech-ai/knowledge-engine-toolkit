@@ -5,6 +5,7 @@ And the per-key limiter factory.
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -70,11 +71,23 @@ async def test_redis_rate_limiter_rejects_over_window() -> None:
         redis=_redis(ConnectionError("down")),
     )
     with pytest.raises(AppError) as caught:
-        await broken.allow_key("u-1")
+        _ = await broken.allow_key("u-1")
 
     assert results == [True, True, False]
-    redis.pipeline.return_value.incr.assert_called_with("rl:u-1:2")
-    redis.pipeline.return_value.expire.assert_called_with("rl:u-1:2", 60)
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", redis.pipeline).return_value).incr,
+        ).assert_called_with,
+    )("rl:u-1:2")
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", redis.pipeline).return_value).expire,
+        ).assert_called_with,
+    )("rl:u-1:2", 60)
     assert caught.value.code is ErrorCode.UNAVAILABLE
 
 
@@ -95,7 +108,7 @@ async def test_zero_limit_is_unlimited() -> None:
             PerKeyRateLimiterConfig(kind=kind, max_per_window=0), redis=redis
         )
         assert all([await limiter.allow_key("u-1") for _ in range(5)])
-    redis.pipeline.assert_not_called()
+    cast("MagicMock", cast("MagicMock", redis.pipeline).assert_not_called)()
 
 
 def test_unknown_kind_raises() -> None:
@@ -110,9 +123,9 @@ def test_unknown_kind_raises() -> None:
       - the default kind is the in-memory limiter
     """
     with pytest.raises(AppError) as unknown:
-        per_key_rate_limiter_from_config(PerKeyRateLimiterConfig(kind="memcached"))
+        _ = per_key_rate_limiter_from_config(PerKeyRateLimiterConfig(kind="memcached"))
     with pytest.raises(AppError) as no_client:
-        per_key_rate_limiter_from_config(
+        _ = per_key_rate_limiter_from_config(
             PerKeyRateLimiterConfig(kind=PerKeyRateLimiterKind.REDIS)
         )
 

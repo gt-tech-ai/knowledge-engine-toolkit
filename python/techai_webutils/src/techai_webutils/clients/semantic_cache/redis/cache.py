@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from redis.commands.search import Search
     from redis.typing import EncodableT, FieldT
 
-    from techai_webutils.clients.semantic_cache.builder import SemanticCacheConfig
+    from techai_webutils.clients.semantic_cache.config import SemanticCacheConfig
     from techai_webutils.core.interfaces.cache import Cache
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider

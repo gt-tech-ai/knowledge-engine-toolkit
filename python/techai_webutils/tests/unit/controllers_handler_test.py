@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -151,7 +151,7 @@ async def test_rate_limit_rejects_resource_exhausted() -> None:
         not run.
     """
     limiter = MagicMock(spec=RateLimiter)
-    limiter.allow.return_value = False
+    cast("MagicMock", limiter.allow).return_value = False
     handler = AsyncMock()
     base = ControllerBase(_Search, Decorations.fixed(Deps(rate_limiter=limiter)), "api")
 
@@ -218,7 +218,7 @@ async def test_lay_out_streams_get_no_timeout() -> None:
         runs.append((unary, stream))
         return len(runs)
 
-    lay_out("api", Deps(timeout=0.01, skip_recovery=True), lambda _: None, adapt)
+    _ = lay_out("api", Deps(timeout=0.01, skip_recovery=True), lambda _: None, adapt)
     [(unary, stream)] = runs
 
     async def slow() -> str:
@@ -226,5 +226,5 @@ async def test_lay_out_streams_get_no_timeout() -> None:
         return "done"
 
     with pytest.raises(AppError):
-        await exec_op(unary, "Op", slow)
+        _ = await exec_op(unary, "Op", slow)
     assert await exec_op(stream, "Op", slow) == "done"

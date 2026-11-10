@@ -373,7 +373,7 @@ class TestSortField:
         """
         sf = SortField(field="name")
         try:
-            sf.field = "other"  # type: ignore[misc]
+            sf.field = "other"
             msg = "Should have raised FrozenInstanceError"
             raise AssertionError(msg)
         except AttributeError:

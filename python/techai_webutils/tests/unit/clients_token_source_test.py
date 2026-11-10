@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, final
 from urllib.parse import parse_qs
 
 import httpx
@@ -32,6 +32,7 @@ _EXPECTED_FORMS_COUNT = 2
 _URL = "https://tenant.example/oauth/token"
 
 
+@final
 class _Clock:
     """A monotonic clock the test steps by hand."""
 
@@ -158,7 +159,7 @@ async def test_oauth_token_source_codes_each_failure(
 
     source = _source(handler, _Clock())
     with pytest.raises(AppError) as info:
-        await source.token()
+        _ = await source.token()
     assert info.value.code == code
 
 
@@ -188,7 +189,7 @@ async def test_oauth_token_source_codes_transport_failures(
         raise exc
 
     with pytest.raises(AppError) as info:
-        await _source(handler, _Clock()).token()
+        _ = await _source(handler, _Clock()).token()
     assert info.value.code == code
 
 
@@ -216,10 +217,10 @@ async def test_token_source_factory_selects_kind() -> None:
     )
     assert isinstance(oauth, OAuthTokenSource)
     with pytest.raises(AppValueError, match="token_url"):
-        new_token_source_from_config(TokenSourceConfig(kind=TokenSourceKind.OAUTH))
+        _ = new_token_source_from_config(TokenSourceConfig(kind=TokenSourceKind.OAUTH))
     with pytest.raises(AppValueError, match="unknown"):
-        new_token_source_from_config(
-            TokenSourceConfig(kind=cast("TokenSourceKind", "ldap"))
+        _ = new_token_source_from_config(
+            TokenSourceConfig(kind=cast("TokenSourceKind", cast("object", "ldap")))
         )
     shown = repr(
         TokenSourceConfig(

@@ -6,6 +6,7 @@ The aiobotocore session is mocked where the ingestor imports it; errors are real
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,6 +17,7 @@ from techai_webutils.clients.kb_ingestion.bedrock.ingestor import (
 )
 from techai_webutils.clients.kb_ingestion.mapping import start_client_token
 from techai_webutils.core.errors import AppError, ConflictError, ErrorCode
+from tests.json_path import dig
 
 _EXPECTED_FIRST_COUNT = 64
 
@@ -30,7 +32,12 @@ def _ingestor(client: AsyncMock) -> BedrockKnowledgeBaseIngestor:
 
     """
     session = MagicMock()
-    session.create_client.return_value.__aenter__.return_value = client
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", cast("MagicMock", session.create_client).return_value
+        ).__aenter__,
+    ).return_value = client
     with patch("aiobotocore.session.get_session", return_value=session):
         return BedrockKnowledgeBaseIngestor(region="us-east-1")
 
@@ -72,10 +79,10 @@ async def test_start_maps_conflict_and_quota_codes(
         ``UNAVAILABLE``
     """
     client = AsyncMock()
-    client.start_ingestion_job.side_effect = _client_error(code)
+    cast("MagicMock", client.start_ingestion_job).side_effect = _client_error(code)
 
     with pytest.raises(AppError) as info:
-        await _ingestor(client).start_ingestion_job(
+        _ = await _ingestor(client).start_ingestion_job(
             knowledge_base_id="kb", data_source_id="ds"
         )
 
@@ -98,10 +105,12 @@ async def test_start_validation_error_stays_permanent() -> None:
         error
     """
     client = AsyncMock()
-    client.start_ingestion_job.side_effect = _client_error("ValidationException")
+    cast("MagicMock", client.start_ingestion_job).side_effect = _client_error(
+        "ValidationException"
+    )
 
     with pytest.raises(ClientError):
-        await _ingestor(client).start_ingestion_job(
+        _ = await _ingestor(client).start_ingestion_job(
             knowledge_base_id="kb", data_source_id="ds"
         )
 
@@ -121,20 +130,25 @@ async def test_start_retry_reuses_client_token() -> None:
         ``start_client_token("kb", "ds", "r1")``; a start without a round sends no token
     """
     client = AsyncMock()
-    client.start_ingestion_job.return_value = _JOB
+    cast("MagicMock", client.start_ingestion_job).return_value = _JOB
     ingestor = _ingestor(client)
 
-    await ingestor.start_ingestion_job(
+    _ = await ingestor.start_ingestion_job(
         knowledge_base_id="kb", data_source_id="ds", round_id="r1"
     )
-    await ingestor.start_ingestion_job(
+    _ = await ingestor.start_ingestion_job(
         knowledge_base_id="kb", data_source_id="ds", round_id="r1"
     )
-    await ingestor.start_ingestion_job(knowledge_base_id="kb", data_source_id="ds")
+    _ = await ingestor.start_ingestion_job(knowledge_base_id="kb", data_source_id="ds")
 
-    first, second, third = (c.kwargs for c in client.start_ingestion_job.await_args_list)
-    assert first["clientToken"] == second["clientToken"]
-    assert first["clientToken"] == start_client_token("kb", "ds", "r1")
-    assert len(first["clientToken"]) == _EXPECTED_FIRST_COUNT
-    assert "clientToken" not in third
-    assert start_client_token("kb", "ds", "r2") != first["clientToken"]
+    first, second, third = (
+        cast("object", c.kwargs)
+        for c in cast(
+            "list[object]", cast("AsyncMock", client.start_ingestion_job).await_args_list
+        )
+    )
+    assert dig(first, "clientToken") == dig(second, "clientToken")
+    assert dig(first, "clientToken") == start_client_token("kb", "ds", "r1")
+    assert len(str(dig(first, "clientToken"))) == _EXPECTED_FIRST_COUNT
+    assert "clientToken" not in cast("dict[str, object]", third)
+    assert start_client_token("kb", "ds", "r2") != dig(first, "clientToken")

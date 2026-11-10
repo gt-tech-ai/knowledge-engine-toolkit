@@ -9,7 +9,8 @@ swap the two behind one protocol.
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from unittest.mock import create_autospec
+from typing import cast
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
@@ -53,13 +54,13 @@ def _local_runtime() -> RayRuntime:
         The mock runtime.
 
     """
-    runtime = create_autospec(RayRuntime, instance=True)
+    runtime = cast("object", create_autospec(RayRuntime, instance=True))
 
     async def submit(fn: Callable[[int], Awaitable[StepResult]], item: int) -> StepResult:
         return await fn(item)
 
-    runtime.submit.side_effect = submit
-    return runtime
+    cast("MagicMock", runtime.submit).side_effect = submit
+    return cast("RayRuntime", runtime)
 
 
 class TestRayExecutor:
@@ -98,7 +99,7 @@ class TestRayExecutor:
           - When submit raises for one item, that item FAILs and the rest PASS (fan_out
             isolation).
         """
-        runtime = create_autospec(RayRuntime, instance=True)
+        runtime = cast("object", create_autospec(RayRuntime, instance=True))
 
         async def submit(
             fn: Callable[[int], Awaitable[StepResult]], item: int
@@ -108,8 +109,8 @@ class TestRayExecutor:
                 raise RuntimeError(msg)
             return await fn(item)
 
-        runtime.submit.side_effect = submit
-        ex = RayExecutor(runtime)
+        cast("MagicMock", runtime.submit).side_effect = submit
+        ex = RayExecutor(cast("RayRuntime", runtime))
         batch = await ex.run(_ok, [0, 1, 2], concurrency=3)
         assert batch.failed == 1
         assert batch.succeeded == _EXPECTED_SUCCEEDED_2
@@ -135,7 +136,7 @@ class TestRayExecutor:
         ex = RayExecutor(runtime)
 
         with pytest.raises(RayUnavailableError):
-            await ex.run(_ok, [0, 1, 2], concurrency=3)
+            _ = await ex.run(_ok, [0, 1, 2], concurrency=3)
         runtime.submit.assert_not_awaited()
 
     @staticmethod
@@ -168,7 +169,7 @@ class TestRayExecutor:
         ex = RayExecutor(runtime)
 
         with pytest.raises(RayUnavailableError):
-            await ex.run(_ok, [0, 1, 2, 3, 4], concurrency=1)
+            _ = await ex.run(_ok, [0, 1, 2, 3, 4], concurrency=1)
         assert runtime.submit.await_count == _EXPECTED_AWAIT_COUNT_2
 
     @staticmethod
@@ -228,10 +229,10 @@ class TestRayExecutor:
             in_flight -= 1
             return await fn(item)
 
-        runtime = create_autospec(RayRuntime, instance=True)
-        runtime.submit.side_effect = submit
-        ex = RayExecutor(runtime)
-        await ex.run(_ok, list(range(6)), concurrency=2)
+        runtime = cast("object", create_autospec(RayRuntime, instance=True))
+        cast("MagicMock", runtime.submit).side_effect = submit
+        ex = RayExecutor(cast("RayRuntime", runtime))
+        _ = await ex.run(_ok, list(range(6)), concurrency=2)
         assert peak <= _EXPECTED_PEAK
 
     @staticmethod
@@ -301,4 +302,4 @@ class TestExecutorFromConfig:
             kind.
         """
         with pytest.raises(AppValueError, match="unknown executor kind"):
-            executor_from_config(ExecutorConfig(kind="bogus"))
+            _ = executor_from_config(ExecutorConfig(kind="bogus"))

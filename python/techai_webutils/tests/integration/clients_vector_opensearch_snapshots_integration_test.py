@@ -7,7 +7,7 @@ The repository is an ``fs`` one under the container's ``path.repo``; the managed
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 import pytest_asyncio
@@ -114,11 +114,13 @@ async def test_snapshot_restores_an_orgs_documents_under_a_new_name(
 
     schedule = SnapshotSchedule(policy=f"p{tag}", cron="0 * * * *", indices=index, keep=3)
     await admin.ensure_schedule(schedule, repo.name)
-    first = await client.transport.perform_request(
-        "GET", f"/_plugins/_sm/policies/p{tag}"
+    first = cast(
+        "dict[str, object]",
+        await client.transport.perform_request("GET", f"/_plugins/_sm/policies/p{tag}"),
     )
     await admin.ensure_schedule(schedule, repo.name)
-    second = await client.transport.perform_request(
-        "GET", f"/_plugins/_sm/policies/p{tag}"
+    second = cast(
+        "dict[str, object]",
+        await client.transport.perform_request("GET", f"/_plugins/_sm/policies/p{tag}"),
     )
     assert second["_seq_no"] == first["_seq_no"]

@@ -102,15 +102,15 @@ class TestRequestIdMiddleware:
           - Inside the wrapped handler, get_request_id() returns a non-empty,
             36-character UUID-formatted value when no request_id kwarg is passed
         """
-        captured_id: str = ""
+        captured: list[str] = []
 
         async def handler() -> None:
             await asyncio.sleep(0)
-            nonlocal captured_id
-            captured_id = get_request_id()
+            captured.append(get_request_id())
 
         wrapped = request_id_middleware(handler)
-        await wrapped()
+        _ = await wrapped()
+        (captured_id,) = captured
         assert captured_id
         assert len(captured_id) == _EXPECTED_CAPTURED_ID_COUNT  # UUID format
 
@@ -137,7 +137,7 @@ class TestRequestIdMiddleware:
             captured_id = get_request_id()
 
         wrapped = request_id_middleware(handler)
-        await wrapped(request_id="custom-123")
+        _ = await wrapped(request_id="custom-123")
         assert captured_id == "custom-123"
 
     @staticmethod

@@ -5,6 +5,7 @@ And the annotator.
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -92,7 +93,7 @@ def test_redact_and_mask_leave_no_span_and_keep_leaves_the_text() -> None:
     assert apply_pii(_TEXT, spans, PiiMode.KEEP) == _TEXT
     assert apply_pii(_TEXT, [], PiiMode.REDACT) == _TEXT
     with pytest.raises(AppValueError):
-        PiiSpan(PiiKind.EMAIL, 3, 3, "")
+        _ = PiiSpan(PiiKind.EMAIL, 3, 3, "")
 
 
 @pytest.mark.asyncio
@@ -124,18 +125,20 @@ async def test_annotator_answers_pii_and_passes_other_tasks_on() -> None:
 
     both = await annotator.annotate_batch(blocks, frozenset({ENTITIES, PII}), "p")
 
-    inner.annotate_batch.assert_awaited_once_with(blocks, frozenset({ENTITIES}), "p")
+    cast("MagicMock", cast("AsyncMock", inner.annotate_batch).assert_awaited_once_with)(
+        blocks, frozenset({ENTITIES}), "p"
+    )
     assert both[0].entities == (ann,)
     assert [s.text for s in both[0].task_results[PII]] == ["jane@example.com"]
     assert both[1].task_results[PII] == ()
 
-    inner.annotate_batch.reset_mock()
+    cast("MagicMock", cast("MagicMock", inner.annotate_batch).reset_mock)()
     only = await annotator.annotate_batch(blocks, frozenset({PII}), "p")
 
-    inner.annotate_batch.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.annotate_batch).assert_not_awaited)()
     assert [len(a.task_results[PII]) for a in only] == [1, 0]
     with pytest.raises(AppValueError):
-        await PiiAnnotator(inner, registry=TaskRegistry()).annotate_batch(
+        _ = await PiiAnnotator(inner, registry=TaskRegistry()).annotate_batch(
             blocks, frozenset({PII}), "p"
         )
-    inner.annotate_batch.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.annotate_batch).assert_not_awaited)()

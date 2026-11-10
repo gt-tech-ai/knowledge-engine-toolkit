@@ -5,7 +5,8 @@ spec'd mock prompt (``create_autospec(RewritePrompt)``) and assert the rewriter'
 (passthrough vs LLM call) independent of any product prompt.
 """
 
-from unittest.mock import create_autospec
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
 
@@ -31,12 +32,13 @@ class TestLlmQueryRewriter:
         **What it tests:**
           - rewrite(query, context=None) returns [query] and never calls the LLM.
         """
-        llm = create_autospec(LLMProvider, instance=True)
+        llm = cast("MagicMock", create_autospec(LLMProvider, instance=True))
         result = await LlmQueryRewriter(
-            llm, create_autospec(RewritePrompt, instance=True)
+            cast("LLMProvider", llm),
+            cast("RewritePrompt", create_autospec(RewritePrompt, instance=True)),
         ).rewrite("What is Q3 revenue?")
         assert result == ["What is Q3 revenue?"]
-        llm.complete.assert_not_awaited()
+        cast("MagicMock", cast("AsyncMock", llm.complete).assert_not_awaited)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -53,19 +55,21 @@ class TestLlmQueryRewriter:
             as the second argument.
         """
         cfg = LLMConfig(temperature=0.1)
-        llm = create_autospec(LLMProvider, instance=True)
-        llm.complete.return_value = LLMResponse(
+        llm = cast("MagicMock", create_autospec(LLMProvider, instance=True))
+        cast("MagicMock", llm.complete).return_value = LLMResponse(
             content="standalone",
             model="m",
             input_tokens=1,
             output_tokens=1,
             finish_reason="stop",
         )
-        prompt = create_autospec(RewritePrompt, instance=True)
-        await LlmQueryRewriter(llm, prompt, cfg).rewrite(
-            "follow up", [HistoryTurn(role="user", content="hi")]
+        prompt = cast("MagicMock", create_autospec(RewritePrompt, instance=True))
+        _ = await LlmQueryRewriter(
+            cast("LLMProvider", llm), cast("RewritePrompt", prompt), cfg
+        ).rewrite("follow up", [HistoryTurn(role="user", content="hi")])
+        cast("MagicMock", cast("AsyncMock", llm.complete).assert_awaited_once_with)(
+            cast("object", cast("MagicMock", prompt.messages).return_value), cfg
         )
-        llm.complete.assert_awaited_once_with(prompt.messages.return_value, cfg)
 
     @staticmethod
     @pytest.mark.asyncio
@@ -82,8 +86,8 @@ class TestLlmQueryRewriter:
           - With history turns, rewrite calls the LLM once and returns its standalone
             question.
         """
-        llm = create_autospec(LLMProvider, instance=True)
-        llm.complete.return_value = LLMResponse(
+        llm = cast("MagicMock", create_autospec(LLMProvider, instance=True))
+        cast("MagicMock", llm.complete).return_value = LLMResponse(
             content="Q4 revenue analysis",
             model="m",
             input_tokens=1,
@@ -91,10 +95,11 @@ class TestLlmQueryRewriter:
             finish_reason="stop",
         )
         result = await LlmQueryRewriter(
-            llm, create_autospec(RewritePrompt, instance=True)
+            cast("LLMProvider", llm),
+            cast("RewritePrompt", create_autospec(RewritePrompt, instance=True)),
         ).rewrite(
             "What about Q4?",
             history=[HistoryTurn(role="user", content="Tell me about Q3 revenue")],
         )
         assert result == ["Q4 revenue analysis"]
-        llm.complete.assert_awaited_once()
+        cast("MagicMock", cast("AsyncMock", llm.complete).assert_awaited_once)()

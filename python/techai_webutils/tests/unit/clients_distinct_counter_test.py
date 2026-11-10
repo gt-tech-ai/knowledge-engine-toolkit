@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -35,7 +36,7 @@ async def test_noop_counts_nothing_and_redis_without_a_host_is_refused() -> None
     assert await counter.observe(["a", "b"], "d1") == [0, 0]
 
     with pytest.raises(AppValueError):
-        distinct_counter_from_config(
+        _ = distinct_counter_from_config(
             DistinctCounterConfig(kind=DistinctCounterKind.REDIS)
         )
 
@@ -55,10 +56,10 @@ async def test_redis_error_returns_zero_counts_and_is_counted() -> None:
     pipeline = MagicMock()
     pipeline.execute = AsyncMock(side_effect=RedisConnectionError("down"))
     redis = MagicMock(spec=Redis)
-    redis.pipeline.return_value = pipeline
+    cast("MagicMock", redis.pipeline).return_value = pipeline
     errors = MagicMock()
     metrics = MagicMock()
-    metrics.counter.return_value = errors
+    cast("MagicMock", metrics.counter).return_value = errors
 
     counter = distinct_counter_from_config(
         DistinctCounterConfig(kind=DistinctCounterKind.REDIS),
@@ -67,4 +68,4 @@ async def test_redis_error_returns_zero_counts_and_is_counted() -> None:
     )
 
     assert await counter.observe(["a", "b"], "d1") == [0, 0]
-    errors.inc.assert_called_once_with(op="observe")
+    cast("MagicMock", cast("MagicMock", errors.inc).assert_called_once_with)(op="observe")

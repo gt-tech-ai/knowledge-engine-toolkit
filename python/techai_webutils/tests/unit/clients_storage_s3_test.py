@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import threading
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -60,9 +60,9 @@ class TestS3StorageClient:
         client = await _open(s3_config)
 
         await client.upload("bucket", "key.txt", b"content", "text/plain")
-        mock_client.put_object.assert_called_once_with(
-            Bucket="bucket", Key="key.txt", Body=b"content", ContentType="text/plain"
-        )
+        cast(
+            "MagicMock", cast("MagicMock", mock_client.put_object).assert_called_once_with
+        )(Bucket="bucket", Key="key.txt", Body=b"content", ContentType="text/plain")
 
     @staticmethod
     @pytest.mark.asyncio
@@ -82,7 +82,10 @@ class TestS3StorageClient:
         client = await _open(s3_config)
 
         await client.delete("bucket", "key.txt")
-        mock_client.delete_object.assert_called_once_with(Bucket="bucket", Key="key.txt")
+        cast(
+            "MagicMock",
+            cast("MagicMock", mock_client.delete_object).assert_called_once_with,
+        )(Bucket="bucket", Key="key.txt")
 
     @staticmethod
     @pytest.mark.asyncio
@@ -211,7 +214,10 @@ class TestS3StorageClient:
         client = await _open(s3_config)
 
         obj = await client.stat("bucket", "big.pdf")
-        mock_client.head_object.assert_called_once_with(Bucket="bucket", Key="big.pdf")
+        cast(
+            "MagicMock",
+            cast("MagicMock", mock_client.head_object).assert_called_once_with,
+        )(Bucket="bucket", Key="big.pdf")
         assert obj.size == _EXPECTED_SIZE_4096
         assert obj.content_type == "application/pdf"
         assert obj.key == "big.pdf"
@@ -246,9 +252,14 @@ class TestS3StorageClient:
 
         await client.copy("bucket", "src", "dst")
 
-        mock_client.copy_object.assert_not_called()
-        assert mock_client.upload_part_copy.await_count >= _EXPECTED_AWAIT_COUNT
-        mock_client.complete_multipart_upload.assert_awaited_once()
+        cast("MagicMock", cast("MagicMock", mock_client.copy_object).assert_not_called)()
+        assert (
+            cast("AsyncMock", mock_client.upload_part_copy).await_count
+        ) >= _EXPECTED_AWAIT_COUNT
+        cast(
+            "MagicMock",
+            cast("AsyncMock", mock_client.complete_multipart_upload).assert_awaited_once,
+        )()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -278,10 +289,16 @@ class TestS3StorageClient:
         with pytest.raises(AppRuntimeError, match="ETag"):
             await client.copy("bucket", "src", "dst")
 
-        mock_client.complete_multipart_upload.assert_not_awaited()
-        mock_client.abort_multipart_upload.assert_awaited_once_with(
-            Bucket="bucket", Key="dst", UploadId="u1"
-        )
+        cast(
+            "MagicMock",
+            cast("AsyncMock", mock_client.complete_multipart_upload).assert_not_awaited,
+        )()
+        cast(
+            "MagicMock",
+            cast(
+                "AsyncMock", mock_client.abort_multipart_upload
+            ).assert_awaited_once_with,
+        )(Bucket="bucket", Key="dst", UploadId="u1")
 
     @staticmethod
     @pytest.mark.asyncio
@@ -305,7 +322,7 @@ class TestS3StorageClient:
         client = await _open(s3_config)
 
         with pytest.raises(AppRuntimeError, match="Key"):
-            await client.list_objects("bucket", "prefix/")
+            _ = await client.list_objects("bucket", "prefix/")
 
     @staticmethod
     @pytest.mark.asyncio

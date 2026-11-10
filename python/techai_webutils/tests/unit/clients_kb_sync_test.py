@@ -8,8 +8,8 @@ retry-with-backoff.
 """
 
 import asyncio
-from typing import TypedDict, Unpack
-from unittest.mock import MagicMock, create_autospec
+from typing import TypedDict, Unpack, cast
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
 
@@ -51,9 +51,9 @@ def _ingestor_mock() -> MagicMock:
         A ``create_autospec(KnowledgeBaseIngestor)``.
 
     """
-    mock = create_autospec(KnowledgeBaseIngestor, instance=True)
-    mock.list_documents.return_value = []
-    return mock
+    mock = cast("object", create_autospec(KnowledgeBaseIngestor, instance=True))
+    cast("MagicMock", mock.list_documents).return_value = []
+    return cast("MagicMock", mock)
 
 
 def _job(state: IngestionJobState, job_id: str = "job-1") -> IngestionJob:
@@ -124,7 +124,7 @@ class TestPollingIngestor:
             ``start``).
         """
         ingestor = _ingestor_mock()
-        ingestor.start_ingestion_job.return_value = _job(
+        cast("MagicMock", ingestor.start_ingestion_job).return_value = _job(
             IngestionJobState.IN_PROGRESS, "fresh"
         )
         job = await _polling(ingestor).start_ingestion_job(
@@ -132,7 +132,9 @@ class TestPollingIngestor:
         )
         assert job.state is IngestionJobState.IN_PROGRESS
         assert job.job_id == "fresh"
-        ingestor.get_ingestion_job.assert_not_awaited()
+        cast(
+            "MagicMock", cast("AsyncMock", ingestor.get_ingestion_job).assert_not_awaited
+        )()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -150,7 +152,7 @@ class TestPollingIngestor:
             COMPLETE and polled at least twice (seeded from the given job_id).
         """
         ingestor = _ingestor_mock()
-        ingestor.get_ingestion_job.side_effect = [
+        cast("MagicMock", ingestor.get_ingestion_job).side_effect = [
             _job(IngestionJobState.IN_PROGRESS),
             _job(IngestionJobState.COMPLETE),
         ]
@@ -158,7 +160,9 @@ class TestPollingIngestor:
             knowledge_base_id="kb", data_source_id="ds", job_id="job-1"
         )
         assert job.state is IngestionJobState.COMPLETE
-        assert ingestor.get_ingestion_job.await_count >= _EXPECTED_AWAIT_COUNT
+        assert (
+            cast("AsyncMock", ingestor.get_ingestion_job).await_count
+        ) >= _EXPECTED_AWAIT_COUNT
 
     @staticmethod
     @pytest.mark.asyncio
@@ -177,7 +181,7 @@ class TestPollingIngestor:
             FAILED with 'poll_timeout'.
         """
         ingestor = _ingestor_mock()
-        ingestor.get_ingestion_job.return_value = _job(
+        cast("MagicMock", ingestor.get_ingestion_job).return_value = _job(
             IngestionJobState.IN_PROGRESS, "stuck"
         )
         job = await _polling(ingestor, max_poll_seconds=0.0).poll_ingestion_job(
@@ -201,7 +205,7 @@ class TestPollingIngestor:
             ``documents_scanned == 1200``.
         """
         ingestor = _ingestor_mock()
-        ingestor.get_ingestion_job.return_value = IngestionJob(
+        cast("MagicMock", ingestor.get_ingestion_job).return_value = IngestionJob(
             "stuck", IngestionJobState.IN_PROGRESS, documents_scanned=1200
         )
         job = await _polling(ingestor, max_poll_seconds=0.0).poll_ingestion_job(
@@ -274,15 +278,18 @@ class TestStopIngestionJob:
             inner stop with the job_id and returns its STOPPING job.
         """
         inner = _ingestor_mock()
-        inner.stop_ingestion_job.return_value = _job(IngestionJobState.STOPPING, "j")
+        cast("MagicMock", inner.stop_ingestion_job).return_value = _job(
+            IngestionJobState.STOPPING, "j"
+        )
         stack = _polling(RetryingIngestor(inner, base_delay=0.0, max_delay=0.0))
         job = await stack.stop_ingestion_job(
             knowledge_base_id="kb", data_source_id="ds", job_id="j"
         )
         assert job.state is IngestionJobState.STOPPING
-        inner.stop_ingestion_job.assert_awaited_once_with(
-            knowledge_base_id="kb", data_source_id="ds", job_id="j"
-        )
+        cast(
+            "MagicMock",
+            cast("AsyncMock", inner.stop_ingestion_job).assert_awaited_once_with,
+        )(knowledge_base_id="kb", data_source_id="ds", job_id="j")
 
     @staticmethod
     @pytest.mark.asyncio
@@ -303,13 +310,15 @@ class TestStopIngestionJob:
             exactly once — no retry).
         """
         inner = _ingestor_mock()
-        inner.stop_ingestion_job.side_effect = AppError(ErrorCode.UNAVAILABLE, "flaky")
+        cast("MagicMock", inner.stop_ingestion_job).side_effect = AppError(
+            ErrorCode.UNAVAILABLE, "flaky"
+        )
         ingestor = RetryingIngestor(inner, base_delay=0.0, max_delay=0.0)
         with pytest.raises(AppError):
-            await ingestor.stop_ingestion_job(
+            _ = await ingestor.stop_ingestion_job(
                 knowledge_base_id="kb", data_source_id="ds", job_id="j"
             )
-        assert inner.stop_ingestion_job.await_count == 1
+        assert (cast("AsyncMock", inner.stop_ingestion_job).await_count) == 1
 
 
 class TestSingleWriterRunner:
@@ -390,7 +399,7 @@ class TestRetryingIngestor:
             attempts.
         """
         inner = _ingestor_mock()
-        inner.start_ingestion_job.side_effect = [
+        cast("MagicMock", inner.start_ingestion_job).side_effect = [
             AppError(ErrorCode.UNAVAILABLE, "flaky"),
             AppError(ErrorCode.UNAVAILABLE, "flaky"),
             _job(IngestionJobState.COMPLETE, "ok"),
@@ -400,7 +409,9 @@ class TestRetryingIngestor:
             knowledge_base_id="kb", data_source_id="ds"
         )
         assert job.state is IngestionJobState.COMPLETE
-        assert inner.start_ingestion_job.await_count == _EXPECTED_AWAIT_COUNT_3
+        assert (
+            cast("AsyncMock", inner.start_ingestion_job).await_count
+        ) == _EXPECTED_AWAIT_COUNT_3
 
     @staticmethod
     @pytest.mark.asyncio
@@ -418,15 +429,15 @@ class TestRetryingIngestor:
             one call).
         """
         inner = _ingestor_mock()
-        inner.start_ingestion_job.side_effect = AppError(
+        cast("MagicMock", inner.start_ingestion_job).side_effect = AppError(
             ErrorCode.INVALID_INPUT, "always fails"
         )
         ingestor = RetryingIngestor(inner, base_delay=0.0, max_delay=0.0)
         with pytest.raises(AppError):
-            await ingestor.start_ingestion_job(
+            _ = await ingestor.start_ingestion_job(
                 knowledge_base_id="kb", data_source_id="ds"
             )
-        assert inner.start_ingestion_job.await_count == 1
+        assert (cast("AsyncMock", inner.start_ingestion_job).await_count) == 1
 
     @staticmethod
     @pytest.mark.asyncio
@@ -444,15 +455,17 @@ class TestRetryingIngestor:
             after 3 calls.
         """
         inner = _ingestor_mock()
-        inner.start_ingestion_job.side_effect = AppError(
+        cast("MagicMock", inner.start_ingestion_job).side_effect = AppError(
             ErrorCode.UNAVAILABLE, "always fails"
         )
         ingestor = RetryingIngestor(inner, max_attempts=3, base_delay=0.0, max_delay=0.0)
         with pytest.raises(AppError):
-            await ingestor.start_ingestion_job(
+            _ = await ingestor.start_ingestion_job(
                 knowledge_base_id="kb", data_source_id="ds"
             )
-        assert inner.start_ingestion_job.await_count == _EXPECTED_AWAIT_COUNT_3
+        assert (
+            cast("AsyncMock", inner.start_ingestion_job).await_count
+        ) == _EXPECTED_AWAIT_COUNT_3
 
     @staticmethod
     @pytest.mark.asyncio

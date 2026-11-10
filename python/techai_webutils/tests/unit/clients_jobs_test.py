@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import override
+from typing import final, override
 
 import pytest
 
@@ -17,6 +17,7 @@ from techai_webutils.core.interfaces.jobs import Job, PeriodicJob, Worker
 _EXPECTED_MAX_WORKERS = 10
 
 
+@final
 class SimpleJob(Job):
     """Test job for assertions."""
 
@@ -34,6 +35,7 @@ class SimpleJob(Job):
         return self._args
 
 
+@final
 class CountingWorker(Worker):
     """Worker that counts invocations."""
 

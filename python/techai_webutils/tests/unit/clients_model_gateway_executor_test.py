@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,6 +16,7 @@ from techai_webutils.core.errors import AppError, ErrorCode, UnavailableError
 from techai_webutils.core.interfaces.llm import LLMProvider, LLMResponse, StreamUsage
 from techai_webutils.core.types.llm import LlmConfig, LlmKind
 from techai_webutils.core.types.routing import Capabilities, CatalogEndpointRef
+from tests.json_path import dig
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -62,7 +63,7 @@ def _provider(model: str, error: Exception | None = None) -> MagicMock:
 async def _trip(executor: ChainExecutor, ref: CatalogEndpointRef) -> None:
     """Open ``ref``'s breaker (threshold 1) by failing one guarded call."""
     with pytest.raises(UnavailableError):
-        await executor.complete(
+        _ = await executor.complete(
             (ref,), lambda _r: _provider("x", UnavailableError()), _call
         )
 
@@ -123,12 +124,12 @@ async def test_chain_surfaces_permanent_error_without_failover() -> None:
     }
 
     with pytest.raises(AppError) as caught:
-        await ChainExecutor(max_attempts=2).complete(
+        _ = await ChainExecutor(max_attempts=2).complete(
             (a, b), lambda r: providers[r.key], _call
         )
 
     assert caught.value.code is ErrorCode.INVALID_INPUT
-    secondary.complete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", secondary.complete).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -146,7 +147,7 @@ async def test_permanent_error_leaves_the_breaker_closed() -> None:
     a = _ref("a")
     executor = ChainExecutor(max_attempts=1, failure_threshold=1, recovery_timeout=60)
     with pytest.raises(AppError):
-        await executor.complete(
+        _ = await executor.complete(
             (a,),
             lambda _r: _provider("a", AppError(ErrorCode.INVALID_INPUT, "too long")),
             _call,
@@ -183,7 +184,7 @@ async def test_chain_skips_open_breaker_endpoint() -> None:
         ("m/a@e", "breaker_open"),
         ("m/b@e", "ok"),
     ]
-    primary.complete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", primary.complete).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -203,17 +204,17 @@ async def test_chain_exhaustion_raises_coded_unavailable_error() -> None:
     providers = {a.key: _provider("a", UnavailableError()), b.key: second}
 
     with pytest.raises(AppError) as caught:
-        await ChainExecutor(max_attempts=2).complete(
+        _ = await ChainExecutor(max_attempts=2).complete(
             (a, b), lambda r: providers[r.key], _call
         )
-    second.complete.reset_mock()
+    cast("MagicMock", cast("MagicMock", second.complete).reset_mock)()
     with pytest.raises(AppError):
-        await ChainExecutor(max_attempts=1).complete(
+        _ = await ChainExecutor(max_attempts=1).complete(
             (a, b), lambda r: providers[r.key], _call
         )
 
     assert caught.value.code is ErrorCode.UNAVAILABLE
-    second.complete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", second.complete).assert_not_awaited)()
 
 
 async def _items(
@@ -282,7 +283,7 @@ async def test_stream_fails_over_before_first_token_only() -> None:
     assert (chunks, served) == (["hello", " world"], b)
     assert [x.outcome for x in attempts] == ["failed", "ok"]
     assert seen == ["one"]
-    spare.stream_with_usage.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", spare.stream_with_usage).assert_not_awaited)()
 
 
 def test_passthrough_and_routed_never_stack_fallback(
@@ -299,8 +300,10 @@ def test_passthrough_and_routed_never_stack_fallback(
         ``new_llm_from_config`` returns a bare provider
     """
     raw = dict(catalog_raw)
-    sonnet: dict[str, Any] = dict(cast("dict[str, Any]", raw["anthropic/sonnet"]))
-    endpoint: dict[str, Any] = dict(sonnet["endpoints"][0])
+    sonnet: dict[str, object] = dict(cast("dict[str, object]", raw["anthropic/sonnet"]))
+    endpoint: dict[str, object] = dict(
+        cast("dict[str, object]", dig(sonnet, "endpoints", 0))
+    )
     endpoint["llm"] = {"kind": "bedrock", "model": "m", "fallback_model": "f"}
     sonnet["endpoints"] = [endpoint]
     raw["anthropic/sonnet"] = sonnet
@@ -358,7 +361,7 @@ def test_executor_attempt_bound_and_breaker_invariant(
         )
         if expected is None or callable_outcomes[expected] == "permanent":
             with pytest.raises(AppError) as caught:
-                await executor.complete(refs, lambda r: providers[r.key], _call)
+                _ = await executor.complete(refs, lambda r: providers[r.key], _call)
             want = ErrorCode.UNAVAILABLE if expected is None else ErrorCode.INVALID_INPUT
             assert caught.value.code is want
         else:
@@ -367,10 +370,15 @@ def test_executor_attempt_bound_and_breaker_invariant(
             )
             healthy = [r for r, o in zip(refs, outcomes, strict=True) if o != "open"]
             assert response.model == healthy[expected].model_id
-        calls = sum(p.complete.await_count for p in providers.values())
+        calls = sum(
+            (cast("AsyncMock", p.complete).await_count) for p in providers.values()
+        )
         assert calls <= max_attempts
         for ref, outcome in zip(refs, outcomes, strict=True):
             if outcome == "open":
-                providers[ref.key].complete.assert_not_awaited()
+                cast(
+                    "MagicMock",
+                    cast("AsyncMock", providers[ref.key].complete).assert_not_awaited,
+                )()
 
     asyncio.run(scenario())

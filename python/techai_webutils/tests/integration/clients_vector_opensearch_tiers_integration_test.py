@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 import pytest_asyncio
@@ -77,9 +77,11 @@ async def test_tier_policy_is_ensured_once_and_attached_only_where_asked(
     path = f"/_plugins/_ism/policies/{policy.policy_id}"
 
     await admin.ensure_policy(policy)
-    first = await client.transport.perform_request("GET", path)
+    first = cast("dict[str, object]", await client.transport.perform_request("GET", path))
     await admin.ensure_policy(policy)
-    second = await client.transport.perform_request("GET", path)
+    second = cast(
+        "dict[str, object]", await client.transport.perform_request("GET", path)
+    )
     assert second["_seq_no"] == first["_seq_no"]
     await admin.ensure_policy(
         TierPolicy(
@@ -89,8 +91,8 @@ async def test_tier_policy_is_ensured_once_and_attached_only_where_asked(
             delete_after="30d",
         )
     )
-    third = await client.transport.perform_request("GET", path)
-    assert third["_seq_no"] > second["_seq_no"]
+    third = cast("dict[str, object]", await client.transport.perform_request("GET", path))
+    assert cast("float", third["_seq_no"]) > cast("float", second["_seq_no"])
 
     await admin.attach(retired, policy.policy_id)
     await admin.attach(retired, policy.policy_id)

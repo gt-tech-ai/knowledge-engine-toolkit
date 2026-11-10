@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from techai_webutils.clients.model_gateway.routed.catalog import (
@@ -28,7 +26,7 @@ from techai_webutils.core.types.routing import Classification, PlanInput
 
 @pytest.mark.asyncio
 async def test_stub_classifier_returns_step_default_route(
-    routes_raw: dict[str, Any],
+    routes_raw: dict[str, object],
 ) -> None:
     """Test that the stub classifier routes each step to its own route, else the default.
 
@@ -52,13 +50,13 @@ async def test_stub_classifier_returns_step_default_route(
     assert rewrite == Classification(route="rewrite", confidence=1.0)
     assert unrouted == Classification(route="generate", confidence=1.0)
     with pytest.raises(AppError) as caught:
-        await strict.classify(RouteContext(step="summarize"), "q")
+        _ = await strict.classify(RouteContext(step="summarize"), "q")
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
 @pytest.mark.asyncio
 async def test_static_order_follows_route_preference_then_catalog(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the static ranker orders by the route's models, then catalog order.
 
@@ -92,7 +90,7 @@ async def test_static_order_follows_route_preference_then_catalog(
 
 @pytest.mark.asyncio
 async def test_static_order_ignores_the_requests_prices(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the static ranker's per-request entry point ranks exactly as ``rank``.
 
@@ -124,7 +122,7 @@ async def test_static_order_ignores_the_requests_prices(
 
 @pytest.mark.asyncio
 async def test_local_planner_classifies_then_ranks(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that the local planner chains classifier and ranker into a plan.
 
@@ -156,7 +154,7 @@ async def test_local_planner_classifies_then_ranks(
     assert plan.ordered[0].key == "anthropic/sonnet@use1"
 
 
-def test_planner_kind_unknown_raises(routes_raw: dict[str, Any]) -> None:
+def test_planner_kind_unknown_raises(routes_raw: dict[str, object]) -> None:
     """Test that every stage factory fails loudly on an unknown kind.
 
     **Why this test is important:**
@@ -184,6 +182,6 @@ def test_planner_kind_unknown_raises(routes_raw: dict[str, Any]) -> None:
     )
     for build in builds:
         with pytest.raises(AppValueError, match="kind") as caught:
-            build()
+            _ = build()
         assert isinstance(caught.value, AppError)
         assert caught.value.code is ErrorCode.INVALID_INPUT

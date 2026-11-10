@@ -13,8 +13,8 @@ import asyncio
 import json
 from contextlib import AsyncExitStack
 from dataclasses import replace
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -77,7 +77,7 @@ async def _consume(
             return {"Messages": []}
         return {"Messages": batch}
 
-    aws_client.receive_message.side_effect = receive
+    cast("MagicMock", aws_client.receive_message).side_effect = receive
     async with subscriber:
         await subscriber.subscribe(topic, handler)
 
@@ -173,7 +173,7 @@ class TestDeliveryConfig:
           - Each listed setting raises ``AppValueError`` (``INVALID_INPUT``).
         """
         with pytest.raises(AppValueError):
-            build()
+            _ = build()
 
 
 class TestSQSDelivery:
@@ -210,11 +210,22 @@ class TestSQSDelivery:
         await _consume(subscriber, aws_client, [[_raw(0, receives=3)]], failing)
 
         assert seen == [3]
-        aws_client.change_message_visibility.assert_awaited_once_with(
-            QueueUrl=sqs_config.queue_url, ReceiptHandle="r-0", VisibilityTimeout=8
+        cast(
+            "MagicMock",
+            cast(
+                "AsyncMock", aws_client.change_message_visibility
+            ).assert_awaited_once_with,
+        )(QueueUrl=sqs_config.queue_url, ReceiptHandle="r-0", VisibilityTimeout=8)
+        cast(
+            "MagicMock", cast("AsyncMock", aws_client.delete_message).assert_not_awaited
+        )()
+        request = cast(
+            "dict[str, object]",
+            cast(
+                "list[object]",
+                cast("AsyncMock", aws_client.receive_message).await_args_list,
+            )[0].kwargs,
         )
-        aws_client.delete_message.assert_not_awaited()
-        request = aws_client.receive_message.await_args_list[0].kwargs
         assert request["MessageSystemAttributeNames"] == ["ApproximateReceiveCount"]
 
     @staticmethod
@@ -235,9 +246,21 @@ class TestSQSDelivery:
         """
         await _consume(SQSSubscriber(sqs_config), aws_client, [[_raw(0)]], _failing)
 
-        aws_client.get_queue_attributes.assert_not_awaited()
-        aws_client.change_message_visibility.assert_not_awaited()
-        request = aws_client.receive_message.await_args_list[0].kwargs
+        cast(
+            "MagicMock",
+            cast("AsyncMock", aws_client.get_queue_attributes).assert_not_awaited,
+        )()
+        cast(
+            "MagicMock",
+            cast("AsyncMock", aws_client.change_message_visibility).assert_not_awaited,
+        )()
+        request = cast(
+            "dict[str, object]",
+            cast(
+                "list[object]",
+                cast("AsyncMock", aws_client.receive_message).await_args_list,
+            )[0].kwargs,
+        )
         assert "MessageSystemAttributeNames" not in request
 
     @staticmethod
@@ -281,7 +304,7 @@ class TestSQSDelivery:
           - A matching policy subscribes normally; a different count, a missing policy, or
             a different target queue raises ``AppValueError`` before any receive.
         """
-        aws_client.get_queue_attributes.return_value = _queue(redrive)
+        cast("MagicMock", aws_client.get_queue_attributes).return_value = _queue(redrive)
         subscriber = SQSSubscriber(sqs_config, delivery=delivery)
 
         if matches:
@@ -289,7 +312,9 @@ class TestSQSDelivery:
             return
         with pytest.raises(AppValueError):
             await _consume(subscriber, aws_client, [], AsyncMock())
-        aws_client.receive_message.assert_not_awaited()
+        cast(
+            "MagicMock", cast("AsyncMock", aws_client.receive_message).assert_not_awaited
+        )()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -307,7 +332,9 @@ class TestSQSDelivery:
           - Against a 300-second visibility timeout, 299 seconds subscribes and 300 raises
             ``AppValueError``.
         """
-        aws_client.get_queue_attributes.return_value = _queue(None, visibility="300")
+        cast("MagicMock", aws_client.get_queue_attributes).return_value = _queue(
+            None, visibility="300"
+        )
         subscriber = SQSSubscriber(
             sqs_config, delivery=DeliveryConfig(max_processing_seconds=limit)
         )
@@ -338,7 +365,7 @@ class TestSQSDelivery:
             await asyncio.sleep(10)
             return {}
 
-        aws_client.get_queue_attributes.side_effect = hang
+        cast("MagicMock", aws_client.get_queue_attributes).side_effect = hang
         subscriber = SQSSubscriber(
             replace(sqs_config, attributes_timeout_seconds=0.01),
             delivery=DeliveryConfig(max_deliveries=3),
@@ -373,9 +400,12 @@ class TestSQSDelivery:
 
         await _consume(subscriber, aws_client, [[_raw(0)]], handler)
 
-        aws_client.change_message_visibility.assert_awaited_once_with(
-            QueueUrl=sqs_config.queue_url, ReceiptHandle="r-0", VisibilityTimeout=91
-        )
+        cast(
+            "MagicMock",
+            cast(
+                "AsyncMock", aws_client.change_message_visibility
+            ).assert_awaited_once_with,
+        )(QueueUrl=sqs_config.queue_url, ReceiptHandle="r-0", VisibilityTimeout=91)
         with pytest.raises(AppValueError):
             await subscriber.extend(seen[0], 10)
 
@@ -398,7 +428,10 @@ class TestSQSDelivery:
             sqs_config,
             topic_queue_urls={"parse": "http://q/parse", "index": "http://q/index"},
         )
-        aws_client.send_message_batch.return_value = {"Successful": [], "Failed": []}
+        cast("MagicMock", aws_client.send_message_batch).return_value = {
+            "Successful": [],
+            "Failed": [],
+        }
         publisher = await AsyncExitStack().enter_async_context(SQSPublisher(config))
 
         await publisher.publish("parse", b"a")
@@ -407,13 +440,33 @@ class TestSQSDelivery:
             await publisher.publish("other", b"c")
         await _consume(SQSSubscriber(config), aws_client, [], AsyncMock(), topic="index")
 
-        assert aws_client.send_message.await_args.kwargs["QueueUrl"] == "http://q/parse"
         assert (
-            aws_client.send_message_batch.await_args.kwargs["QueueUrl"]
+            cast(
+                "dict[str, object]",
+                cast(
+                    "MagicMock", cast("AsyncMock", aws_client.send_message).await_args
+                ).kwargs,
+            )["QueueUrl"]
+            == "http://q/parse"
+        )
+        assert (
+            cast(
+                "dict[str, object]",
+                cast(
+                    "MagicMock",
+                    cast("AsyncMock", aws_client.send_message_batch).await_args,
+                ).kwargs,
+            )["QueueUrl"]
             == "http://q/index"
         )
         assert (
-            aws_client.receive_message.await_args.kwargs["QueueUrl"] == "http://q/index"
+            cast(
+                "dict[str, object]",
+                cast(
+                    "MagicMock", cast("AsyncMock", aws_client.receive_message).await_args
+                ).kwargs,
+            )["QueueUrl"]
+            == "http://q/index"
         )
 
 
@@ -511,7 +564,10 @@ class TestPayloadLimit:
             9-byte entry raise ``AppValueError``, an 8-byte payload is accepted, and no
             batch call is made.
         """
-        aws_client.send_message_batch.return_value = {"Successful": [], "Failed": []}
+        cast("MagicMock", aws_client.send_message_batch).return_value = {
+            "Successful": [],
+            "Failed": [],
+        }
         config = MessagingConfig(sqs=sqs_config, kind=kind, max_payload_bytes=8)
         publisher = new_messaging_from_config(config)
 
@@ -522,4 +578,7 @@ class TestPayloadLimit:
                 await publisher.publish_batch("events", [b"ok", b"x" * 9])
             await publisher.publish("events", b"x" * 8)
 
-        aws_client.send_message_batch.assert_not_awaited()
+        cast(
+            "MagicMock",
+            cast("AsyncMock", aws_client.send_message_batch).assert_not_awaited,
+        )()

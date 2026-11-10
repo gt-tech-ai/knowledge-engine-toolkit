@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 from hypothesis import given
@@ -55,7 +56,7 @@ def test_golden_cases_exist() -> None:
     assert len(_CASES) >= _EXPECTED_CASES_COUNT
 
 
-@pytest.mark.parametrize("path", _CASES, ids=lambda p: p.stem)
+@pytest.mark.parametrize("path", _CASES, ids=[case.stem for case in _CASES])
 def test_golden_case(path: Path) -> None:
     """Each golden case resumes at its expected stage.
 
@@ -70,11 +71,14 @@ def test_golden_case(path: Path) -> None:
         current → chunk; a stale chunk → chunk; Bedrock after chunk → index; a stale parse
         → parse.
     """
-    case = json.loads(path.read_text(encoding="utf-8"))
-    states = [_state(raw) for raw in case["states"]]
-    current = {Stage(k): v for k, v in case["current"].items()}
+    case = cast("dict[str, object]", json.loads(path.read_text(encoding="utf-8")))
+    states = [
+        _state(cast("dict[str, object]", raw))
+        for raw in cast("list[object]", case["states"])
+    ]
+    current = {Stage(k): v for k, v in cast("dict[str, str]", case["current"]).items()}
 
-    got = ResumePlanner().plan(states, current, sink=case["sink"])
+    got = ResumePlanner().plan(states, current, sink=cast("str", case["sink"]))
 
     assert (None if got is None else str(got)) == case["expected"]
 

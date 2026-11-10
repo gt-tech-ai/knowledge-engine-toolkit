@@ -18,7 +18,7 @@ from __future__ import annotations
 import importlib
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from docker.errors import DockerException
@@ -30,6 +30,8 @@ from testcontainers.core.container import DockerContainer
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
+
+    from testcontainers.core.docker_client import DockerClient
 
 _RAY_IMAGE = "rayproject/ray:2.56.1-py312"
 _DASHBOARD_PORT = 8265
@@ -55,10 +57,11 @@ def _ray_image_present() -> bool:
 
     """
     try:
-        docker_client = importlib.import_module(
-            "testcontainers.core.docker_client"
-        ).DockerClient
-        docker_client().client.images.get(_RAY_IMAGE)
+        module = importlib.import_module("testcontainers.core.docker_client")
+        classes = cast("dict[str, type[DockerClient]]", vars(module))
+        docker_client = classes["DockerClient"]
+        client = docker_client()
+        _ = client.client.images.get(_RAY_IMAGE)
     except (OSError, DockerException):
         return False
     return True
@@ -150,7 +153,7 @@ def ray_jobs_client() -> Iterator[JobSubmissionClient]:
         .with_exposed_ports(_DASHBOARD_PORT)
         .with_kwargs(shm_size="2gb")
     )
-    container.start()
+    _ = container.start()
     try:
         host = container.get_container_host_ip()
         port = container.get_exposed_port(_DASHBOARD_PORT)
@@ -161,7 +164,7 @@ def ray_jobs_client() -> Iterator[JobSubmissionClient]:
         for _ in range(45):
             try:
                 candidate = JobSubmissionClient(address)
-                candidate.list_jobs()
+                _ = candidate.list_jobs()
                 client = candidate
                 break
             except Exception as exc:

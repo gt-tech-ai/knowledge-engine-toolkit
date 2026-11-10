@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,6 +15,8 @@ from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations, Deps, Layer
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from conftest import Observed
 
 _EXPECTED_EXEC = 2
@@ -29,13 +31,13 @@ def _retrier() -> MagicMock:
     """
     retrier = MagicMock(spec=Retrier)
 
-    async def retry(op: object) -> object:
+    async def retry(op: Callable[[], Awaitable[object]]) -> object:
         try:
-            return await op()  # type: ignore[operator]
+            return await op()
         except AppError as exc:
             if not exc.is_transient:
                 raise
-            return await op()  # type: ignore[operator]
+            return await op()
 
     retrier.retry = AsyncMock(side_effect=retry)
     return retrier
@@ -99,10 +101,10 @@ async def test_client_base_exec_once_handler_and_producer(observed: Observed) ->
             "send", AsyncMock(side_effect=AppError(ErrorCode.UNAVAILABLE, "x"))
         )
     handlers = ClientBase.wire(decorations, "queue.handler", handler())
-    retrier.retry.reset_mock()
+    cast("MagicMock", cast("MagicMock", retrier.retry).reset_mock)()
     assert handlers.name == "queue.handler"
     assert await handlers.exec("orders", AsyncMock(return_value=1)) == 1
-    retrier.retry.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", retrier.retry).assert_not_awaited)()
     assert observed.spans[-1][:2] == ("queue.handler.orders", SpanKind.CONSUMER)
     bus = ClientBase.wire(
         Decorations.fixed(Deps(observability=observed.observability)), "bus", producer()

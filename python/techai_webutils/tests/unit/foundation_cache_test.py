@@ -27,7 +27,8 @@ are async (pytest-asyncio) to match the real Redis client's async interface.
 Run with: pytest tests/python/test_foundation/test_cache.py
 """
 
-from unittest.mock import AsyncMock
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from redis import exceptions as redis_errors
@@ -51,7 +52,7 @@ class TestRedisCache:
         **What it tests:**
           - result equals the bytes value stored in Redis
         """
-        mock_redis.get.return_value = b'{"name": "test"}'
+        cast("MagicMock", mock_redis.get).return_value = b'{"name": "test"}'
 
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
         result = await cache.get("key1")
@@ -70,7 +71,7 @@ class TestRedisCache:
         **What it tests:**
           - result is None when Redis returns None for the key
         """
-        mock_redis.get.return_value = None
+        cast("MagicMock", mock_redis.get).return_value = None
 
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
         result = await cache.get("missing")
@@ -92,7 +93,7 @@ class TestRedisCache:
         **What it tests:**
           - result is None when Redis raises ConnectionError in bypass mode
         """
-        mock_redis.get.side_effect = ConnectionError("Redis down")
+        cast("MagicMock", mock_redis.get).side_effect = ConnectionError("Redis down")
 
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
         result = await cache.get("key")
@@ -121,9 +122,9 @@ class TestRedisCache:
           - get returns None, and set and delete return, when the client raises either
             redis-py error in bypass mode
         """
-        mock_redis.get.side_effect = failure
-        mock_redis.setex.side_effect = failure
-        mock_redis.delete.side_effect = failure
+        cast("MagicMock", mock_redis.get).side_effect = failure
+        cast("MagicMock", mock_redis.setex).side_effect = failure
+        cast("MagicMock", mock_redis.delete).side_effect = failure
 
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
         assert await cache.get("key") is None
@@ -143,11 +144,11 @@ class TestRedisCache:
         **What it tests:**
           - ConnectionError is raised when Redis is down in error mode
         """
-        mock_redis.get.side_effect = ConnectionError("Redis down")
+        cast("MagicMock", mock_redis.get).side_effect = ConnectionError("Redis down")
 
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.ERROR)
         with pytest.raises(ConnectionError):
-            await cache.get("key")
+            _ = await cache.get("key")
 
     @staticmethod
     @pytest.mark.asyncio
@@ -165,7 +166,9 @@ class TestRedisCache:
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
 
         await cache.set("key", b"value", ttl_seconds=60)
-        mock_redis.setex.assert_called_once_with("key", 60, b"value")
+        cast("MagicMock", cast("MagicMock", mock_redis.setex).assert_called_once_with)(
+            "key", 60, b"value"
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -184,7 +187,9 @@ class TestRedisCache:
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
 
         await cache.delete("key")
-        mock_redis.delete.assert_called_once_with("key")
+        cast("MagicMock", cast("MagicMock", mock_redis.delete).assert_called_once_with)(
+            "key"
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -199,7 +204,7 @@ class TestRedisCache:
         **What it tests:**
           - No exception is raised when setex fails with ConnectionError in bypass mode
         """
-        mock_redis.setex.side_effect = ConnectionError("Redis down")
+        cast("MagicMock", mock_redis.setex).side_effect = ConnectionError("Redis down")
 
         cache = RedisCache(client=mock_redis, failure_mode=FailureMode.BYPASS)
         # Should not raise

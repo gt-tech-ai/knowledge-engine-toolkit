@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import MagicMock, call
 
 from opentelemetry import baggage
@@ -69,7 +70,7 @@ def test_root_span_stamped_with_conversation_id_and_turn_index() -> None:
     assert conv == ConversationContext(
         conversation_id="conv_42", turn_index=3, prev=_PREV
     )
-    assert span.set_attribute.call_args_list == [
+    assert cast("object", cast("MagicMock", span.set_attribute).call_args_list) == [
         call("conversation.id", "conv_42"),
         call("turn.index", 3),
     ]

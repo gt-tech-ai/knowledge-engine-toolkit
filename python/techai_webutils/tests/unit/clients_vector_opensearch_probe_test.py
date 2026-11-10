@@ -17,6 +17,7 @@ from techai_webutils.clients.vector.opensearch.index_probe import (
     ProbeSettings,
     probe_index,
 )
+from tests.json_path import dig
 
 if TYPE_CHECKING:
     from opensearchpy import AsyncOpenSearch
@@ -180,12 +181,18 @@ async def test_probe_index_without_previous_or_chunks() -> None:
     assert probe == IndexProbe(
         samples=1, known_answer_recall=1.0, overlap=1.0, self_recall=1.0
     )
-    bodies = [call.kwargs["body"] for call in new.search.await_args_list]
-    sample = bodies[0]["query"]["function_score"]
-    assert sample["random_score"]["seed"] == _EXPECTED_SAMPLE
-    assert sample["query"]["bool"]["filter"] == [{"term": {"org_id": _ORG}}]
-    match = next(b for b in bodies if "bool" in b["query"])
-    assert match["query"]["bool"]["must"] == [{"match": {"text": "w0 w1 w2 w3 w4"}}]
+    bodies = [
+        cast("dict[str, object]", call.kwargs)["body"]
+        for call in cast("list[object]", cast("AsyncMock", new.search).await_args_list)
+    ]
+    sample = cast("dict[str, object]", dig(bodies, 0, "query", "function_score"))
+    assert dig(sample, "random_score", "seed") == _EXPECTED_SAMPLE
+    assert dig(sample, "query", "bool", "filter") == [{"term": {"org_id": _ORG}}]
+    match = cast(
+        "dict[str, object]",
+        next(b for b in bodies if "bool" in cast("dict[str, object]", dig(b, "query"))),
+    )
+    assert dig(match, "query", "bool", "must") == [{"match": {"text": "w0 w1 w2 w3 w4"}}]
 
     empty = cast("dict[str, AsyncOpenSearch]", {"a": _client({})})
     probe = await probe_index(empty, _ORG, _NEW, _OLD, options=ProbeIndexOptions())

@@ -8,6 +8,7 @@ parse
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -34,8 +35,8 @@ def _client_returning(embeddings: list[list[float]]) -> httpx.AsyncClient:
 
     """
     resp = MagicMock()
-    resp.json.return_value = {"embeddings": embeddings}
-    resp.raise_for_status.return_value = None
+    cast("MagicMock", resp.json).return_value = {"embeddings": embeddings}
+    cast("MagicMock", resp.raise_for_status).return_value = None
     client = MagicMock(spec=httpx.AsyncClient)
     client.post = AsyncMock(return_value=resp)
     return client
@@ -110,7 +111,7 @@ class TestOllamaEmbeddingProvider:
             _client_returning([[0.1, 0.2]]), model="m", dimension=3
         )
         with pytest.raises(AppValueError, match="expected 3"):
-            await provider.embed_batch(["a"])
+            _ = await provider.embed_batch(["a"])
 
     @staticmethod
     @pytest.mark.asyncio
@@ -124,13 +125,13 @@ class TestOllamaEmbeddingProvider:
             key rather than a bare KeyError.
         """
         resp = MagicMock()
-        resp.json.return_value = {"data": []}
-        resp.raise_for_status.return_value = None
+        cast("MagicMock", resp.json).return_value = {"data": []}
+        cast("MagicMock", resp.raise_for_status).return_value = None
         client = MagicMock(spec=httpx.AsyncClient)
         client.post = AsyncMock(return_value=resp)
         provider = OllamaEmbeddingProvider(client, model="m", dimension=1)
         with pytest.raises(AppValueError, match="missing 'embeddings'"):
-            await provider.embed_batch(["a"])
+            _ = await provider.embed_batch(["a"])
 
     @staticmethod
     def test_dimension_and_model_name() -> None:
@@ -190,4 +191,6 @@ class TestEmbeddingFactory:
     def test_unknown_kind_raises() -> None:
         """An unknown embedding kind fails loudly."""
         with pytest.raises(AppValueError, match="unknown embedding kind"):
-            new_embedding_from_config(EmbeddingConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = new_embedding_from_config(
+                EmbeddingConfig(kind=cast("EmbeddingKind", cast("object", "bogus")))
+            )

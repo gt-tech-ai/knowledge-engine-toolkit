@@ -323,7 +323,10 @@ modules = [
 # only because they are listed here.
 [tool.pyright]
 pythonVersion = "3.12"
-typeCheckingMode = "strict"
+typeCheckingMode = "all"
+# Implicit concatenation is how a long message or docstring wraps under the line limit;
+# ruff's ISC rules already police the accidental kind (a missing comma in a list).
+reportImplicitStringConcatenation = "none"
 include = ["src/techai_webutils", "tests"]
 
 # Mock-noise relaxation for the test tree: pytest fixtures and unittest.mock doubles are

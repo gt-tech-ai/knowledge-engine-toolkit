@@ -9,6 +9,7 @@ fixed candidates, so each test pins a tier decision, not a search.
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -105,7 +106,7 @@ async def test_tiers_serve_in_configured_order_and_record_the_tier() -> None:
 
     assert hit is not None
     assert hit.tier == "exact"
-    backend.nearest.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", backend.nearest).assert_not_awaited)()
 
     backend = _backend(nearest=_answer(0.97))
     hit = await cache_lookup_from_config(
@@ -131,7 +132,7 @@ async def test_semantic_and_verified_share_one_neighbour_search() -> None:
     lookup = cache_lookup_from_config(_ALL, cache=backend, verifier=_verifier())
 
     assert await lookup.lookup("q", _NS) is None
-    assert backend.nearest.await_count == 1
+    assert (cast("AsyncMock", backend.nearest).await_count) == 1
 
 
 @pytest.mark.asyncio
@@ -164,9 +165,9 @@ async def test_verified_band_serves_only_what_the_verifier_confirms() -> None:
 
     assert hit is not None
     assert hit.tier == "verified"
-    confirming.same_question.assert_awaited_once_with(
-        "the cached question", "new question"
-    )
+    cast(
+        "MagicMock", cast("AsyncMock", confirming.same_question).assert_awaited_once_with
+    )("the cached question", "new question")
 
     for verifier in (_verifier(same=False), _verifier(same=True, delay=1.0)):
         lookup = cache_lookup_from_config(
@@ -217,7 +218,7 @@ async def test_an_empty_tier_list_never_looks_up_and_a_backend_error_misses() ->
     """
     backend = _backend(exact=_answer(1.0))
     assert await cache_lookup_from_config((), cache=backend).lookup("q", _NS) is None
-    backend.exact.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", backend.exact).assert_not_awaited)()
 
     broken = _backend()
     broken.exact = AsyncMock(side_effect=RuntimeError("down"))
@@ -260,7 +261,7 @@ def test_cache_lookup_factory_refuses_an_invalid_tier_list(
         ``INVALID_INPUT``
     """
     with pytest.raises(AppError) as caught:
-        cache_lookup_from_config(
+        _ = cache_lookup_from_config(
             configs,
             cache=_backend(),
             verifier=_verifier() if verifier else None,

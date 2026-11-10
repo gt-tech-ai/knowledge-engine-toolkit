@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -147,7 +148,7 @@ class TestQdrantVectorStore:
         entry = VectorEntry(
             id="p", document_id="d", content="c", embedding=[0.1, 0.2, 0.3], metadata={}
         )
-        await asyncio.gather(*(store.upsert("docs", [entry]) for _ in range(10)))
+        _ = await asyncio.gather(*(store.upsert("docs", [entry]) for _ in range(10)))
 
         client.create_collection.assert_awaited_once()
 
@@ -423,8 +424,8 @@ class TestQdrantVectorStore:
         with patch(
             "techai_webutils.clients.vector.qdrant.store.uuid.uuid5", wraps=uuid.uuid5
         ) as hashed:
-            await store.stored_metadata("c", [e.id for e in entries])
-            await store.count_by_document("c", "d")
+            _ = await store.stored_metadata("c", [e.id for e in entries])
+            _ = await store.count_by_document("c", "d")
 
         assert hashed.call_count == _EXPECTED_CALL_COUNT
         client.collection_exists.assert_not_awaited()
@@ -453,4 +454,6 @@ class TestVectorStoreFactory:
     def test_unknown_kind_raises() -> None:
         """An unknown vector-store kind fails loudly."""
         with pytest.raises(AppValueError, match="unknown vector store kind"):
-            new_vector_store_from_config(VectorStoreConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = new_vector_store_from_config(
+                VectorStoreConfig(kind=cast("VectorStoreKind", cast("object", "bogus")))
+            )

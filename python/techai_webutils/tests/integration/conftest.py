@@ -26,7 +26,7 @@ import logging
 import time
 import uuid
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urlsplit, urlunsplit
 
 import aiobotocore.session
@@ -48,6 +48,11 @@ from techai_webutils.clients.storage.config import S3Config
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+    from unittest.mock import MagicMock
+
+    from aiobotocore.session import ClientCreatorContext
+    from testcontainers.core.docker_client import DockerClient
+    from types_aiobotocore_sqs import SQSClient
 
 _FAKE_CRED_1 = "test"
 
@@ -82,10 +87,11 @@ def _docker_available() -> bool:
 
     """
     try:
-        docker_client = importlib.import_module(
-            "testcontainers.core.docker_client"
-        ).DockerClient
-        docker_client().client.ping()
+        module = importlib.import_module("testcontainers.core.docker_client")
+        classes = cast("dict[str, type[DockerClient]]", vars(module))
+        docker_client = classes["DockerClient"]
+        client = docker_client()
+        _ = client.client.ping()
     except (OSError, DockerException):
         return False
     return True
@@ -130,7 +136,7 @@ def sqs_endpoint() -> Iterator[str]:
             LogMessageWaitStrategy("Started SQS rest server").with_startup_timeout(90)
         )
     )
-    container.start()
+    _ = container.start()
     try:
         host = container.get_container_host_ip()
         port = int(container.get_exposed_port(9324))
@@ -155,7 +161,7 @@ def minio_endpoint() -> Iterator[str]:
         .with_command("server /data")
         .waiting_for(LogMessageWaitStrategy("API:").with_startup_timeout(90))
     )
-    container.start()
+    _ = container.start()
     try:
         host = container.get_container_host_ip()
         port = int(container.get_exposed_port(9000))
@@ -177,8 +183,8 @@ async def redis_cache(redis_container: object) -> AsyncIterator[RedisCache]:
         A RedisCache bound to the live container, in ERROR mode (no masking).
 
     """
-    host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
-    port = int(redis_container.get_exposed_port(redis_container.port))  # type: ignore[attr-defined]
+    host = redis_container.get_container_host_ip()
+    port = int(redis_container.get_exposed_port(redis_container.port))
     client = Redis(host=host, port=port)
     try:
         # ERROR mode so a real connection fault surfaces instead of a silent miss.
@@ -203,18 +209,24 @@ async def _create_sqs_queue(
 
     """
     session = aiobotocore.session.get_session()
-    async with session.create_client(
-        "sqs",
-        endpoint_url=endpoint,
-        region_name="us-east-1",
-        aws_access_key_id="test",
-        aws_secret_access_key=_FAKE_CRED_1,
+    async with cast(
+        "ClientCreatorContext[SQSClient]",
+        session.create_client(
+            "sqs",
+            endpoint_url=endpoint,
+            region_name="us-east-1",
+            aws_access_key_id="test",
+            aws_secret_access_key=_FAKE_CRED_1,
+        ),
     ) as client:
-        resp = await client.create_queue(
-            QueueName=name, Attributes=dict(attributes or {})
+        resp = cast(
+            "dict[str, object]",
+            await cast("MagicMock", client.create_queue)(
+                QueueName=name, Attributes=dict(attributes or {})
+            ),
         )
     endpoint_parts = urlsplit(endpoint)
-    queue_parts = urlsplit(resp["QueueUrl"])
+    queue_parts = urlsplit(cast("str", resp["QueueUrl"]))
     return urlunsplit((
         endpoint_parts.scheme,
         endpoint_parts.netloc,
@@ -277,14 +289,17 @@ async def s3_config(minio_endpoint: str) -> S3Config:
     """
     bucket = f"it-{uuid.uuid4().hex[:12]}"
     session = aiobotocore.session.get_session()
-    async with session.create_client(
-        "s3",
-        endpoint_url=minio_endpoint,
-        region_name="us-east-1",
-        aws_access_key_id=_MINIO_USER,
-        aws_secret_access_key=_MINIO_ROOT_CRED,
+    async with cast(
+        "ClientCreatorContext[SQSClient]",
+        session.create_client(
+            "s3",
+            endpoint_url=minio_endpoint,
+            region_name="us-east-1",
+            aws_access_key_id=_MINIO_USER,
+            aws_secret_access_key=_MINIO_ROOT_CRED,
+        ),
     ) as client:
-        await client.create_bucket(Bucket=bucket)
+        await cast("MagicMock", client.create_bucket)(Bucket=bucket)
     return S3Config(
         endpoint=minio_endpoint,
         bucket=bucket,
@@ -343,7 +358,7 @@ def postgres_dsn() -> Iterator[str]:
             ).with_startup_timeout(60)
         )
     )
-    container.start()
+    _ = container.start()
     try:
         host = container.get_container_host_ip()
         port = int(container.get_exposed_port(5432))
@@ -386,7 +401,7 @@ def ray_cluster(request: pytest.FixtureRequest) -> object:
         A small local Ray cluster ONCE for the module and pickle its mappers/workers.
 
     """
-    ray.init(
+    _ = ray.init(
         num_cpus=2,
         ignore_reinit_error=True,
         include_dashboard=False,
@@ -447,7 +462,7 @@ def _opensearch() -> Iterator[str]:
         .with_env("path.repo", _OPENSEARCH_SNAPSHOT_PATH)
         .with_exposed_ports(9200)
     )
-    container.start()
+    _ = container.start()
     try:
         url = f"http://{container.get_container_host_ip()}:{container.get_exposed_port(9200)}"
         _await_opensearch(url)

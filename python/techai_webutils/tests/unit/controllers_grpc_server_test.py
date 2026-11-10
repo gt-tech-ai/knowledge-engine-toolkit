@@ -10,7 +10,7 @@ the status a caller sees is the real wire status.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
@@ -59,15 +59,9 @@ async def _slow(
 
 async def _abort(
     _request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
-) -> bytes:
-    """Abort NOT_FOUND with the handler's own message.
-
-    Returns:
-        Empty bytes, after the abort.
-
-    """
+) -> NoReturn:
+    """Abort NOT_FOUND with the handler's own message; ``abort`` never returns."""
     await context.abort(grpc.StatusCode.NOT_FOUND, "no such thing")
-    return b""  # pragma: no cover - abort raises
 
 
 async def _coded(
@@ -165,7 +159,7 @@ def _limiter(*, allow: bool) -> RateLimiter:
 
     """
     limiter = MagicMock(spec=RateLimiter)
-    limiter.allow.return_value = allow
+    cast("MagicMock", limiter.allow).return_value = allow
     return limiter
 
 

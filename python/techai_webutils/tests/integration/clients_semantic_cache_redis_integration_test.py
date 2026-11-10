@@ -12,8 +12,8 @@ for Valkey 9 serves it).
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -74,9 +74,9 @@ def _axis_embedding() -> AsyncMock:
         return EmbeddingResult(embedding=_VECTORS[text], model="axes", token_count=0)
 
     embedding = AsyncMock(spec=EmbeddingProvider)
-    embedding.embed.side_effect = embed
-    embedding.dimension.return_value = 3
-    embedding.model_name.return_value = "axes"
+    cast("MagicMock", embedding.embed).side_effect = embed
+    cast("MagicMock", embedding.dimension).return_value = 3
+    cast("MagicMock", embedding.model_name).return_value = "axes"
     return embedding
 
 
@@ -88,7 +88,7 @@ def stack_container(request: pytest.FixtureRequest) -> Iterator[object]:
         One search-capable server per image for the module.
 
     """
-    with RedisContainer(request.param) as container:
+    with RedisContainer(cast("str", request.param)) as container:
         yield container
 
 
@@ -100,10 +100,10 @@ async def semantic_cache(stack_container: object) -> AsyncIterator[SemanticCache
         A fresh redis-kind cache on the container (flushed before each test).
 
     """
-    host = stack_container.get_container_host_ip()  # type: ignore[attr-defined]
-    port = int(stack_container.get_exposed_port(stack_container.port))  # type: ignore[attr-defined]
+    host = stack_container.get_container_host_ip()
+    port = int(stack_container.get_exposed_port(stack_container.port))
     client = Redis(host=host, port=port)
-    await client.flushall()
+    _ = await client.flushall()
     try:
         yield semantic_cache_from_config(
             SemanticCacheConfig(kind=SemanticCacheKind.REDIS, index_prefix="it"),

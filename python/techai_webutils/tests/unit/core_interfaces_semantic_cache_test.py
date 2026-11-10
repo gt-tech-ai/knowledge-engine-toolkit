@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -19,6 +20,9 @@ from techai_webutils.core.interfaces.semantic_cache import (
     CacheVerifier,
     SemanticCache,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _EXPECTED_TAG_COUNT = 16
 
@@ -66,7 +70,7 @@ def test_cache_namespace_rejects_a_separator_in_the_workspace() -> None:
       - ``CacheNamespace("ws:a", …)`` raises a ``ValueError`` coded ``INVALID_INPUT``
     """
     with pytest.raises(AppValueError, match="workspace_id") as caught:
-        CacheNamespace("ws:a", "m", "v1")
+        _ = CacheNamespace("ws:a", "m", "v1")
 
     assert isinstance(caught.value, AppError)
     assert caught.value.code is ErrorCode.INVALID_INPUT
@@ -88,7 +92,7 @@ def test_cached_answer_is_frozen_and_cache_composes_invalidator() -> None:
     )
 
     with pytest.raises(dataclasses.FrozenInstanceError):
-        answer.payload = b"y"  # pyright: ignore[reportAttributeAccessIssue]
+        answer.payload = b"y"
     assert issubclass(SemanticCache, CacheInvalidator)
 
 
@@ -141,7 +145,7 @@ async def test_lookup_default_serves_the_exact_repeat_before_the_neighbour() -> 
     backend = _backend(exact_hit, _answer(0.97))
 
     assert await SemanticCache.lookup(backend, "q", ns, min_similarity=0.95) is exact_hit
-    backend.nearest.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", backend.nearest).assert_not_awaited)()
 
     backend = _backend(None, _answer(0.97))
     hit = await SemanticCache.lookup(backend, "q", ns, min_similarity=0.95)
@@ -171,6 +175,6 @@ def test_tier_contracts_are_abstract() -> None:
         CacheAdmission,
     ):
         with pytest.raises(TypeError):
-            contract()  # pyright: ignore[reportAbstractUsage]
+            _ = cast("Callable[[], object]", contract)()
     assert _answer(1.0, tier="exact").tier == "exact"
     assert not CachedAnswer(b"a", 1.0, "q", "m").tier

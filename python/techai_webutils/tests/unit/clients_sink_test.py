@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -13,6 +13,7 @@ from techai_webutils.clients.sink.vector.sink import VectorStoreSink
 from techai_webutils.clients.vector.opensearch import OpenSearchVectorStore
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.sink import ChunkPayload, SinkDocument
+from tests.json_path import dig
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.vector_store import VectorEntry
@@ -89,11 +90,17 @@ async def test_write_upserts_stable_ids_with_entities_and_content_hash() -> None
 
     await _sink(store).write(_DOC, chunks, [[1.0, 0.0], [0.0, 1.0]])
 
-    store.for_org.assert_called_once_with("o1")
-    collection, entries = scoped.upsert.await_args.args
+    cast("MagicMock", cast("MagicMock", store.for_org).assert_called_once_with)("o1")
+    collection, entries = cast(
+        "tuple[object, list[VectorEntry]]",
+        cast("MagicMock", cast("AsyncMock", scoped.upsert).await_args).args,
+    )
     assert collection == "docs"
-    assert [e.id for e in entries] == ["d1:0", "d1:1"]
-    first: VectorEntry = entries[0]
+    assert [e.id for e in entries] == [
+        "d1:0",
+        "d1:1",
+    ]
+    first = entries[0]
     assert first.metadata == {
         "clearance": "public",
         "org_id": "o1",
@@ -104,9 +111,9 @@ async def test_write_upserts_stable_ids_with_entities_and_content_hash() -> None
         "section_path": "Intro",
         "entities.person": "Ada|Grace",
     }
-    assert entries[1].metadata["language"] == "en"
-    assert entries[1].metadata["page"] == "2"
-    assert entries[1].embedding == [0.0, 1.0]
+    assert cast("dict[str, object]", dig(entries, 1).metadata)["language"] == "en"
+    assert cast("dict[str, object]", dig(entries, 1).metadata)["page"] == "2"
+    assert cast("object", dig(entries, 1).embedding) == [0.0, 1.0]
 
 
 @pytest.mark.asyncio
@@ -131,7 +138,7 @@ async def test_write_refuses_missing_or_mismatched_vectors(
             _DOC, [ChunkPayload(text="a"), ChunkPayload(text="b")], vectors
         )
 
-    scoped.upsert.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", scoped.upsert).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -159,7 +166,7 @@ async def test_write_refuses_vectors_from_another_model(
 
     assert info.value.code is ErrorCode.CONFLICT
     assert info.value.is_permanent
-    scoped.upsert.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", scoped.upsert).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -180,19 +187,33 @@ async def test_redelivered_write_sends_only_chunks_not_stored_as_is() -> None:
     await sink.write(
         _DOC, [ChunkPayload(text="a"), ChunkPayload(text="b")], [[1.0], [2.0]]
     )
-    written = scoped.upsert.await_args.args[1]
-    stale = written[1].metadata | {"content_hash": "old"}
-    scoped.stored_metadata.return_value = {"d1:0": written[0].metadata, "d1:1": stale}
-    scoped.count_by_document.return_value = 2
-    scoped.upsert.reset_mock()
+    written = cast(
+        "list[object]",
+        cast("MagicMock", cast("AsyncMock", scoped.upsert).await_args).args[1],
+    )
+    stale = cast("object", written[1].metadata | {"content_hash": "old"})
+    cast("MagicMock", scoped.stored_metadata).return_value = {
+        "d1:0": cast("object", written[0].metadata),
+        "d1:1": stale,
+    }
+    cast("MagicMock", scoped.count_by_document).return_value = 2
+    cast("MagicMock", cast("MagicMock", scoped.upsert).reset_mock)()
 
     await sink.write(
         _DOC, [ChunkPayload(text="a"), ChunkPayload(text="b")], [[1.0], [2.0]]
     )
 
-    assert [e.id for e in scoped.upsert.await_args.args[1]] == ["d1:1"]
-    scoped.stored_metadata.assert_awaited_with("docs", ["d1:0", "d1:1"])
-    scoped.delete_by_document.assert_not_awaited()
+    assert [
+        cast("object", e.id)
+        for e in cast(
+            "list[object]",
+            cast("MagicMock", cast("AsyncMock", scoped.upsert).await_args).args[1],
+        )
+    ] == ["d1:1"]
+    cast("MagicMock", cast("AsyncMock", scoped.stored_metadata).assert_awaited_with)(
+        "docs", ["d1:0", "d1:1"]
+    )
+    cast("MagicMock", cast("AsyncMock", scoped.delete_by_document).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -208,12 +229,16 @@ async def test_write_of_a_shorter_version_deletes_the_extra_chunks() -> None:
         the document's entries except ``d1:0``
     """
     store, scoped = _store()
-    scoped.stored_metadata.return_value = {"d1:0": {"content_hash": "old"}}
-    scoped.count_by_document.return_value = 3
+    cast("MagicMock", scoped.stored_metadata).return_value = {
+        "d1:0": {"content_hash": "old"}
+    }
+    cast("MagicMock", scoped.count_by_document).return_value = 3
 
     await _sink(store).write(_DOC, [ChunkPayload(text="a")], [[1.0]])
 
-    scoped.delete_by_document.assert_awaited_once_with("docs", "d1", ["d1:0"])
+    cast(
+        "MagicMock", cast("AsyncMock", scoped.delete_by_document).assert_awaited_once_with
+    )("docs", "d1", ["d1:0"])
 
 
 @pytest.mark.asyncio
@@ -233,9 +258,15 @@ async def test_chunk_ordinal_sets_its_id() -> None:
 
     await _sink(store).write(_DOC, chunks, [[1.0], [2.0]])
 
-    entries = scoped.upsert.await_args.args[1]
-    assert [e.id for e in entries] == ["d1:0", "d1:2"]
-    assert entries[1].metadata["chunk_index"] == "2"
+    entries = cast(
+        "list[object]",
+        cast("MagicMock", cast("AsyncMock", scoped.upsert).await_args).args[1],
+    )
+    assert [cast("object", e.id) for e in entries] == [
+        "d1:0",
+        "d1:2",
+    ]
+    assert cast("dict[str, object]", entries[1].metadata)["chunk_index"] == "2"
 
 
 @pytest.mark.asyncio
@@ -258,9 +289,16 @@ async def test_delete_and_update_metadata_are_scoped_to_the_org() -> None:
     await sink.delete("o2", "d9")
     await sink.update_metadata("o2", "d9", {"clearance": "secret"})
 
-    assert [c.args for c in store.for_org.call_args_list] == [("o2",), ("o2",)]
-    scoped.delete_by_document.assert_awaited_once_with("docs", "d9")
-    scoped.update_metadata.assert_awaited_once_with("docs", "d9", {"clearance": "secret"})
+    assert [
+        cast("object", c.args)
+        for c in cast("list[object]", cast("MagicMock", store.for_org).call_args_list)
+    ] == [("o2",), ("o2",)]
+    cast(
+        "MagicMock", cast("AsyncMock", scoped.delete_by_document).assert_awaited_once_with
+    )("docs", "d9")
+    cast("MagicMock", cast("AsyncMock", scoped.update_metadata).assert_awaited_once_with)(
+        "docs", "d9", {"clearance": "secret"}
+    )
 
 
 @pytest.mark.asyncio
@@ -281,8 +319,8 @@ async def test_default_is_noop_and_factory_fails_loudly() -> None:
     await sink.delete("o", "d")
     await sink.update_metadata("o", "d", {})
     with pytest.raises(AppValueError):
-        sink_from_config(SinkConfig(kind=SinkKind.OPENSEARCH))
+        _ = sink_from_config(SinkConfig(kind=SinkKind.OPENSEARCH))
     bogus = MagicMock(spec=SinkConfig)
     bogus.kind = "bogus"
     with pytest.raises(AppValueError):
-        sink_from_config(bogus)
+        _ = sink_from_config(bogus)

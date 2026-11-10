@@ -39,7 +39,7 @@ def test_workspace_override_beats_tenant_policy() -> None:
         {"kind": "config", "policies": {"o": {"colour": 1}}},
     ):
         with pytest.raises(AppError) as caught:
-            routing_policy_store_from_config(bad)
+            _ = routing_policy_store_from_config(bad)
         assert caught.value.code is ErrorCode.INVALID_INPUT
 
 

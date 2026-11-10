@@ -540,6 +540,11 @@ Python: `techai-webutils` 0.9.5.
     `clients.semantic_cache`); `clients.decorators` no longer exports them.
   - `foundation.resilience.sqs_dlq.SqsDeadLetterBackend` takes any `SqsQueueTarget` (a
     `queue_url` and `client_kwargs()`); `clients.messaging.SQSConfig` satisfies it unchanged.
+  - Import cycles between a factory and its backends are gone (basedpyright all-mode reports
+    them). `SemanticCacheConfig` / `SemanticCacheKind` moved to `clients.semantic_cache.config`,
+    `TokenLedgerConfig` / `TokenLedgerKind` to `clients.token_ledger.config`, and
+    `RoutedConfig` to `clients.model_gateway.routed.config`; each package still exports them.
+    `EvalOutput` moved from `core.interfaces.evaluator` to `core.interfaces.grader`.
 - **Breaking (Go):** `OutboxStore.Claim(ctx, lane, partition, limit)` takes the partition to claim.
   Pass 0 for an unpartitioned lane. Mocks and custom stores must add the argument.
 - Size ratchets: a Go and a Python unit test fail when a function in the trees the ingestion

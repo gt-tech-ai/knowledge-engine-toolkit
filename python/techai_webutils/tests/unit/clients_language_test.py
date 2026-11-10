@@ -32,7 +32,7 @@ def _model(label: str, probability: float) -> MagicMock:
 
     """
     model = MagicMock()
-    model.predict.return_value = ((label,), (probability,))
+    cast("MagicMock", model.predict).return_value = ((label,), (probability,))
     return model
 
 
@@ -53,9 +53,14 @@ def test_default_langdetect_kind_identifies_the_parity_set() -> None:
     identifier = language_identifier_from_config(LanguageIdentifierConfig())
     rows = [json.loads(line) for line in _PARITY.read_text().splitlines()]
 
-    guesses = [identifier.identify(row["text"]) for row in rows]
+    guesses = [
+        identifier.identify(cast("str", row["text"]))
+        for row in cast("list[dict[str, object]]", rows)
+    ]
 
-    assert [g.code for g in guesses] == [row["language"] for row in rows]
+    assert [g.code for g in guesses] == [
+        row["language"] for row in cast("list[dict[str, object]]", rows)
+    ]
     assert all(0.0 < g.confidence <= 1.0 for g in guesses)
     assert identifier.identify(" \n ") == UNDETERMINED_GUESS
 
@@ -84,11 +89,13 @@ def test_fasttext_kind_loads_once_on_first_use_and_reads_one_line() -> None:
         blank = identifier.identify("\n\t ")
         loaded_at_build = load.call_count
         first = identifier.identify("Der Bericht\nist  fertig.")
-        identifier.identify("Noch einer.")
+        _ = identifier.identify("Noch einer.")
 
     assert (loaded_at_build, blank) == (0, UNDETERMINED_GUESS)
     load.assert_called_once_with("lid.ftz")
-    model.predict.assert_any_call("Der Bericht ist fertig.", k=1)
+    cast("MagicMock", cast("MagicMock", model.predict).assert_any_call)(
+        "Der Bericht ist fertig.", k=1
+    )
     assert first == LanguageGuess("de", 1.0)
 
 
@@ -111,7 +118,7 @@ def test_glotlid_kind_splits_the_code_and_script() -> None:
             )
         )
         guess = identifier.identify("Hello there.")
-        model.predict.return_value = ((), ())
+        cast("MagicMock", model.predict).return_value = ((), ())
         none = identifier.identify("???")
 
     assert guess == LanguageGuess("eng", 0.93, "Latn")
@@ -139,17 +146,19 @@ def test_unloadable_model_and_bad_config_are_refused(tmp_path: Path) -> None:
     )
 
     with pytest.raises(AppValueError):
-        identifier.identify("Hello there.")
+        _ = identifier.identify("Hello there.")
     for config in (
         LanguageIdentifierConfig(kind=LanguageIdentifierKind.FASTTEXT),
         LanguageIdentifierConfig(kind=LanguageIdentifierKind.GLOTLID),
-        LanguageIdentifierConfig(kind=cast("LanguageIdentifierKind", "cld3")),
+        LanguageIdentifierConfig(
+            kind=cast("LanguageIdentifierKind", cast("object", "cld3"))
+        ),
     ):
         with pytest.raises(AppValueError):
-            language_identifier_from_config(config)
+            _ = language_identifier_from_config(config)
     for code, confidence in (("", 0.5), ("en", 1.5), ("en", -0.1)):
         with pytest.raises(AppValueError):
-            LanguageGuess(code, confidence)
+            _ = LanguageGuess(code, confidence)
 
 
 def _lingua(code: str, confidence: float) -> MagicMock:
@@ -162,11 +171,24 @@ def _lingua(code: str, confidence: float) -> MagicMock:
 
     """
     value = MagicMock()
-    value.language.iso_code_639_1.name = code.upper()
+    cast(
+        "MagicMock", cast("MagicMock", value.language).iso_code_639_1
+    ).name = code.upper()
     value.value = confidence
     module = MagicMock()
-    detector = module.LanguageDetectorBuilder.from_all_languages.return_value.build
-    detector.return_value.compute_language_confidence_values.return_value = [value]
+    detector = cast(
+        "object",
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock",
+                cast("MagicMock", module.LanguageDetectorBuilder).from_all_languages,
+            ).return_value,
+        ).build,
+    )
+    cast(
+        "MagicMock", detector.return_value.compute_language_confidence_values
+    ).return_value = [value]
     return module
 
 
@@ -207,4 +229,4 @@ def test_short_text_goes_to_lingua_and_a_low_confidence_guess_is_und() -> None:
         LanguageIdentifierConfig(min_confidence=1.5),
     ):
         with pytest.raises(AppValueError):
-            language_identifier_from_config(bad)
+            _ = language_identifier_from_config(bad)

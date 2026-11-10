@@ -76,7 +76,7 @@ def _context(code: grpc.StatusCode | None = None) -> MagicMock:
 
     """
     context = MagicMock()
-    context.code.return_value = code
+    cast("MagicMock", context.code).return_value = code
     context.write = AsyncMock()
     return context
 
@@ -172,8 +172,16 @@ class TestTracingServerInterceptor:
         assert span.attributes["rpc.method"] == "Do"
         assert span.context is not None
         assert format(span.context.trace_id, "032x") == trace_id
-        trailer = dict(context.set_trailing_metadata.call_args.args[0])
-        assert trace_id in trailer["traceresponse"]
+        trailer = dict(
+            cast(
+                "dict[str, object]",
+                cast(
+                    "MagicMock",
+                    cast("MagicMock", context.set_trailing_metadata).call_args,
+                ).args[0],
+            )
+        )
+        assert trace_id in str(trailer["traceresponse"])
 
     @staticmethod
     @pytest.mark.asyncio
@@ -208,12 +216,17 @@ class TestTracingServerInterceptor:
 
         wrapped = await _wrap(interceptor, grpc.unary_stream_rpc_method_handler(endless))
         context = _context()
-        context.write.side_effect = [None, asyncio.CancelledError()]
+        cast("MagicMock", context.write).side_effect = [None, asyncio.CancelledError()]
 
         with pytest.raises(asyncio.CancelledError):
-            await _behavior(wrapped, stream=True)(object(), context)
+            _ = await _behavior(wrapped, stream=True)(object(), context)
 
-        assert [c.args[0] for c in context.write.await_args_list] == [
+        assert [
+            cast("list[object]", c.args)[0]
+            for c in cast(
+                "list[object]", cast("AsyncMock", context.write).await_args_list
+            )
+        ] == [
             "chunk-0",
             "chunk-1",
         ]
@@ -243,7 +256,7 @@ class TestTracingServerInterceptor:
         wrapped = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(failing))
 
         with pytest.raises(RuntimeError):
-            await _behavior(wrapped)(object(), _context())
+            _ = await _behavior(wrapped)(object(), _context())
 
         [span] = exporter.get_finished_spans()
         assert span.status.status_code is StatusCode.ERROR
@@ -294,7 +307,7 @@ class TestTracingServerInterceptor:
             )
             assert wrapped is not None
             with contextlib.suppress(RuntimeError):
-                await _behavior(wrapped)(object(), _context())
+                _ = await _behavior(wrapped)(object(), _context())
             assert baggage.get_baggage("k") is None
 
         assert seen == ["v", "v"]
@@ -333,23 +346,44 @@ class TestMetricsServerInterceptor:
             call counts its status, and both observe a duration.
         """
         metrics, requests, duration = MagicMock(), MagicMock(), MagicMock()
-        metrics.counter.return_value = requests
-        metrics.histogram.return_value = duration
+        cast("MagicMock", metrics.counter).return_value = requests
+        cast("MagicMock", metrics.histogram).return_value = duration
         interceptor = MetricsServerInterceptor(metrics)
-        assert metrics.counter.call_args.args[0] == "grpc_server_requests_total"
-        assert metrics.histogram.call_args.args[0] == "grpc_server_duration_seconds"
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", metrics.counter).call_args).args,
+            )[0]
+            == "grpc_server_requests_total"
+        )
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", metrics.histogram).call_args).args,
+            )[0]
+            == "grpc_server_duration_seconds"
+        )
 
         ok = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(AsyncMock()))
-        await _behavior(ok)(object(), _context())
+        _ = await _behavior(ok)(object(), _context())
         abort = AsyncMock(side_effect=grpc.aio.AbortError("x"))
         aborted = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(abort))
         with pytest.raises(grpc.aio.AbortError):
-            await _behavior(aborted)(object(), _context(grpc.StatusCode.NOT_FOUND))
+            _ = await _behavior(aborted)(object(), _context(grpc.StatusCode.NOT_FOUND))
 
-        codes = [c.kwargs["code"] for c in requests.inc.call_args_list]
+        codes = [
+            cast("dict[str, object]", c.kwargs)["code"]
+            for c in cast("list[object]", cast("MagicMock", requests.inc).call_args_list)
+        ]
         assert codes == ["OK", "NotFound"]
-        assert requests.inc.call_args.kwargs["service"] == "test.TestService"
-        assert duration.observe.call_count == _EXPECTED_CALL_COUNT
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", requests.inc).call_args).kwargs,
+            )["service"]
+            == "test.TestService"
+        )
+        assert (cast("MagicMock", duration.observe).call_count) == _EXPECTED_CALL_COUNT
 
 
 class TestLoggingServerInterceptor:
@@ -371,13 +405,37 @@ class TestLoggingServerInterceptor:
         interceptor = LoggingServerInterceptor(logger)
 
         ok = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(AsyncMock()))
-        await _behavior(ok)(object(), _context())
+        _ = await _behavior(ok)(object(), _context())
         failing = AsyncMock(side_effect=RuntimeError("x"))
         failed = await _wrap(interceptor, grpc.unary_unary_rpc_method_handler(failing))
         with pytest.raises(RuntimeError):
-            await _behavior(failed)(object(), _context(grpc.StatusCode.INTERNAL))
+            _ = await _behavior(failed)(object(), _context(grpc.StatusCode.INTERNAL))
 
-        assert logger.info.call_args.args[0] == "gRPC request completed"
-        assert logger.info.call_args.kwargs["code"] == "OK"
-        assert logger.error.call_args.args[0] == "gRPC request failed"
-        assert logger.error.call_args.kwargs["code"] == "Internal"
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", logger.info).call_args).args,
+            )[0]
+            == "gRPC request completed"
+        )
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", logger.info).call_args).kwargs,
+            )["code"]
+            == "OK"
+        )
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", logger.error).call_args).args,
+            )[0]
+            == "gRPC request failed"
+        )
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", logger.error).call_args).kwargs,
+            )["code"]
+            == "Internal"
+        )

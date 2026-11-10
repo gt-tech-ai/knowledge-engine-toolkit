@@ -1,5 +1,7 @@
 """Tests for the config-selected email backend factory (noop <-> smtp <-> ses)."""
 
+from typing import cast
+
 import pytest
 
 # Imported eagerly (the factory lazy-imports ses/smtp) so the selection tests can
@@ -117,7 +119,9 @@ class TestEmailFactory:
         # Deliberately bypass the EmailKind enum with a bogus value to exercise the
         # defensive raise.
         with pytest.raises(AppValueError, match="unknown email kind"):
-            new_email_from_config(EmailConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = new_email_from_config(
+                EmailConfig(kind=cast("EmailKind", cast("object", "bogus")))
+            )
 
     @staticmethod
     @pytest.mark.asyncio

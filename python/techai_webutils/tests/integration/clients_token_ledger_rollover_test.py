@@ -51,8 +51,8 @@ def _client(container: object) -> Redis:
         A client for ``container`` that fails fast once it is gone.
 
     """
-    host = container.get_container_host_ip()  # type: ignore[attr-defined]
-    port = int(container.get_exposed_port(container.port))  # type: ignore[attr-defined]
+    host = container.get_container_host_ip()
+    port = int(container.get_exposed_port(container.port))
     return Redis(host=host, port=port, socket_timeout=1, socket_connect_timeout=1)
 
 
@@ -129,7 +129,7 @@ async def test_exhausted_budget_is_served_again_after_rollover(
       - the next day's first second → allowed, with the full allowance remaining
     """
     prefix = f"tl-{request.node.name}"
-    await redis_client.hset(f"{prefix}:limits:org-1:w-1", mapping={"tokens": "100"})
+    _ = await redis_client.hset(f"{prefix}:limits:org-1:w-1", mapping={"tokens": "100"})
     now = {"t": _LAST_SECOND}
     ledger = _ledger(redis_client, prefix, lambda: now["t"])
 
@@ -168,21 +168,24 @@ async def test_redis_outage_soft_serves_hard_rejects_and_counts_lost_records() -
         )
     )
     container = RedisContainer("redis:7-alpine")
-    container.start()
+    _ = container.start()
     client = _client(container)
     ledger = _ledger(client, "tl-outage", lambda: _LAST_SECOND, metrics)
 
     def proxy(enforcement: Enforcement) -> LLMProvider:
         return cast(
             "LLMProvider",
-            TokenAccountingProxy(
-                inner,
-                options=TokenAccountingOptions(
-                    ledger=ledger,
-                    scope=lambda: _SCOPE,
-                    prices=_PRICES,
-                    policy=BudgetPolicy(enforcement=enforcement),
-                    step="generate",
+            cast(
+                "object",
+                TokenAccountingProxy(
+                    inner,
+                    options=TokenAccountingOptions(
+                        ledger=ledger,
+                        scope=lambda: _SCOPE,
+                        prices=_PRICES,
+                        policy=BudgetPolicy(enforcement=enforcement),
+                        step="generate",
+                    ),
                 ),
             ),
         )
@@ -193,10 +196,12 @@ async def test_redis_outage_soft_serves_hard_rejects_and_counts_lost_records() -
             LLMMessage(role="user", content="q")
         ])
         with pytest.raises(QuotaExceededError):
-            await proxy(Enforcement.HARD).complete([LLMMessage(role="user", content="q")])
+            _ = await proxy(Enforcement.HARD).complete([
+                LLMMessage(role="user", content="q")
+            ])
     finally:
         await client.aclose()
 
     assert served.content == "a"
-    inner.complete.assert_awaited_once()
-    failed.inc.assert_called_once()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_awaited_once)()
+    cast("MagicMock", cast("MagicMock", failed.inc).assert_called_once)()

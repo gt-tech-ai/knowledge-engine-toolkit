@@ -20,6 +20,7 @@ import asyncio
 import functools
 import os
 from pathlib import Path
+from typing import final
 
 import pytest
 
@@ -164,6 +165,7 @@ def _die_once(marker: str) -> None:
         os._exit(1)
 
 
+@final
 class _DiesOnceWorker:
     """PooledWorker whose first ``process`` call kills its actor process.
 

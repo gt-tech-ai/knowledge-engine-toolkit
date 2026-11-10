@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -29,7 +30,7 @@ async def test_decorated_sink_delegates_every_call_and_its_lifecycle() -> None:
         with the same arguments, and entering the decorator enters the wrapped sink.
     """
     inner = AsyncMock(spec=Sink)
-    inner.__aenter__.return_value = inner
+    cast("MagicMock", inner.__aenter__).return_value = inner
     decorations = Decorations(decoration.default_config(), Collaborators())
     sink = decorate(inner, decorations, "ingestion.sink")
     document = SinkDocument(
@@ -46,9 +47,13 @@ async def test_decorated_sink_delegates_every_call_and_its_lifecycle() -> None:
         await sink.delete("org-1", "doc-1")
         await sink.update_metadata("org-1", "doc-1", {"clearance": "public"})
 
-    inner.__aenter__.assert_awaited_once()
-    inner.write.assert_awaited_once_with(document, chunks, [[0.1, 0.2]])
-    inner.delete.assert_awaited_once_with("org-1", "doc-1")
-    inner.update_metadata.assert_awaited_once_with(
+    cast("MagicMock", cast("AsyncMock", inner.__aenter__).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", inner.write).assert_awaited_once_with)(
+        document, chunks, [[0.1, 0.2]]
+    )
+    cast("MagicMock", cast("AsyncMock", inner.delete).assert_awaited_once_with)(
+        "org-1", "doc-1"
+    )
+    cast("MagicMock", cast("AsyncMock", inner.update_metadata).assert_awaited_once_with)(
         "org-1", "doc-1", {"clearance": "public"}
     )

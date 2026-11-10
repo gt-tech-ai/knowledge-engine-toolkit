@@ -6,7 +6,8 @@ A metrics querier run through the client tier.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -30,10 +31,10 @@ async def test_decorated_querier_forwards_queries_and_their_results() -> None:
         arguments, and their results come back unchanged.
     """
     inner = AsyncMock(spec=MetricsQuerier)
-    inner.query.return_value = 42.0
+    cast("MagicMock", inner.query).return_value = 42.0
     start = datetime(2026, 11, 6, tzinfo=UTC)
     series = [MetricSample(time=start, value=1.0)]
-    inner.query_range.return_value = series
+    cast("MagicMock", inner.query_range).return_value = series
     querier = decorate(
         inner,
         Decorations(decoration.default_config(), Collaborators()),
@@ -45,5 +46,7 @@ async def test_decorated_querier_forwards_queries_and_their_results() -> None:
 
     assert value == pytest.approx(42.0)
     assert got == series
-    inner.query.assert_awaited_once_with("up")
-    inner.query_range.assert_awaited_once_with("up", start, start, timedelta(seconds=15))
+    cast("MagicMock", cast("AsyncMock", inner.query).assert_awaited_once_with)("up")
+    cast("MagicMock", cast("AsyncMock", inner.query_range).assert_awaited_once_with)(
+        "up", start, start, timedelta(seconds=15)
+    )

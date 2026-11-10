@@ -2,7 +2,8 @@
 
 An eval run feeds each ``EvalCase`` through the system under test, captures an
 ``EvalOutput`` and asks the evaluator to grade it with a set of ``Grader``s; the run folds
-the ``EvalResult``s into an ``EvalReport`` keyed on the dataset version.
+the ``EvalResult``s into an ``EvalReport`` keyed on the dataset version. ``EvalOutput``
+lives with the ``Grader`` contract, which consumes it.
 """
 
 from __future__ import annotations
@@ -15,22 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from techai_webutils.core.interfaces.dataset import EvalCase
-    from techai_webutils.core.interfaces.grader import Grader, GradeResult
-
-
-@dataclass(frozen=True, slots=True)
-class EvalOutput:
-    """What the system under test produced for one case."""
-
-    answer: str
-    """The generated answer text."""
-    citations: tuple[str, ...]
-    """Ids of the sources the answer cites, in order."""
-    trace_id: str
-    """The OTel trace id of the run (links a result to its trace)."""
-    retrieved: tuple[str, ...] = ()
-    """Ids of the documents retrieval ranked for the case, best first (ranking
-    graders)."""
+    from techai_webutils.core.interfaces.grader import EvalOutput, Grader, GradeResult
 
 
 @dataclass(frozen=True, slots=True)

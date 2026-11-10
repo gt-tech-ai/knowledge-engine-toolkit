@@ -24,6 +24,7 @@ from techai_webutils.core.interfaces.llm import (
     LLMResponse,
 )
 from techai_webutils.core.types.fact import Fact
+from tests.json_path import items
 
 _MODULE = "techai_webutils.clients.decorators.ai_enricher"
 """Import site of the enricher (its OTel span lookup and clock are patched here)."""
@@ -69,23 +70,28 @@ async def test_enricher_emits_gen_ai_tokens_total_from_response(
     provider, instruments = metrics_mock
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            _llm(),
-            options=AiSpanEnricherOptions(
-                step="generate", capture_content=False, metrics=provider
+        cast(
+            "object",
+            AiSpanEnricher(
+                _llm(),
+                options=AiSpanEnricherOptions(
+                    step="generate", capture_content=False, metrics=provider
+                ),
             ),
         ),
     )
 
     with patch(f"{_MODULE}.trace.get_current_span", return_value=MagicMock()):
-        await enricher.complete([LLMMessage(role="user", content="hi")])
+        _ = await enricher.complete([LLMMessage(role="user", content="hi")])
 
     assert call(
         "gen_ai_tokens_total",
         "GenAI tokens by step, model and type.",
         ["step", "model", "type"],
-    ) in (provider.counter.call_args_list)
-    assert instruments["gen_ai_tokens_total"].inc.call_args_list == [
+    ) in (cast("MagicMock", provider.counter).call_args_list)
+    assert cast(
+        "object", cast("MagicMock", instruments["gen_ai_tokens_total"].inc).call_args_list
+    ) == [
         call(42, step="generate", model="nova", type="input"),
         call(7, step="generate", model="nova", type="output"),
     ]
@@ -111,10 +117,13 @@ async def test_enricher_observes_request_duration(
     provider, instruments = metrics_mock
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            _llm(),
-            options=AiSpanEnricherOptions(
-                step="generate", capture_content=False, metrics=provider
+        cast(
+            "object",
+            AiSpanEnricher(
+                _llm(),
+                options=AiSpanEnricherOptions(
+                    step="generate", capture_content=False, metrics=provider
+                ),
             ),
         ),
     )
@@ -123,17 +132,20 @@ async def test_enricher_observes_request_duration(
         patch(f"{_MODULE}.trace.get_current_span", return_value=MagicMock()),
         patch(f"{_MODULE}.perf_counter", side_effect=[10.0, 12.5]),
     ):
-        await enricher.complete([LLMMessage(role="user", content="hi")])
+        _ = await enricher.complete([LLMMessage(role="user", content="hi")])
 
-    provider.histogram.assert_called_once_with(
+    cast("MagicMock", cast("MagicMock", provider.histogram).assert_called_once_with)(
         "gen_ai_request_duration_seconds",
         "GenAI request duration in seconds by step and model.",
         ["step", "model"],
         [0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 20.0, 30.0, 60.0],
     )
-    instruments["gen_ai_request_duration_seconds"].observe.assert_called_once_with(
-        2.5, step="generate", model="nova"
-    )
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", instruments["gen_ai_request_duration_seconds"].observe
+        ).assert_called_once_with,
+    )(2.5, step="generate", model="nova")
 
 
 @pytest.mark.asyncio
@@ -162,14 +174,17 @@ async def test_enricher_reports_metrics_and_fact_under_the_served_model(
     )
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            _llm(),
-            options=AiSpanEnricherOptions(
-                step="generate",
-                capture_content=False,
-                metrics=provider,
-                facts=facts,
-                fact_dimensions=lambda: {"org_id": "org-1"},
+        cast(
+            "object",
+            AiSpanEnricher(
+                _llm(),
+                options=AiSpanEnricherOptions(
+                    step="generate",
+                    capture_content=False,
+                    metrics=provider,
+                    facts=facts,
+                    fact_dimensions=lambda: {"org_id": "org-1"},
+                ),
             ),
         ),
     )
@@ -178,17 +193,24 @@ async def test_enricher_reports_metrics_and_fact_under_the_served_model(
         patch(f"{_MODULE}.trace.get_current_span", return_value=_span(1, 2)),
         patch(f"{_MODULE}._utcnow", side_effect=[start, end]),
     ):
-        await enricher.complete(
+        _ = await enricher.complete(
             [LLMMessage(role="user", content="hi")], LLMConfig(model="nova-alias")
         )
 
-    assert instruments["gen_ai_tokens_total"].inc.call_args_list == [
+    assert cast(
+        "object", cast("MagicMock", instruments["gen_ai_tokens_total"].inc).call_args_list
+    ) == [
         call(42, step="generate", model="nova", type="input"),
         call(7, step="generate", model="nova", type="output"),
     ]
-    (fact,) = facts.publish.call_args.args[0]
-    assert fact.dims["model"] == "nova"
-    assert fact.ts == start
+    (fact,) = items(
+        cast(
+            "list[object]",
+            cast("MagicMock", cast("MagicMock", facts.publish).call_args).args,
+        )[0]
+    )
+    assert cast("dict[str, object]", fact.dims)["model"] == "nova"
+    assert cast("object", fact.ts) == start
 
 
 def _span(trace_id: int, span_id: int) -> MagicMock:
@@ -201,7 +223,7 @@ def _span(trace_id: int, span_id: int) -> MagicMock:
 
     """
     span = MagicMock()
-    span.get_span_context.return_value = SpanContext(
+    cast("MagicMock", span.get_span_context).return_value = SpanContext(
         trace_id=trace_id, span_id=span_id, is_remote=False
     )
     return span
@@ -233,18 +255,21 @@ async def test_enricher_emits_one_fact_per_call_with_configured_dims(
     now = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
     enricher = cast(
         "LLMProvider",
-        AiSpanEnricher(
-            _llm(),
-            options=AiSpanEnricherOptions(
-                step="generate",
-                capture_content=False,
-                metrics=provider,
-                facts=facts,
-                fact_dimensions=lambda: {
-                    "org_id": "org-1",
-                    "team": "t-1",
-                    "workspace": "w-1",
-                },
+        cast(
+            "object",
+            AiSpanEnricher(
+                _llm(),
+                options=AiSpanEnricherOptions(
+                    step="generate",
+                    capture_content=False,
+                    metrics=provider,
+                    facts=facts,
+                    fact_dimensions=lambda: {
+                        "org_id": "org-1",
+                        "team": "t-1",
+                        "workspace": "w-1",
+                    },
+                ),
             ),
         ),
     )
@@ -254,9 +279,9 @@ async def test_enricher_emits_one_fact_per_call_with_configured_dims(
         patch(f"{_MODULE}.perf_counter", side_effect=[10.0, 12.5]),
         patch(f"{_MODULE}._utcnow", return_value=now),
     ):
-        await enricher.complete([LLMMessage(role="user", content="hi")])
+        _ = await enricher.complete([LLMMessage(role="user", content="hi")])
 
-    facts.publish.assert_called_once_with([
+    cast("MagicMock", cast("MagicMock", facts.publish).assert_called_once_with)([
         Fact(
             cube="genai_calls",
             org_id="org-1",
@@ -273,8 +298,11 @@ async def test_enricher_emits_one_fact_per_call_with_configured_dims(
         )
     ])
     assert {
-        tuple(sorted(c.kwargs))
-        for c in instruments["gen_ai_tokens_total"].inc.call_args_list
+        tuple(sorted(cast("dict[str, object]", c.kwargs)))
+        for c in cast(
+            "list[object]",
+            cast("MagicMock", instruments["gen_ai_tokens_total"].inc).call_args_list,
+        )
     } == {("model", "step", "type")}
 
 
@@ -294,7 +322,7 @@ async def test_enricher_fact_publish_error_never_fails_call() -> None:
       - a fact without an ``org_id`` dimension is not published
     """
     raising_publisher = MagicMock(spec=FactPublisher)
-    raising_publisher.publish.side_effect = RuntimeError("queue gone")
+    cast("MagicMock", raising_publisher.publish).side_effect = RuntimeError("queue gone")
     quiet_publisher = MagicMock(spec=FactPublisher)
 
     def _bad_dims() -> dict[str, str]:
@@ -309,16 +337,19 @@ async def test_enricher_fact_publish_error_never_fails_call() -> None:
     with patch(f"{_MODULE}.trace.get_current_span", return_value=_span(1, 2)):
         for publisher, dims in cases:
             inner = _llm()
-            expected = inner.complete.return_value
+            expected = cast("object", cast("MagicMock", inner.complete).return_value)
             enricher = cast(
                 "LLMProvider",
-                AiSpanEnricher(
-                    inner,
-                    options=AiSpanEnricherOptions(
-                        step="generate",
-                        capture_content=False,
-                        facts=publisher,
-                        fact_dimensions=dims,
+                cast(
+                    "object",
+                    AiSpanEnricher(
+                        inner,
+                        options=AiSpanEnricherOptions(
+                            step="generate",
+                            capture_content=False,
+                            facts=publisher,
+                            fact_dimensions=dims,
+                        ),
                     ),
                 ),
             )
@@ -327,5 +358,5 @@ async def test_enricher_fact_publish_error_never_fails_call() -> None:
                 is expected
             )
 
-    raising_publisher.publish.assert_called_once()
-    quiet_publisher.publish.assert_not_called()
+    cast("MagicMock", cast("MagicMock", raising_publisher.publish).assert_called_once)()
+    cast("MagicMock", cast("MagicMock", quiet_publisher.publish).assert_not_called)()

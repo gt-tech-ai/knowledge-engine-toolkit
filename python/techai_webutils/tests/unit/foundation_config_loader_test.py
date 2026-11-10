@@ -184,7 +184,7 @@ class TestYamlConfigLoader:
         assert cfg.port == _EXPECTED_PORT
 
     @staticmethod
-    def _make_loader(data: dict) -> YamlConfigLoader:  # type: ignore[type-arg]
+    def _make_loader(data: dict[str, object]) -> YamlConfigLoader:
         """Create a YamlConfigLoader from a dict by writing a temp YAML file.
 
         Returns:
@@ -193,5 +193,5 @@ class TestYamlConfigLoader:
         """
         with tempfile.TemporaryDirectory() as tmpdir:
             config_file = Path(tmpdir) / "base.yaml"
-            config_file.write_text(yaml.dump(data))
+            _ = config_file.write_text(yaml.dump(data))
             return YamlConfigLoader(tmpdir)

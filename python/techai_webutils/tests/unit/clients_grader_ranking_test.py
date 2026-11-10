@@ -15,7 +15,7 @@ import pytest
 from techai_webutils.clients.grader import GraderConfig, GraderKind, grader_from_config
 from techai_webutils.core.errors import AppError
 from techai_webutils.core.interfaces.dataset import EvalCase
-from techai_webutils.core.interfaces.evaluator import EvalOutput
+from techai_webutils.core.interfaces.grader import EvalOutput
 
 
 def _case(relevant: list[str]) -> EvalCase:
@@ -107,7 +107,7 @@ def test_ranking_grader_rejects_an_unknown_metric_or_a_cutoff_below_one(
       - An unknown metric and a cutoff below 1 each raise ``INVALID_INPUT`` naming it.
     """
     with pytest.raises(AppError, match=why):
-        grader_from_config(config)
+        _ = grader_from_config(config)
 
 
 @pytest.mark.asyncio
@@ -126,4 +126,4 @@ async def test_ranking_grader_rejects_a_case_without_relevance_judgments() -> No
     for expected in ({}, {"relevant": "{}"}, {"relevant": "[1]"}):
         case = EvalCase(id="q", inputs={}, expected=expected, metadata={})
         with pytest.raises(AppError, match="relevant"):
-            await grader.grade(case, EvalOutput("", (), "", retrieved=("a",)))
+            _ = await grader.grade(case, EvalOutput("", (), "", retrieved=("a",)))

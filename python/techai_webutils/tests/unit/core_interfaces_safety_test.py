@@ -54,6 +54,6 @@ def test_safety_result_is_frozen_and_kinds_are_stable() -> None:
     result = SafetyResult(flags=(), decision=SafetyDecision.ALLOW, redacted=None)
 
     with pytest.raises(dataclasses.FrozenInstanceError):
-        result.decision = SafetyDecision.BLOCK  # pyright: ignore[reportAttributeAccessIssue]
+        result.decision = SafetyDecision.BLOCK
     assert [kind.value for kind in ScanKind] == ["prompt", "answer"]
     assert [decision.value for decision in SafetyDecision] == ["allow", "redact", "block"]

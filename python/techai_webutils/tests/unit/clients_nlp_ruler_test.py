@@ -97,4 +97,4 @@ async def test_no_patterns_or_no_entities_task_leaves_output_unchanged() -> None
     assert other == [Annotation(entities=_STATISTICAL)]
     for label, phrase in (("", "x"), ("X", " ")):
         with pytest.raises(AppValueError):
-            RulerPattern(label, phrase)
+            _ = RulerPattern(label, phrase)

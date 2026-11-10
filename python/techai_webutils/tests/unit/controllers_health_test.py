@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from http import HTTPStatus
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -176,10 +177,10 @@ async def test_readyz_follows_the_drain_flag_and_the_dependency_probe() -> None:
         ready_status = (await client.get("/readyz")).status
         probe.return_value = ["models"]
         loading = await client.get("/readyz")
-        loading_body = await loading.json()
+        loading_body = cast("object", await loading.json())
         ready.return_value = False
         draining = await client.get("/readyz")
-        draining_body = await draining.json()
+        draining_body = cast("object", await draining.json())
         live = (await client.get("/healthz")).status
         metrics = await client.get("/metrics")
         openmetrics = await client.get(

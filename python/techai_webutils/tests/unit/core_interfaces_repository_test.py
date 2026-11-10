@@ -1,5 +1,6 @@
 """Tests for Repository, Transaction, and TransactionManager ABCs."""
 
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,6 +11,9 @@ from techai_webutils.core.interfaces.repository import (
     Transaction,
     TransactionManager,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class TestRepository:
@@ -32,7 +36,7 @@ class TestRepository:
             are abstract
         """
         with pytest.raises(TypeError):
-            Repository()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", Repository)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -52,8 +56,8 @@ class TestRepository:
             yields "entity-1" through the contract
         """
         repo = MagicMock(spec=Repository)
-        repo.get.return_value = "entity-1"
-        assert await repo.get("1") == "entity-1"
+        cast("MagicMock", repo.get).return_value = "entity-1"
+        assert await cast("MagicMock", repo.get)("1") == "entity-1"
 
     @staticmethod
     @pytest.mark.asyncio
@@ -71,9 +75,16 @@ class TestRepository:
             awaited with a PageRequest and yields a Page whose items are ["a"]
         """
         repo = MagicMock(spec=Repository)
-        repo.list.return_value = Page(items=["a"], total=1, page_size=10, page_number=1)
-        page = await repo.list({}, PageRequest(page_size=10, page_number=1))
-        assert page.items == ["a"]
+        cast("MagicMock", repo.list).return_value = Page(
+            items=["a"], total=1, page_size=10, page_number=1
+        )
+        page = cast(
+            "MagicMock",
+            await cast("MagicMock", repo.list)(
+                {}, PageRequest(page_size=10, page_number=1)
+            ),
+        )
+        assert cast("object", page.items) == ["a"]
 
     @staticmethod
     @pytest.mark.asyncio
@@ -90,8 +101,8 @@ class TestRepository:
             "x"
         """
         repo = MagicMock(spec=Repository)
-        repo.create.return_value = "x"
-        assert await repo.create("x") == "x"
+        cast("MagicMock", repo.create).return_value = "x"
+        assert await cast("MagicMock", repo.create)("x") == "x"
 
     @staticmethod
     @pytest.mark.asyncio
@@ -108,8 +119,8 @@ class TestRepository:
             the boolean True
         """
         repo = MagicMock(spec=Repository)
-        repo.exists.return_value = True
-        assert await repo.exists("1") is True
+        cast("MagicMock", repo.exists).return_value = True
+        assert await cast("MagicMock", repo.exists)("1") is True
 
 
 class TestTransaction:
@@ -130,7 +141,7 @@ class TestTransaction:
             rollback() are abstract
         """
         with pytest.raises(TypeError):
-            Transaction()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", Transaction)()
 
 
 class TestTransactionManager:
@@ -153,4 +164,4 @@ class TestTransactionManager:
             with_transaction() are abstract
         """
         with pytest.raises(TypeError):
-            TransactionManager()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", TransactionManager)()

@@ -1,7 +1,7 @@
 """Tests for the stub LLM provider + env-aware LLM factory."""
 
 from collections.abc import AsyncIterator
-from typing import Any, Self
+from typing import Self, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -14,6 +14,7 @@ from techai_webutils.clients.llm.ollama import OllamaLlmProvider
 from techai_webutils.clients.llm.stub import StubLlmProvider
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.llm import LLMConfig, LLMMessage
+from tests.json_path import dig
 
 _EXPECTED_ARGS = 1024
 _EXPECTED_OUTPUT_TOKENS = 6
@@ -34,7 +35,7 @@ def _messages(user: str) -> list[LLMMessage]:
 
 async def _converse_args(
     model: str, messages: list[LLMMessage], config: LLMConfig | None
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Run ``complete`` against a mocked bedrock-runtime client.
 
     Return the Converse kwargs sent.
@@ -52,8 +53,11 @@ async def _converse_args(
     session.create_client = MagicMock(return_value=client_cm)
     with patch("aiobotocore.session.get_session", return_value=session):
         async with BedrockLlmProvider(region="us-east-1", model=model) as provider:
-            await provider.complete(messages, config)
-    return runtime.converse.call_args.kwargs
+            _ = await provider.complete(messages, config)
+    return cast(
+        "dict[str, object]",
+        cast("MagicMock", cast("MagicMock", runtime.converse).call_args).kwargs,
+    )
 
 
 class TestStubLlmProvider:
@@ -135,7 +139,7 @@ class TestConverseArgs:
         assert args["modelId"] == "amazon.nova-lite-v1:0"
         assert args["system"] == [{"text": "instruction"}]
         assert args["messages"] == [{"role": "user", "content": [{"text": "hi"}]}]
-        assert args["inferenceConfig"]["maxTokens"] == _EXPECTED_ARGS
+        assert dig(args, "inferenceConfig", "maxTokens") == _EXPECTED_ARGS
 
     @staticmethod
     @pytest.mark.asyncio
@@ -178,7 +182,10 @@ class TestConverseArgs:
         """
         config = LLMConfig(max_tokens=4096, temperature=0.1, top_p=0.8)
         inf = (await _converse_args("m", _messages("hi"), config))["inferenceConfig"]
-        default = (await _converse_args("m", _messages("hi"), None))["inferenceConfig"]
+        default = cast(
+            "list[object]",
+            (await _converse_args("m", _messages("hi"), None))["inferenceConfig"],
+        )
         assert inf == {"maxTokens": 4096, "temperature": 0.1}
         assert "topP" not in default
 
@@ -274,7 +281,9 @@ class TestLlmFactory:
           - A bogus kind raises ValueError naming the kind.
         """
         with pytest.raises(AppValueError, match="llm kind"):
-            new_llm_from_config(LlmConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = new_llm_from_config(
+                LlmConfig(kind=cast("LlmKind", cast("object", "bogus")))
+            )
 
     @staticmethod
     @pytest.mark.parametrize("kind", [LlmKind.BEDROCK, LlmKind.OLLAMA])
@@ -296,9 +305,9 @@ class TestLlmFactory:
             all.
         """
         with pytest.raises(AppValueError, match="model"):
-            new_llm_from_config(LlmConfig(kind=kind, model=""))
+            _ = new_llm_from_config(LlmConfig(kind=kind, model=""))
         with pytest.raises(AppValueError, match="model"):
-            new_llm_from_config(LlmConfig(kind=kind))
+            _ = new_llm_from_config(LlmConfig(kind=kind))
 
 
 class TestOllamaLlmProvider:
@@ -324,14 +333,14 @@ class TestOllamaLlmProvider:
             assistant content, model, eval token count, and finish reason.
         """
         resp = MagicMock()
-        resp.json.return_value = {
+        cast("MagicMock", resp.json).return_value = {
             "model": "llama3.2",
             "message": {"role": "assistant", "content": "Ishmael had little money."},
             "done_reason": "stop",
             "prompt_eval_count": 12,
             "eval_count": 6,
         }
-        resp.raise_for_status.return_value = None
+        cast("MagicMock", resp.raise_for_status).return_value = None
         client = MagicMock(spec=httpx.AsyncClient)
         client.post = AsyncMock(return_value=resp)
 
@@ -339,10 +348,22 @@ class TestOllamaLlmProvider:
             _messages("Did Ishmael have money?")
         )
 
-        assert client.post.call_args.args[0] == "/api/chat"
-        sent = client.post.call_args.kwargs["json"]
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", client.post).call_args).args,
+            )[0]
+            == "/api/chat"
+        )
+        sent = cast(
+            "dict[str, object]",
+            cast("MagicMock", cast("MagicMock", client.post).call_args).kwargs["json"],
+        )
         assert sent["model"] == "llama3.2"
-        assert [m["role"] for m in sent["messages"]] == ["system", "user"]
+        assert [m["role"] for m in cast("list[dict[str, object]]", sent["messages"])] == [
+            "system",
+            "user",
+        ]
         assert response.content == "Ishmael had little money."
         assert response.model == "llama3.2"
         assert response.output_tokens == _EXPECTED_OUTPUT_TOKENS
@@ -369,7 +390,7 @@ class TestOllamaLlmProvider:
         """
         request = httpx.Request("POST", "http://ollama/api/chat")
         resp = MagicMock()
-        resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        cast("MagicMock", resp.raise_for_status).side_effect = httpx.HTTPStatusError(
             "service unavailable",
             request=request,
             response=httpx.Response(503, request=request),
@@ -378,7 +399,9 @@ class TestOllamaLlmProvider:
         client.post = AsyncMock(return_value=resp)
 
         with pytest.raises(AppError) as exc_info:
-            await OllamaLlmProvider(client, model="llama3.2").complete(_messages("hi"))
+            _ = await OllamaLlmProvider(client, model="llama3.2").complete(
+                _messages("hi")
+            )
 
         err = exc_info.value
         assert err.code == ErrorCode.UNAVAILABLE

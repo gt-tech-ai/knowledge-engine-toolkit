@@ -7,6 +7,8 @@ Why these tests are important:
   - Field defaults must match config.yaml to work in all environments
 """
 
+from typing import ClassVar
+
 import pytest
 from pydantic import ValidationError
 from pydantic_settings import SettingsConfigDict
@@ -277,7 +279,7 @@ def test_settings_subclass_owns_its_env_prefix(monkeypatch: pytest.MonkeyPatch) 
     """
 
     class MyAppSettings(DatabaseSettings):
-        model_config = SettingsConfigDict(
+        model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
             env_prefix="MYAPP_", frozen=True, extra="ignore"
         )
 
@@ -306,7 +308,7 @@ def test_telemetry_settings_read_the_standard_otel_variables(
     """
 
     class _Probe(TelemetrySettings, LoggingSettings):
-        model_config = SettingsConfigDict(
+        model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
             env_prefix="MYAPP_", frozen=True, extra="ignore"
         )
 

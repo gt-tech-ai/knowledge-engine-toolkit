@@ -61,7 +61,7 @@ def _discover_configs() -> dict[str, type[DataclassInstance]]:
     found: dict[str, type[DataclassInstance]] = {}
     for info in pkgutil.walk_packages(techai_webutils.__path__, "techai_webutils."):
         module = importlib.import_module(info.name)
-        for name, value in vars(module).items():
+        for name, value in cast("dict[str, object]", vars(module)).items():
             if (
                 isinstance(value, type)
                 and name.endswith("Config")

@@ -121,7 +121,7 @@ class TestRetry:
             raise NotFoundError(msg)
 
         with pytest.raises(NotFoundError):
-            always_missing()
+            _ = always_missing()
         assert len(attempts) == 1
 
     @staticmethod
@@ -143,7 +143,7 @@ class TestRetry:
             raise UnavailableError(msg)
 
         with pytest.raises(UnavailableError):
-            always_fails()
+            _ = always_fails()
 
 
 class TestCircuitBreaker:
@@ -248,9 +248,9 @@ class TestCircuitBreaker:
         assert isinstance(cb, CircuitBreakerInterface)
         assert cb.execute(_work) == "ok"
         with pytest.raises(UnavailableError):
-            cb.execute(_raise_unavailable)
+            _ = cb.execute(_raise_unavailable)
         with pytest.raises(CircuitOpenError):
-            cb.execute(_work)
+            _ = cb.execute(_work)
         assert calls == [1]
 
 
@@ -298,7 +298,7 @@ class TestTimeout:
             return "never"
 
         with pytest.raises(AppTimeoutError):
-            await with_timeout(slow(), seconds=0.05)
+            _ = await with_timeout(slow(), seconds=0.05)
 
 
 _DOWN = UnavailableError("dependency down")

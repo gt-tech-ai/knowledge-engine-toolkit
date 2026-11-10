@@ -115,7 +115,7 @@ def test_unknown_model_raises() -> None:
         model
     """
     with pytest.raises(AppError) as caught:
-        cost_of(_record("gpt-unknown", 1, 1, 0), _TABLE)
+        _ = cost_of(_record("gpt-unknown", 1, 1, 0), _TABLE)
 
     assert caught.value.code is ErrorCode.INVALID_INPUT
     assert caught.value.details == {"model": "gpt-unknown", "pricing_version": "2026-10"}

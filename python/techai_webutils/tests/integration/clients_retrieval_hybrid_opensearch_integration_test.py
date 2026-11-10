@@ -7,7 +7,7 @@ index and the fusion are real.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -57,7 +57,7 @@ def _embedder(vector: list[float]) -> EmbeddingProvider:
 
     """
     embedder = MagicMock(spec=EmbeddingProvider)
-    embedder.dimension.return_value = len(vector)
+    cast("MagicMock", embedder.dimension).return_value = len(vector)
     embedder.embed = AsyncMock(
         return_value=EmbeddingResult(embedding=vector, model="m", token_count=0)
     )

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -28,7 +26,7 @@ _GEN = RouteContext(tenant_id="org-1", step="generate")
 _SMALL_REQ = RouteRequirements(prompt_tokens=100, max_tokens=100)
 
 
-def _refs(catalog_raw: dict[str, Any]) -> tuple[CatalogEndpointRef, ...]:
+def _refs(catalog_raw: dict[str, object]) -> tuple[CatalogEndpointRef, ...]:
     """Return the fixture catalog's endpoint refs.
 
     Returns:
@@ -38,7 +36,7 @@ def _refs(catalog_raw: dict[str, Any]) -> tuple[CatalogEndpointRef, ...]:
     return ModelCatalog.from_mapping(catalog_raw, priced_ids=None).refs
 
 
-def test_pin_still_honours_data_policy(catalog_raw: dict[str, Any]) -> None:
+def test_pin_still_honours_data_policy(catalog_raw: dict[str, object]) -> None:
     """Test that a pin cannot route around residency rules.
 
     **Why this test is important:**
@@ -61,12 +59,14 @@ def test_pin_still_honours_data_policy(catalog_raw: dict[str, Any]) -> None:
     assert (pinned.direct_model, pinned.decider) == ("anthropic/sonnet", "admin_pin")
     assert pinned.rejections["anthropic/sonnet@usw2"] == "data_policy"
     with pytest.raises(AppError) as caught:
-        filter_candidates(refs, RoutingPolicy(pins={"*": "meta/small"}), _GEN, _SMALL_REQ)
+        _ = filter_candidates(
+            refs, RoutingPolicy(pins={"*": "meta/small"}), _GEN, _SMALL_REQ
+        )
     assert caught.value.code is ErrorCode.FORBIDDEN
 
 
 def test_filter_drops_models_whose_context_window_is_too_small(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that a prompt too large for a model's window drops that model for capability.
 
@@ -90,7 +90,7 @@ def test_filter_drops_models_whose_context_window_is_too_small(
     assert (result.direct_model, result.decider) == (None, "local")
 
 
-def test_filter_empty_policy_raises_forbidden(catalog_raw: dict[str, Any]) -> None:
+def test_filter_empty_policy_raises_forbidden(catalog_raw: dict[str, object]) -> None:
     """Test that policy excluding every endpoint is ``FORBIDDEN``, not a silent default.
 
     **Why this test is important:**
@@ -100,14 +100,16 @@ def test_filter_empty_policy_raises_forbidden(catalog_raw: dict[str, Any]) -> No
       - a region no endpoint runs in raises ``AppError(FORBIDDEN)``
     """
     with pytest.raises(AppError) as caught:
-        filter_candidates(
+        _ = filter_candidates(
             _refs(catalog_raw), RoutingPolicy(region="eu-central-1"), _GEN, _SMALL_REQ
         )
 
     assert caught.value.code is ErrorCode.FORBIDDEN
 
 
-def test_filter_no_model_fits_raises_invalid_input(catalog_raw: dict[str, Any]) -> None:
+def test_filter_no_model_fits_raises_invalid_input(
+    catalog_raw: dict[str, object],
+) -> None:
     """Test that a request no model can serve is ``INVALID_INPUT``.
 
     **Why this test is important:**
@@ -117,7 +119,7 @@ def test_filter_no_model_fits_raises_invalid_input(catalog_raw: dict[str, Any]) 
       - a 500k-token prompt raises ``AppError(INVALID_INPUT)``
     """
     with pytest.raises(AppError) as caught:
-        filter_candidates(
+        _ = filter_candidates(
             _refs(catalog_raw),
             RoutingPolicy(allow_off_cloud=True),
             _GEN,
@@ -128,7 +130,7 @@ def test_filter_no_model_fits_raises_invalid_input(catalog_raw: dict[str, Any]) 
 
 
 def test_user_mode_honours_explicit_model_choice_within_policy(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that an end user's model choice is served directly in ``user`` mode.
 
@@ -155,7 +157,7 @@ def test_user_mode_honours_explicit_model_choice_within_policy(
 
 
 def test_user_choice_outside_allow_list_raises_forbidden(
-    catalog_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
 ) -> None:
     """Test that a user's choice outside policy is refused, never substituted.
 
@@ -170,14 +172,14 @@ def test_user_choice_outside_allow_list_raises_forbidden(
     allow_haiku = RoutingPolicy(allow={"*": ("anthropic/haiku",)})
 
     with pytest.raises(AppError) as denied:
-        filter_candidates(
+        _ = filter_candidates(
             refs,
             allow_haiku,
             RouteContext(step="generate", model_preference="anthropic/sonnet"),
             _SMALL_REQ,
         )
     with pytest.raises(AppError) as unknown:
-        filter_candidates(
+        _ = filter_candidates(
             refs,
             RoutingPolicy(),
             RouteContext(step="generate", model_preference="openai/none"),
@@ -190,7 +192,7 @@ def test_user_choice_outside_allow_list_raises_forbidden(
 
 @pytest.mark.parametrize(("user_override", "decider"), [(False, "local"), (True, "user")])
 def test_overlord_mode_ignores_user_choice_unless_user_override(
-    catalog_raw: dict[str, Any], *, user_override: bool, decider: str
+    catalog_raw: dict[str, object], *, user_override: bool, decider: str
 ) -> None:
     """Test that overlord mode hands the choice.
 

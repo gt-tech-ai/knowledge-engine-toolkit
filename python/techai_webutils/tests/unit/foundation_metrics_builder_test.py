@@ -10,6 +10,8 @@ Run with: pytest tests/python/test_foundation/test_metrics_builder.py -v
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from prometheus_client import CollectorRegistry
 
@@ -73,9 +75,9 @@ class TestMetricsBuilder:
         **What it tests:**
           - ValueError raised for invalid kind
         """
-        config = MetricsConfig(kind="unknown")  # type: ignore[arg-type]
+        config = MetricsConfig(kind=cast("MetricsKind", cast("object", "unknown")))
         with pytest.raises(AppValueError, match="unknown"):
-            new_metrics_from_config(config)
+            _ = new_metrics_from_config(config)
 
     @staticmethod
     def test_default_config() -> None:

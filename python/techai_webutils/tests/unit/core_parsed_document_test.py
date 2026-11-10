@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 import pytest
 from hypothesis import given, settings
@@ -61,7 +62,12 @@ def test_parsed_document_round_trips_through_json(doc: ParsedDocument) -> None:
       - For any document, encoding, serializing to JSON text, and decoding gives an equal
         document.
     """
-    assert parsed_from_json(json.loads(json.dumps(parsed_to_json(doc)))) == doc
+    assert (
+        parsed_from_json(
+            cast("dict[str, object]", json.loads(json.dumps(parsed_to_json(doc))))
+        )
+        == doc
+    )
 
 
 def test_parsed_from_json_refuses_unknown_versions_and_malformed_payloads() -> None:
@@ -79,11 +85,11 @@ def test_parsed_from_json_refuses_unknown_versions_and_malformed_payloads() -> N
     good = parsed_to_json(ParsedDocument("x", DocumentFormat.TXT))
     for version in (PARSED_FORMAT_VERSION + 1, PARSED_FORMAT_VERSION - 2):
         with pytest.raises(AppValueError):
-            parsed_from_json({**good, "format_version": version})
+            _ = parsed_from_json({**good, "format_version": version})
     with pytest.raises(AppValueError):
-        parsed_from_json({"format_version": PARSED_FORMAT_VERSION})
+        _ = parsed_from_json({"format_version": PARSED_FORMAT_VERSION})
     with pytest.raises(AppValueError):
-        parsed_from_json({**good, "document_format": "nope"})
+        _ = parsed_from_json({**good, "document_format": "nope"})
     without_blocks = {k: v for k, v in good.items() if k != "blocks"}
     assert parsed_from_json(without_blocks).blocks == ()
 
@@ -139,4 +145,4 @@ def test_join_parsed_reassembles_parts_into_one_document() -> None:
         "parse_timeout"
     )
     with pytest.raises(AppValueError):
-        join_parsed([])
+        _ = join_parsed([])

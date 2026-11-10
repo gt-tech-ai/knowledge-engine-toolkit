@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -39,7 +39,7 @@ def _session(client: object) -> MagicMock:
     """
 
     @asynccontextmanager
-    async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[Any]:
+    async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[object]:
         yield client
 
     session = MagicMock()
@@ -79,14 +79,18 @@ async def test_comprehend_maps_entities_to_flags() -> None:
 
     async with check:
         first = await check.scan(_TEXT, kind=ScanKind.PROMPT)
-        await check.scan(_TEXT, kind=ScanKind.ANSWER)
+        _ = await check.scan(_TEXT, kind=ScanKind.ANSWER)
 
     assert isinstance(check, ComprehendSafetyCheck)
     assert first.flags == ("pii.ssn", "pii.email")
     assert first.decision is SafetyDecision.REDACT
     assert first.redacted == "SSN [REDACTED:ssn] and [REDACTED:email]"
-    session.create_client.assert_called_once_with("comprehend", region_name="eu-west-1")
-    client.detect_pii_entities.assert_awaited_with(Text=_TEXT, LanguageCode="en")
+    cast("MagicMock", cast("MagicMock", session.create_client).assert_called_once_with)(
+        "comprehend", region_name="eu-west-1"
+    )
+    cast("MagicMock", cast("AsyncMock", client.detect_pii_entities).assert_awaited_with)(
+        Text=_TEXT, LanguageCode="en"
+    )
 
 
 @pytest.mark.asyncio
@@ -163,10 +167,21 @@ async def test_guardrails_intervened_maps_to_decision() -> None:
         ("guardrail.intervened",),
         "masked",
     )
-    sources = [call.kwargs["source"] for call in client.apply_guardrail.await_args_list]
+    sources = [
+        cast("dict[str, object]", call.kwargs)["source"]
+        for call in cast(
+            "list[object]", cast("AsyncMock", client.apply_guardrail).await_args_list
+        )
+    ]
     assert sources == ["INPUT", "INPUT", "OUTPUT"]
     assert (
-        client.apply_guardrail.await_args_list[0].kwargs["guardrailIdentifier"] == "gr-1"
+        cast(
+            "dict[str, object]",
+            cast(
+                "list[object]", cast("AsyncMock", client.apply_guardrail).await_args_list
+            )[0].kwargs,
+        )["guardrailIdentifier"]
+        == "gr-1"
     )
 
 
@@ -202,7 +217,7 @@ async def test_managed_client_error_is_coded() -> None:
     )
 
     with pytest.raises(AppError) as caught:
-        await check.scan(_TEXT, kind=ScanKind.PROMPT)
+        _ = await check.scan(_TEXT, kind=ScanKind.PROMPT)
 
     assert caught.value.code is ErrorCode.UNAVAILABLE
 
@@ -224,14 +239,14 @@ async def test_managed_client_opens_once_and_bounds_each_call() -> None:
     opened = 0
 
     @asynccontextmanager
-    async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[Any]:
+    async def _open(*_args: object, **_kwargs: object) -> AsyncGenerator[object]:
         nonlocal opened
         opened += 1
         await asyncio.sleep(0)
         yield client
 
-    async def _hang(**_kwargs: object) -> dict[str, Any]:
-        await asyncio.Event().wait()
+    async def _hang(**_kwargs: object) -> dict[str, object]:
+        _ = await asyncio.Event().wait()
         return {}
 
     client = MagicMock()
@@ -242,12 +257,12 @@ async def test_managed_client_opens_once_and_bounds_each_call() -> None:
         SafetyConfig(kind=SafetyKind.COMPREHEND, timeout_seconds=0.05), session=session
     )
 
-    await asyncio.gather(
+    _ = await asyncio.gather(
         check.scan(_TEXT, kind=ScanKind.PROMPT), check.scan(_TEXT, kind=ScanKind.PROMPT)
     )
     client.detect_pii_entities = AsyncMock(side_effect=_hang)
     with pytest.raises(AppError) as caught:
-        await check.scan(_TEXT, kind=ScanKind.PROMPT)
+        _ = await check.scan(_TEXT, kind=ScanKind.PROMPT)
 
     assert opened == 1
     assert caught.value.code is ErrorCode.UNAVAILABLE

@@ -8,8 +8,9 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+from dataclasses import replace
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
@@ -53,6 +54,7 @@ from techai_webutils.core.interfaces.token_ledger import (
 from techai_webutils.foundation.metrics.metrics import PrometheusMetricsProvider
 from techai_webutils.foundation.tokens.cost import PriceTable
 from techai_webutils.foundation.tokens.policy import BudgetPolicy
+from tests.json_path import dig
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -90,10 +92,10 @@ def _decode(payload: bytes) -> object:
         A cached payload into a zero-token response.
 
     """
-    body = json.loads(payload)
+    body = cast("dict[str, object]", json.loads(payload))
     return LLMResponse(
-        content=body["text"],
-        model=body["model"],
+        content=cast("str", body["text"]),
+        model=cast("str", body["model"]),
         input_tokens=0,
         output_tokens=0,
         finish_reason="cache_hit",
@@ -117,8 +119,8 @@ def _decode_text(payload: bytes) -> tuple[str, str]:
         The cached text and model.
 
     """
-    body = json.loads(payload)
-    return body["text"], body["model"]
+    body = cast("dict[str, object]", json.loads(payload))
+    return str(body["text"]), str(body["model"])
 
 
 _BINDING = SemanticCacheBinding(
@@ -171,17 +173,22 @@ def _proxy(inner: MagicMock, cache: SemanticCache, **kwargs: object) -> LLMProvi
         The proxy.
 
     """
-    options: dict[str, Any] = {
-        "min_similarity": 0.95,
-        "ttl_seconds": 600,
-        "enabled": True,
-        "path": "generation",
-    }
-    options.update(kwargs)
+    options = replace(
+        SemanticCacheProxyOptions(
+            min_similarity=0.95, ttl_seconds=600, enabled=True, path="generation"
+        ),
+        **kwargs,
+    )
     return cast(
         "LLMProvider",
-        SemanticCacheProxy(
-            inner, cache, _BINDING, options=SemanticCacheProxyOptions(**options)
+        cast(
+            "object",
+            SemanticCacheProxy(
+                inner,
+                cache,
+                _BINDING,
+                options=options,
+            ),
         ),
     )
 
@@ -201,7 +208,7 @@ def _metrics() -> tuple[MagicMock, dict[str, MagicMock]]:
     return metrics, counters
 
 
-def _increments(counter: MagicMock) -> list[Any]:
+def _increments(counter: MagicMock) -> list[object]:
     """Return ``counter``'s non-zero ``inc`` calls.
 
     (dropping the 0 that creates a series).
@@ -210,7 +217,11 @@ def _increments(counter: MagicMock) -> list[Any]:
         ``counter``'s non-zero ``inc`` calls.
 
     """
-    return [c for c in counter.inc.call_args_list if c.args[0]]
+    return [
+        c
+        for c in cast("list[object]", cast("MagicMock", counter.inc).call_args_list)
+        if cast("list[object]", c.args)[0]
+    ]
 
 
 @pytest.mark.asyncio
@@ -235,7 +246,7 @@ async def test_semantic_cache_proxy_hit_short_circuits_wrapped() -> None:
         "cache_hit",
         0,
     )
-    inner.complete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()
     assert served_from_cache()
     assert on_hit.await_args is not None
     assert on_hit.await_args.args[3] == dataclasses.replace(_HIT, tier="semantic")
@@ -258,7 +269,7 @@ async def test_semantic_cache_proxy_miss_calls_wrapped_then_stores() -> None:
 
     assert response is _RESPONSE
     assert not served_from_cache()
-    cache.store.assert_awaited_once_with(
+    cast("MagicMock", cast("AsyncMock", cache.store).assert_awaited_once_with)(
         "what is the refund window", _encode(_RESPONSE), _NS, ttl_seconds=600
     )
 
@@ -303,7 +314,7 @@ async def test_semantic_cache_proxy_passthrough_for_non_bound_methods() -> None:
     stubbed = await _proxy(inner, StubSemanticCache()).complete(_MESSAGES)
 
     assert (name, disabled, stubbed) == ("sonnet", _RESPONSE, _RESPONSE)
-    cache.lookup.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", cache.lookup).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -329,14 +340,14 @@ async def test_semantic_cache_proxy_emits_hit_and_saving_metrics() -> None:
     metrics, counters = _metrics()
     org = {"fact_dimensions": lambda: {"org_id": "o1", "team": "t1"}}
 
-    await _proxy(
+    _ = await _proxy(
         _inner(),
         _cache(_HIT),
         metrics=metrics,
         saving=lambda _hit: Decimal("0.002"),
         **org,
     ).complete(_MESSAGES)
-    await _proxy(_inner(), _cache(), metrics=metrics, **org).complete(_MESSAGES)
+    _ = await _proxy(_inner(), _cache(), metrics=metrics, **org).complete(_MESSAGES)
 
     labels = {"org_id": "o1", "path": "generation", "workspace": "ws-1"}
     assert _increments(counters["semantic_cache_hits_total"]) == [
@@ -346,9 +357,25 @@ async def test_semantic_cache_proxy_emits_hit_and_saving_metrics() -> None:
         call(0.002, **labels)
     ]
     assert _increments(counters["semantic_cache_misses_total"]) == [call(1.0, **labels)]
-    assert counters["semantic_cache_lookups_total"].inc.call_count == _EXPECTED_CALL_COUNT
-    counters["semantic_cache_lookups_total"].inc.assert_called_with(1.0, **labels)
-    registered = {call.args[0]: call.args[2] for call in metrics.counter.call_args_list}
+    assert (
+        cast(
+            "object",
+            cast("MagicMock", counters["semantic_cache_lookups_total"].inc).call_count,
+        )
+        == _EXPECTED_CALL_COUNT
+    )
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", counters["semantic_cache_lookups_total"].inc
+        ).assert_called_with,
+    )(1.0, **labels)
+    registered = {
+        cast("list[object]", call.args)[0]: cast("list[object]", call.args)[2]
+        for call in cast(
+            "list[object]", cast("MagicMock", metrics.counter).call_args_list
+        )
+    }
     for name in (
         "semantic_cache_lookups_total",
         "semantic_cache_misses_total",
@@ -378,11 +405,16 @@ async def test_semantic_cache_proxy_counts_without_an_org() -> None:
     """
     metrics, counters = _metrics()
 
-    await _proxy(_inner(), _cache(), metrics=metrics).complete(_MESSAGES)
+    _ = await _proxy(_inner(), _cache(), metrics=metrics).complete(_MESSAGES)
 
     labels = {"org_id": "", "path": "generation", "workspace": "ws-1"}
     assert _increments(counters["semantic_cache_misses_total"]) == [call(1.0, **labels)]
-    counters["semantic_cache_lookups_total"].inc.assert_called_once_with(1.0, **labels)
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", counters["semantic_cache_lookups_total"].inc
+        ).assert_called_once_with,
+    )(1.0, **labels)
 
 
 @pytest.mark.asyncio
@@ -408,7 +440,7 @@ async def test_semantic_cache_proxy_creates_the_hit_series_on_the_first_miss() -
     proxy = _proxy(_inner(), cache, metrics=PrometheusMetricsProvider(registry), **org)
     labels = {"org_id": "o1", "path": "generation", "workspace": "ws-1"}
 
-    await proxy.complete(_MESSAGES)
+    _ = await proxy.complete(_MESSAGES)
 
     for tier in ("exact", "semantic", "verified"):
         assert registry.get_sample_value(
@@ -422,7 +454,7 @@ async def test_semantic_cache_proxy_creates_the_hit_series_on_the_first_miss() -
     ) == pytest.approx(1.0)
 
     cache.lookup = AsyncMock(return_value=_HIT)
-    await proxy.complete(_MESSAGES)
+    _ = await proxy.complete(_MESSAGES)
 
     assert registry.get_sample_value(
         "semantic_cache_hits_total", {**labels, "tier": "semantic"}
@@ -441,24 +473,34 @@ async def test_semantic_cache_proxy_emits_cache_lookups_fact() -> None:
         publishes outcome ``miss``
     """
     facts = MagicMock(spec=FactPublisher)
-    options: dict[str, Any] = {
+    options: dict[str, object] = {
         "facts": facts,
         "fact_dimensions": lambda: {"org_id": "org-1"},
         "saving": lambda _hit: Decimal("0.002"),
     }
 
-    await _proxy(_inner(), _cache(_HIT), **options).complete(_MESSAGES)
-    await _proxy(_inner(), _cache(), **options).complete(_MESSAGES)
+    _ = await _proxy(_inner(), _cache(_HIT), **(options)).complete(_MESSAGES)
+    _ = await _proxy(_inner(), _cache(), **(options)).complete(_MESSAGES)
 
-    hit, miss = (call.args[0][0] for call in facts.publish.call_args_list)
-    assert (hit.cube, hit.org_id) == ("cache_lookups", "org-1")
-    assert (hit.dims["outcome"], hit.dims["similarity_bin"], hit.dims["workspace"]) == (
+    hit, miss = (
+        dig(cast("list[object]", call.args), 0, 0)
+        for call in cast("list[object]", cast("MagicMock", facts.publish).call_args_list)
+    )
+    assert (cast("object", hit.cube), cast("object", hit.org_id)) == (
+        "cache_lookups",
+        "org-1",
+    )
+    assert (
+        cast("dict[str, object]", hit.dims)["outcome"],
+        cast("dict[str, object]", hit.dims)["similarity_bin"],
+        cast("dict[str, object]", hit.dims)["workspace"],
+    ) == (
         "hit",
         "0.95",
         "ws-1",
     )
-    assert hit.measures == {"lookups": 1.0, "saving_usd": 0.002}
-    assert miss.dims["outcome"] == "miss"
+    assert cast("object", hit.measures) == {"lookups": 1.0, "saving_usd": 0.002}
+    assert cast("dict[str, object]", miss.dims)["outcome"] == "miss"
 
 
 @pytest.mark.asyncio
@@ -480,7 +522,7 @@ async def test_fact_publisher_error_never_turns_hit_into_miss() -> None:
     ).complete(_MESSAGES)
 
     assert response.finish_reason == "cache_hit"
-    inner.complete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()
 
 
 async def _items(
@@ -533,7 +575,7 @@ async def test_stream_hit_replays_cached_text_without_opening_inner() -> None:
         model="sonnet", input_tokens=0, output_tokens=0, finish_reason="cache_hit"
     )
     assert "".join(text) == "30 days"
-    inner.stream_with_usage.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.stream_with_usage).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -565,7 +607,7 @@ async def test_stream_hit_is_handed_to_on_hit_as_a_response() -> None:
     text = "".join([item async for item in stream])
 
     assert on_hit.await_args is not None
-    handed = on_hit.await_args.args[2]
+    handed = cast("object", on_hit.await_args.args[2])
     assert isinstance(handed, LLMResponse)
     assert (handed.content, handed.model) == ("30 days", "sonnet")
     assert text == "[redacted]"
@@ -590,7 +632,7 @@ async def test_hit_hook_coded_error_refuses_the_hit(code: ErrorCode) -> None:
     refusing = AsyncMock(side_effect=AppError(code, "refused"))
 
     with pytest.raises(AppError) as caught:
-        await _proxy(_inner(), _cache(_HIT), on_hit=refusing).complete(_MESSAGES)
+        _ = await _proxy(_inner(), _cache(_HIT), on_hit=refusing).complete(_MESSAGES)
 
     assert caught.value.code is code
     assert not served_from_cache()
@@ -615,7 +657,12 @@ async def test_hit_hook_uncoded_failure_serves_the_hit() -> None:
     ).complete(_MESSAGES)
 
     assert response.content == "30 days"
-    counters["semantic_cache_proxy_errors_total"].inc.assert_any_call(1.0, op="on_hit")
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", counters["semantic_cache_proxy_errors_total"].inc
+        ).assert_any_call,
+    )(1.0, op="on_hit")
 
 
 @pytest.mark.asyncio
@@ -642,7 +689,12 @@ async def test_stream_hit_ignores_a_non_response_replacement() -> None:
     text = "".join([item async for item in stream])
 
     assert text == "30 days"
-    counters["semantic_cache_proxy_errors_total"].inc.assert_any_call(1.0, op="on_hit")
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", counters["semantic_cache_proxy_errors_total"].inc
+        ).assert_any_call,
+    )(1.0, op="on_hit")
 
 
 @pytest.mark.asyncio
@@ -666,7 +718,7 @@ async def test_stream_miss_stores_after_full_consumption() -> None:
     ]
 
     assert items == ["30 ", "days", _USAGE]
-    cache.store.assert_awaited_once_with(
+    cast("MagicMock", cast("AsyncMock", cache.store).assert_awaited_once_with)(
         "what is the refund window", _encode(_RESPONSE), _NS, ttl_seconds=600
     )
 
@@ -696,11 +748,11 @@ async def test_abandoned_stream_stores_nothing() -> None:
     inner.stream_with_usage = AsyncMock(
         side_effect=lambda *_a, **_k: _items("30 ", "days", _USAGE)
     )
-    stream = cast("Any", await proxy.stream_with_usage(_MESSAGES))
-    await anext(stream)
-    await stream.aclose()
+    stream = cast("MagicMock", cast("object", await proxy.stream_with_usage(_MESSAGES)))
+    _ = await anext(cast("AsyncIterator[object]", stream))
+    await cast("MagicMock", stream.aclose)()
 
-    cache.store.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", cache.store).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -755,29 +807,43 @@ async def test_accounting_over_cache_records_a_hit_as_zero_tokens() -> None:
     def accounted() -> LLMProvider:
         return cast(
             "LLMProvider",
-            TokenAccountingProxy(
-                _proxy(_inner(), cache),
-                options=TokenAccountingOptions(
-                    ledger=ledger,
-                    scope=lambda: UsageScope(org_id="org-1"),
-                    prices=PriceTable(prices={}, version="v1"),
-                    policy=BudgetPolicy(),
-                    step="generate",
+            cast(
+                "object",
+                TokenAccountingProxy(
+                    _proxy(_inner(), cache),
+                    options=TokenAccountingOptions(
+                        ledger=ledger,
+                        scope=lambda: UsageScope(org_id="org-1"),
+                        prices=PriceTable(prices={}, version="v1"),
+                        policy=BudgetPolicy(),
+                        step="generate",
+                    ),
                 ),
             ),
         )
 
-    await accounted().complete(_MESSAGES)
+    _ = await accounted().complete(_MESSAGES)
     cache.lookup = AsyncMock(return_value=None)
-    await accounted().complete(_MESSAGES)
+    _ = await accounted().complete(_MESSAGES)
 
-    hit, miss = (call.args[0] for call in ledger.record.await_args_list)
-    assert (hit.operation, hit.input_tokens, hit.output_tokens) == (
+    hit, miss = (
+        cast("list[object]", call.args)[0]
+        for call in cast("list[object]", cast("AsyncMock", ledger.record).await_args_list)
+    )
+    assert (
+        cast("object", hit.operation),
+        cast("object", hit.input_tokens),
+        cast("object", hit.output_tokens),
+    ) == (
         "generate.cache_hit",
         0,
         0,
     )
-    assert (miss.operation, miss.input_tokens, miss.output_tokens) == ("generate", 9, 3)
+    assert (
+        cast("object", miss.operation),
+        cast("object", miss.input_tokens),
+        cast("object", miss.output_tokens),
+    ) == ("generate", 9, 3)
 
 
 @pytest.mark.asyncio
@@ -809,12 +875,12 @@ async def test_semantic_cache_proxy_reads_through_an_injected_tier_chain(
     )
     inner, cache = _inner(), _cache()
 
-    await _proxy(inner, cache, metrics=metrics, lookup=lookup).complete(_MESSAGES)
+    _ = await _proxy(inner, cache, metrics=metrics, lookup=lookup).complete(_MESSAGES)
 
-    inner.complete.assert_not_awaited()
-    cache.lookup.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()
+    cast("MagicMock", cast("AsyncMock", cache.lookup).assert_not_awaited)()
     hits = _increments(counters["semantic_cache_hits_total"])
-    assert [c.kwargs["tier"] for c in hits] == ["exact"]
+    assert [cast("dict[str, object]", c.kwargs)["tier"] for c in (hits)] == ["exact"]
     (span,) = exporter.get_finished_spans()
     assert span.attributes is not None
     assert span.attributes["semantic_cache.tier"] == "exact"

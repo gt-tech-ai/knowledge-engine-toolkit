@@ -6,6 +6,7 @@ In-flight tasks bounded by the cluster's schedulable CPU slots.
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
@@ -43,10 +44,10 @@ def _runtime(cluster_cpus: float) -> MagicMock:
         A generated-mock ``RayRuntime`` reporting ``cluster_cpus``.
 
     """
-    runtime = create_autospec(RayRuntime, instance=True)
+    runtime = cast("object", create_autospec(RayRuntime, instance=True))
     runtime.warm_up = AsyncMock()
     runtime.cluster_cpus = AsyncMock(return_value=cluster_cpus)
-    return runtime
+    return cast("MagicMock", runtime)
 
 
 async def _mapper(item: int) -> StepResult:
@@ -111,7 +112,7 @@ class TestRayExecutorWidth:
         runtime = _runtime(32.0)
 
         assert await RayExecutor(runtime).width(64) == _EXPECTED_WIDTH_64
-        runtime.cluster_cpus.assert_not_awaited()
+        cast("MagicMock", cast("AsyncMock", runtime.cluster_cpus).assert_not_awaited)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -165,10 +166,16 @@ class TestRuntimeClusterCpus:
             and a task is scheduled through ``.options(memory=…, num_cpus=…)``.
         """
         ray = MagicMock()
-        ray.is_initialized.return_value = True
-        ray.cluster_resources.side_effect = [{"CPU": 24.0, "memory": 1.0}, {}]
+        cast("MagicMock", ray.is_initialized).return_value = True
+        cast("MagicMock", ray.cluster_resources).side_effect = [
+            {"CPU": 24.0, "memory": 1.0},
+            {},
+        ]
         mapper = MagicMock()
-        mapper.options.return_value.remote.side_effect = lambda *_: _mapper(1)
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", mapper.options).return_value).remote,
+        ).side_effect = lambda *_: _mapper(1)
         with patch(f"{_MODULE}.ray", ray), patch(f"{_MODULE}._run_mapper", mapper):
             runtime = RealRayRuntime(
                 options=RealRayRuntimeOptions(
@@ -176,10 +183,12 @@ class TestRuntimeClusterCpus:
                 )
             )
             cpus = [await runtime.cluster_cpus(), await runtime.cluster_cpus()]
-            await runtime.submit(_mapper, 1)
+            _ = await runtime.submit(_mapper, 1)
 
         assert cpus == [24.0, 0.0]
-        mapper.options.assert_called_once_with(memory=2 << 30, num_cpus=2.0)
+        cast("MagicMock", cast("MagicMock", mapper.options).assert_called_once_with)(
+            memory=2 << 30, num_cpus=2.0
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -201,7 +210,7 @@ class TestRuntimeClusterCpus:
         assert await ResilientRayRuntime(
             inner, options=ResilientRayRuntimeOptions()
         ).cluster_cpus() == pytest.approx(12.0)
-        inner.warm_up.assert_awaited_once()
+        cast("MagicMock", cast("AsyncMock", inner.warm_up).assert_awaited_once)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -219,8 +228,8 @@ class TestRuntimeClusterCpus:
             cluster has width 16 under a cap of 64.
         """
         ray = MagicMock()
-        ray.is_initialized.return_value = True
-        ray.cluster_resources.return_value = {"CPU": 32.0}
+        cast("MagicMock", ray.is_initialized).return_value = True
+        cast("MagicMock", ray.cluster_resources).return_value = {"CPU": 32.0}
         with patch(f"{_MODULE}.ray", ray):
             executor = executor_from_config(
                 ExecutorConfig(kind="ray", ray_task_num_cpus=2.0)

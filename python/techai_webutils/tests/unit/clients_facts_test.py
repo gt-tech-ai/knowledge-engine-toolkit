@@ -6,7 +6,7 @@ import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -72,7 +72,7 @@ def _dropped_counter() -> tuple[MagicMock, MagicMock]:
     """
     counter = MagicMock(spec=MetricCounter)
     metrics = MagicMock(spec=MetricsProvider)
-    metrics.counter.return_value = counter
+    cast("MagicMock", metrics.counter).return_value = counter
     return metrics, counter
 
 
@@ -120,7 +120,7 @@ def test_factory_builds_stub_by_default_and_rejects_unknown_kinds() -> None:
         ),
     ):
         with pytest.raises(AppError) as caught:
-            new_fact_publisher_from_config(config, publisher=publisher)
+            _ = new_fact_publisher_from_config(config, publisher=publisher)
         assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
@@ -152,13 +152,18 @@ async def test_messaging_publisher_drops_and_counts_when_full() -> None:
     )
 
     publisher.publish([_fact(1), _fact(2), _fact(3)])
-    assert dropped.inc.call_args_list == [((), {"reason": "buffer_full"})]
+    assert cast("object", cast("MagicMock", dropped.inc).call_args_list) == [
+        ((), {"reason": "buffer_full"})
+    ]
 
     async with publisher:
         pass
 
-    assert dropped.inc.call_args_list[1] == ((2,), {"reason": "publish_error"})
-    metrics.counter.assert_called_once_with(
+    assert cast("list[object]", cast("MagicMock", dropped.inc).call_args_list)[1] == (
+        (2,),
+        {"reason": "publish_error"},
+    )
+    cast("MagicMock", cast("MagicMock", metrics.counter).assert_called_once_with)(
         "gen_ai_fact_dropped_total",
         "Analytics facts dropped before publish, by reason.",
         ["reason"],
@@ -183,7 +188,11 @@ async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose(
       - after ``aclose``, one more published fact counts ``inc(reason="closed")``
     """
     metrics, dropped = _dropped_counter()
-    dropped.inc.side_effect = [RuntimeError("metrics down"), None, None]
+    cast("MagicMock", dropped.inc).side_effect = [
+        RuntimeError("metrics down"),
+        None,
+        None,
+    ]
     transport = MagicMock(spec=MessagePublisher)
     transport.publish_batch = AsyncMock(side_effect=RuntimeError("sqs down"))
     publisher = MessagingFactPublisher(
@@ -214,17 +223,17 @@ async def test_messaging_publisher_closes_when_the_sender_dies_and_after_aclose(
         async with publisher:
             publisher.publish([_fact(1)])
             [sender] = senders
-            await asyncio.wait([sender])
+            _ = await asyncio.wait([sender])
             publisher.publish([_fact(2), _fact(3)])
             await publisher.aclose()
             publisher.publish([_fact(4)])
 
-    assert dropped.inc.call_args_list == [
+    assert cast("object", cast("MagicMock", dropped.inc).call_args_list) == [
         ((), {"reason": "publish_error"}),
         ((2,), {"reason": "closed"}),
         ((), {"reason": "closed"}),
     ]
-    assert transport.publish_batch.await_count == 1
+    assert (cast("AsyncMock", transport.publish_batch).await_count) == 1
 
 
 @pytest.mark.asyncio
@@ -255,7 +264,12 @@ async def test_messaging_publisher_batches_by_ten() -> None:
     async with publisher:
         pass
 
-    sent = [c.args for c in transport.publish_batch.await_args_list]
+    sent = [
+        cast("tuple[str, list[object]]", c.args)
+        for c in cast(
+            "list[object]", cast("AsyncMock", transport.publish_batch).await_args_list
+        )
+    ]
     assert [topic for topic, _ in sent] == ["facts", "facts", "facts"]
     assert [len(batch) for _, batch in sent] == [10, 10, 5]
     assert [payload for _, batch in sent for payload in batch] == [
@@ -364,7 +378,7 @@ def test_fact_json_round_trips(
     )
 
     raw = fact.to_json()
-    body = json.loads(raw)
+    body = cast("dict[str, object]", json.loads(raw))
 
     assert (
         body["cube"],
@@ -380,7 +394,9 @@ def test_fact_json_round_trips(
         fact.schema,
     )
     assert body["measures"] == {k: float(v) for k, v in measures.items()}
-    assert not any(isinstance(v, bool) for v in body["measures"].values())
-    assert body["ts"].endswith("Z")
-    assert datetime.fromisoformat(body["ts"]) == ts
+    assert not any(
+        isinstance(v, bool) for v in cast("list[object]", body["measures"].values())
+    )
+    assert cast("MagicMock", body["ts"].endswith)("Z")
+    assert datetime.fromisoformat(cast("str", body["ts"])) == ts
     assert not any(c in raw for c in (b"<", b">", b"&"))

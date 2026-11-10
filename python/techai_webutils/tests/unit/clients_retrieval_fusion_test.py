@@ -145,6 +145,6 @@ def test_bad_fusion_config_is_refused() -> None:
     bogus.kind = "bogus"
 
     with pytest.raises(AppValueError):
-        fuse(FusionConfig(kind=FusionKind.CONVEX, dense_weight=1.5), [], [])
+        _ = fuse(FusionConfig(kind=FusionKind.CONVEX, dense_weight=1.5), [], [])
     with pytest.raises(AppValueError):
-        fuse(bogus, [], [])
+        _ = fuse(bogus, [], [])

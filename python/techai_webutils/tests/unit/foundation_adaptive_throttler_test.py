@@ -38,19 +38,19 @@ async def test_rejection_rises_on_failure_and_eases_on_recovery() -> None:
     )  # never shed → op always runs
 
     for _ in range(10):  # healthy: accepts keep pace with requests
-        await throttle.do(_ok)
+        _ = await throttle.do(_ok)
     assert throttle.rejection_probability == pytest.approx(0.0), (
         "a healthy backend is not throttled"
     )
 
     for _ in range(20):  # backend down: accepts frozen while requests climb
         with pytest.raises(RuntimeError):
-            await throttle.do(_fail)
+            _ = await throttle.do(_fail)
     fail_prob = throttle.rejection_probability
     assert fail_prob > 0.0, "sustained failure must raise the rejection probability"
 
     for _ in range(40):  # recovery: accepts climb again
-        await throttle.do(_ok)
+        _ = await throttle.do(_ok)
     assert throttle.rejection_probability < fail_prob, (
         "rejection eases as the backend recovers"
     )
@@ -77,7 +77,7 @@ async def test_sheds_locally_without_calling_op() -> None:
     # First call: probability is 0 at cold start, so it is allowed; its failure builds p >
     # 0.
     with pytest.raises(RuntimeError):
-        await throttle.do(_fail)
+        _ = await throttle.do(_fail)
 
     called = False
 

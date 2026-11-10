@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import asyncpg
 import pytest
@@ -39,6 +39,9 @@ _DDL = (
 )
 _INTERVAL = 0.3
 
+_STARTED_SQL = "SELECT last_start_at > 'epoch' FROM bedrock_start_rate WHERE account = $1"
+"""Whether the account has recorded a start since the epoch."""
+
 
 @pytest_asyncio.fixture
 async def pool(postgres_dsn: str) -> AsyncIterator[asyncpg.Pool]:
@@ -49,8 +52,8 @@ async def pool(postgres_dsn: str) -> AsyncIterator[asyncpg.Pool]:
 
     """
     pool = await asyncpg.create_pool(postgres_dsn, min_size=1, max_size=8)
-    await pool.execute(_DDL)
-    await pool.execute("TRUNCATE bedrock_start_rate")
+    _ = await pool.execute(_DDL)
+    _ = await pool.execute("TRUNCATE bedrock_start_rate")
     try:
         yield pool
     finally:
@@ -112,7 +115,7 @@ async def test_six_pods_five_hold_and_starts_are_paced(
             await stack.enter_async_context(_budget(pool, postgres_dsn, timeout=3.0))
             for _ in range(7)
         ]
-        await asyncio.gather(*(take(b, n) for n, b in enumerate(budgets[:6])))
+        _ = await asyncio.gather(*(take(b, n) for n, b in enumerate(budgets[:6])))
 
         slots = [slot for _, slot in granted if slot is not None]
         assert len(slots) == _EXPECTED_SLOTS_COUNT
@@ -161,10 +164,13 @@ async def test_a_budget_built_from_a_dsn_paces_through_its_own_pool(
     async with budget:
         slot = await budget.acquire("kb:ds")
         assert slot is not None
-        stamped = await pool.fetchval(
-            "SELECT last_start_at > 'epoch' FROM bedrock_start_rate WHERE account = $1",
-            "acct-dsn",
+        stamped = cast(
+            "object",
+            await pool.fetchval(
+                _STARTED_SQL,
+                "acct-dsn",
+            ),
         )
         assert stamped is True
     with pytest.raises(InternalError):
-        await budget.acquire("kb:ds")
+        _ = await budget.acquire("kb:ds")

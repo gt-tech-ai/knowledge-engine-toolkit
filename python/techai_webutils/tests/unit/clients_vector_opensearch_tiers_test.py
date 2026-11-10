@@ -94,4 +94,4 @@ def test_render_policy_chains_the_configured_tiers_and_refuses_unusable_ones() -
         TierPolicy(policy_id="p", cold_after="1d"),
     ):
         with pytest.raises(AppValueError):
-            render_policy(bad)
+            _ = render_policy(bad)

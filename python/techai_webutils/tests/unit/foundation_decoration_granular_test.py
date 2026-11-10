@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from typing import Protocol
+from typing import Protocol, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -44,7 +44,9 @@ def _with(
     return dataclasses.replace(
         config,
         **{
-            name: dataclasses.replace(getattr(config, name), overrides=overrides)
+            name: dataclasses.replace(
+                cast("decoration.Tier", getattr(config, name)), overrides=overrides
+            )
             for name, overrides in tiers.items()
         },
     )
@@ -103,8 +105,8 @@ def test_deps_refuses_an_override_turning_on_a_layer_its_tier_lacks() -> None:
     decorations = Decorations(config)
 
     with pytest.raises(AppValueError, match=r"app\.ask turns on retry"):
-        decorations.deps(workflow_tier(), "app.ask")
-    decorations.deps(workflow_tier(), "app.quiet")
+        _ = decorations.deps(workflow_tier(), "app.ask")
+    _ = decorations.deps(workflow_tier(), "app.quiet")
     assert decorations.deps(repository_tier(), "app.docs").breaker is not None
 
 
@@ -128,8 +130,8 @@ def test_verify_fails_on_an_override_no_component_uses() -> None:
         pipelines={"app": decoration.Layers(logging=True)},
     )
     decorations = Decorations(config)
-    decorations.deps(repository_tier(), "app.documents")
-    decorations.subject(pipeline_tier(), "app.documents.create")
+    _ = decorations.deps(repository_tier(), "app.documents")
+    _ = decorations.subject(pipeline_tier(), "app.documents.create")
 
     with pytest.raises(AppValueError) as raised:
         decorations.verify("app")
@@ -139,8 +141,8 @@ def test_verify_fails_on_an_override_no_component_uses() -> None:
 
     clean_config = _with(config, repositories={"app.documents": on, "other.users": on})
     clean = Decorations(clean_config)
-    clean.deps(repository_tier(), "app.documents")
-    clean.subject(pipeline_tier(), "app.documents.create")
+    _ = clean.deps(repository_tier(), "app.documents")
+    _ = clean.subject(pipeline_tier(), "app.documents.create")
     clean.verify("app")
 
     broken = Decorations(
@@ -151,7 +153,7 @@ def test_verify_fails_on_an_override_no_component_uses() -> None:
             },
         )
     )
-    broken.subject(workflow_tier(), "app.ask")
+    _ = broken.subject(workflow_tier(), "app.ask")
     with pytest.raises(AppValueError, match="retry"):
         broken.verify("app")
 
@@ -186,7 +188,7 @@ async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name(
     """
     logger = MagicMock()
     logged: list[str] = []
-    logger.debug.side_effect = lambda _msg, **fields: logged.extend(  # pyright: ignore[reportUnknownLambdaType]
+    cast("MagicMock", logger.debug).side_effect = lambda _msg, **fields: logged.extend(
         f"{v}.{fields['operation']}" for k, v in fields.items() if k != "operation"
     )
     config = _with(
@@ -215,7 +217,7 @@ async def test_configured_bases_resolve_each_stage_job_and_gate_by_its_own_name(
         JobMeta(name="sweep", group="events"), sweep
     )
     gate = new_gate("events.nightly").serial("sweep", job).decorate(decorations).build()
-    await run_gate(gate)
+    _ = await run_gate(gate)
 
     assert "app.documents.create" in logged
     assert "app.documents.delete" not in logged

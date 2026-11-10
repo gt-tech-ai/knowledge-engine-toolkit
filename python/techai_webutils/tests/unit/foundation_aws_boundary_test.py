@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
-from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to_app_error
@@ -81,7 +83,9 @@ class TestBotocoreErrorToAppError:
             maps to UNAVAILABLE. The original error is kept as the cause and the operation
             name is in the message.
         """
-        err = botocore_error_to_app_error(error, "bedrock retrieve")  # type: ignore[arg-type]
+        err = botocore_error_to_app_error(
+            cast("ClientError | BotoCoreError", error), "bedrock retrieve"
+        )
 
         assert isinstance(err, AppError)
         assert err.code is expected_code

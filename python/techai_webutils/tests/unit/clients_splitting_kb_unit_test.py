@@ -7,6 +7,8 @@ and a missing "always >=1 chunk" invariant would silently drop a document.
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from techai_webutils.clients.splitting import (
@@ -151,4 +153,6 @@ class TestKbUnitSplitterFactory:
         (the Go NewFromConfig contract).
         """
         with pytest.raises(AppValueError, match="unknown splitter kind"):
-            splitter_from_config(SplitterConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = splitter_from_config(
+                SplitterConfig(kind=cast("SplitterKind", cast("object", "bogus")))
+            )

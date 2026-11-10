@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -34,7 +35,7 @@ def _embedder(dimension: int = 3) -> EmbeddingProvider:
 
     """
     embedder = MagicMock(spec=EmbeddingProvider)
-    embedder.dimension.return_value = dimension
+    cast("MagicMock", embedder.dimension).return_value = dimension
     embedder.embed_batch = AsyncMock(
         side_effect=lambda texts: [
             EmbeddingResult(embedding=[0.1, 0.2, 0.3], model="m", token_count=0)
@@ -289,7 +290,9 @@ class TestVectorKnowledgeBase:
           - ``embed_concurrency=0`` raises ``AppError`` with ``INVALID_INPUT``
         """
         with pytest.raises(AppError) as info:
-            VectorKnowledgeBase(_embedder(), _store(), "documents", embed_concurrency=0)
+            _ = VectorKnowledgeBase(
+                _embedder(), _store(), "documents", embed_concurrency=0
+            )
         assert info.value.code is ErrorCode.INVALID_INPUT
 
     @staticmethod
@@ -326,25 +329,30 @@ class TestVectorKnowledgeBase:
     @staticmethod
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        ("stored", "reindex"),
+        ("stored", "attributes", "document_name"),
         [
             (
                 _indexed("doc-1", range(150), level="public"),
-                {"attributes": {"level": "restricted"}},
+                {"level": "restricted"},
+                "",
             ),
             (
                 _indexed("doc-1", range(150), level="public", tenant="t1"),
-                {"attributes": {"level": "public"}},
+                {"level": "public"},
+                "",
             ),
             (
                 _indexed("doc-1", range(150), level="public"),
-                {"attributes": {"level": "public"}, "document_name": "a.pdf"},
+                {"level": "public"},
+                "a.pdf",
             ),
         ],
         ids=["changed-attribute", "removed-attribute", "changed-document-name"],
     )
     async def test_index_document_rewrites_sub_batches_whose_stored_metadata_differs(
-        stored: dict[str, dict[str, str]], reindex: dict[str, object]
+        stored: dict[str, dict[str, str]],
+        attributes: dict[str, str],
+        document_name: str,
     ) -> None:
         """Re-indexing a present document with other attributes.
 
@@ -365,14 +373,19 @@ class TestVectorKnowledgeBase:
         embedder, store = _embedder(), _store(stored=stored)
         kb = VectorKnowledgeBase(embedder, store, "documents")
 
-        await kb.index_document("doc-1", [f"chunk-{i}" for i in range(150)], **reindex)  # type: ignore[arg-type]
+        await kb.index_document(
+            "doc-1",
+            [f"chunk-{i}" for i in range(150)],
+            attributes=attributes,
+            document_name=document_name,
+        )
 
         assert embedder.embed_batch.await_count == _EXPECTED_AWAIT_COUNT
         entries = [e for call in store.upsert.call_args_list for e in call.args[1]]
         assert [e.id for e in entries] == [f"doc-1:{i}" for i in range(150)]
-        expected_name = str(reindex.get("document_name", "doc-1"))
+        expected_name = document_name or "doc-1"
         assert entries[5].metadata == {
-            **reindex["attributes"],  # type: ignore[dict-item]
+            **attributes,
             "document_name": expected_name,
             "chunk_index": "5",
         }
@@ -457,7 +470,7 @@ class TestVectorKnowledgeBase:
         (single source of truth).
         """
         with pytest.raises(AppValueError, match="dimension"):
-            VectorKnowledgeBase(
+            _ = VectorKnowledgeBase(
                 _embedder(dimension=768), _store(dimension=3), "documents"
             )
 
@@ -498,7 +511,7 @@ class TestKnowledgeBaseFactory:
         embedder = None if missing == "embedder" else _embedder(dimension=768)
         store = None if missing == "store" else _store(dimension=768)
         with pytest.raises(AppError) as raised:
-            new_knowledge_base_from_config(
+            _ = new_knowledge_base_from_config(
                 KnowledgeBaseConfig(), embedder=embedder, store=store
             )
         assert raised.value.code is ErrorCode.INVALID_INPUT
@@ -507,4 +520,8 @@ class TestKnowledgeBaseFactory:
     def test_unknown_kind_raises() -> None:
         """An unknown knowledge-base kind fails loudly."""
         with pytest.raises(AppValueError, match="unknown knowledge base kind"):
-            new_knowledge_base_from_config(KnowledgeBaseConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = new_knowledge_base_from_config(
+                KnowledgeBaseConfig(
+                    kind=cast("KnowledgeBaseKind", cast("object", "bogus"))
+                )
+            )

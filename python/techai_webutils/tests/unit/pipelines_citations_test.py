@@ -228,7 +228,7 @@ class TestVerifiedCitations:
         ]
         assert citations[0].confidence == pytest.approx(1.0)
         assert citations[1].confidence < _EXPECTED_CONFIDENCE
-        nli.score.assert_not_awaited()
+        cast("MagicMock", cast("AsyncMock", nli.score).assert_not_awaited)()
         assert await LexicalCitationScorer().score([ClaimPassage("", "x")]) == [0.0]
 
     @staticmethod
@@ -258,7 +258,7 @@ class TestVerifiedCitations:
         citations = await extractor.extract(_ANSWER, _SOURCES)
 
         claim = "Revenue grew 3% in the third quarter."
-        nli.score.assert_awaited_once_with([
+        cast("MagicMock", cast("AsyncMock", nli.score).assert_awaited_once_with)([
             ClaimPassage(claim, _SOURCES[0].chunk_content),
             ClaimPassage(claim, _SOURCES[1].chunk_content),
             ClaimPassage("Headcount rose to 410.", _SOURCES[2].chunk_content),
@@ -283,15 +283,17 @@ class TestVerifiedCitations:
           - an answer with no markers returns no verified citations and calls no scorer
         """
         with pytest.raises(AppValueError):
-            PassageCitationExtractor(verify=CitationVerify.NLI)
+            _ = PassageCitationExtractor(verify=CitationVerify.NLI)
         with pytest.raises(AppValueError):
-            PassageCitationExtractor(min_confidence=1.5)
+            _ = PassageCitationExtractor(min_confidence=1.5)
         with pytest.raises(AppValueError):
-            PassageCitationExtractor(unsupported=cast("UnsupportedCitation", "drop"))
+            _ = PassageCitationExtractor(
+                unsupported=cast("UnsupportedCitation", cast("object", "drop"))
+            )
         short = PassageCitationExtractor(verify=CitationVerify.NLI, scorer=_nli([0.9]))
         with pytest.raises(InternalError):
-            await short.extract(_ANSWER, _SOURCES)
+            _ = await short.extract(_ANSWER, _SOURCES)
         quiet = _nli([])
         unmarked = PassageCitationExtractor(verify=CitationVerify.NLI, scorer=quiet)
         assert await unmarked.extract("No citations here.", _SOURCES) == []
-        quiet.score.assert_not_awaited()
+        cast("MagicMock", cast("AsyncMock", quiet.score).assert_not_awaited)()

@@ -5,6 +5,7 @@ And Go-style durations (Go ``foundation/config``).
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -55,7 +56,7 @@ def test_parse_duration_rejects_malformed_values(raw: object) -> None:
         ``AppValueError``.
     """
     with pytest.raises(AppValueError, match="invalid duration"):
-        parse_duration(raw)
+        _ = parse_duration(raw)
 
 
 def test_defaults_match_go() -> None:
@@ -175,7 +176,7 @@ def test_from_mapping_rejects_malformed_sections(section: object) -> None:
         overrides each raise ``AppValueError``.
     """
     with pytest.raises(AppValueError):
-        decoration.from_mapping(section)
+        _ = decoration.from_mapping(section)
 
 
 def test_load_reads_the_section_or_keeps_the_defaults() -> None:
@@ -188,11 +189,15 @@ def test_load_reads_the_section_or_keeps_the_defaults() -> None:
       - An absent section returns the defaults; a present one is overlaid.
     """
     loader = MagicMock()
-    loader.get.return_value = None
+    cast("MagicMock", loader.get).return_value = None
     assert decoration.load(loader) == decoration.default_config()
-    loader.get.return_value = {"jobs": {"defaults": {"logging": False}}}
+    cast("MagicMock", loader.get).return_value = {
+        "jobs": {"defaults": {"logging": False}}
+    }
     assert decoration.load(loader).jobs.defaults.logging is False
-    loader.get.assert_called_with(decoration.SECTION_KEY)
+    cast("MagicMock", cast("MagicMock", loader.get).assert_called_with)(
+        decoration.SECTION_KEY
+    )
 
 
 @pytest.mark.parametrize(

@@ -309,16 +309,16 @@ def test_factory_refuses_a_sentence_chunker_it_cannot_build() -> None:
     """
     sentence = ChunkerConfig(kind=ChunkerKind.SENTENCE)
     with pytest.raises(AppValueError):
-        chunker_from_config(sentence, tokenizer=_words)
+        _ = chunker_from_config(sentence, tokenizer=_words)
     with pytest.raises(AppValueError):
-        chunker_from_config(sentence, splitter=_SPLITTER)
+        _ = chunker_from_config(sentence, splitter=_SPLITTER)
     for config in (
         ChunkerConfig(kind=ChunkerKind.SENTENCE, max_tokens=10, overlap_tokens=10),
         ChunkerConfig(kind=ChunkerKind.SENTENCE, max_tokens=0),
         ChunkerConfig(kind=ChunkerKind.SENTENCE, window_chars=0),
     ):
         with pytest.raises(AppValueError):
-            chunker_from_config(config, splitter=_SPLITTER, tokenizer=_words)
+            _ = chunker_from_config(config, splitter=_SPLITTER, tokenizer=_words)
     assert ChunkerConfig().kind is ChunkerKind.FIXED
     assert _chunker(64).chunk("One. Two.") == ["One. Two."]
 

@@ -10,6 +10,7 @@ Run with: pytest tests/python/test_foundation/test_cache_builder.py -v
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -90,7 +91,7 @@ class TestCacheBuilder:
         """
         config = CacheConfig(kind=CacheKind.REDIS)
         with pytest.raises(AppValueError, match="redis_client"):
-            new_cache_from_config(config)
+            _ = new_cache_from_config(config)
 
     @staticmethod
     def test_new_cache_unknown_kind_raises() -> None:
@@ -103,9 +104,9 @@ class TestCacheBuilder:
         **What it tests:**
           - ValueError is raised for an invalid kind
         """
-        config = CacheConfig(kind="unknown")  # type: ignore[arg-type]
+        config = CacheConfig(kind=cast("CacheKind", cast("object", "unknown")))
         with pytest.raises(AppValueError, match="unknown"):
-            new_cache_from_config(config)
+            _ = new_cache_from_config(config)
 
     @staticmethod
     def test_default_config_returns_local() -> None:

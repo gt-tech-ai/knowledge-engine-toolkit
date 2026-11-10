@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -149,8 +149,11 @@ def _recorded(sink: MagicMock) -> AuditRecord:
         The one record ``sink`` received.
 
     """
-    sink.record.assert_awaited_once()
-    return sink.record.await_args.args[0]
+    cast("MagicMock", cast("AsyncMock", sink.record).assert_awaited_once)()
+    return cast(
+        "AuditRecord",
+        cast("MagicMock", cast("AsyncMock", sink.record).await_args).args[0],
+    )
 
 
 @pytest.mark.asyncio
@@ -174,12 +177,19 @@ async def test_audit_proxy_captures_provenance_flags_traceid_decision() -> None:
     )
 
     response = await cast(
-        "LLMProvider", _audit(inner, sink, checks=(_check(redacted), None))
+        "LLMProvider",
+        cast("object", _audit(inner, sink, checks=(_check(redacted), None))),
     ).complete(_MESSAGES)
 
     assert response is _RESPONSE
-    sent = inner.complete.await_args.args[0]
-    assert [m.content for m in sent] == ["ctx", "my ssn is [SSN]"]
+    sent = cast(
+        "list[object]",
+        cast("MagicMock", cast("AsyncMock", inner.complete).await_args).args[0],
+    )
+    assert [cast("object", m.content) for m in sent] == [
+        "ctx",
+        "my ssn is [SSN]",
+    ]
     assert _recorded(sink) == AuditRecord(
         request_id="r-1",
         trace_id="",
@@ -226,7 +236,7 @@ async def test_cache_hit_is_audited() -> None:
         payload=b"", similarity=0.99, source_query="q", embedding_model="titan"
     )
 
-    await _audit(inner, sink).audit_cached((_MESSAGES,), {}, cached, hit)
+    _ = await _audit(inner, sink).audit_cached((_MESSAGES,), {}, cached, hit)
 
     record = _recorded(sink)
     assert (record.cache_hit, record.answer, record.prompt_tokens, record.decision) == (
@@ -235,7 +245,7 @@ async def test_cache_hit_is_audited() -> None:
         0,
         "allowed",
     )
-    inner.complete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()
 
 
 _CACHED = LLMResponse(
@@ -271,9 +281,9 @@ async def test_cache_hit_is_blocked_or_redacted_before_it_is_served() -> None:
     blocked_sink, redacted_sink = _sink(), _sink()
 
     with pytest.raises(AppError) as caught:
-        await _audit(_inner(), blocked_sink, checks=(None, _check(block))).audit_cached(
-            (_MESSAGES,), {}, _CACHED, _HIT
-        )
+        _ = await _audit(
+            _inner(), blocked_sink, checks=(None, _check(block))
+        ).audit_cached((_MESSAGES,), {}, _CACHED, _HIT)
     served = await _audit(
         _inner(), redacted_sink, checks=(None, _check(redact))
     ).audit_cached((_MESSAGES,), {}, _CACHED, _HIT)
@@ -305,7 +315,7 @@ async def test_cache_hit_records_the_redacted_prompt() -> None:
     )
     sink = _sink()
 
-    await _audit(_inner(), sink, checks=(_check(redact), None)).audit_cached(
+    _ = await _audit(_inner(), sink, checks=(_check(redact), None)).audit_cached(
         (_MESSAGES,), {}, _CACHED, _HIT
     )
 
@@ -337,9 +347,13 @@ async def test_record_takes_the_route_model_only_when_the_call_routed() -> None:
     gateway = _inner()
     gateway.complete = AsyncMock(side_effect=routed_complete)
 
-    await _audit(_inner(), hit_sink).audit_cached((_MESSAGES,), {}, _CACHED, _HIT)
-    await cast("LLMProvider", _audit(_inner(), plain_sink)).complete(_MESSAGES)
-    await cast("LLMProvider", _audit(gateway, routed_sink)).complete(_MESSAGES)
+    _ = await _audit(_inner(), hit_sink).audit_cached((_MESSAGES,), {}, _CACHED, _HIT)
+    _ = await cast("LLMProvider", cast("object", _audit(_inner(), plain_sink))).complete(
+        _MESSAGES
+    )
+    _ = await cast("LLMProvider", cast("object", _audit(gateway, routed_sink))).complete(
+        _MESSAGES
+    )
 
     assert _recorded(hit_sink).model == "sonnet"
     assert _recorded(plain_sink).model == "sonnet"
@@ -358,13 +372,16 @@ async def test_enforced_raises_coded_error_on_sink_failure() -> None:
         (``UNAVAILABLE``)
     """
     with pytest.raises(AppError) as uncoded:
-        await cast("LLMProvider", _audit(_inner(), _sink(RuntimeError("boom")))).complete(
-            _MESSAGES
-        )
+        _ = await cast(
+            "LLMProvider", cast("object", _audit(_inner(), _sink(RuntimeError("boom"))))
+        ).complete(_MESSAGES)
     with pytest.raises(AppError) as coded:
-        await cast(
+        _ = await cast(
             "LLMProvider",
-            _audit(_inner(), _sink(AppError(ErrorCode.UNAVAILABLE, "aiops down"))),
+            cast(
+                "object",
+                _audit(_inner(), _sink(AppError(ErrorCode.UNAVAILABLE, "aiops down"))),
+            ),
         ).complete(_MESSAGES)
 
     assert uncoded.value.code is ErrorCode.INTERNAL
@@ -388,16 +405,21 @@ async def test_shadow_swallows_and_logs_sink_failure() -> None:
 
     response = await cast(
         "LLMProvider",
-        _audit(
-            _inner(),
-            _sink(RuntimeError("boom")),
-            enforcement=AuditEnforcement.SHADOW,
-            metrics=metrics,
+        cast(
+            "object",
+            _audit(
+                _inner(),
+                _sink(RuntimeError("boom")),
+                enforcement=AuditEnforcement.SHADOW,
+                metrics=metrics,
+            ),
         ),
     ).complete(_MESSAGES)
 
     assert response is _RESPONSE
-    failures.inc.assert_called_once_with(1.0, enforcement="shadow")
+    cast("MagicMock", cast("MagicMock", failures.inc).assert_called_once_with)(
+        1.0, enforcement="shadow"
+    )
 
 
 @pytest.mark.asyncio
@@ -421,15 +443,17 @@ async def test_block_short_circuits_forbidden_and_still_audited() -> None:
     inner, sink = _inner(), _sink()
 
     with pytest.raises(AppError) as before:
-        await cast(
-            "LLMProvider", _audit(inner, sink, checks=(_check(blocked), None))
+        _ = await cast(
+            "LLMProvider",
+            cast("object", _audit(inner, sink, checks=(_check(blocked), None))),
         ).complete(_MESSAGES)
-    inner.complete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()
     first = _recorded(sink)
-    sink.record.reset_mock()
+    cast("MagicMock", cast("MagicMock", sink.record).reset_mock)()
     with pytest.raises(AppError) as after:
-        await cast(
-            "LLMProvider", _audit(inner, sink, checks=(None, _check(blocked)))
+        _ = await cast(
+            "LLMProvider",
+            cast("object", _audit(inner, sink, checks=(None, _check(blocked)))),
         ).complete(_MESSAGES)
 
     assert (before.value.code, after.value.code) == (
@@ -478,9 +502,17 @@ async def test_stream_is_audited_on_exhaustion() -> None:
     inner.stream_with_usage = AsyncMock(
         side_effect=lambda *_a, **_k: _items("the ", "answer", usage)
     )
-    proxy = cast("Any", _audit(inner, sink, checks=(None, _check(blocked))))
+    proxy = cast(
+        "MagicMock", cast("object", _audit(inner, sink, checks=(None, _check(blocked))))
+    )
 
-    items = [item async for item in await proxy.stream_with_usage(_MESSAGES)]
+    items = [
+        item
+        async for item in cast(
+            "AsyncIterator[object]",
+            await cast("MagicMock", proxy.stream_with_usage)(_MESSAGES),
+        )
+    ]
 
     record = _recorded(sink)
     assert items == ["the ", "answer", usage]
@@ -512,16 +544,19 @@ async def test_failed_safety_scan_is_flagged_in_shadow_and_raised_when_enforced(
 
     served = await cast(
         "LLMProvider",
-        _audit(inner, sink, enforcement=AuditEnforcement.SHADOW, checks=(down, None)),
+        cast(
+            "object",
+            _audit(inner, sink, enforcement=AuditEnforcement.SHADOW, checks=(down, None)),
+        ),
     ).complete(_MESSAGES)
     flags = _recorded(sink).safety_flags
-    inner.complete.reset_mock()
+    cast("MagicMock", cast("MagicMock", inner.complete).reset_mock)()
     with pytest.raises(AppError) as caught:
-        await cast("LLMProvider", _audit(inner, _sink(), checks=(down, None))).complete(
-            _MESSAGES
-        )
+        _ = await cast(
+            "LLMProvider", cast("object", _audit(inner, _sink(), checks=(down, None)))
+        ).complete(_MESSAGES)
 
     assert served is _RESPONSE
     assert flags == ("safety.check_failed",)
     assert caught.value.code is ErrorCode.UNAVAILABLE
-    inner.complete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", inner.complete).assert_not_awaited)()

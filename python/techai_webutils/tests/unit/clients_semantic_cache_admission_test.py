@@ -87,5 +87,5 @@ def test_admission_factory_refuses_an_unknown_kind() -> None:
       - kind ``"maybe"`` raises ``INVALID_INPUT``
     """
     with pytest.raises(AppError) as caught:
-        cache_admission_from_config(CacheAdmissionConfig(kind="maybe"))
+        _ = cache_admission_from_config(CacheAdmissionConfig(kind="maybe"))
     assert caught.value.code is ErrorCode.INVALID_INPUT

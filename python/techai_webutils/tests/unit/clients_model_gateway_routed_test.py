@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -45,11 +45,11 @@ _MESSAGES = [LLMMessage(role="user", content="what is the refund window")]
 
 
 def _gateway(
-    catalog_raw: dict[str, Any],
-    routes_raw: dict[str, Any],
+    catalog_raw: dict[str, object],
+    routes_raw: dict[str, object],
     ctx: RouteContext,
     *,
-    policies: dict[str, Any] | None = None,
+    policies: dict[str, object] | None = None,
     factory: Callable[[LlmConfig], LLMProvider] | None = None,
 ) -> RoutedGateway:
     """Build a routed gateway over the fixture catalog whose context is always ``ctx``.
@@ -80,7 +80,7 @@ def _gateway(
 
 @pytest.mark.asyncio
 async def test_routed_default_stages_match_passthrough(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that routed with default stages and no pins serves each step's model as today.
 
@@ -123,7 +123,7 @@ async def test_routed_default_stages_match_passthrough(
 
 @pytest.mark.asyncio
 async def test_pin_resolves_model_and_skips_classify_and_rank(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a tenant pin serves its model without consulting the planner.
 
@@ -155,7 +155,7 @@ async def test_pin_resolves_model_and_skips_classify_and_rank(
     response = await gateway.complete(_MESSAGES)
     decision = current_route_decision()
 
-    planner.plan.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", planner.plan).assert_not_awaited)()
     assert response.model == "haiku-use1"
     assert decision is not None
     assert (decision.decider, decision.reason) == ("admin_pin", "pinned")
@@ -163,7 +163,7 @@ async def test_pin_resolves_model_and_skips_classify_and_rank(
 
 @pytest.mark.asyncio
 async def test_routed_reuses_endpoint_instances(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that each endpoint's provider is built once and reused.
 
@@ -179,7 +179,7 @@ async def test_routed_reuses_endpoint_instances(
 
     def factory(llm: LlmConfig) -> StubLlmProvider:
         provider = StubLlmProvider(llm.model)
-        provider.__aexit__ = AsyncMock(return_value=None)  # type: ignore[method-assign]
+        provider.__aexit__ = AsyncMock(return_value=None)
         built.append(provider)
         return provider
 
@@ -189,7 +189,7 @@ async def test_routed_reuses_endpoint_instances(
 
     first = await gateway.resolve(RouteContext(step="rewrite"))
     second = await gateway.resolve(RouteContext(step="rewrite"))
-    await gateway.resolve(RouteContext(step="generate"))
+    _ = await gateway.resolve(RouteContext(step="generate"))
 
     async def consume() -> object:
         _ = [c async for c in await gateway.stream(_MESSAGES)]
@@ -203,12 +203,12 @@ async def test_routed_reuses_endpoint_instances(
     assert [p.model_name() for p in built] == ["haiku-use1", "sonnet-use1"]
     assert decision is not None
     for provider in built:
-        provider.__aexit__.assert_awaited_once()  # type: ignore[attr-defined]
+        provider.__aexit__.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_route_context_defaults_when_provider_returns_empty_context(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that an empty request context still routes, to the default route.
 
@@ -238,12 +238,12 @@ async def test_route_context_defaults_when_provider_returns_empty_context(
     response = await gateway.complete(_MESSAGES)
 
     assert response.model == "sonnet-use1"
-    assert isinstance(gateway.wrapped_provider, StubLlmProvider)  # type: ignore[attr-defined]
+    assert isinstance(gateway.wrapped_provider, StubLlmProvider)
 
 
 @pytest.mark.asyncio
 async def test_gateway_warms_embedding_classifier_on_enter(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that entering the gateway embeds the route exemplars.
 
@@ -259,7 +259,10 @@ async def test_gateway_warms_embedding_classifier_on_enter(
     """
     routes = {
         **routes_raw,
-        "generate": {**routes_raw["generate"], "exemplars": ["summarize"]},
+        "generate": {
+            **cast("dict[str, object]", routes_raw["generate"]),
+            "exemplars": ["summarize"],
+        },
     }
     embedding = MagicMock(spec=EmbeddingProvider)
     embedding.embed_batch = AsyncMock(
@@ -288,13 +291,15 @@ async def test_gateway_warms_embedding_classifier_on_enter(
         async with build(broken):
             pass
 
-    embedding.embed_batch.assert_awaited_once_with(["summarize"], input_type="query")
+    cast("MagicMock", cast("AsyncMock", embedding.embed_batch).assert_awaited_once_with)(
+        ["summarize"], input_type="query"
+    )
     assert caught.value.code is ErrorCode.UNAVAILABLE
 
 
 @pytest.mark.asyncio
 async def test_transient_failure_fails_over_and_records_reason(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a throttled primary fails over and the decision says so.
 
@@ -310,7 +315,7 @@ async def test_transient_failure_fails_over_and_records_reason(
     def factory(llm: LlmConfig) -> StubLlmProvider:
         provider = StubLlmProvider(llm.model)
         if llm.model == "sonnet-use1":
-            provider.complete = AsyncMock(side_effect=UnavailableError("throttled"))  # type: ignore[method-assign]
+            provider.complete = AsyncMock(side_effect=UnavailableError("throttled"))
         return provider
 
     gateway = _gateway(
@@ -331,7 +336,7 @@ async def test_transient_failure_fails_over_and_records_reason(
 
 @pytest.mark.asyncio
 async def test_injected_policy_store_replaces_the_configured_one(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a caller-supplied policy store is the one the routed gateway consults.
 
@@ -347,7 +352,9 @@ async def test_injected_policy_store_replaces_the_configured_one(
     """
     ctx = RouteContext(tenant_id="org-1", step="generate")
     store = MagicMock(spec=RoutingPolicyStore)
-    store.policy.return_value = RoutingPolicy(pins={"generate": "anthropic/haiku"})
+    cast("MagicMock", store.policy).return_value = RoutingPolicy(
+        pins={"generate": "anthropic/haiku"}
+    )
     config = GatewayConfig(
         kind=GatewayKind.ROUTED,
         routed=RoutedConfig(catalog=catalog_raw, routes=routes_raw),
@@ -368,12 +375,12 @@ async def test_injected_policy_store_replaces_the_configured_one(
     )
 
     assert (await injected.complete(_MESSAGES)).model == "haiku-use1"
-    store.policy.assert_called_with("org-1", "")
+    cast("MagicMock", cast("MagicMock", store.policy).assert_called_with)("org-1", "")
     assert (await configured.complete(_MESSAGES)).model == "haiku-use1"
 
 
 def test_cost_aware_gateway_without_prices_fails_at_boot(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a routed gateway ranking by cost refuses to boot with no price table.
 

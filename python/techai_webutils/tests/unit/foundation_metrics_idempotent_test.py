@@ -39,9 +39,9 @@ class TestMetricsIdempotency:
         first = PrometheusMetricsProvider(registry=reg)
         second = PrometheusMetricsProvider(registry=reg)
 
-        first.counter("dup_widget", "help", labels=["k"])
-        first.gauge("dup_depth", "help")
-        first.histogram("dup_latency", "help")
+        _ = first.counter("dup_widget", "help", labels=["k"])
+        _ = first.gauge("dup_depth", "help")
+        _ = first.histogram("dup_latency", "help")
 
         # Second init on the same registry must NOT raise.
         counter = second.counter("dup_widget", "help", labels=["k"])
@@ -70,9 +70,9 @@ class TestMetricsIdempotency:
         """
         reg = CollectorRegistry()
         provider = PrometheusMetricsProvider(registry=reg)
-        provider.counter("conflict_widget", "help", labels=["a"])
+        _ = provider.counter("conflict_widget", "help", labels=["a"])
 
         with pytest.raises(ValueError, match=r"[Dd]uplicat"):
-            provider.counter("conflict_widget", "help", labels=["b"])
+            _ = provider.counter("conflict_widget", "help", labels=["b"])
         with pytest.raises(ValueError, match=r"[Dd]uplicat"):
-            provider.gauge("conflict_widget", "help")
+            _ = provider.gauge("conflict_widget", "help")

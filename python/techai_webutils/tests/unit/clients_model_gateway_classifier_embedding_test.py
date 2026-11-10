@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -84,7 +84,7 @@ async def _classifier(embedding: MagicMock) -> RouteClassifier:
         routes=_ROUTES,
         embedding=embedding,
     )
-    await classifier.warm()  # type: ignore[attr-defined]
+    await classifier.warm()
     return classifier
 
 
@@ -110,7 +110,7 @@ async def test_embedding_classifier_picks_route_with_highest_exemplar_similarity
     assert result.route == "lookup"
     assert result.confidence == pytest.approx(0.99, abs=0.01)
     assert result.degraded is False
-    embedding.embed_batch.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", embedding.embed_batch).assert_awaited_once)()
 
 
 @pytest.mark.asyncio
@@ -156,10 +156,10 @@ async def test_embedding_classifier_degrades_when_embedder_fails() -> None:
     broken = _embedding()
     broken.embed_batch = AsyncMock(side_effect=RuntimeError("down"))
     with pytest.raises(AppError) as boot:
-        await _classifier(broken)
+        _ = await _classifier(broken)
     assert boot.value.code is ErrorCode.UNAVAILABLE
     with pytest.raises(AppError) as missing:
-        route_classifier_from_config(
+        _ = route_classifier_from_config(
             {"kind": "embedding"},
             route_names=frozenset(),
             default_route="",

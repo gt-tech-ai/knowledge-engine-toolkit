@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from docling_core.types.doc.base import BoundingBox, Size
@@ -32,6 +32,7 @@ from techai_webutils.core.interfaces.parser import PagedParser, PageText, TextLa
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from unittest.mock import MagicMock
 
 _EXPECTED_PAGE_COUNT = 3
 
@@ -78,15 +79,17 @@ def _report(note: str = "") -> DoclingDocument:
     """
     doc = DoclingDocument(name="report")
     for page in (1, 2):
-        doc.add_page(page_no=page, size=Size(width=100, height=100))
-    doc.add_text(label=DocItemLabel.PAGE_HEADER, text="ACME confidential", prov=_prov(1))
-    doc.add_title(text="Annual report", prov=_prov(1))
-    doc.add_heading(text="Results", level=1, prov=_prov(1))
-    doc.add_text(label=DocItemLabel.TEXT, text=note or "Revenue grew.", prov=_prov(1))
+        _ = doc.add_page(page_no=page, size=Size(width=100, height=100))
+    _ = doc.add_text(
+        label=DocItemLabel.PAGE_HEADER, text="ACME confidential", prov=_prov(1)
+    )
+    _ = doc.add_title(text="Annual report", prov=_prov(1))
+    _ = doc.add_heading(text="Results", level=1, prov=_prov(1))
+    _ = doc.add_text(label=DocItemLabel.TEXT, text=note or "Revenue grew.", prov=_prov(1))
     bullets = doc.add_list_group()
-    doc.add_list_item(text="Costs fell.", prov=_prov(1), parent=bullets)
-    doc.add_code(text="total = sum(costs)", prov=_prov(1))
-    doc.add_heading(text="Costs", level=1, prov=_prov(2))
+    _ = doc.add_list_item(text="Costs fell.", prov=_prov(1), parent=bullets)
+    _ = doc.add_code(text="total = sum(costs)", prov=_prov(1))
+    _ = doc.add_heading(text="Costs", level=1, prov=_prov(2))
     caption = doc.add_text(
         label=DocItemLabel.CAPTION, text="Table 1: costs", prov=_prov(2)
     )
@@ -100,7 +103,7 @@ def _report(note: str = "") -> DoclingDocument:
             _cell(1, 1, "10"),
         ],
     )
-    doc.add_table(data=data, caption=caption, prov=_prov(2))
+    _ = doc.add_table(data=data, caption=caption, prov=_prov(2))
     return doc
 
 
@@ -224,7 +227,7 @@ async def test_pdf_parses_in_the_bounded_child_and_other_formats_fall_back(
       - an HTML document is parsed by the ``isolated`` parser (no blocks)
     """
     path = tmp_path / "report.pdf"
-    path.write_bytes(_PDF)
+    _ = path.write_bytes(_PDF)
     parser = _layout(convert_report)
 
     from_bytes = await parser.parse(_PDF, filename="report.pdf")
@@ -285,18 +288,18 @@ def test_factory_refuses_layout_without_docling() -> None:
         kind
     """
     with pytest.raises(AppValueError):
-        parser_from_config(ParserConfig(kind=ParserKind.LAYOUT))
+        _ = parser_from_config(ParserConfig(kind=ParserKind.LAYOUT))
     assert ParserConfig().kind is ParserKind.ISOLATED
 
 
 def _write_pdf(path: Path, pages: int) -> None:
     """Write a blank PDF of ``pages`` pages to ``path`` with pymupdf."""
     pymupdf = importlib.import_module("pymupdf")
-    doc = pymupdf.open()
+    doc = cast("MagicMock", cast("MagicMock", pymupdf.open)())
     for _ in range(pages):
-        doc.new_page()
-    doc.save(str(path))
-    doc.close()
+        cast("MagicMock", doc.new_page)()
+    cast("MagicMock", doc.save)(str(path))
+    cast("MagicMock", doc.close)()
 
 
 @pytest.mark.asyncio
@@ -317,9 +320,9 @@ async def test_page_count_reads_the_pdf_in_the_child_and_counts_zero_otherwise(
     pdf = tmp_path / "three.pdf"
     _write_pdf(pdf, 3)
     junk = tmp_path / "junk.pdf"
-    junk.write_bytes(_PDF)
+    _ = junk.write_bytes(_PDF)
     html = tmp_path / "a.html"
-    html.write_bytes(b"<html></html>")
+    _ = html.write_bytes(b"<html></html>")
     parser = _layout(convert_report)
 
     assert isinstance(parser, PagedParser)
@@ -334,17 +337,21 @@ def _write_text_layers(path: Path) -> None:
     And a text layer of control bytes.
     """
     pymupdf = importlib.import_module("pymupdf")
-    doc = pymupdf.open()
-    doc.new_page().insert_text((72, 72), "Revenue grew in every quarter.")
-    doc.new_page()
-    garbled = doc.new_page()
-    garbled.insert_text((72, 72), "x", fontname="helv")
+    doc = cast("MagicMock", cast("MagicMock", pymupdf.open)())
+    cast("MagicMock", cast("MagicMock", doc.new_page)().insert_text)(
+        (72, 72), "Revenue grew in every quarter."
+    )
+    cast("MagicMock", doc.new_page)()
+    garbled = cast("MagicMock", cast("MagicMock", doc.new_page)())
+    cast("MagicMock", garbled.insert_text)((72, 72), "x", fontname="helv")
     # Six bytes the font's encoding has no character for, then "ab": what a broken font
     # encoding leaves in a text layer.
     stream = b"q BT 1 0 0 1 72 770 Tm /helv 11 Tf [<0102030405066162>]TJ ET Q"
-    doc.update_stream(garbled.get_contents()[0], stream)
-    doc.save(str(path))
-    doc.close()
+    cast("MagicMock", doc.update_stream)(
+        cast("MagicMock", garbled.get_contents)()[0], stream
+    )
+    cast("MagicMock", doc.save)(str(path))
+    cast("MagicMock", doc.close)()
 
 
 @pytest.mark.asyncio
@@ -369,7 +376,7 @@ async def test_text_layers_count_each_page_and_its_unreadable_characters(
     pdf = tmp_path / "layers.pdf"
     _write_text_layers(pdf)
     html = tmp_path / "a.html"
-    html.write_bytes(b"<html></html>")
+    _ = html.write_bytes(b"<html></html>")
     parser = _layout(convert_report)
 
     layers = await parser.text_layers(str(pdf))
@@ -400,7 +407,7 @@ async def test_ocr_pages_forces_full_page_ocr_on_its_range(tmp_path: Path) -> No
       - ``parse_pages`` over the same range leaves it unset
     """
     path = tmp_path / "scan.pdf"
-    path.write_bytes(_PDF)
+    _ = path.write_bytes(_PDF)
     parser = _layout(convert_noting_ocr)
 
     ocr = await parser.ocr_pages(str(path), first_page=2, last_page=3)

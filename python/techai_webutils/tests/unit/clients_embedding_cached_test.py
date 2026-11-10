@@ -5,6 +5,7 @@ Which reuses a text's vector through a ``Cache``.
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -31,8 +32,8 @@ def _inner(model: str = "m") -> MagicMock:
         return [EmbeddingResult([float(len(t)), 0.5], model, 7) for t in texts]
 
     inner.embed_batch = AsyncMock(side_effect=batch)
-    inner.model_name.return_value = model
-    inner.dimension.return_value = 2
+    cast("MagicMock", inner.model_name).return_value = model
+    cast("MagicMock", inner.dimension).return_value = 2
     return inner
 
 
@@ -76,22 +77,28 @@ async def test_cached_vectors_are_reused_and_misses_embedded_once() -> None:
     inner, cache = _inner(), _cache()
     metrics = MagicMock(spec=MetricsProvider)
     counter = MagicMock(spec=MetricCounter)
-    metrics.counter.return_value = counter
+    cast("MagicMock", metrics.counter).return_value = counter
     cached = CachedEmbedding(inner, cache, ttl_seconds=60, version="v1", metrics=metrics)
 
     first = await cached.embed_batch(["ab", "ab", "cde"])
     second = await cached.embed_batch(["cde", "ab"])
 
-    assert inner.embed_batch.await_count == 1
-    assert inner.embed_batch.await_args.args[0] == ["ab", "cde"]
-    assert {call.kwargs["ttl_seconds"] for call in cache.set.await_args_list} == {60}
+    assert (cast("AsyncMock", inner.embed_batch).await_count) == 1
+    assert cast(
+        "list[object]",
+        cast("MagicMock", cast("AsyncMock", inner.embed_batch).await_args).args,
+    )[0] == ["ab", "cde"]
+    assert {
+        cast("dict[str, object]", call.kwargs)["ttl_seconds"]
+        for call in cast("list[object]", cast("AsyncMock", cache.set).await_args_list)
+    } == {60}
     assert [r.embedding for r in first] == [[2.0, 0.5], [2.0, 0.5], [3.0, 0.5]]
     assert [(r.embedding, r.token_count) for r in second] == [
         ([3.0, 0.5], 0),
         ([2.0, 0.5], 0),
     ]
-    counter.inc.assert_any_call(3, result="miss")
-    counter.inc.assert_any_call(2, result="hit")
+    cast("MagicMock", cast("MagicMock", counter.inc).assert_any_call)(3, result="miss")
+    cast("MagicMock", cast("MagicMock", counter.inc).assert_any_call)(2, result="hit")
     assert (cached.model_name(), cached.dimension()) == ("m", 2)
 
 
@@ -110,14 +117,20 @@ async def test_key_separates_models_versions_and_input_types() -> None:
     """
     cache = _cache()
     a, b = _inner("a"), _inner("b")
-    await CachedEmbedding(a, cache, ttl_seconds=60, version="v1").embed("secret text")
-    await CachedEmbedding(b, cache, ttl_seconds=60, version="v1").embed("secret text")
-    await CachedEmbedding(a, cache, ttl_seconds=60, version="v2").embed("secret text")
-    await CachedEmbedding(a, cache, ttl_seconds=60, version="v1").embed(
+    _ = await CachedEmbedding(a, cache, ttl_seconds=60, version="v1").embed("secret text")
+    _ = await CachedEmbedding(b, cache, ttl_seconds=60, version="v1").embed("secret text")
+    _ = await CachedEmbedding(a, cache, ttl_seconds=60, version="v2").embed("secret text")
+    _ = await CachedEmbedding(a, cache, ttl_seconds=60, version="v1").embed(
         "secret text", input_type="query"
     )
 
-    assert (a.embed_batch.await_count, b.embed_batch.await_count) == (3, 1)
-    keys = [call.args[0] for call in cache.set.await_args_list]
+    assert (
+        (cast("AsyncMock", a.embed_batch).await_count),
+        (cast("AsyncMock", b.embed_batch).await_count),
+    ) == (3, 1)
+    keys = [
+        cast("str", cast("list[object]", call.args)[0])
+        for call in cast("list[object]", cast("AsyncMock", cache.set).await_args_list)
+    ]
     assert len(set(keys)) == _EXPECTED_SET_COUNT
     assert not any("secret" in k for k in keys)

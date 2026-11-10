@@ -140,7 +140,7 @@ async def test_noop_reranker_keeps_order_and_empty_results_skip_the_reranker() -
     assert scores == pytest.approx([1.0, 2 / 3, 1 / 3])
     assert await noop.rerank("q", []) == []
     assert await engine.retrieve("q") == []
-    unused.rerank.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", unused.rerank).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -162,7 +162,7 @@ async def test_a_short_score_list_is_an_internal_error() -> None:
     )
 
     with pytest.raises(AppError) as raised:
-        await reranker.rerank("q", ["a", "b"])
+        _ = await reranker.rerank("q", ["a", "b"])
 
     assert raised.value.code is ErrorCode.INTERNAL
 
@@ -183,25 +183,27 @@ def test_misconfigured_reranking_is_refused() -> None:
         with batch size 0, or an unknown reranker kind — each raises ``AppValueError``
     """
     with pytest.raises(AppValueError, match="bedrock_rerank"):
-        new_retrieval_engine_from_config(
+        _ = new_retrieval_engine_from_config(
             RetrievalConfig(
                 kind=RetrievalKind.OPENSEARCH, reranking_kind="bedrock_rerank"
             ),
             options=RetrievalEngineDependencies(policies=[]),
         )
     with pytest.raises(AppValueError, match="reranker"):
-        new_retrieval_engine_from_config(
+        _ = new_retrieval_engine_from_config(
             RetrievalConfig(reranking_kind="cross_encoder"),
             options=RetrievalEngineDependencies(policies=[]),
         )
     with pytest.raises(AppValueError, match="unknown reranking kind"):
-        RetrievalConfig(reranking_kind="cohere")
+        _ = RetrievalConfig(reranking_kind="cohere")
     with pytest.raises(AppValueError, match="client"):
-        reranker_from_config(RerankerConfig(kind=RerankerKind.CROSS_ENCODER))
+        _ = reranker_from_config(RerankerConfig(kind=RerankerKind.CROSS_ENCODER))
     with pytest.raises(AppValueError, match="batch_size"):
-        reranker_from_config(
+        _ = reranker_from_config(
             RerankerConfig(kind=RerankerKind.CROSS_ENCODER, batch_size=0),
             client=_client({}),
         )
     with pytest.raises(AppValueError, match="unknown reranker kind"):
-        reranker_from_config(RerankerConfig(kind=cast("RerankerKind", "bogus")))
+        _ = reranker_from_config(
+            RerankerConfig(kind=cast("RerankerKind", cast("object", "bogus")))
+        )

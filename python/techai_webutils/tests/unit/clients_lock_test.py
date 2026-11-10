@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import struct
 import zlib
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import asyncpg
@@ -117,7 +118,12 @@ class TestPostgresAdvisoryLock:
         call = connect.call_args
         assert call.args[0] == "postgresql://u:p@h:5432/db?sslmode=require"
         assert "tcp_keepalives_idle" in call.kwargs["server_settings"]
-        first_sql = conn.fetchval.await_args_list[0].args[0]
+        first_sql = cast(
+            "list[object]",
+            cast("list[object]", cast("AsyncMock", conn.fetchval).await_args_list)[
+                0
+            ].args[0],
+        )
         assert "pg_try_advisory_lock" in first_sql
 
     @staticmethod
@@ -137,10 +143,15 @@ class TestPostgresAdvisoryLock:
         with patch("asyncpg.connect", AsyncMock(return_value=conn)):
             lock = PostgresAdvisoryLock(dsn="postgresql://h/db", key="kb:ds", namespace=7)
             async with lock:
-                await lock.acquire()
+                _ = await lock.acquire()
                 await lock.release()
 
-        issued = [c.args[0] for c in conn.fetchval.await_args_list]
+        issued = [
+            cast("str", cast("list[object]", c.args)[0])
+            for c in cast(
+                "list[object]", cast("AsyncMock", conn.fetchval).await_args_list
+            )
+        ]
         assert any("pg_advisory_unlock" in sql for sql in issued)
 
     @staticmethod
@@ -166,9 +177,14 @@ class TestPostgresAdvisoryLock:
                 dsn="postgresql://h/db", key="kb-1:ds-1", namespace=0x4B425359
             )
             async with lock:
-                await lock.acquire()
+                _ = await lock.acquire()
 
-        _, classid, objid = conn.fetchval.await_args_list[0].args
+        _, classid, objid = cast(
+            "tuple[object, object, float]",
+            cast("list[object]", cast("AsyncMock", conn.fetchval).await_args_list)[
+                0
+            ].args,
+        )
         raw = zlib.crc32(b"kb-1:ds-1")
         assert raw > INT32_MAX  # fixture actually exercises the overflow path
         assert objid == struct.unpack("i", struct.pack("I", raw))[0]
@@ -189,15 +205,15 @@ class TestPostgresAdvisoryLock:
             ``ValueError``; both int32 bounds are accepted.
         """
         with pytest.raises(AppValueError, match="key"):
-            PostgresAdvisoryLock(dsn="postgresql://h/db", key="", namespace=1)
+            _ = PostgresAdvisoryLock(dsn="postgresql://h/db", key="", namespace=1)
         with pytest.raises(AppValueError, match="namespace"):
-            PostgresAdvisoryLock(dsn="postgresql://h/db", key="k", namespace=2**31)
+            _ = PostgresAdvisoryLock(dsn="postgresql://h/db", key="k", namespace=2**31)
         with pytest.raises(AppValueError, match="namespace"):
-            PostgresAdvisoryLock(
+            _ = PostgresAdvisoryLock(
                 dsn="postgresql://h/db", key="k", namespace=INT32_MIN - 1
             )
-        PostgresAdvisoryLock(dsn="postgresql://h/db", key="k", namespace=INT32_MIN)
-        PostgresAdvisoryLock(dsn="postgresql://h/db", key="k", namespace=INT32_MAX)
+        _ = PostgresAdvisoryLock(dsn="postgresql://h/db", key="k", namespace=INT32_MIN)
+        _ = PostgresAdvisoryLock(dsn="postgresql://h/db", key="k", namespace=INT32_MAX)
 
     @staticmethod
     @pytest.mark.asyncio
@@ -215,9 +231,9 @@ class TestPostgresAdvisoryLock:
         with patch("asyncpg.connect", AsyncMock(return_value=conn)):
             lock = PostgresAdvisoryLock(dsn="postgresql://h/db", key="kb:ds", namespace=7)
             async with lock:
-                await lock.acquire()
+                _ = await lock.acquire()
 
-        conn.close.assert_awaited_once()
+        cast("MagicMock", cast("AsyncMock", conn.close).assert_awaited_once)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -263,11 +279,11 @@ class TestPostgresAdvisoryLock:
         with patch("asyncpg.connect", AsyncMock(side_effect=[dead, fresh])) as connect:
             lock = PostgresAdvisoryLock(dsn="postgresql://h/db", key="kb:ds", namespace=7)
             async with lock:
-                await lock.acquire()  # opens `dead`
-                await lock.acquire()  # `dead` is closed → reconnect to `fresh`
+                _ = await lock.acquire()  # opens `dead`
+                _ = await lock.acquire()  # `dead` is closed → reconnect to `fresh`
 
         assert connect.await_count == _EXPECTED_AWAIT_COUNT
-        fresh.fetchval.assert_awaited()
+        cast("MagicMock", cast("AsyncMock", fresh.fetchval).assert_awaited)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -294,7 +310,7 @@ class TestPostgresAdvisoryLock:
             lock = PostgresAdvisoryLock(dsn="postgresql://h/db", key="kb:ds", namespace=7)
             async with lock:
                 with pytest.raises(UnavailableError) as excinfo:
-                    await lock.acquire()
+                    _ = await lock.acquire()
 
         assert excinfo.value.is_transient is True
 
@@ -347,8 +363,12 @@ class TestPostgresAdvisoryLock:
             lock = PostgresAdvisoryLock(dsn="postgresql://h/db", key="kb:ds", namespace=7)
             async with lock:
                 with pytest.raises(UnavailableError):
-                    await lock.acquire()  # broken session → terminate + transient raise
-                broken.terminate.assert_called_once()
+                    _ = (
+                        await lock.acquire()
+                    )  # broken session → terminate + transient raise
+                cast(
+                    "MagicMock", cast("MagicMock", broken.terminate).assert_called_once
+                )()
                 assert await lock.acquire() is True  # reconnects on a fresh session
 
         assert connect.await_count == _EXPECTED_AWAIT_COUNT
@@ -379,11 +399,20 @@ class TestPostgresAdvisoryLock:
         ):
             lock = PostgresAdvisoryLock(dsn="postgresql://h/db", key="kb:ds", namespace=7)
             async with lock:
-                await lock.acquire()
+                _ = await lock.acquire()
                 await lock.release()
 
-        fields = mock_logger.warning.call_args.kwargs
-        assert "not held" in mock_logger.warning.call_args.args[0]
+        fields = cast(
+            "dict[str, object]",
+            cast("MagicMock", cast("MagicMock", mock_logger.warning).call_args).kwargs,
+        )
+        assert (
+            "not held"
+            in cast(
+                "tuple[str, ...]",
+                cast("MagicMock", cast("MagicMock", mock_logger.warning).call_args).args,
+            )[0]
+        )
         assert fields["key"] == "kb:ds"
         assert fields["namespace"] == _EXPECTED_FIELDS
 
@@ -434,10 +463,15 @@ class TestLockFromConfig:
                 )
             )
             async with lock:
-                await lock.acquire()
+                _ = await lock.acquire()
 
         assert isinstance(lock, PostgresAdvisoryLock)
-        _, classid, objid = conn.fetchval.await_args_list[0].args
+        _, classid, objid = cast(
+            "tuple[object, object, object]",
+            cast("list[object]", cast("AsyncMock", conn.fetchval).await_args_list)[
+                0
+            ].args,
+        )
         assert classid == _EXPECTED_CLASSID
         assert objid == struct.unpack("i", struct.pack("I", zlib.crc32(b"kb:ds")))[0]
         assert (
@@ -462,7 +496,7 @@ class TestLockFromConfig:
             kind still needs none.
         """
         with pytest.raises(AppValueError, match="namespace"):
-            new_lock_from_config(LockConfig(kind=LockKind.POSTGRES, key="kb:ds"))
+            _ = new_lock_from_config(LockConfig(kind=LockKind.POSTGRES, key="kb:ds"))
         assert isinstance(
             new_lock_from_config(LockConfig(kind=LockKind.MEMORY)), InMemoryLock
         )
@@ -481,7 +515,9 @@ class TestLockFromConfig:
         # Deliberately bypass the LockKind enum with a bogus value to exercise the
         # defensive ``raise``.
         with pytest.raises(AppValueError, match="unknown lock kind"):
-            new_lock_from_config(LockConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = new_lock_from_config(
+                LockConfig(kind=cast("LockKind", cast("object", "bogus")))
+            )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -517,9 +553,9 @@ class TestLockFromConfig:
         with patch("asyncpg.connect", AsyncMock(return_value=conn)) as connect:
             lock = new_lock_from_config(config)
             async with lock:
-                await lock.acquire()
+                _ = await lock.acquire()
 
-        dsn = connect.call_args.args[0]
+        dsn = cast("list[object]", connect.call_args.args[0])
         assert "sslmode=require" in dsn
         assert "p%40ss%2Fword" in dsn
         assert postgres_dsn(config) == dsn

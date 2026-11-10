@@ -6,6 +6,7 @@ Which packs concurrent callers into shared batches.
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -29,8 +30,8 @@ def _inner() -> MagicMock:
         return [EmbeddingResult([float(len(t))], "m", 1) for t in texts]
 
     inner.embed_batch = AsyncMock(side_effect=batch)
-    inner.model_name.return_value = "m"
-    inner.dimension.return_value = 1
+    cast("MagicMock", inner.model_name).return_value = "m"
+    cast("MagicMock", inner.dimension).return_value = 1
     return inner
 
 
@@ -56,7 +57,12 @@ async def test_concurrent_callers_share_full_batches() -> None:
         coalescer.embed("ffffff"),
     )
 
-    sizes = [len(call.args[0]) for call in inner.embed_batch.await_args_list]
+    sizes = [
+        len(cast("list[object]", call.args[0]))
+        for call in cast(
+            "list[object]", cast("AsyncMock", inner.embed_batch).await_args_list
+        )
+    ]
     assert sizes == [3, 3]
     assert [r.embedding for r in results[0]] == [[1.0], [2.0]]
     assert [r.embedding for r in results[1]] == [[3.0], [4.0], [5.0]]
@@ -86,7 +92,10 @@ async def test_partial_batch_goes_after_linger_and_input_types_stay_apart() -> N
     )
 
     types = sorted(
-        call.kwargs["input_type"] for call in inner.embed_batch.await_args_list
+        cast("str", cast("dict[str, object]", call.kwargs)["input_type"])
+        for call in cast(
+            "list[object]", cast("AsyncMock", inner.embed_batch).await_args_list
+        )
     )
     assert types == ["document", "query"]
     assert (doc.embedding, query.embedding) == ([3.0], [1.0])
@@ -106,7 +115,7 @@ async def test_failed_batch_fails_every_caller_in_it() -> None:
       - an invalid ``max_batch`` or ``linger_seconds`` is refused at construction
     """
     inner = _inner()
-    inner.embed_batch.side_effect = RuntimeError("throttled")
+    cast("MagicMock", inner.embed_batch).side_effect = RuntimeError("throttled")
     coalescer = CoalescingEmbedding(inner, max_batch=2, linger_seconds=10)
 
     outcomes = await asyncio.gather(
@@ -115,6 +124,6 @@ async def test_failed_batch_fails_every_caller_in_it() -> None:
 
     assert all(isinstance(o, RuntimeError) for o in outcomes)
     with pytest.raises(AppValueError):
-        CoalescingEmbedding(inner, max_batch=0, linger_seconds=1)
+        _ = CoalescingEmbedding(inner, max_batch=0, linger_seconds=1)
     with pytest.raises(AppValueError):
-        CoalescingEmbedding(inner, max_batch=1, linger_seconds=-1)
+        _ = CoalescingEmbedding(inner, max_batch=1, linger_seconds=-1)

@@ -1,5 +1,7 @@
 """Tests for the knowledge-base ingestion interface + IngestionJob."""
 
+from typing import TYPE_CHECKING, cast
+
 import pytest
 
 from techai_webutils.core.interfaces.kb_ingestion import (
@@ -7,6 +9,9 @@ from techai_webutils.core.interfaces.kb_ingestion import (
     IngestionJobState,
     KnowledgeBaseIngestor,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class TestIngestionJob:
@@ -67,4 +72,4 @@ class TestKnowledgeBaseIngestor:
           - Instantiating KnowledgeBaseIngestor directly raises TypeError.
         """
         with pytest.raises(TypeError):
-            KnowledgeBaseIngestor()  # type: ignore[abstract]
+            _ = cast("Callable[[], object]", KnowledgeBaseIngestor)()

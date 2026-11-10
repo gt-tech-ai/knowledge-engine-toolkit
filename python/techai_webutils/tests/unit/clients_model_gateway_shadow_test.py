@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,6 +20,7 @@ from techai_webutils.core.interfaces.fact_publisher import FactPublisher
 from techai_webutils.core.interfaces.llm import LLMMessage
 from techai_webutils.core.interfaces.model_gateway import RouteContext
 from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
+from tests.json_path import dig
 
 if TYPE_CHECKING:
     from techai_webutils.core.types.llm import LlmConfig
@@ -39,7 +40,7 @@ _PRICES = PriceTable(
 
 @pytest.mark.asyncio
 async def test_shadow_run_makes_no_model_call_and_emits_shadow_fact(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a shadow policy plans alongside the live one without serving anything.
 
@@ -86,14 +87,20 @@ async def test_shadow_run_makes_no_model_call_and_emits_shadow_fact(
         response = await gateway.complete([LLMMessage(role="user", content="q")])
 
     shadow_flags = [
-        call.args[0][0].dims["shadow"] for call in facts.publish.call_args_list
+        cast("dict[str, object]", call.args[0][0].dims)["shadow"]
+        for call in cast("list[object]", cast("MagicMock", facts.publish).call_args_list)
     ]
-    shadow_fact = next(
-        call.args[0][0]
-        for call in facts.publish.call_args_list
-        if call.args[0][0].dims["shadow"] == "true"
+    shadow_fact = cast(
+        "MagicMock",
+        next(
+            dig(cast("list[object]", call.args), 0, 0)
+            for call in cast(
+                "list[object]", cast("MagicMock", facts.publish).call_args_list
+            )
+            if cast("dict[str, object]", call.args[0][0].dims)["shadow"] == "true"
+        ),
     )
     assert response.model == "sonnet-use1"
     assert [p.model_name() for p in built] == ["sonnet-use1"]
-    assert sorted(shadow_flags) == ["false", "true"]
-    assert shadow_fact.dims["model_id"] == "meta/small"
+    assert sorted(map(str, shadow_flags)) == ["false", "true"]
+    assert cast("dict[str, object]", shadow_fact.dims)["model_id"] == "meta/small"

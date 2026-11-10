@@ -92,7 +92,7 @@ async def _consume(
             {consumer, waiter}, timeout=_WAIT_SECONDS, return_when=asyncio.FIRST_COMPLETED
         )
         await subscriber.close()
-        waiter.cancel()
+        _ = waiter.cancel()
         if consumer in finished:
             consumer.result()
         await asyncio.wait_for(consumer, timeout=_WAIT_SECONDS)
@@ -158,7 +158,7 @@ async def retry_then_dead_letter(transport: Transport) -> None:
 
     async with transport.publisher(DEFAULT_MAX_PAYLOAD_BYTES) as publisher:
         await publisher.publish(transport.topic, b"poison")
-    await asyncio.gather(
+    _ = await asyncio.gather(
         _consume(transport, transport.topic, transport.delivery, failing, dead_lettered),
         _consume(
             transport,
@@ -222,7 +222,7 @@ async def handlers_settle_independently(transport: Transport) -> None:
 
     async def handler(message: Message) -> None:
         if message.payload == b"slow" and transport.concurrent:
-            await asyncio.wait_for(fast_done.wait(), timeout=_WAIT_SECONDS)
+            _ = await asyncio.wait_for(fast_done.wait(), timeout=_WAIT_SECONDS)
         await asyncio.sleep(0)
         finished.append(message.payload)
         if message.payload == b"fast":

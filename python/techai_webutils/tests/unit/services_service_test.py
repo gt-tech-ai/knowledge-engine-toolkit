@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from abc import ABC
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -27,7 +28,7 @@ if TYPE_CHECKING:
     from conftest import Observed
 
 
-class _Orders(CrudService[Any, Any, Any]):
+class _Orders(CrudService[str, object, str], ABC):
     """The test service's contract: CRUD plus two domain operations."""
 
     async def refund(self) -> None:
@@ -110,12 +111,12 @@ async def test_crud_runs_through_the_tier_and_validates(observed: Observed) -> N
     assert await svc.update("1", "e") == "e"
     await svc.delete("1")
     with pytest.raises(InvalidInputError):
-        await svc.create("")
+        _ = await svc.create("")
     with pytest.raises(InvalidInputError):
-        await svc.update("1", "")
+        _ = await svc.update("1", "")
 
-    assert repo.create.await_count == 1
-    assert repo.update.await_count == 1
+    assert (cast("AsyncMock", repo.create).await_count) == 1
+    assert (cast("AsyncMock", repo.update).await_count) == 1
     ops = ["get", "list", "create", "update", "delete", "create", "update"]
     assert [name for name, _, _ in observed.spans] == [f"orders.{op}" for op in ops]
 
@@ -138,7 +139,7 @@ async def test_auth_authorizes_the_service_action() -> None:
     with pytest.raises(ForbiddenError):
         await svc.delete("1")
     auth.assert_awaited_once_with("orders.delete")
-    repo.delete.assert_not_awaited()
+    cast("MagicMock", cast("AsyncMock", repo.delete).assert_not_awaited)()
 
 
 @pytest.mark.asyncio

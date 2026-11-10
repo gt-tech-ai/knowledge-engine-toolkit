@@ -6,7 +6,7 @@ Tiers and config-built Deps (Go ``foundation/decorate``).
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -35,6 +35,7 @@ from techai_webutils.foundation.decorate import (
     Decorations,
     Deps,
     Layer,
+    OpMiddleware,
     Subject,
     Tier,
     chain,
@@ -56,6 +57,8 @@ from techai_webutils.repos.repository import tier as repository_tier
 from techai_webutils.services.service import tier as service_tier
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from conftest import Observed
 
 _EXPECTED_EXEC_OP = 2
@@ -63,17 +66,17 @@ _EXPECTED_EXEC_OP_3 = 3
 _EXPECTED_EXEC = 5
 
 
-async def _run(op: object) -> object:
+async def _run(op: Callable[[], Awaitable[object]]) -> object:
     """Run ``op`` once (a retrier's or bulkhead's pass-through).
 
     Returns:
         What ``op`` returns.
 
     """
-    return await op()  # type: ignore[operator]
+    return await op()
 
 
-def _recorder(calls: list[str], label: str) -> object:
+def _recorder(calls: list[str], label: str) -> OpMiddleware:
     """Return a middleware that records ``label`` on entry, then runs the operation.
 
     Returns:
@@ -83,10 +86,10 @@ def _recorder(calls: list[str], label: str) -> object:
 
     class _Mw:
         @staticmethod
-        async def wrap_op(op: str, next_: object) -> object:
+        async def wrap_op(op: str, next_: Callable[[], Awaitable[object]]) -> object:
             del op
             calls.append(label)
-            return await next_()  # type: ignore[operator]
+            return await next_()
 
     return _Mw()
 
@@ -106,7 +109,7 @@ class TestLayers:
           - ``chain(a, b)`` enters a then b; an empty chain runs the op.
         """
         calls: list[str] = []
-        mw = chain(_recorder(calls, "a"), _recorder(calls, "b"))  # type: ignore[arg-type]
+        mw = chain(_recorder(calls, "a"), _recorder(calls, "b"))
 
         assert await exec_op(mw, "Get", AsyncMock(return_value=1)) == 1
         assert calls == ["a", "b"]
@@ -133,7 +136,10 @@ class TestLayers:
 
         with pytest.raises(InternalError):
             await exec_op(mw, "Archive", AsyncMock(side_effect=RuntimeError("boom")))
-        assert logger.exception.call_args.kwargs == {
+        assert cast(
+            "object",
+            cast("MagicMock", cast("MagicMock", logger.exception).call_args).kwargs,
+        ) == {
             "service": "projects",
             "operation": "Archive",
         }
@@ -262,7 +268,7 @@ class TestLayers:
             await exec_op(new_timeout(0.01), "Get", slow)
 
         limiter = MagicMock(spec=RateLimiter)
-        limiter.allow.side_effect = [False, True]
+        cast("MagicMock", limiter.allow).side_effect = [False, True]
         with pytest.raises(AppError) as caught:
             await exec_op(new_rate_limit(limiter), "Get", AsyncMock())
         assert caught.value.code is ErrorCode.RESOURCE_EXHAUSTED
@@ -293,7 +299,7 @@ class TestLayers:
         )
 
         breaker = MagicMock(spec=CircuitBreakerInterface)
-        breaker.__enter__.side_effect = CircuitOpenError()
+        cast("MagicMock", breaker.__enter__).side_effect = CircuitOpenError()
         with pytest.raises(UnavailableError, match="projects"):
             await exec_op(new_circuit_breaker(breaker, "projects"), "Get", AsyncMock())
 
@@ -402,7 +408,7 @@ class TestDecorations:
         assert storage.shed_load is False
         assert decorations.observability is observed.observability
         with pytest.raises(AppValueError, match="no config for tier"):
-            decorations.deps(Tier("gateway", ()), "x")
+            _ = decorations.deps(Tier("gateway", ()), "x")
 
     @staticmethod
     def test_load_reads_the_section_with_the_collaborators(observed: Observed) -> None:
@@ -421,12 +427,12 @@ class TestDecorations:
         """
         collab = Collaborators(observability=observed.observability)
         absent = MagicMock()
-        absent.get.return_value = None
+        cast("MagicMock", absent.get).return_value = None
         search = Decorations.load(absent, collab).deps(client_tier(), "search")
         assert search.observability.tracer is observed.observability.tracer
 
         quiet = MagicMock()
-        quiet.get.return_value = {
+        cast("MagicMock", quiet.get).return_value = {
             "clients": {"overrides": {"search": {"tracing": False}}}
         }
         search = Decorations.load(quiet, collab).deps(client_tier(), "search")
@@ -505,6 +511,6 @@ class TestDecorations:
         assert api.bulkhead is not None
         assert api.shed_load is True
         with pytest.raises(AppValueError, match=r"odd\.bulkhead"):
-            decorations.deps(controller, "odd")
+            _ = decorations.deps(controller, "odd")
         with pytest.raises(AppValueError, match=r"neg\.retry"):
-            decorations.deps(client_tier(), "neg")
+            _ = decorations.deps(client_tier(), "neg")

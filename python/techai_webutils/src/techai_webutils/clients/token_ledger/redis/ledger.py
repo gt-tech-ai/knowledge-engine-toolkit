@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 
     from redis.asyncio import Redis
 
-    from techai_webutils.clients.token_ledger.builder import TokenLedgerConfig
+    from techai_webutils.clients.token_ledger.config import TokenLedgerConfig
     from techai_webutils.core.interfaces.metrics import MetricCounter, MetricsProvider
 
 COUNTER_FIELDS = ("input_tokens", "output_tokens", "embed_tokens", "cost_micro_usd")

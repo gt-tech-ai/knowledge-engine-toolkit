@@ -57,7 +57,7 @@ async def _claims_after(
     """
 
     async def run() -> AuthClaims | None:
-        await interceptor.intercept_service(
+        _ = await interceptor.intercept_service(
             AsyncMock(return_value="handler"), MagicMock(invocation_metadata=metadata)
         )
         return get_auth_claims()
@@ -140,7 +140,7 @@ class TestAuthClaims:
         """
         claims = AuthClaims(user_id="u-1")
         with pytest.raises(AttributeError):
-            claims.user_id = "u-2"  # type: ignore[misc]
+            claims.user_id = "u-2"
 
 
 class TestSplitRoles:
@@ -447,4 +447,4 @@ class TestHeaderClaimMapping:
         }
 
         with pytest.raises(ValueError, match=field):
-            HeaderClaimMapping(**names)
+            _ = HeaderClaimMapping(**names)

@@ -1,5 +1,6 @@
 """Tests for transient/permanent error classification across error families."""
 
+from typing import cast
 from unittest.mock import MagicMock
 
 import grpc
@@ -69,7 +70,7 @@ def _rpc_error(code: grpc.StatusCode) -> MagicMock:
 
     """
     err = MagicMock(spec=grpc.aio.AioRpcError)
-    err.code.return_value = code
+    cast("MagicMock", err.code).return_value = code
     return err
 
 

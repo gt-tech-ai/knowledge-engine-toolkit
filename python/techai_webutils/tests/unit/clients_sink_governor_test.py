@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from typing import cast, final
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -37,6 +38,7 @@ _CONFIG = GovernorConfig(
 """Eight writes at most, halved while p99 exceeds 500 ms, checked every 10 s."""
 
 
+@final
 class _Clock:
     """A monotonic clock the test advances by hand."""
 
@@ -65,14 +67,14 @@ async def _peak_writes(inner: MagicMock, governor: Sink, count: int) -> int:
     """
     active, peak, gate = 0, 0, asyncio.Event()
 
-    async def write(*_: object) -> None:
+    async def write(*_args: object) -> None:
         nonlocal active, peak
         active += 1
         peak = max(peak, active)
-        await gate.wait()
+        _ = await gate.wait()
         active -= 1
 
-    inner.write.side_effect = write
+    cast("MagicMock", inner.write).side_effect = write
     tasks = [
         asyncio.create_task(governor.write(_DOCUMENT, [ChunkPayload(text="t")], [[0.0]]))
         for _ in range(count)
@@ -80,7 +82,7 @@ async def _peak_writes(inner: MagicMock, governor: Sink, count: int) -> int:
     for _ in range(20):
         await asyncio.sleep(0)
     gate.set()
-    await asyncio.gather(*tasks)
+    _ = await asyncio.gather(*tasks)
     return peak
 
 
@@ -108,8 +110,8 @@ async def test_bulk_writes_back_off_when_query_p99_exceeds_budget() -> None:
 
     assert over == _EXPECTED_OVER
     assert under == _EXPECTED_UNDER
-    assert querier.query.await_count == _EXPECTED_AWAIT_COUNT
-    querier.query.assert_awaited_with("p99_ms")
+    assert (cast("AsyncMock", querier.query).await_count) == _EXPECTED_AWAIT_COUNT
+    cast("MagicMock", cast("AsyncMock", querier.query).assert_awaited_with)("p99_ms")
 
 
 @pytest.mark.asyncio
@@ -132,12 +134,18 @@ async def test_governor_holds_concurrency_when_metrics_read_fails() -> None:
     peak = await _peak_writes(inner, governor, 8)
 
     assert peak == _EXPECTED_PEAK
-    metrics.counter.assert_any_call(
+    cast("MagicMock", cast("MagicMock", metrics.counter).assert_any_call)(
         "sink_write_governor_read_failures_total",
         "Query-latency reads the sink write governor failed and held through.",
         [],
     )
-    metrics.counter.return_value.inc.assert_called_once_with()
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", metrics.counter).return_value).inc,
+        ).assert_called_once_with,
+    )()
 
 
 @pytest.mark.parametrize(
@@ -162,4 +170,6 @@ def test_governor_refuses_an_unusable_config(config: GovernorConfig) -> None:
         empty query each raise ``AppValueError``.
     """
     with pytest.raises(AppValueError):
-        SinkWriteGovernor(AsyncMock(spec=Sink), MagicMock(spec=MetricsQuerier), config)
+        _ = SinkWriteGovernor(
+            AsyncMock(spec=Sink), MagicMock(spec=MetricsQuerier), config
+        )

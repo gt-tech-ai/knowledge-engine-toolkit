@@ -8,7 +8,8 @@ instruction) is the consuming app's concern and is tested there.
 
 import asyncio
 from collections.abc import AsyncIterator
-from unittest.mock import create_autospec
+from typing import cast
+from unittest.mock import AsyncMock, MagicMock, create_autospec
 
 import pytest
 
@@ -63,16 +64,19 @@ class TestResponseGenerator:
         **What it tests:**
           - Tokens reassemble to the LLM output and the LLM stream is invoked once.
         """
-        llm = create_autospec(LLMProvider, instance=True)
-        llm.stream.return_value = _aiter(["Answer ", "[1]"])
+        llm = cast("MagicMock", create_autospec(LLMProvider, instance=True))
+        cast("MagicMock", llm.stream).return_value = _aiter(["Answer ", "[1]"])
         tokens = [
             token
             async for token in ResponseGenerator(
-                llm, create_autospec(GenerationPrompt, instance=True)
+                cast("LLMProvider", llm),
+                cast(
+                    "GenerationPrompt", create_autospec(GenerationPrompt, instance=True)
+                ),
             ).stream("q", [_passage("context text")])
         ]
         assert "".join(tokens) == "Answer [1]"
-        llm.stream.assert_awaited_once()
+        cast("MagicMock", cast("AsyncMock", llm.stream).assert_awaited_once)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -82,8 +86,8 @@ class TestResponseGenerator:
         **What it tests:**
           - complete() returns the LLM response content.
         """
-        llm = create_autospec(LLMProvider, instance=True)
-        llm.complete.return_value = LLMResponse(
+        llm = cast("MagicMock", create_autospec(LLMProvider, instance=True))
+        cast("MagicMock", llm.complete).return_value = LLMResponse(
             content="the answer",
             model="m",
             input_tokens=1,
@@ -92,7 +96,10 @@ class TestResponseGenerator:
         )
         assert (
             await ResponseGenerator(
-                llm, create_autospec(GenerationPrompt, instance=True)
+                cast("LLMProvider", llm),
+                cast(
+                    "GenerationPrompt", create_autospec(GenerationPrompt, instance=True)
+                ),
             ).complete("q", [_passage("c")])
             == "the answer"
         )
@@ -113,15 +120,19 @@ class TestResponseGenerator:
           - The prompt's messages() is invoked with the query, passages, AND the history
             turns.
         """
-        llm = create_autospec(LLMProvider, instance=True)
-        llm.complete.return_value = LLMResponse(
+        llm = cast("MagicMock", create_autospec(LLMProvider, instance=True))
+        cast("MagicMock", llm.complete).return_value = LLMResponse(
             content="a", model="m", input_tokens=1, output_tokens=1, finish_reason="stop"
         )
-        prompt = create_autospec(GenerationPrompt, instance=True)
+        prompt = cast("MagicMock", create_autospec(GenerationPrompt, instance=True))
         passages = [_passage("c")]
         history = [HistoryTurn(role="user", content="hi")]
-        _ = await ResponseGenerator(llm, prompt).complete("q", passages, history)
-        prompt.messages.assert_called_once_with("q", passages, history)
+        _ = await ResponseGenerator(
+            cast("LLMProvider", llm), cast("GenerationPrompt", prompt)
+        ).complete("q", passages, history)
+        cast("MagicMock", cast("MagicMock", prompt.messages).assert_called_once_with)(
+            "q", passages, history
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -139,14 +150,20 @@ class TestResponseGenerator:
             argument.
         """
         cfg = LLMConfig(max_tokens=4096, temperature=0.1)
-        llm = create_autospec(LLMProvider, instance=True)
-        llm.stream.return_value = _aiter(["x"])
-        llm.complete.return_value = LLMResponse(
+        llm = cast("object", create_autospec(LLMProvider, instance=True))
+        cast("MagicMock", llm.stream).return_value = _aiter(["x"])
+        cast("MagicMock", llm.complete).return_value = LLMResponse(
             content="a", model="m", input_tokens=1, output_tokens=1, finish_reason="stop"
         )
-        prompt = create_autospec(GenerationPrompt, instance=True)
-        gen = ResponseGenerator(llm, prompt, cfg)
+        prompt = cast("object", create_autospec(GenerationPrompt, instance=True))
+        gen = ResponseGenerator(
+            cast("LLMProvider", llm), cast("GenerationPrompt", prompt), cfg
+        )
         _ = [token async for token in gen.stream("q", [_passage("c")])]
-        llm.stream.assert_awaited_once_with(prompt.messages.return_value, cfg)
+        cast("MagicMock", llm.stream.assert_awaited_once_with)(
+            cast("object", prompt.messages.return_value), cfg
+        )
         _ = await gen.complete("q", [_passage("c")])
-        llm.complete.assert_awaited_once_with(prompt.messages.return_value, cfg)
+        cast("MagicMock", llm.complete.assert_awaited_once_with)(
+            cast("object", prompt.messages.return_value), cfg
+        )

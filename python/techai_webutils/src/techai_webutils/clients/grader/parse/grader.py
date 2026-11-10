@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
     from techai_webutils.core.domain.document_ir import DocumentBlock
     from techai_webutils.core.interfaces.dataset import EvalCase
-    from techai_webutils.core.interfaces.evaluator import EvalOutput
+    from techai_webutils.core.interfaces.grader import EvalOutput
 
 EXPECTED_BLOCKS_KEY = "blocks"
 """The eval case's ``expected`` key holding the golden blocks' IR JSON."""

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -29,6 +29,7 @@ from techai_webutils.core.interfaces.model_gateway import (
     current_route_decision,
 )
 from techai_webutils.foundation.tokens.cost import ModelPrice, PriceTable
+from tests.json_path import dig, items
 
 _PRICES = PriceTable(
     prices={
@@ -67,14 +68,22 @@ def test_analytics_sink_publishes_a_route_decisions_fact() -> None:
     sink.record(decision, _CTX)
     route_decision_sink_from_config({}, facts=facts).record(decision, _CTX)
 
-    (published,) = facts.publish.call_args.args[0]
-    assert (published.cube, published.org_id) == ("route_decisions", "org-1")
-    assert published.dims["model_id"] == "anthropic/sonnet"
-    assert published.dims["shadow"] == "false"
-    assert published.measures["tokens"] == pytest.approx(12.0)
-    facts.publish.assert_called_once()
+    (published,) = items(
+        cast(
+            "list[object]",
+            cast("MagicMock", cast("MagicMock", facts.publish).call_args).args,
+        )[0]
+    )
+    assert (cast("object", published.cube), cast("object", published.org_id)) == (
+        "route_decisions",
+        "org-1",
+    )
+    assert cast("dict[str, object]", published.dims)["model_id"] == "anthropic/sonnet"
+    assert cast("dict[str, object]", published.dims)["shadow"] == "false"
+    assert cast("dict[str, object]", published.measures)["tokens"] == pytest.approx(12.0)
+    cast("MagicMock", cast("MagicMock", facts.publish).assert_called_once)()
     with pytest.raises(AppError) as caught:
-        route_decision_sink_from_config({"kind": "kafka"})
+        _ = route_decision_sink_from_config({"kind": "kafka"})
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
@@ -107,21 +116,28 @@ def test_analytics_sink_attributes_the_decision_to_workspace_team_and_user() -> 
     sink.record(decision, who)
     sink.record(decision, _CTX)
 
-    named, anonymous = (call.args[0][0] for call in facts.publish.call_args_list)
-    assert (named.dims["workspace"], named.dims["team"], named.dims["user"]) == (
+    named, anonymous = (
+        dig(cast("list[object]", call.args), 0, 0)
+        for call in cast("list[object]", cast("MagicMock", facts.publish).call_args_list)
+    )
+    assert (
+        cast("dict[str, object]", named.dims)["workspace"],
+        cast("dict[str, object]", named.dims)["team"],
+        cast("dict[str, object]", named.dims)["user"],
+    ) == (
         "ws-1",
         "t1",
         "u1",
     )
-    assert anonymous.dims["workspace"] == "ws-1"
-    assert "team" not in anonymous.dims
-    assert "user" not in anonymous.dims
-    assert "workspace_id" not in named.dims
+    assert cast("dict[str, object]", anonymous.dims)["workspace"] == "ws-1"
+    assert "team" not in cast("list[object]", anonymous.dims)
+    assert "user" not in cast("list[object]", anonymous.dims)
+    assert "workspace_id" not in cast("list[object]", named.dims)
 
 
 @pytest.mark.asyncio
 async def test_decision_carries_actual_tokens_and_cost(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a served call's decision carries its estimate, tokens and cost.
 
@@ -162,13 +178,18 @@ async def test_decision_carries_actual_tokens_and_cost(
     ) / 1000
     assert decision.actual_cost == expected.quantize(Decimal("0.000001"))
     assert decision.estimated_cost is not None
-    (fact,) = facts.publish.call_args.args[0]
-    assert fact.dims["workspace"] == "ws-1"
+    (fact,) = items(
+        cast(
+            "list[object]",
+            cast("MagicMock", cast("MagicMock", facts.publish).call_args).args,
+        )[0]
+    )
+    assert cast("dict[str, object]", fact.dims)["workspace"] == "ws-1"
 
 
 @pytest.mark.asyncio
 async def test_sink_failure_never_fails_the_answer(
-    catalog_raw: dict[str, Any], routes_raw: dict[str, Any]
+    catalog_raw: dict[str, object], routes_raw: dict[str, object]
 ) -> None:
     """Test that a sink that raises is counted, never surfaced.
 
@@ -202,4 +223,4 @@ async def test_sink_failure_never_fails_the_answer(
     response = await gateway.complete([LLMMessage(role="user", content="q")])
 
     assert response.content == "q"
-    failures.inc.assert_called()
+    cast("MagicMock", cast("MagicMock", failures.inc).assert_called)()

@@ -35,7 +35,7 @@ async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
     host = container.get_container_host_ip()
     port = int(container.get_exposed_port(container.port))
     client = Redis(host=host, port=port)
-    await client.flushdb()
+    _ = await client.flushdb()
     try:
         yield client
     finally:

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, final
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -39,6 +39,7 @@ _NS = CacheNamespace("ws-1", "stub-embed", "8")
 _OTHER = CacheNamespace("ws-2", "stub-embed", "8")
 
 
+@final
 class _Harness:
     """The mocked collaborators of one cache under test."""
 
@@ -68,7 +69,7 @@ class _Harness:
         self.kv.get = AsyncMock(return_value=None)
         self.kv.set = AsyncMock()
         self.embedding = StubEmbeddingProvider("stub-embed", 8)
-        self.embedding.embed = AsyncMock(wraps=self.embedding.embed)  # type: ignore[method-assign]
+        self.embedding.embed = AsyncMock(wraps=self.embedding.embed)
         self.errors = MagicMock(spec=MetricCounter)
         metrics = MagicMock(spec=MetricsProvider)
         metrics.counter = MagicMock(return_value=self.errors)
@@ -112,11 +113,11 @@ def _array_reply(docs: list[SimpleNamespace]) -> list[object]:
             f"sc:d:{i}".encode(),
             [
                 b"key",
-                doc.key.encode(),
+                cast("MagicMock", cast("MagicMock", doc.key).encode)(),
                 b"query",
-                doc.query.encode(),
+                cast("MagicMock", cast("MagicMock", doc.query).encode)(),
                 b"dist",
-                doc.dist.encode(),
+                cast("MagicMock", cast("MagicMock", doc.dist).encode)(),
             ],
         ]
     return reply
@@ -135,9 +136,9 @@ def _map_reply(docs: list[SimpleNamespace]) -> dict[bytes, object]:
             {
                 b"id": f"sc:d:{i}".encode(),
                 b"extra_attributes": {
-                    b"key": doc.key.encode(),
-                    b"query": doc.query.encode(),
-                    b"dist": doc.dist.encode(),
+                    b"key": cast("MagicMock", cast("MagicMock", doc.key).encode)(),
+                    b"query": cast("MagicMock", cast("MagicMock", doc.query).encode)(),
+                    b"dist": cast("MagicMock", cast("MagicMock", doc.dist).encode)(),
                 },
             }
             for i, doc in enumerate(docs)
@@ -182,8 +183,16 @@ async def test_redis_semantic_cache_exact_hit_skips_embedding() -> None:
         embedding_model="stub-embed",
     )
     harness.embedding.embed.assert_not_awaited()
-    harness.redis.execute_command.assert_not_awaited()
-    assert harness.kv.get.await_args.args[0].startswith(f"sc:p:ws-1:{_NS.tag()}:")
+    cast(
+        "MagicMock", cast("AsyncMock", harness.redis.execute_command).assert_not_awaited
+    )()
+    assert cast(
+        "MagicMock",
+        cast(
+            "list[object]",
+            cast("MagicMock", cast("AsyncMock", harness.kv.get).await_args).args,
+        )[0].startswith,
+    )(f"sc:p:ws-1:{_NS.tag()}:")
 
 
 @pytest.mark.asyncio
@@ -206,7 +215,10 @@ async def test_redis_semantic_cache_knn_hit_above_threshold() -> None:
     assert hit.payload == b"cached answer"
     assert hit.similarity == pytest.approx(0.97)
     assert hit.source_query == "the cached question"
-    assert harness.kv.get.await_args_list[1].args == ("sc:p:ws-1:k:abc",)
+    assert cast(
+        "object",
+        cast("list[object]", cast("AsyncMock", harness.kv.get).await_args_list)[1].args,
+    ) == ("sc:p:ws-1:k:abc",)
 
 
 @pytest.mark.asyncio
@@ -255,7 +267,7 @@ async def test_redis_semantic_cache_knn_miss_below_threshold() -> None:
     stale = _Harness(docs=[_doc(0.01)])
 
     assert await far.cache.lookup("q", _NS, min_similarity=0.95) is None
-    assert far.kv.get.await_count == _EXPECTED_AWAIT_COUNT
+    assert (cast("AsyncMock", far.kv.get).await_count) == _EXPECTED_AWAIT_COUNT
     assert await stale.cache.lookup("q", _NS, min_similarity=0.95) is None
 
 
@@ -279,21 +291,41 @@ async def test_redis_semantic_cache_store_writes_payload_with_ttl() -> None:
     await harness.cache.store("What is X?", b"answer", _NS, ttl_seconds=120)
     await harness.cache.store("Other", b"two", _NS, ttl_seconds=120)
 
-    harness.search.create_index.assert_awaited_once()
-    payload_key, payload = harness.kv.set.await_args_list[0].args[:2]
+    cast(
+        "MagicMock", cast("AsyncMock", harness.search.create_index).assert_awaited_once
+    )()
+    payload_key, payload = cast(
+        "list[object]",
+        cast("list[object]", cast("AsyncMock", harness.kv.set).await_args_list)[0].args,
+    )[:2]
     assert payload == b"answer"
-    assert harness.kv.set.await_args_list[0].kwargs == {"ttl_seconds": 120}
-    assert payload_key.startswith(f"sc:p:ws-1:{_NS.tag()}:")
-    doc_key = harness.redis.hset.await_args_list[0].args[0]
-    mapping = harness.redis.hset.await_args_list[0].kwargs["mapping"]
-    assert doc_key == payload_key.replace("sc:p:", "sc:d:", 1)
+    assert cast(
+        "object",
+        cast("list[object]", cast("AsyncMock", harness.kv.set).await_args_list)[0].kwargs,
+    ) == {"ttl_seconds": 120}
+    assert cast("MagicMock", payload_key.startswith)(f"sc:p:ws-1:{_NS.tag()}:")
+    doc_key = cast(
+        "object",
+        cast("list[object]", cast("AsyncMock", harness.redis.hset).await_args_list)[
+            0
+        ].args[0],
+    )
+    mapping = cast(
+        "dict[str, object]",
+        cast("list[object]", cast("AsyncMock", harness.redis.hset).await_args_list)[
+            0
+        ].kwargs["mapping"],
+    )
+    assert doc_key == cast("MagicMock", payload_key.replace)("sc:p:", "sc:d:", 1)
     assert (mapping["ns"], mapping["key"], mapping["query"]) == (
         _NS.tag(),
         payload_key,
         "What is X?",
     )
-    assert len(mapping["embedding"]) == _EXPECTED_MAPPING_COUNT
-    harness.redis.expire.assert_any_await(doc_key, 120)
+    assert len(cast("list[object]", mapping["embedding"])) == _EXPECTED_MAPPING_COUNT
+    cast("MagicMock", cast("AsyncMock", harness.redis.expire).assert_any_await)(
+        doc_key, 120
+    )
 
 
 @pytest.mark.asyncio
@@ -315,11 +347,13 @@ async def test_redis_semantic_cache_lookup_fails_open() -> None:
         side_effect=RedisConnectionError("down")
     )
     embed_down = _Harness()
-    embed_down.embedding.embed = AsyncMock(side_effect=RuntimeError("ollama down"))  # type: ignore[method-assign]
+    embed_down.embedding.embed = AsyncMock(side_effect=RuntimeError("ollama down"))
 
     for harness in (kv_down, search_down, embed_down):
         assert await harness.cache.lookup("q", _NS, min_similarity=0.9) is None
-        harness.errors.inc.assert_called_once_with(op="lookup")
+        cast("MagicMock", cast("MagicMock", harness.errors.inc).assert_called_once_with)(
+            op="lookup"
+        )
 
 
 @pytest.mark.asyncio
@@ -344,9 +378,13 @@ async def test_redis_semantic_cache_store_fails_open() -> None:
     await harness.cache.store("q", b"a", _NS, ttl_seconds=60)
     await harness.cache.store("q", b"a", _NS, ttl_seconds=60)
 
-    harness.errors.inc.assert_called_with(op="store")
-    assert harness.errors.inc.call_count == _EXPECTED_CALL_COUNT
-    assert harness.search.create_index.await_count == _EXPECTED_AWAIT_COUNT
+    cast("MagicMock", cast("MagicMock", harness.errors.inc).assert_called_with)(
+        op="store"
+    )
+    assert (cast("MagicMock", harness.errors.inc).call_count) == _EXPECTED_CALL_COUNT
+    assert (
+        cast("AsyncMock", harness.search.create_index).await_count
+    ) == _EXPECTED_AWAIT_COUNT
 
 
 @pytest.mark.asyncio
@@ -363,11 +401,15 @@ async def test_redis_semantic_cache_namespace_isolation() -> None:
     """
     harness = _Harness()
 
-    await harness.cache.lookup("q", _NS, min_similarity=0.9)
-    await harness.cache.lookup("q", _OTHER, min_similarity=0.9)
+    _ = await harness.cache.lookup("q", _NS, min_similarity=0.9)
+    _ = await harness.cache.lookup("q", _OTHER, min_similarity=0.9)
 
     first, second = (
-        call.args[2] for call in harness.redis.execute_command.await_args_list
+        cast("str", cast("list[object]", call.args)[2])
+        for call in cast(
+            "list[object]",
+            cast("AsyncMock", harness.redis.execute_command).await_args_list,
+        )
     )
     assert f"@ns:{{{_NS.tag()}}}" in first
     assert f"@ns:{{{_OTHER.tag()}}}" in second
@@ -400,7 +442,12 @@ async def test_redis_semantic_cache_invalidation() -> None:
     await harness.cache.invalidate_prefix("w*")
     await harness.cache.invalidate_all()
 
-    matches = [call.kwargs["match"] for call in harness.redis.scan_iter.call_args_list]
+    matches = [
+        cast("dict[str, object]", call.kwargs)["match"]
+        for call in cast(
+            "list[object]", cast("MagicMock", harness.redis.scan_iter).call_args_list
+        )
+    ]
     assert matches == [
         "sc:p:ws-1:*",
         "sc:d:ws-1:*",
@@ -409,8 +456,12 @@ async def test_redis_semantic_cache_invalidation() -> None:
         "sc:d:*",
         "sc:p:*",
     ]
-    harness.redis.unlink.assert_any_await("sc:p:ws-1:x")
-    harness.search.dropindex.assert_awaited_once_with(delete_documents=False)
+    cast("MagicMock", cast("AsyncMock", harness.redis.unlink).assert_any_await)(
+        "sc:p:ws-1:x"
+    )
+    cast(
+        "MagicMock", cast("AsyncMock", harness.search.dropindex).assert_awaited_once_with
+    )(delete_documents=False)
     assert isinstance(harness.cache, RedisSemanticCache)
 
     down = _Harness()
@@ -418,8 +469,10 @@ async def test_redis_semantic_cache_invalidation() -> None:
     down.search.dropindex = AsyncMock(side_effect=RedisConnectionError("down"))
     await down.cache.invalidate_prefix("ws-1")
     await down.cache.invalidate_all()
-    assert down.errors.inc.call_count == _EXPECTED_CALL_COUNT
-    down.errors.inc.assert_called_with(op="invalidate")
+    assert (cast("MagicMock", down.errors.inc).call_count) == _EXPECTED_CALL_COUNT
+    cast("MagicMock", cast("MagicMock", down.errors.inc).assert_called_with)(
+        op="invalidate"
+    )
 
 
 @pytest.mark.asyncio
@@ -442,7 +495,9 @@ async def test_redis_semantic_cache_primitives_split_exact_and_nearest() -> None
 
     assert await harness.cache.exact("what's x", _NS) is None
     harness.embedding.embed.assert_not_awaited()
-    harness.redis.execute_command.assert_not_awaited()
+    cast(
+        "MagicMock", cast("AsyncMock", harness.redis.execute_command).assert_not_awaited
+    )()
 
     harness.kv.get = AsyncMock(return_value=b"near answer")
     near = await harness.cache.nearest("what's x", _NS)
@@ -466,14 +521,20 @@ async def test_redis_semantic_cache_strips_trailing_punctuation_when_configured(
       - with it off (the default), they read different keys
     """
     on = _Harness(strip_trailing_punctuation=True)
-    await on.cache.exact("What is X?", _NS)
-    await on.cache.exact("what is x", _NS)
-    keys_on = [c.args[0] for c in on.kv.get.await_args_list]
+    _ = await on.cache.exact("What is X?", _NS)
+    _ = await on.cache.exact("what is x", _NS)
+    keys_on = [
+        cast("list[object]", c.args)[0]
+        for c in cast("list[object]", cast("AsyncMock", on.kv.get).await_args_list)
+    ]
 
     off = _Harness()
-    await off.cache.exact("What is X?", _NS)
-    await off.cache.exact("what is x", _NS)
-    keys_off = [c.args[0] for c in off.kv.get.await_args_list]
+    _ = await off.cache.exact("What is X?", _NS)
+    _ = await off.cache.exact("what is x", _NS)
+    keys_off = [
+        cast("list[object]", c.args)[0]
+        for c in cast("list[object]", cast("AsyncMock", off.kv.get).await_args_list)
+    ]
 
     assert keys_on[0] == keys_on[1]
     assert keys_off[0] != keys_off[1]
@@ -497,4 +558,4 @@ async def test_redis_semantic_cache_primitives_fail_open() -> None:
 
     assert await harness.cache.exact("q", _NS) is None
     assert await harness.cache.nearest("q", _NS) is None
-    assert harness.errors.inc.call_count == _EXPECTED_CALL_COUNT
+    assert (cast("MagicMock", harness.errors.inc).call_count) == _EXPECTED_CALL_COUNT

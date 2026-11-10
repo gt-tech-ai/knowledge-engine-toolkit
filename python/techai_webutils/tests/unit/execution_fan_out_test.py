@@ -160,7 +160,7 @@ class TestFanOut:
             return StepResult(name=f"item-{item}")
 
         with pytest.raises(asyncio.CancelledError):
-            await fan_out(list(range(4)), 4, fn)
+            _ = await fan_out(list(range(4)), 4, fn)
 
     @staticmethod
     @pytest.mark.asyncio

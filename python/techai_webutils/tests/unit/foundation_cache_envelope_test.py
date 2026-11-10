@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import cast
 
 import pytest
 
@@ -34,7 +35,10 @@ class TestEncode:
           - A cached_at key is present
         """
         result = encode({"id": "1", "name": "alice"}, version=1)
-        parsed = json.loads(result)
+        parsed = cast(
+            "dict[str, object]",
+            json.loads(result),
+        )
         assert parsed["data"] == {"id": "1", "name": "alice"}
         assert parsed["version"] == 1
         assert "cached_at" in parsed
@@ -56,8 +60,8 @@ class TestEncode:
         before = time.time()
         result = encode("test", version=1)
         after = time.time()
-        parsed = json.loads(result)
-        assert before <= parsed["cached_at"] <= after
+        parsed = cast("dict[str, object]", json.loads(result))
+        assert before <= cast("float", parsed["cached_at"]) <= after
 
     @staticmethod
     def test_returns_bytes() -> None:
@@ -178,7 +182,7 @@ class TestDecode:
             returning (None, False)
         """
         with pytest.raises((json.JSONDecodeError, ValueError)):
-            decode(b"not json", version=1)
+            _ = decode(b"not json", version=1)
 
     @staticmethod
     def test_empty_bytes_raises() -> None:
@@ -194,7 +198,7 @@ class TestDecode:
           - decode of b"" raises JSONDecodeError/ValueError
         """
         with pytest.raises((json.JSONDecodeError, ValueError)):
-            decode(b"", version=1)
+            _ = decode(b"", version=1)
 
 
 class TestCacheEnvelope:
@@ -216,7 +220,7 @@ class TestCacheEnvelope:
         """
         env = CacheEnvelope(data="test", cached_at=time.time(), version=1)
         with pytest.raises(AttributeError):
-            env.data = "changed"  # type: ignore[misc]
+            env.data = "changed"
 
     @staticmethod
     def test_fields() -> None:

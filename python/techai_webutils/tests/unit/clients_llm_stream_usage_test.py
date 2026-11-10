@@ -9,7 +9,7 @@ stays the text-only API.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, cast, override
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -48,7 +48,7 @@ def _messages(user: str) -> list[LLMMessage]:
     ]
 
 
-async def _collect(iterator: AsyncIterator[Any]) -> list[Any]:
+async def _collect(iterator: AsyncIterator[object]) -> list[object]:
     """Drain an async iterator into a list.
 
     Returns:
@@ -58,7 +58,7 @@ async def _collect(iterator: AsyncIterator[Any]) -> list[Any]:
     return [item async for item in iterator]
 
 
-async def _events(events: list[dict[str, Any]]) -> AsyncIterator[dict[str, Any]]:
+async def _events(events: list[dict[str, object]]) -> AsyncIterator[dict[str, object]]:
     """Yield Converse stream events in order.
 
     (the shape aiobotocore's EventStream yields).
@@ -228,7 +228,7 @@ async def test_ollama_stream_with_usage_codes_http_errors(
     stream = await OllamaLlmProvider(client, model="m").stream_with_usage(_messages("hi"))
 
     with pytest.raises(AppError) as excinfo:
-        await _collect(stream)
+        _ = await _collect(stream)
 
     assert excinfo.value.code == code
     assert excinfo.value.message == f"ollama chat returned HTTP {status}"
@@ -278,7 +278,13 @@ async def test_ollama_stream_codes_mid_stream_failures(
     """
     first = '{"message":{"content":"partial"},"done":false}'
     client = _ollama_client([])
-    response = client.stream.return_value.__aenter__.return_value
+    response = cast(
+        "object",
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", client.stream).return_value).__aenter__,
+        ).return_value,
+    )
     if isinstance(tail, Exception):
         response.aiter_lines = MagicMock(return_value=_lines_then_fail([first], tail))
     else:
@@ -287,15 +293,15 @@ async def test_ollama_stream_codes_mid_stream_failures(
 
     assert await anext(stream) == "partial"
     with pytest.raises(AppError) as excinfo:
-        await anext(stream)
+        _ = await anext(stream)
 
     assert excinfo.value.code == code
     assert excinfo.value.message.startswith(message)
 
 
 async def _events_then_fail(
-    events: list[dict[str, Any]], exc: Exception
-) -> AsyncIterator[dict[str, Any]]:
+    events: list[dict[str, object]], exc: Exception
+) -> AsyncIterator[dict[str, object]]:
     """Yield Converse stream events in order.
 
     Then raise ``exc`` as a failing EventStream would.
@@ -346,7 +352,7 @@ async def test_bedrock_stream_codes_mid_stream_client_errors() -> None:
         stream = await provider.stream_with_usage(_messages("hi"))
         assert await anext(stream) == "Hel"
         with pytest.raises(AppError) as excinfo:
-            await anext(stream)
+            _ = await anext(stream)
 
     assert excinfo.value.code == ErrorCode.UNAVAILABLE
 
@@ -376,7 +382,7 @@ async def test_stub_stream_yields_to_the_event_loop_between_tokens() -> None:
         await asyncio.sleep(0)
         order.append("tick")
 
-    await asyncio.gather(consume(), tick())
+    _ = await asyncio.gather(consume(), tick())
 
     assert order.index("tick") < order.index("gamma ")
 

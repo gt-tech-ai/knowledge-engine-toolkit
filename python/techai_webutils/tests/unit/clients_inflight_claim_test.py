@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -34,7 +35,7 @@ def _client(*, set_result: object = True) -> tuple[MagicMock, AsyncMock]:
     """
     script = AsyncMock(return_value=1)
     client = MagicMock(spec=Redis)
-    client.register_script.return_value = script
+    cast("MagicMock", client.register_script).return_value = script
     client.set = AsyncMock(return_value=set_result)
     return client, script
 
@@ -90,8 +91,11 @@ async def test_redis_claim_sets_key_nx_with_ttl_in_ms() -> None:
 
     assert await claim.claim("k", 1.5)
 
-    client.set.assert_awaited_once()
-    args, kwargs = client.set.await_args
+    cast("MagicMock", cast("AsyncMock", client.set).assert_awaited_once)()
+    args, kwargs = cast(
+        "tuple[tuple[object, ...], dict[str, object]]",
+        cast("AsyncMock", client.set).await_args,
+    )
     assert args[0] == "inflight:k"
     assert kwargs == {"nx": True, "px": 1500}
 
@@ -134,8 +138,10 @@ async def test_redis_release_deletes_only_with_own_token() -> None:
     """
     client, script = _client()
     claim = _redis_claim(client)
-    await claim.claim("k", 10)
-    token = client.set.await_args.args[1]
+    _ = await claim.claim("k", 10)
+    token = cast(
+        "object", cast("MagicMock", cast("AsyncMock", client.set).await_args).args[1]
+    )
 
     await claim.release("k")
     await claim.release("k")
@@ -179,11 +185,11 @@ def test_redis_kind_without_client_and_unknown_kind_raise() -> None:
       - an unknown kind raises ``AppValueError``
     """
     with pytest.raises(AppValueError, match="client or host"):
-        inflight_claim_from_config(InflightClaimConfig(kind=InflightClaimKind.REDIS))
+        _ = inflight_claim_from_config(InflightClaimConfig(kind=InflightClaimKind.REDIS))
     bogus = MagicMock(spec=InflightClaimConfig)
     bogus.kind = "bogus"
     with pytest.raises(AppValueError):
-        inflight_claim_from_config(bogus)
+        _ = inflight_claim_from_config(bogus)
 
 
 def test_inflight_key_names_content_and_stage() -> None:
@@ -236,4 +242,4 @@ async def test_inflight_claim_fails_open_on_redis_outage_and_counts_it() -> None
     await claim.aclose()
 
     assert opened.call_args.kwargs["host"] == "redis"
-    client.aclose.assert_awaited_once()
+    cast("MagicMock", cast("AsyncMock", client.aclose).assert_awaited_once)()

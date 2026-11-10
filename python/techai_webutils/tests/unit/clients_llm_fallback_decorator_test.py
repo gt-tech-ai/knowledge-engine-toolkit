@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -120,12 +120,12 @@ def _providers_with_fallback(
 
     """
     primary = AsyncMock()
-    primary.complete.side_effect = primary_error
+    cast("MagicMock", primary.complete).side_effect = primary_error
     fallback = AsyncMock()
     if isinstance(fallback_result, Exception):
-        fallback.complete.side_effect = fallback_result
+        cast("MagicMock", fallback.complete).side_effect = fallback_result
     else:
-        fallback.complete.return_value = fallback_result
+        cast("MagicMock", fallback.complete).return_value = fallback_result
     return FallbackLlmProvider(primary, fallback), fallback
 
 
@@ -161,7 +161,7 @@ async def test_both_models_fail_raises_unavailable() -> None:
         _client_error("ThrottlingException", 429),
     )
     with pytest.raises(UnavailableError):
-        await provider.complete(_MESSAGES)
+        _ = await provider.complete(_MESSAGES)
 
 
 @pytest.mark.asyncio
@@ -174,8 +174,8 @@ async def test_non_retryable_error_reraises_without_fallback() -> None:
         _client_error("ValidationException", 400), _response("haiku")
     )
     with pytest.raises(ClientError):
-        await provider.complete(_MESSAGES)
-    fallback.complete.assert_not_awaited()
+        _ = await provider.complete(_MESSAGES)
+    cast("MagicMock", cast("AsyncMock", fallback.complete).assert_not_awaited)()
 
 
 def _coded_provider_error(code: str, status: int) -> AppError:
@@ -231,8 +231,8 @@ async def test_coded_provider_error_is_classified_through_its_cause(
         assert (await provider.complete(_MESSAGES)).model == "haiku"
         return
     with pytest.raises(AppError):
-        await provider.complete(_MESSAGES)
-    fallback.complete.assert_not_awaited()
+        _ = await provider.complete(_MESSAGES)
+    cast("MagicMock", cast("AsyncMock", fallback.complete).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -252,8 +252,8 @@ async def test_error_without_botocore_shape_reraises() -> None:
         RuntimeError("unexpected"), _response("haiku")
     )
     with pytest.raises(RuntimeError):
-        await provider.complete(_MESSAGES)
-    fallback.complete.assert_not_awaited()
+        _ = await provider.complete(_MESSAGES)
+    cast("MagicMock", cast("AsyncMock", fallback.complete).assert_not_awaited)()
 
 
 @pytest.mark.asyncio
@@ -271,10 +271,10 @@ async def test_async_context_enters_and_exits_both_providers() -> None:
     provider = FallbackLlmProvider(primary, fallback)
     async with provider as entered:
         assert entered is provider
-        primary.__aenter__.assert_awaited_once()
-        fallback.__aenter__.assert_awaited_once()
-    primary.__aexit__.assert_awaited_once()
-    fallback.__aexit__.assert_awaited_once()
+        cast("MagicMock", cast("AsyncMock", primary.__aenter__).assert_awaited_once)()
+        cast("MagicMock", cast("AsyncMock", fallback.__aenter__).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", primary.__aexit__).assert_awaited_once)()
+    cast("MagicMock", cast("AsyncMock", fallback.__aexit__).assert_awaited_once)()
 
 
 @pytest.mark.asyncio
@@ -290,12 +290,12 @@ async def test_aenter_rolls_back_primary_when_fallback_enter_fails() -> None:
         is exited (rolled back).
     """
     primary, fallback = AsyncMock(), AsyncMock()
-    fallback.__aenter__.side_effect = RuntimeError("enter failed")
+    cast("MagicMock", fallback.__aenter__).side_effect = RuntimeError("enter failed")
     provider = FallbackLlmProvider(primary, fallback)
     async with AsyncExitStack() as stack:
         with pytest.raises(RuntimeError, match="enter failed"):
-            await stack.enter_async_context(provider)
-    primary.__aexit__.assert_awaited_once()
+            _ = await stack.enter_async_context(provider)
+    cast("MagicMock", cast("AsyncMock", primary.__aexit__).assert_awaited_once)()
 
 
 @pytest.mark.asyncio
@@ -311,10 +311,12 @@ async def test_stream_falls_back_before_first_token() -> None:
         tokens are returned.
     """
     primary, fallback = AsyncMock(), AsyncMock()
-    primary.stream_with_usage.return_value = _stream_then_fail(
+    cast("MagicMock", primary.stream_with_usage).return_value = _stream_then_fail(
         _client_error("ThrottlingException", 429)
     )
-    fallback.stream_with_usage.return_value = _stream("hello", " world")
+    cast("MagicMock", fallback.stream_with_usage).return_value = _stream(
+        "hello", " world"
+    )
     provider = FallbackLlmProvider(primary, fallback)
 
     tokens = [t async for t in await provider.stream(_MESSAGES)]
@@ -334,14 +336,14 @@ async def test_stream_propagates_failure_after_first_token() -> None:
         is never streamed.
     """
     primary, fallback = AsyncMock(), AsyncMock()
-    primary.stream_with_usage.return_value = _stream_then_fail(
+    cast("MagicMock", primary.stream_with_usage).return_value = _stream_then_fail(
         _client_error("ThrottlingException", 429), "partial"
     )
     provider = FallbackLlmProvider(primary, fallback)
 
     with pytest.raises(ClientError):
         _ = [t async for t in await provider.stream(_MESSAGES)]
-    fallback.stream_with_usage.assert_not_called()
+    cast("MagicMock", cast("MagicMock", fallback.stream_with_usage).assert_not_called)()
 
 
 @pytest.mark.asyncio
@@ -356,10 +358,10 @@ async def test_stream_both_fail_raises_unavailable() -> None:
         UnavailableError.
     """
     primary, fallback = AsyncMock(), AsyncMock()
-    primary.stream_with_usage.return_value = _stream_then_fail(
+    cast("MagicMock", primary.stream_with_usage).return_value = _stream_then_fail(
         _client_error("ThrottlingException", 429)
     )
-    fallback.stream_with_usage.return_value = _stream_then_fail(
+    cast("MagicMock", fallback.stream_with_usage).return_value = _stream_then_fail(
         _client_error("InternalServerException", 500)
     )
     provider = FallbackLlmProvider(primary, fallback)
@@ -384,10 +386,10 @@ async def test_stream_with_usage_passes_fallback_usage_through() -> None:
         model="haiku", input_tokens=9, output_tokens=2, finish_reason="end_turn"
     )
     primary, fallback = AsyncMock(), AsyncMock()
-    primary.stream_with_usage.return_value = _stream_then_fail(
+    cast("MagicMock", primary.stream_with_usage).return_value = _stream_then_fail(
         _client_error("ThrottlingException", 429)
     )
-    fallback.stream_with_usage.return_value = _stream("hi", usage)
+    cast("MagicMock", fallback.stream_with_usage).return_value = _stream("hi", usage)
     provider = FallbackLlmProvider(primary, fallback)
 
     items = [i async for i in await provider.stream_with_usage(_MESSAGES)]

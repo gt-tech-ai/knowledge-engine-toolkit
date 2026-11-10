@@ -5,6 +5,7 @@ With its auth.
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -62,7 +63,7 @@ def test_sigv4_signs_with_the_ambient_credentials() -> None:
     """
     credentials = MagicMock(name="credentials")
     session = MagicMock()
-    session.get_credentials.return_value = credentials
+    cast("MagicMock", session.get_credentials).return_value = credentials
     conn = OpenSearchConnection(
         domains=(("d0", "https://d0.example"),),
         auth=OpenSearchAuth.SIGV4,
@@ -73,10 +74,12 @@ def test_sigv4_signs_with_the_ambient_credentials() -> None:
         patch(f"{_MODULE}.AWSV4SignerAsyncAuth") as signer_cls,
         patch(f"{_MODULE}.AsyncOpenSearch") as client_cls,
     ):
-        opensearch_clients_from_config(conn)
+        _ = opensearch_clients_from_config(conn)
 
     signer_cls.assert_called_once_with(credentials, "us-east-1", "es")
-    assert client_cls.call_args.kwargs["http_auth"] is signer_cls.return_value
+    assert client_cls.call_args.kwargs["http_auth"] is cast(
+        "object", signer_cls.return_value
+    )
 
 
 @pytest.mark.parametrize(
@@ -112,7 +115,7 @@ def test_refuses_a_connection_it_cannot_use(
         ``sigv4`` without a region each raise ``AppValueError`` naming the reason.
     """
     with pytest.raises(AppValueError, match=reason):
-        opensearch_clients_from_config(conn)
+        _ = opensearch_clients_from_config(conn)
 
 
 def test_sigv4_without_credentials_is_refused() -> None:
@@ -126,7 +129,7 @@ def test_sigv4_without_credentials_is_refused() -> None:
       - No credentials from the botocore session raises ``AppValueError``.
     """
     session = MagicMock()
-    session.get_credentials.return_value = None
+    cast("MagicMock", session.get_credentials).return_value = None
     conn = OpenSearchConnection(
         domains=(("d0", "https://d0.example"),),
         auth=OpenSearchAuth.SIGV4,
@@ -136,4 +139,4 @@ def test_sigv4_without_credentials_is_refused() -> None:
         patch(f"{_MODULE}.botocore.session.get_session", return_value=session),
         pytest.raises(AppValueError, match="credentials"),
     ):
-        opensearch_clients_from_config(conn)
+        _ = opensearch_clients_from_config(conn)

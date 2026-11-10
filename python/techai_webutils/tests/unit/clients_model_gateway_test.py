@@ -120,7 +120,7 @@ def test_new_model_gateway_from_config_unknown_kind_raises() -> None:
       - an unknown kind raises a ``ValueError`` coded ``INVALID_INPUT``
     """
     with pytest.raises(AppValueError, match="unknown model gateway kind") as caught:
-        new_model_gateway_from_config(
+        _ = new_model_gateway_from_config(
             GatewayConfig(kind="magic"),
             options=ModelGatewayDependencies(provider_factory=new_llm_from_config),
         )
@@ -160,7 +160,7 @@ async def test_passthrough_sets_route_decision_for_complete_and_stream() -> None
     # A fresh task copies this (still empty) context, so the stream's decision stays in
     # it.
     before, after_stream = await asyncio.create_task(consume())
-    await gateway.complete(_MESSAGES)
+    _ = await gateway.complete(_MESSAGES)
     after_complete = current_route_decision()
 
     assert after_complete == expected

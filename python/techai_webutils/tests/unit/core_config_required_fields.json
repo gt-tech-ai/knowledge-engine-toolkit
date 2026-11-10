@@ -28,7 +28,7 @@
   },
   "techai_webutils.clients.metadata.factory.MetadataConfig": {},
   "techai_webutils.clients.model_gateway.builder.GatewayConfig": {},
-  "techai_webutils.clients.model_gateway.builder.RoutedConfig": {},
+  "techai_webutils.clients.model_gateway.routed.config.RoutedConfig": {},
   "techai_webutils.clients.model_gateway.routed.planner.overlord.OverlordPlannerConfig": {
     "target": "localhost:50051"
   },
@@ -43,7 +43,7 @@
   "techai_webutils.clients.rpc.grpc.client.ChannelConfig": {},
   "techai_webutils.clients.safety.builder.SafetyConfig": {},
   "techai_webutils.clients.semantic_cache.admission.CacheAdmissionConfig": {},
-  "techai_webutils.clients.semantic_cache.builder.SemanticCacheConfig": {},
+  "techai_webutils.clients.semantic_cache.config.SemanticCacheConfig": {},
   "techai_webutils.clients.semantic_cache.tiers.CacheTierConfig": {
     "kind": "exact"
   },
@@ -64,7 +64,7 @@
     "endpoint": "http://localhost:9000",
     "region": "us-east-1"
   },
-  "techai_webutils.clients.token_ledger.builder.TokenLedgerConfig": {},
+  "techai_webutils.clients.token_ledger.config.TokenLedgerConfig": {},
   "techai_webutils.clients.token_source.builder.TokenSourceConfig": {},
   "techai_webutils.clients.tokenizer.builder.TokenCounterConfig": {},
   "techai_webutils.clients.vector.builder.VectorStoreConfig": {},

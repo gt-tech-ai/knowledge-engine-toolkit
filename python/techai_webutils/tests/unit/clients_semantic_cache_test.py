@@ -75,7 +75,7 @@ def test_semantic_cache_from_config_unknown_kind_raises() -> None:
       - an unknown kind raises a ``ValueError`` coded ``INVALID_INPUT``
     """
     with pytest.raises(AppValueError, match="unknown semantic cache kind") as caught:
-        semantic_cache_from_config(SemanticCacheConfig(kind="qdrant"))
+        _ = semantic_cache_from_config(SemanticCacheConfig(kind="qdrant"))
 
     assert isinstance(caught.value, AppError)
     assert caught.value.code is ErrorCode.INVALID_INPUT
@@ -95,7 +95,7 @@ def test_semantic_cache_from_config_redis_requires_collaborators() -> None:
     config = SemanticCacheConfig(kind=SemanticCacheKind.REDIS)
 
     with pytest.raises(AppError, match="requires cache, embedding and redis") as caught:
-        semantic_cache_from_config(config, cache=MagicMock(spec=Cache))
+        _ = semantic_cache_from_config(config, cache=MagicMock(spec=Cache))
 
     assert caught.value.code is ErrorCode.INVALID_INPUT
 

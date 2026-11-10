@@ -1,7 +1,8 @@
 """Tests for the Job[T] discover -> map -> fan-out builder."""
 
 import asyncio
-from unittest.mock import create_autospec
+from typing import cast
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
@@ -42,9 +43,9 @@ def _discoverer(items: list[int]) -> Discoverer[int]:
         The mock discoverer.
 
     """
-    disc = create_autospec(Discoverer, instance=True)
-    disc.discover.return_value = items
-    return disc
+    disc = cast("object", create_autospec(Discoverer, instance=True))
+    cast("MagicMock", disc.discover).return_value = items
+    return cast("Discoverer[int]", disc)
 
 
 class TestJob:

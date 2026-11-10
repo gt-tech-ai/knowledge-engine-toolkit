@@ -9,7 +9,8 @@ from __future__ import annotations
 import asyncio
 import json
 from io import StringIO
-from unittest.mock import patch
+from typing import cast, final
+from unittest.mock import MagicMock, patch
 
 import pytest
 import structlog
@@ -35,6 +36,7 @@ def _serve(path: str, status: int = 200) -> None:
     Middleware.
     """
 
+    @final
     class _App:
         title = "test-svc"
 
@@ -51,7 +53,7 @@ def _serve(path: str, status: int = 200) -> None:
         await asyncio.sleep(0)
         return PlainTextResponse("ok", status_code=status)
 
-    asyncio.run(
+    _ = asyncio.run(
         http_observability.fastapi_observability_middleware(Request(scope), call_next)
     )
 
@@ -64,7 +66,11 @@ def _http_logs(raw: str) -> list[dict[str, object]]:
 
     """
     entries = [json.loads(line) for line in raw.strip().split("\n") if line]
-    return [e for e in entries if e.get("message") == "http request"]
+    return [
+        e
+        for e in cast("list[MagicMock]", entries)
+        if cast("MagicMock", e.get)("message") == "http request"
+    ]
 
 
 class TestTraceContextProcessor:
@@ -84,9 +90,9 @@ class TestTraceContextProcessor:
           - With no recording span, a rendered log line carries no trace_id/span_id
         """
         output = StringIO()
-        configure_logging(level="INFO", stream=output)
-        structlog.get_logger("t").info("hi")
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        _ = configure_logging(level="INFO", stream=output)
+        cast("MagicMock", structlog.get_logger("t").info)("hi")
+        data = cast("list[object]", json.loads(output.getvalue().strip().split("\n")[-1]))
         assert "trace_id" not in data
         assert "span_id" not in data
 
@@ -109,10 +115,13 @@ class TestTraceContextProcessor:
             "timestamp", and level=="info"
         """
         output = StringIO()
-        configure_logging(level="INFO", stream=output)
+        _ = configure_logging(level="INFO", stream=output)
 
-        structlog.get_logger("t").info("hello")
-        data = json.loads(output.getvalue().strip().split("\n")[-1])
+        cast("MagicMock", structlog.get_logger("t").info)("hello")
+        data = cast(
+            "dict[str, object]",
+            json.loads(output.getvalue().strip().split("\n")[-1]),
+        )
         assert data["message"] == "hello"
         assert "timestamp" in data
         assert data["level"] == "info"
@@ -132,10 +141,10 @@ class TestTraceContextProcessor:
           - At level INFO, a .debug() call produces no output while .info() does.
         """
         output = StringIO()
-        configure_logging(level="INFO", stream=output)
-        log = structlog.get_logger("t")
-        log.debug("debug-should-be-filtered")
-        log.info("info-should-appear")
+        _ = configure_logging(level="INFO", stream=output)
+        log = cast("MagicMock", structlog.get_logger("t"))
+        cast("MagicMock", log.debug)("debug-should-be-filtered")
+        cast("MagicMock", log.info)("info-should-appear")
 
         rendered = output.getvalue()
         assert "info-should-appear" in rendered
@@ -206,7 +215,7 @@ class TestHTTPMetrics:
             a normal path still renders exactly one
         """
         out = StringIO()
-        configure_logging(level="INFO", stream=out)
+        _ = configure_logging(level="INFO", stream=out)
 
         for probe in ("/healthz", "/readyz", "/metrics"):
             _serve(probe)
@@ -255,6 +264,7 @@ class TestSampleRate:
         assert parse_sample_rate(raw) == expected
 
 
+@final
 class TestHTTPRequestLogging:
     """The 'http request' log uses a status-appropriate level and fires on error paths.
 
@@ -265,7 +275,11 @@ class TestHTTPRequestLogging:
     @staticmethod
     def _last_http_log(raw: str) -> dict[str, object]:
         entries = [json.loads(line) for line in raw.strip().split("\n") if line]
-        http = [e for e in entries if e.get("message") == "http request"]
+        http = [
+            e
+            for e in cast("list[MagicMock]", entries)
+            if cast("MagicMock", e.get)("message") == "http request"
+        ]
         return http[-1] if http else {}
 
     def test_aiohttp_404_logs_at_warning(self) -> None:
@@ -285,7 +299,7 @@ class TestHTTPRequestLogging:
             status==404 and level=="warning"
         """
         out = StringIO()
-        configure_logging(level="INFO", stream=out)
+        _ = configure_logging(level="INFO", stream=out)
         middleware = http_observability.aiohttp_observability_middleware("test-svc")
 
         async def handler(_request: object) -> object:
@@ -293,7 +307,7 @@ class TestHTTPRequestLogging:
             raise web.HTTPNotFound
 
         with pytest.raises(web.HTTPNotFound):
-            asyncio.run(
+            _ = asyncio.run(
                 middleware(make_mocked_request("GET", "/does-not-exist"), handler)
             )
 
@@ -317,7 +331,7 @@ class TestHTTPRequestLogging:
             status==500, level=="error", and an "exception" field present
         """
         out = StringIO()
-        configure_logging(level="INFO", stream=out)
+        _ = configure_logging(level="INFO", stream=out)
         middleware = http_observability.aiohttp_observability_middleware("test-svc")
 
         async def handler(_request: object) -> object:
@@ -326,7 +340,7 @@ class TestHTTPRequestLogging:
             raise ValueError(msg)
 
         with pytest.raises(ValueError, match="boom"):
-            asyncio.run(
+            _ = asyncio.run(
                 middleware(make_mocked_request("GET", "/does-not-exist"), handler)
             )
 
@@ -350,8 +364,9 @@ class TestHTTPRequestLogging:
             with status==404 and level=="warning"
         """
         out = StringIO()
-        configure_logging(level="INFO", stream=out)
+        _ = configure_logging(level="INFO", stream=out)
 
+        @final
         class _App:
             title = "test-svc"
 
@@ -368,7 +383,7 @@ class TestHTTPRequestLogging:
             await asyncio.sleep(0)
             return PlainTextResponse("nope", status_code=404)
 
-        asyncio.run(
+        _ = asyncio.run(
             http_observability.fastapi_observability_middleware(Request(scope), call_next)
         )
 

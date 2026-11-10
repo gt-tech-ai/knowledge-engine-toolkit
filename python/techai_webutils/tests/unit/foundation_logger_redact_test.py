@@ -6,8 +6,9 @@
 import io
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 import structlog
@@ -35,7 +36,7 @@ def restore_logging() -> Iterator[None]:
     root = logging.getLogger()
     handlers, level = root.handlers[:], root.level
     yield
-    structlog.configure(**saved)
+    cast("Callable[..., None]", structlog.configure)(**cast("dict[str, object]", saved))
     root.handlers[:] = handlers
     root.setLevel(level)
 
@@ -52,11 +53,11 @@ def test_redact_pii_matches_go_vectors() -> None:
       - for each case in ``testdata/redact_vectors.json`` (also read by the Go suite),
         ``redact_pii(input) == want``
     """
-    vectors = json.loads(_VECTORS.read_text(encoding="utf-8"))
+    vectors = cast("object", json.loads(_VECTORS.read_text(encoding="utf-8")))
 
     assert vectors
-    for vector in vectors:
-        assert redact_pii(vector["input"]) == vector["want"], vector["name"]
+    for vector in cast("list[dict[str, object]]", vectors):
+        assert redact_pii(cast("str", vector["input"])) == vector["want"], vector["name"]
 
 
 @pytest.mark.usefixtures("restore_logging")
@@ -75,15 +76,20 @@ def test_logger_applies_redaction_when_flag_set() -> None:
       - with the flag unset, the same line is emitted verbatim
     """
     redacted_stream = io.StringIO()
-    configure_logging(level="INFO", stream=redacted_stream, redact_pii=True)
+    _ = configure_logging(level="INFO", stream=redacted_stream, redact_pii=True)
     get_logger("t").info("mail john@example.com", caller="555-123-4567", attempts=3)
 
     plain_stream = io.StringIO()
-    configure_logging(level="INFO", stream=plain_stream)
+    _ = configure_logging(level="INFO", stream=plain_stream)
     get_logger("t").info("mail john@example.com", caller="555-123-4567", attempts=3)
 
-    redacted = json.loads(redacted_stream.getvalue().strip().splitlines()[-1])
-    plain = json.loads(plain_stream.getvalue().strip().splitlines()[-1])
+    redacted = cast(
+        "dict[str, object]",
+        json.loads(redacted_stream.getvalue().strip().splitlines()[-1]),
+    )
+    plain = cast(
+        "dict[str, object]", json.loads(plain_stream.getvalue().strip().splitlines()[-1])
+    )
     assert redacted["message"] == "mail [REDACTED]"
     assert redacted["caller"] == "[REDACTED]"
     assert redacted["attempts"] == _EXPECTED_REDACTED
@@ -106,7 +112,7 @@ def test_logger_redacts_nested_fields() -> None:
         numbers and keys left unchanged
     """
     stream = io.StringIO()
-    configure_logging(level="INFO", stream=stream, redact_pii=True)
+    _ = configure_logging(level="INFO", stream=stream, redact_pii=True)
     get_logger("t").info(
         "llm.request",
         request={"user": "john@example.com", "retries": 2, "note": "ok"},
@@ -114,7 +120,9 @@ def test_logger_redacts_nested_fields() -> None:
         pair=("john@example.com", "plain"),
     )
 
-    line = json.loads(stream.getvalue().strip().splitlines()[-1])
+    line = cast(
+        "dict[str, object]", json.loads(stream.getvalue().strip().splitlines()[-1])
+    )
     assert line["request"] == {"user": "[REDACTED]", "retries": 2, "note": "ok"}
     assert line["messages"] == [{"role": "user", "content": "call [REDACTED]"}]
     assert line["pair"] == ["[REDACTED]", "plain"]

@@ -56,7 +56,7 @@ async def test_storage_memory_backend_roundtrip() -> None:
         assert await store.exists("bucket", "k") is False
 
         with pytest.raises(NotFoundError):
-            await store.download("bucket", "missing")
+            _ = await store.download("bucket", "missing")
 
 
 def test_new_storage_from_config_selects_memory() -> None:

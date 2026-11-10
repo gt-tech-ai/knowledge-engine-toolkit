@@ -8,8 +8,7 @@ import pytest
 
 from techai_webutils.clients.grader.stub import StubGrader
 from techai_webutils.core.interfaces.dataset import EvalCase
-from techai_webutils.core.interfaces.evaluator import EvalOutput
-from techai_webutils.core.interfaces.grader import Grader, GradeResult
+from techai_webutils.core.interfaces.grader import EvalOutput, Grader, GradeResult
 from techai_webutils.services.evaluator import ThresholdEvaluator
 
 _CASE = EvalCase(id="c1", inputs={"query": "q"}, expected={"answer": "a"}, metadata={})

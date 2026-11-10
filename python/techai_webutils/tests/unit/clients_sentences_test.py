@@ -81,7 +81,7 @@ def test_language_rules_and_fallback_to_multilanguage_rules() -> None:
         many calls
     """
     metrics = MagicMock(spec=MetricsProvider)
-    counter = metrics.counter.return_value
+    counter = cast("object", cast("MagicMock", metrics.counter).return_value)
     splitter = sentence_splitter_from_config(
         SentenceSplitterConfig(), metrics=cast("MetricsProvider", metrics)
     )
@@ -95,7 +95,9 @@ def test_language_rules_and_fallback_to_multilanguage_rules() -> None:
         "Der Bericht ist fertig. ",
         "Er kommt am Freitag.",
     ]
-    assert [c.kwargs for c in counter.inc.call_args_list] == [
+    assert [
+        cast("object", c.kwargs) for c in cast("list[object]", counter.inc.call_args_list)
+    ] == [
         {"language": "ja"},
         {"language": "zz"},
     ]
@@ -117,7 +119,7 @@ def test_edge_texts_and_limits() -> None:
     assert splitter.split("") == []
     assert splitter.split("   ") == [TextSpan(0, 3)]
     with pytest.raises(AppValueError):
-        splitter.split("x" * 21)
+        _ = splitter.split("x" * 21)
 
 
 def test_factory_and_span_validation_refuse_bad_values() -> None:
@@ -135,15 +137,17 @@ def test_factory_and_span_validation_refuse_bad_values() -> None:
       - ``TextSpan`` refuses a negative start and an empty or inverted range
     """
     for config in (
-        SentenceSplitterConfig(kind=cast("SentenceSplitterKind", "blingfire")),
+        SentenceSplitterConfig(
+            kind=cast("SentenceSplitterKind", cast("object", "blingfire"))
+        ),
         SentenceSplitterConfig(default_language=""),
         SentenceSplitterConfig(max_chars=0),
     ):
         with pytest.raises(AppValueError):
-            sentence_splitter_from_config(config)
+            _ = sentence_splitter_from_config(config)
     for start, end in ((-1, 2), (3, 3), (4, 1)):
         with pytest.raises(AppValueError):
-            TextSpan(start, end)
+            _ = TextSpan(start, end)
 
 
 _TRANSCRIPT = (
@@ -186,4 +190,4 @@ def test_transcript_rules_join_markers_labels_and_honorifics() -> None:
     assert _tiles(_TRANSCRIPT, before)
     assert _tiles(_TRANSCRIPT, after)
     with pytest.raises(AppValueError):
-        sentence_splitter_from_config(SentenceSplitterConfig(join_patterns=("(",)))
+        _ = sentence_splitter_from_config(SentenceSplitterConfig(join_patterns=("(",)))

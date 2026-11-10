@@ -58,7 +58,7 @@ def test_usage_scope_requires_org_id() -> None:
       - the optional team/workspace/user default to ``None``
     """
     with pytest.raises(AppError) as caught:
-        UsageScope(org_id="")
+        _ = UsageScope(org_id="")
 
     assert caught.value.code is ErrorCode.INVALID_INPUT
     assert UsageScope(org_id="org-1") == UsageScope(
@@ -81,9 +81,9 @@ def test_usage_records_are_frozen() -> None:
     record = _record()
 
     with pytest.raises(dataclasses.FrozenInstanceError):
-        record.input_tokens = 1  # type: ignore[misc]
+        record.input_tokens = 1
     with pytest.raises(dataclasses.FrozenInstanceError):
-        record.scope.org_id = "other"  # type: ignore[misc]
+        record.scope.org_id = "other"
     assert record.embed_tokens == 0
     assert record.cost_usd == Decimal(0)
 
@@ -149,7 +149,7 @@ def test_factory_unknown_kind_raises_coded_error() -> None:
         TokenLedgerConfig(kind=TokenLedgerKind.REDIS),
     ):
         with pytest.raises(AppError) as caught:
-            token_ledger_from_config(config)
+            _ = token_ledger_from_config(config)
         assert caught.value.code is ErrorCode.INVALID_INPUT
 
 

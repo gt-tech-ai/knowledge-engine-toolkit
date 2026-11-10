@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import UTC, datetime
+from typing import Literal, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -19,6 +20,9 @@ from techai_webutils.clients.audit import (
 from techai_webutils.clients.audit.stub import StubAuditSink
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.audit import AuditedSource, AuditRecord, AuditSink
+
+_Enforcement = Literal["shadow", "enforced"]
+"""The enforcement modes ``AuditSinkConfig`` accepts."""
 
 
 def _record() -> AuditRecord:
@@ -74,9 +78,9 @@ def test_audit_record_is_frozen() -> None:
     record = _record()
 
     with pytest.raises(dataclasses.FrozenInstanceError):
-        record.answer = "edited"  # type: ignore[misc]
+        record.answer = "edited"
     with pytest.raises(dataclasses.FrozenInstanceError):
-        record.sources[0].score = 1.0  # type: ignore[misc]
+        record.sources[0].score = 1.0
     assert isinstance(record.sources, tuple)
     assert isinstance(record.pii_flags, tuple)
 
@@ -108,7 +112,7 @@ def test_factory_returns_stub_by_default() -> None:
     assert isinstance(sink, StubAuditSink)
     assert isinstance(sink, AuditSink)
     with pytest.raises(AppError) as caught:
-        AuditSinkConfig(enforcement="strict")  # type: ignore[arg-type]
+        _ = AuditSinkConfig(enforcement=cast("_Enforcement", cast("object", "strict")))
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
@@ -148,7 +152,7 @@ def test_factory_unknown_kind_raises_coded_error() -> None:
     """
     for kind in ("kafka", "grpc"):
         with pytest.raises(AppError) as caught:
-            new_audit_sink_from_config(AuditSinkConfig(kind=kind))
+            _ = new_audit_sink_from_config(AuditSinkConfig(kind=kind))
         assert caught.value.code is ErrorCode.INVALID_INPUT
 
 

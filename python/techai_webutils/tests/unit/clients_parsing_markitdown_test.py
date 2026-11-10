@@ -24,7 +24,7 @@ def _make_pdf(*lines: str) -> bytes:
     doc = pymupdf.open()
     for line in lines:
         page = doc.new_page()
-        page.insert_text((72, 72), line)
+        _ = page.insert_text((72, 72), line)
     return doc.tobytes()
 
 
@@ -179,7 +179,7 @@ class TestMarkItDownParser:
             text survives.
         """
         p = tmp_path / "big.txt"
-        p.write_bytes(("a" * 5000 + " café — done").encode("utf-8"))
+        _ = p.write_bytes(("a" * 5000 + " café — done").encode("utf-8"))
         result = MarkItDownParser().parse_path(str(p), filename="big.txt")
         assert result.ok, result.error
         assert "café" in result.markdown_content
@@ -257,7 +257,7 @@ class TestMarkItDownParser:
             its content in the Markdown.
         """
         pdf = tmp_path / "doc.pdf"
-        pdf.write_bytes(_make_pdf("Alpha page", "Bravo page"))
+        _ = pdf.write_bytes(_make_pdf("Alpha page", "Bravo page"))
         parser = MarkItDownParser()
         result = parser.parse_path(str(pdf), filename="doc.pdf")
         assert result.ok

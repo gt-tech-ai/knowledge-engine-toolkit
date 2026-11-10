@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import aiobotocore.session
 import pytest
@@ -18,6 +18,11 @@ from techai_webutils.clients.messaging.sqs.sqs_publisher import SQSPublisher
 from techai_webutils.clients.messaging.sqs.sqs_subscriber import SQSSubscriber
 
 if TYPE_CHECKING:
+    from unittest.mock import MagicMock
+
+    from aiobotocore.session import ClientCreatorContext
+    from types_aiobotocore_sqs import SQSClient
+
     from techai_webutils.clients.messaging.config import SQSConfig
     from techai_webutils.core.interfaces.messaging import Message
 
@@ -135,18 +140,36 @@ async def _queue_depth(config: SQSConfig) -> tuple[int, int]:
 
     """
     session = aiobotocore.session.get_session()
-    async with session.create_client("sqs", **config.client_kwargs()) as client:
-        attrs = await client.get_queue_attributes(
-            QueueUrl=config.queue_url,
-            AttributeNames=[
-                "ApproximateNumberOfMessages",
-                "ApproximateNumberOfMessagesNotVisible",
-            ],
+    async with cast(
+        "ClientCreatorContext[SQSClient]",
+        session.create_client("sqs", **config.client_kwargs()),
+    ) as client:
+        attrs = cast(
+            "MagicMock",
+            await cast("MagicMock", client.get_queue_attributes)(
+                QueueUrl=config.queue_url,
+                AttributeNames=[
+                    "ApproximateNumberOfMessages",
+                    "ApproximateNumberOfMessagesNotVisible",
+                ],
+            ),
         )
-    values = attrs.get("Attributes", {})
+    values = cast("MagicMock", cast("MagicMock", attrs.get)("Attributes", {}))
     return (
-        int(values.get("ApproximateNumberOfMessages", "0")),
-        int(values.get("ApproximateNumberOfMessagesNotVisible", "0")),
+        int(
+            cast(
+                "int",
+                cast("MagicMock", values.get)("ApproximateNumberOfMessages", "0"),
+            )
+        ),
+        int(
+            cast(
+                "int",
+                cast("MagicMock", values.get)(
+                    "ApproximateNumberOfMessagesNotVisible", "0"
+                ),
+            )
+        ),
     )
 
 

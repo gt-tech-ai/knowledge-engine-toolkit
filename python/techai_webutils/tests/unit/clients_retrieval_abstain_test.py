@@ -180,11 +180,11 @@ def test_unknown_abstainer_and_order_are_refused() -> None:
       - both raise ``AppValueError``; the opensearch kind without a store raises too
     """
     with pytest.raises(AppValueError):
-        abstention_policies(cast("AbstainerKind", "bogus"), 0.5)
+        _ = abstention_policies(cast("AbstainerKind", cast("object", "bogus")), 0.5)
     with pytest.raises(AppValueError):
-        order_passages([], cast("PassageOrder", "bogus"))
+        _ = order_passages([], cast("PassageOrder", cast("object", "bogus")))
     with pytest.raises(Exception, match="opensearch"):
-        new_retrieval_engine_from_config(
+        _ = new_retrieval_engine_from_config(
             RetrievalConfig(kind=RetrievalKind.OPENSEARCH),
             options=RetrievalEngineDependencies(policies=[]),
         )
@@ -222,4 +222,4 @@ async def test_top_score_abstainer_abstains_only_when_the_best_passage_is_weak()
     assert dropped == []
     assert [r.document_id for r in ordered] == ["d1", "d3", "d2"]
     with pytest.raises(AppValueError, match="abstain_threshold"):
-        RetrievalConfig(abstainer=AbstainerKind.TOP_SCORE)
+        _ = RetrievalConfig(abstainer=AbstainerKind.TOP_SCORE)

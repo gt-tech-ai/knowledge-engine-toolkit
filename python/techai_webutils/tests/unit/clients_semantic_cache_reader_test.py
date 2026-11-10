@@ -10,8 +10,9 @@ what the reader adds around them: metrics, facts, the hit hook, the served flag 
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
-from typing import Any
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -32,6 +33,7 @@ from techai_webutils.core.interfaces.semantic_cache import (
     served_from_cache,
     set_served_from_cache,
 )
+from tests.json_path import items
 
 _NS = CacheNamespace("ws-1", "m", "v1", "restricted:v7")
 _HIT = CachedAnswer(
@@ -70,10 +72,15 @@ def _reader(
     lookup.lookup = AsyncMock(return_value=hit)
     cache = MagicMock(spec=SemanticCache)
     cache.store = AsyncMock()
-    options: dict[str, Any] = {"ttl_seconds": 600, "path": "answer"}
-    options.update(kwargs)
+    options = replace(
+        SemanticCacheReaderOptions(ttl_seconds=600, path="answer"), **kwargs
+    )
     return (
-        SemanticCacheReader(cache, lookup, options=SemanticCacheReaderOptions(**options)),
+        SemanticCacheReader(
+            cache,
+            lookup,
+            options=options,
+        ),
         lookup,
         cache,
     )
@@ -108,18 +115,30 @@ async def test_served_hit_counts_by_tier_and_forwards_the_similarity() -> None:
     read = await reader.read("q", _NS, min_similarity=1.0)
 
     assert read == CacheRead(query="q", namespace=_NS, hit=_HIT)
-    lookup.lookup.assert_awaited_once_with("q", _NS, min_similarity=1.0)
-    facts.publish.assert_not_called()
+    cast("MagicMock", cast("AsyncMock", lookup.lookup).assert_awaited_once_with)(
+        "q", _NS, min_similarity=1.0
+    )
+    cast("MagicMock", cast("MagicMock", facts.publish).assert_not_called)()
 
-    await reader.serve(read, (), {}, "answer")
+    _ = await reader.serve(read, (), {}, "answer")
 
     hits = [
-        c for c in counters["semantic_cache_hits_total"].inc.call_args_list if c.args[0]
+        c
+        for c in cast(
+            "list[object]",
+            cast("MagicMock", counters["semantic_cache_hits_total"].inc).call_args_list,
+        )
+        if cast("list[object]", c.args)[0]
     ]
     assert len(hits) == 1
-    assert hits[0].kwargs["tier"] == "exact"
-    (published,) = facts.publish.call_args.args[0]
-    assert published.dims["outcome"] == "hit"
+    assert cast("dict[str, object]", hits[0].kwargs)["tier"] == "exact"
+    (published,) = items(
+        cast(
+            "list[object]",
+            cast("MagicMock", cast("MagicMock", facts.publish).call_args).args,
+        )[0]
+    )
+    assert cast("dict[str, object]", published.dims)["outcome"] == "hit"
 
 
 @pytest.mark.asyncio
@@ -151,23 +170,41 @@ async def test_refused_hit_counts_as_a_miss() -> None:
 
         if refuse_by_hook:
             with pytest.raises(AppError):
-                await reader.serve(read, (), {}, "answer")
+                _ = await reader.serve(read, (), {}, "answer")
         else:
             reader.refuse(read)
 
         hits = [
             c
-            for c in counters["semantic_cache_hits_total"].inc.call_args_list
-            if c.args[0]
+            for c in cast(
+                "list[object]",
+                cast(
+                    "MagicMock", counters["semantic_cache_hits_total"].inc
+                ).call_args_list,
+            )
+            if cast("list[object]", c.args)[0]
         ]
         misses = [
             c
-            for c in counters["semantic_cache_misses_total"].inc.call_args_list
-            if c.args[0]
+            for c in cast(
+                "list[object]",
+                cast(
+                    "MagicMock", counters["semantic_cache_misses_total"].inc
+                ).call_args_list,
+            )
+            if cast("list[object]", c.args)[0]
         ]
         assert (len(hits), len(misses)) == (0, 1)
-        (published,) = facts.publish.call_args.args[0]
-        assert (published.dims["outcome"], published.measures["saving_usd"]) == (
+        (published,) = items(
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", facts.publish).call_args).args,
+            )[0]
+        )
+        assert (
+            cast("dict[str, object]", published.dims)["outcome"],
+            cast("dict[str, object]", published.measures)["saving_usd"],
+        ) == (
             "miss",
             0.0,
         )
@@ -201,7 +238,7 @@ async def test_serve_runs_the_hook_and_marks_the_call_served() -> None:
         _HIT, on_hit=AsyncMock(side_effect=AppError(ErrorCode.FORBIDDEN, "blocked"))
     )
     with pytest.raises(AppError):
-        await refusing.serve(await refusing.read("q", _NS), (), {}, "answer")
+        _ = await refusing.serve(await refusing.read("q", _NS), (), {}, "answer")
 
 
 @pytest.mark.asyncio
@@ -227,10 +264,28 @@ async def test_write_uses_the_per_call_ttl_and_fails_open() -> None:
     await reader.write(read, b"payload", ttl_seconds=60)
     await reader.write(read, b"payload")
 
-    assert cache.store.await_args_list[0].args == ("q", b"payload", _NS)
-    assert cache.store.await_args_list[0].kwargs == {"ttl_seconds": 60}
-    assert cache.store.await_args_list[1].kwargs == {"ttl_seconds": 600}
+    assert cast(
+        "object",
+        cast("list[object]", cast("AsyncMock", cache.store).await_args_list)[0].args,
+    ) == (
+        "q",
+        b"payload",
+        _NS,
+    )
+    assert cast(
+        "object",
+        cast("list[object]", cast("AsyncMock", cache.store).await_args_list)[0].kwargs,
+    ) == {"ttl_seconds": 60}
+    assert cast(
+        "object",
+        cast("list[object]", cast("AsyncMock", cache.store).await_args_list)[1].kwargs,
+    ) == {"ttl_seconds": 600}
 
     cache.store = AsyncMock(side_effect=RuntimeError("down"))
     await reader.write(read, b"payload")
-    counters["semantic_cache_proxy_errors_total"].inc.assert_called_with(1.0, op="store")
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock", counters["semantic_cache_proxy_errors_total"].inc
+        ).assert_called_with,
+    )(1.0, op="store")

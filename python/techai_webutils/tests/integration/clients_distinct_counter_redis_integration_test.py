@@ -36,7 +36,7 @@ async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
     host = container.get_container_host_ip()
     port = int(container.get_exposed_port(container.port))
     client = Redis(host=host, port=port)
-    await client.flushdb()
+    _ = await client.flushdb()
     try:
         yield client
     finally:
@@ -65,7 +65,7 @@ async def test_redis_counter_counts_each_member_once_and_expires_its_keys(
     counter = distinct_counter_from_config(config, redis=redis_client)
 
     for member in ("d1", "d2", "d1"):
-        await counter.observe(["a"], member)
+        _ = await counter.observe(["a"], member)
     counts = await counter.observe(["a", "b"], "d3")
 
     assert counts == [3, 1]

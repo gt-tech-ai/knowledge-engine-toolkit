@@ -44,8 +44,8 @@ async def redis_client(redis_container: object) -> AsyncIterator[Redis]:
         A ``decode_responses`` async client bound.
 
     """
-    host = redis_container.get_container_host_ip()  # type: ignore[attr-defined]
-    port = int(redis_container.get_exposed_port(redis_container.port))  # type: ignore[attr-defined]
+    host = redis_container.get_container_host_ip()
+    port = int(redis_container.get_exposed_port(redis_container.port))
     client = Redis(host=host, port=port, decode_responses=True)
     try:
         yield client
@@ -226,7 +226,7 @@ async def test_check_budget_reads_the_stored_enforcement(
         redis=redis_client,
     )
     scope = _record(datetime.now(UTC)).scope
-    await redis_client.hset(
+    _ = await redis_client.hset(
         f"{prefix}:limits:org-1:w-1", mapping={"tokens": "100", "enforcement": "hard"}
     )
     await ledger.record(_record(datetime.now(UTC)))

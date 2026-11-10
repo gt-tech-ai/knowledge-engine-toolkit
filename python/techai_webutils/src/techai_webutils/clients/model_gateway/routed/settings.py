@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from techai_webutils.clients.model_gateway.builder import RoutedConfig
+from techai_webutils.clients.model_gateway.routed.config import RoutedConfig
 from techai_webutils.core.types.llm import LlmKind
 from techai_webutils.core.types.routing import Route
 

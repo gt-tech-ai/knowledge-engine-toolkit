@@ -167,7 +167,7 @@ class TestToGrpcStatus:
           - The original "secret details" text is passed to the logger
         """
         logger = MagicMock()
-        code, msg = to_grpc_status(InternalError("secret details"), logger)  # type: ignore[arg-type]
+        code, msg = to_grpc_status(InternalError("secret details"), logger)
         assert code == grpc.StatusCode.INTERNAL
         assert msg == "internal error"
         # Should have logged the real error
@@ -190,7 +190,7 @@ class TestToGrpcStatus:
           - The original "crash" text is passed to the logger
         """
         logger = MagicMock()
-        code, msg = to_grpc_status(RuntimeError("crash"), logger)  # type: ignore[arg-type]
+        code, msg = to_grpc_status(RuntimeError("crash"), logger)
         assert code == grpc.StatusCode.INTERNAL
         assert msg == "internal error"
         assert any("crash" in str(c) for c in logger.mock_calls)

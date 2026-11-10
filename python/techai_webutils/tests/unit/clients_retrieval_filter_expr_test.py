@@ -90,11 +90,11 @@ def test_empty_filters_are_refused_and_builders_adapt() -> None:
         ``None`` through
     """
     with pytest.raises(AppValueError):
-        bedrock_filter(FilterAnd(()))
+        _ = bedrock_filter(FilterAnd(()))
     with pytest.raises(AppValueError):
-        bedrock_filter(FilterIn("level", ()))
+        _ = bedrock_filter(FilterIn("level", ()))
     with pytest.raises(AppValueError):
-        filter_clauses(FilterIn("level", ()))
+        _ = filter_clauses(FilterIn("level", ()))
 
     builder = expr_filter_builder(
         lambda request: equals_all(request) if request else None

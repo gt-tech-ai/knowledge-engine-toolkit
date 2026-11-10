@@ -13,6 +13,7 @@ Why these tests are important:
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import patch
 
 import pytest
@@ -40,7 +41,7 @@ def test_factory_selects_isolated_backend() -> None:
     assert isinstance(parser, IsolatedParser)
     assert isinstance(parser, DocumentParser)
     with patch("techai_webutils.clients.parsing.isolated.IsolatedParser") as parser_cls:
-        parser_from_config(config)
+        _ = parser_from_config(config)
     parser_cls.assert_called_once_with(
         memory_bytes=123, timeout_seconds=7.0, executor=None
     )
@@ -56,7 +57,9 @@ def test_factory_rejects_unknown_kind() -> None:
         broken/None client.
     """
     with pytest.raises(AppValueError, match="unknown parser kind"):
-        parser_from_config(ParserConfig(kind="bogus"))  # type: ignore[arg-type]
+        _ = parser_from_config(
+            ParserConfig(kind=cast("ParserKind", cast("object", "bogus")))
+        )
 
 
 def test_default_kind_is_isolated() -> None:

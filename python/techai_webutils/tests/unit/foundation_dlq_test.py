@@ -1,6 +1,7 @@
 """Unit tests for the DeadLetterQueue facade over a pluggable backend."""
 
-from unittest.mock import create_autospec
+from typing import cast
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
@@ -47,9 +48,9 @@ class TestDeadLetterQueue:
         **What it tests:**
           - A raising backend causes send to return False (not raise).
         """
-        backend = create_autospec(DeadLetterBackend, instance=True)
-        backend.send.side_effect = RuntimeError("dlq down")
+        backend = cast("object", create_autospec(DeadLetterBackend, instance=True))
+        cast("MagicMock", backend.send).side_effect = RuntimeError("dlq down")
 
-        dlq = DeadLetterQueue(backend)
+        dlq = DeadLetterQueue(cast("DeadLetterBackend", backend))
         delivered = await dlq.send(DeadLetter(id="m1", payload=b"x", reason="x"))
         assert delivered is False

@@ -1,7 +1,8 @@
 """Tests for the MetricsLoggingObserver (sole per-item metric emitter for a fan-out)."""
 
 import asyncio
-from types import SimpleNamespace
+from dataclasses import dataclass, field
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,10 +22,49 @@ _EXPECTED_ITEM = 2
 _EXPECTED_COMPLETED = 4
 
 
-def _recording_metrics() -> tuple[MagicMock, SimpleNamespace]:
-    """Build a spec-bound MetricsProvider mock whose instruments accumulate.
+@dataclass
+class _Accumulated:
+    """What the recording instruments have folded in so far."""
 
-    Into a namespace.
+    inflight: float = 0.0
+    """The net inflight gauge value."""
+
+    completed: float = 0.0
+    """The summed ``ingest_completed_total`` increments."""
+
+    failed: float = 0.0
+    """The summed ``ingest_failed_total`` increments."""
+
+    durations: list[float] = field(default_factory=list[float])
+    """Every batch-duration observation, in order."""
+
+    def set_inflight(self, value: float, **_labels: str) -> None:
+        """Record a gauge ``set``."""
+        self.inflight = value
+
+    def add_inflight(self, value: float = 1.0, **_labels: str) -> None:
+        """Record a gauge ``inc``."""
+        self.inflight += value
+
+    def sub_inflight(self, value: float = 1.0, **_labels: str) -> None:
+        """Record a gauge ``dec``."""
+        self.inflight -= value
+
+    def add_completed(self, value: float = 1.0, **_labels: str) -> None:
+        """Record a completed-counter ``inc``."""
+        self.completed += value
+
+    def add_failed(self, value: float = 1.0, **_labels: str) -> None:
+        """Record a failed-counter ``inc``."""
+        self.failed += value
+
+    def observe(self, value: float, **_labels: str) -> None:
+        """Record a histogram ``observe``."""
+        self.durations.append(value)
+
+
+def _recording_metrics() -> tuple[MagicMock, _Accumulated]:
+    """Build a spec-bound MetricsProvider mock whose instruments fold into one value.
 
     The mock hands the observer spec-bound gauge/counter/histogram mocks whose
     ``set``/``inc``/``dec``/``observe`` side-effects fold each call into ``acc`` — the
@@ -34,44 +74,34 @@ def _recording_metrics() -> tuple[MagicMock, SimpleNamespace]:
     preserved.
 
     Returns:
-        A spec-bound MetricsProvider mock whose instruments accumulate.
+        The provider mock and the accumulated values its instruments update.
 
     """
-    acc = SimpleNamespace(inflight=0.0, completed=0.0, failed=0.0, durations=[])
+    acc = _Accumulated()
 
     gauge = MagicMock(spec=MetricGauge)
-
-    def _set(value: float, **_labels: str) -> None:
-        acc.inflight = value
-
-    def _ginc(value: float = 1.0, **_labels: str) -> None:
-        acc.inflight += value
-
-    def _gdec(value: float = 1.0, **_labels: str) -> None:
-        acc.inflight -= value
-
-    gauge.set.side_effect = _set
-    gauge.inc.side_effect = _ginc
-    gauge.dec.side_effect = _gdec
+    cast("MagicMock", gauge.set).side_effect = acc.set_inflight
+    cast("MagicMock", gauge.inc).side_effect = acc.add_inflight
+    cast("MagicMock", gauge.dec).side_effect = acc.sub_inflight
 
     completed = MagicMock(spec=MetricCounter)
-    completed.inc.side_effect = lambda value=1.0, **_labels: setattr(
-        acc, "completed", acc.completed + value
-    )
+    cast("MagicMock", completed.inc).side_effect = acc.add_completed
 
     failed = MagicMock(spec=MetricCounter)
-    failed.inc.side_effect = lambda value=1.0, **_labels: setattr(
-        acc, "failed", acc.failed + value
-    )
+    cast("MagicMock", failed.inc).side_effect = acc.add_failed
 
     histogram = MagicMock(spec=MetricHistogram)
-    histogram.observe.side_effect = lambda value, **_labels: acc.durations.append(value)
+    cast("MagicMock", histogram.observe).side_effect = acc.observe
 
     counters = {"ingest_completed_total": completed, "ingest_failed_total": failed}
     metrics = MagicMock(spec=MetricsProvider)
-    metrics.gauge.side_effect = lambda _name, _help_text, _labels=None: gauge
-    metrics.counter.side_effect = lambda name, _help_text, _labels=None: counters[name]
-    metrics.histogram.side_effect = (
+    cast("MagicMock", metrics.gauge).side_effect = (
+        lambda _name, _help_text, _labels=None: gauge
+    )
+    cast("MagicMock", metrics.counter).side_effect = (
+        lambda name, _help_text, _labels=None: counters[name]
+    )
+    cast("MagicMock", metrics.histogram).side_effect = (
         lambda _name, _help_text, _labels=None, _buckets=None: histogram
     )
     return metrics, acc
@@ -109,7 +139,7 @@ class TestMetricsLoggingObserver:
                 raise ValueError(msg)
             return StepResult(name=str(item))
 
-        await fan_out([0, 1, 2, 3], 2, fn, observer, name="poll")
+        _ = await fan_out([0, 1, 2, 3], 2, fn, observer, name="poll")
 
         assert acc.inflight == pytest.approx(0.0)
         assert acc.completed == _EXPECTED_COMPLETED

@@ -180,7 +180,7 @@ def _make_pg_error(msg: str, sqlstate: str = "", pgcode: str = "") -> Exception:
     """
     err = Exception(msg)
     if sqlstate:
-        err.sqlstate = sqlstate  # type: ignore[attr-defined]
+        err.sqlstate = sqlstate
     if pgcode:
-        err.pgcode = pgcode  # type: ignore[attr-defined]
+        err.pgcode = pgcode
     return err

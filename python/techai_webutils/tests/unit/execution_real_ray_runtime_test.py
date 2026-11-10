@@ -12,6 +12,7 @@ allow_multiple=True".
 
 import asyncio
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import grpc
@@ -30,6 +31,7 @@ from techai_webutils.execution.executor.resilient_ray_runtime import (
     ResilientRayRuntime,
     ResilientRayRuntimeOptions,
 )
+from tests.json_path import dig
 
 _EXPECTED_CALL_COUNT = 2
 
@@ -91,8 +93,8 @@ def _ray_client_after_head_restart() -> tuple[MagicMock, SimpleNamespace]:
         state["registered"] = 0
 
     api = MagicMock()
-    api.is_connected.side_effect = lambda: state["connected"]
-    api.disconnect.side_effect = disconnect
+    cast("MagicMock", api.is_connected).side_effect = lambda: state["connected"]
+    cast("MagicMock", api.disconnect).side_effect = disconnect
     registry = SimpleNamespace(
         ray=api, num_connected_contexts=lambda: state["registered"]
     )
@@ -107,8 +109,8 @@ def _ray_client_after_head_restart() -> tuple[MagicMock, SimpleNamespace]:
         state["registered"], state["connected"] = 1, True
 
     ray = MagicMock()
-    ray.is_initialized.side_effect = lambda: state["connected"]
-    ray.init.side_effect = init
+    cast("MagicMock", ray.is_initialized).side_effect = lambda: state["connected"]
+    cast("MagicMock", ray.init).side_effect = init
     return ray, registry
 
 
@@ -141,9 +143,20 @@ class TestRealRayRuntimeReconnect:
                 address=_ADDRESS, options=RealRayRuntimeOptions()
             ).warm_up()
 
-        registry.ray.disconnect.assert_called_once_with()
-        ray.init.assert_called_once()
-        assert ray.init.call_args.kwargs["address"] == _ADDRESS
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock", cast("MagicMock", registry.ray).disconnect
+            ).assert_called_once_with,
+        )()
+        cast("MagicMock", cast("MagicMock", ray.init).assert_called_once)()
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", ray.init).call_args).kwargs,
+            )["address"]
+            == _ADDRESS
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -160,18 +173,22 @@ class TestRealRayRuntimeReconnect:
             restarted), calls ``ray.init`` again on the next ``warm_up``.
         """
         ray, registry = _ray_client_after_head_restart()
-        registry.ray.disconnect()  # start healthy: no stale registration
+        cast(
+            "MagicMock", cast("MagicMock", registry.ray).disconnect
+        )()  # start healthy: no stale registration
         with (
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
         ):
             runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
             await runtime.warm_up()
-            ray.is_initialized.side_effect = lambda: False  # the head restarted
-            ray.init.side_effect = None
+            cast("MagicMock", ray.is_initialized).side_effect = lambda: (
+                False
+            )  # the head restarted
+            cast("MagicMock", ray.init).side_effect = None
             await runtime.warm_up()
 
-        assert ray.init.call_count == _EXPECTED_CALL_COUNT
+        assert (cast("MagicMock", ray.init).call_count) == _EXPECTED_CALL_COUNT
 
     @staticmethod
     @pytest.mark.asyncio
@@ -198,10 +215,18 @@ class TestRealRayRuntimeReconnect:
             patch(f"{_POOL}._WorkerActor", actor),
         ):
             build = ray_worker_factory(_build_worker, address=_ADDRESS)
-            await build()
+            _ = await build()
 
-        assert ray.init.call_args.kwargs["address"] == _ADDRESS
-        actor.remote.assert_called_once_with(_build_worker)
+        assert (
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("MagicMock", ray.init).call_args).kwargs,
+            )["address"]
+            == _ADDRESS
+        )
+        cast("MagicMock", cast("MagicMock", actor.remote).assert_called_once_with)(
+            _build_worker
+        )
 
 
 def _ray_client_with_a_dead_session() -> MagicMock:
@@ -232,10 +257,10 @@ def _ray_client_with_a_dead_session() -> MagicMock:
         state["initialized"], state["alive"] = True, True
 
     ray = MagicMock()
-    ray.is_initialized.side_effect = lambda: state["initialized"]
-    ray.cluster_resources.side_effect = cluster_resources
-    ray.shutdown.side_effect = shutdown
-    ray.init.side_effect = init
+    cast("MagicMock", ray.is_initialized).side_effect = lambda: state["initialized"]
+    cast("MagicMock", ray.cluster_resources).side_effect = cluster_resources
+    cast("MagicMock", ray.shutdown).side_effect = shutdown
+    cast("MagicMock", ray.init).side_effect = init
     return ray
 
 
@@ -282,8 +307,8 @@ class TestRealRayRuntimeDeadSession:
             )
             await runtime.warm_up()
 
-            assert ray.cluster_resources() == {"CPU": 2.0}
-        ray.init.assert_called_once()
+            assert cast("MagicMock", ray.cluster_resources)() == {"CPU": 2.0}
+        cast("MagicMock", cast("MagicMock", ray.init).assert_called_once)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -318,15 +343,15 @@ class TestRealRayRuntimeDeadSession:
             patch(f"{_MODULE}._run_mapper", mapper),
         ):
             runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
-            mapper.remote.side_effect = grpc.RpcError
+            cast("MagicMock", mapper.remote).side_effect = grpc.RpcError
             with pytest.raises(RayUnavailableError):
-                await runtime.submit(_mapper, 1)
-            ray.shutdown.assert_called_once_with()
+                _ = await runtime.submit(_mapper, 1)
+            cast("MagicMock", cast("MagicMock", ray.shutdown).assert_called_once_with)()
 
-            ray.is_initialized.side_effect = lambda: True
-            mapper.remote.side_effect = lambda *_: raise_task_error()
+            cast("MagicMock", ray.is_initialized).side_effect = lambda: True
+            cast("MagicMock", mapper.remote).side_effect = lambda *_: raise_task_error()
             with pytest.raises(real_ray.exceptions.RayTaskError):
-                await runtime.submit(_mapper, 1)
+                _ = await runtime.submit(_mapper, 1)
 
 
 async def _completed(*_: object) -> StepResult:
@@ -370,16 +395,16 @@ def _ray_session_across_a_head_replacement() -> tuple[
         context.client_worker = object()
 
     api = MagicMock()
-    api.is_connected.return_value = True
-    api.get_context.return_value = context
-    api.disconnect.side_effect = disconnect
+    cast("MagicMock", api.is_connected).return_value = True
+    cast("MagicMock", api.get_context).return_value = context
+    cast("MagicMock", api.disconnect).side_effect = disconnect
     registry = SimpleNamespace(ray=api, num_connected_contexts=lambda: 1)
 
     ray = MagicMock()
-    ray.is_initialized.side_effect = lambda: state["initialized"]
-    ray.shutdown.side_effect = shutdown
-    ray.init.side_effect = init
-    ray.put.side_effect = [f"ref-{n}" for n in range(1, 10)]
+    cast("MagicMock", ray.is_initialized).side_effect = lambda: state["initialized"]
+    cast("MagicMock", ray.shutdown).side_effect = shutdown
+    cast("MagicMock", ray.init).side_effect = init
+    cast("MagicMock", ray.put).side_effect = [f"ref-{n}" for n in range(1, 10)]
     return ray, registry, context
 
 
@@ -409,22 +434,30 @@ class TestRealRayRuntimeHeadReplacement:
         """
         ray, registry, _ = _ray_session_across_a_head_replacement()
         mapper = MagicMock()
-        mapper.remote.side_effect = _completed
+        cast("MagicMock", mapper.remote).side_effect = _completed
         with (
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
             patch(f"{_MODULE}._run_mapper", mapper),
         ):
             runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
-            await runtime.submit(_mapper, 1)
-            mapper.remote.side_effect = ConnectionError("data channel closed")
+            _ = await runtime.submit(_mapper, 1)
+            cast("MagicMock", mapper.remote).side_effect = ConnectionError(
+                "data channel closed"
+            )
             with pytest.raises(RayUnavailableError):
-                await runtime.submit(_mapper, 2)
-            mapper.remote.side_effect = _completed
-            await runtime.submit(_mapper, 3)
+                _ = await runtime.submit(_mapper, 2)
+            cast("MagicMock", mapper.remote).side_effect = _completed
+            _ = await runtime.submit(_mapper, 3)
 
-        assert ray.put.call_count == _EXPECTED_CALL_COUNT
-        assert mapper.remote.call_args.args[0] == "ref-2"
+        assert (cast("MagicMock", ray.put).call_count) == _EXPECTED_CALL_COUNT
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", mapper.remote).call_args).args,
+            )[0]
+            == "ref-2"
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -444,18 +477,25 @@ class TestRealRayRuntimeHeadReplacement:
         """
         ray, registry, _ = _ray_session_across_a_head_replacement()
         mapper = MagicMock()
-        mapper.remote.side_effect = ConnectionError("data channel closed")
+        cast("MagicMock", mapper.remote).side_effect = ConnectionError(
+            "data channel closed"
+        )
         with (
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
             patch(f"{_MODULE}._run_mapper", mapper),
             pytest.raises(RayUnavailableError),
         ):
-            await RealRayRuntime(
+            _ = await RealRayRuntime(
                 address=_ADDRESS, options=RealRayRuntimeOptions()
             ).submit(_mapper, 1)
 
-        registry.ray.disconnect.assert_called_once_with()
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock", cast("MagicMock", registry.ray).disconnect
+            ).assert_called_once_with,
+        )()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -473,21 +513,27 @@ class TestRealRayRuntimeHeadReplacement:
         """
         ray, registry, context = _ray_session_across_a_head_replacement()
         mapper = MagicMock()
-        mapper.remote.side_effect = _completed
+        cast("MagicMock", mapper.remote).side_effect = _completed
         with (
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}.importlib", _importlib_returning(registry)),
             patch(f"{_MODULE}._run_mapper", mapper),
         ):
             runtime = RealRayRuntime(address=_ADDRESS, options=RealRayRuntimeOptions())
-            await runtime.submit(_mapper, 1)
-            await runtime.submit(_mapper, 2)
-            assert ray.put.call_count == 1
+            _ = await runtime.submit(_mapper, 1)
+            _ = await runtime.submit(_mapper, 2)
+            assert (cast("MagicMock", ray.put).call_count) == 1
             context.client_worker = object()  # another runtime reconnected
-            await runtime.submit(_mapper, 3)
+            _ = await runtime.submit(_mapper, 3)
 
-        assert ray.put.call_count == _EXPECTED_CALL_COUNT
-        assert mapper.remote.call_args.args[0] == "ref-2"
+        assert cast("MagicMock", ray.put).call_count == _EXPECTED_CALL_COUNT
+        assert (
+            cast(
+                "list[object]",
+                cast("MagicMock", cast("MagicMock", mapper.remote).call_args).args,
+            )[0]
+            == "ref-2"
+        )
 
 
 class TestRealRayRuntimeWorkerLogging:
@@ -510,7 +556,7 @@ class TestRealRayRuntimeWorkerLogging:
           hold).
         """
         ray = MagicMock()
-        ray.is_initialized.return_value = False
+        cast("MagicMock", ray.is_initialized).return_value = False
         registry = SimpleNamespace(ray=MagicMock(), num_connected_contexts=lambda: 0)
         with (
             patch(f"{_MODULE}.ray", ray),
@@ -526,12 +572,19 @@ class TestRealRayRuntimeWorkerLogging:
                 address=_ADDRESS, options=RealRayRuntimeOptions()
             ).warm_up()
 
-        configured, default = (c.kwargs for c in ray.init.call_args_list)
-        assert configured["runtime_env"] == {
+        configured, default = (
+            cast("dict[str, object]", c.kwargs)
+            for c in cast("list[object]", cast("MagicMock", ray.init).call_args_list)
+        )
+        assert dig(configured, "runtime_env") == {
             "worker_process_setup_hook": "consumer.logging.configure"
         }
-        ray.LoggingConfig.assert_called_once_with(encoding="JSON")
-        assert configured["logging_config"] is ray.LoggingConfig.return_value
+        cast("MagicMock", cast("MagicMock", ray.LoggingConfig).assert_called_once_with)(
+            encoding="JSON"
+        )
+        assert dig(configured, "logging_config") is cast(
+            "object", cast("MagicMock", ray.LoggingConfig).return_value
+        )
         assert "runtime_env" not in default
         assert "logging_config" not in default
 
@@ -555,10 +608,13 @@ class TestRealRayRuntimeMemory:
             ``.options(memory=…)``; with it unset, straight through ``.remote``.
         """
         ray = MagicMock()
-        ray.is_initialized.return_value = True
+        cast("MagicMock", ray.is_initialized).return_value = True
         mapper = MagicMock()
-        mapper.options.return_value.remote.side_effect = lambda *_: _mapper(1)
-        mapper.remote.side_effect = lambda *_: _mapper(2)
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", mapper.options).return_value).remote,
+        ).side_effect = lambda *_: _mapper(1)
+        cast("MagicMock", mapper.remote).side_effect = lambda *_: _mapper(2)
         with (
             patch(f"{_MODULE}.ray", ray),
             patch(f"{_MODULE}._run_mapper", mapper),
@@ -570,7 +626,9 @@ class TestRealRayRuntimeMemory:
                 address=_ADDRESS, options=RealRayRuntimeOptions()
             ).submit(_mapper, 2)
 
-        mapper.options.assert_called_once_with(memory=2 << 30)
+        cast("MagicMock", cast("MagicMock", mapper.options).assert_called_once_with)(
+            memory=2 << 30
+        )
         assert (reserved.name, unreserved.name) == ("1", "2")
 
     @staticmethod
@@ -586,7 +644,7 @@ class TestRealRayRuntimeMemory:
             ``.options(memory=…)``.
         """
         ray = MagicMock()
-        ray.is_initialized.return_value = True
+        cast("MagicMock", ray.is_initialized).return_value = True
         actor = MagicMock()
         runtime = MagicMock()
         runtime.warm_up = MagicMock(side_effect=lambda: asyncio.sleep(0))
@@ -594,7 +652,15 @@ class TestRealRayRuntimeMemory:
             build = ray_worker_factory(
                 _build_worker, runtime=runtime, memory_bytes=2 << 30
             )
-            await build()
+            _ = await build()
 
-        actor.options.assert_called_once_with(memory=2 << 30)
-        actor.options.return_value.remote.assert_called_once_with(_build_worker)
+        cast("MagicMock", cast("MagicMock", actor.options).assert_called_once_with)(
+            memory=2 << 30
+        )
+        cast(
+            "MagicMock",
+            cast(
+                "MagicMock",
+                cast("MagicMock", cast("MagicMock", actor.options).return_value).remote,
+            ).assert_called_once_with,
+        )(_build_worker)

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from typing import Any, cast
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -46,6 +46,7 @@ from techai_webutils.core.interfaces.vector_store import (
     VectorSearchResult,
 )
 from techai_webutils.foundation.resilience.classify import is_throttled
+from tests.json_path import dig, items
 
 _EXPECTED_RESCORE = 10
 _EXPECTED_PLACED_COUNT = 40
@@ -59,11 +60,11 @@ def _client(*, alias_exists: bool = True) -> MagicMock:
 
     """
     client = MagicMock()
-    client.indices.exists_alias = AsyncMock(return_value=alias_exists)
-    client.indices.exists = AsyncMock(return_value=False)
-    client.indices.create = AsyncMock()
-    client.indices.update_aliases = AsyncMock()
-    client.indices.get_alias = AsyncMock(return_value={})
+    cast("MagicMock", client.indices).exists_alias = AsyncMock(return_value=alias_exists)
+    cast("MagicMock", client.indices).exists = AsyncMock(return_value=False)
+    cast("MagicMock", client.indices).create = AsyncMock()
+    cast("MagicMock", client.indices).update_aliases = AsyncMock()
+    cast("MagicMock", client.indices).get_alias = AsyncMock(return_value={})
     client.bulk = AsyncMock(return_value={"errors": False, "items": []})
     client.update_by_query = AsyncMock(return_value={})
     client.mget = AsyncMock()
@@ -116,14 +117,17 @@ async def test_update_metadata_is_one_update_by_query_scoped_to_org_and_document
 
     await store.update_metadata("docs", "d1", {"clearance": "secret"})
 
-    client.update_by_query.assert_awaited_once()
-    kwargs = client.update_by_query.await_args.kwargs
+    cast("MagicMock", cast("AsyncMock", client.update_by_query).assert_awaited_once)()
+    kwargs = cast(
+        "dict[str, object]",
+        cast("MagicMock", cast("AsyncMock", client.update_by_query).await_args).kwargs,
+    )
     assert kwargs["index"] == "docs"
-    assert kwargs["params"]["routing"] == "o1"
-    assert kwargs["body"]["query"] == {
+    assert dig(kwargs, "params", "routing") == "o1"
+    assert dig(kwargs, "body", "query") == {
         "bool": {"filter": [{"term": {"org_id": "o1"}}, {"term": {"document_id": "d1"}}]}
     }
-    assert kwargs["body"]["script"]["params"] == {"fields": {"clearance": "secret"}}
+    assert dig(kwargs, "body", "script", "params") == {"fields": {"clearance": "secret"}}
     with pytest.raises(AppValueError):
         await store.update_metadata("docs", "d1", {"org_id": "o2"})
 
@@ -150,12 +154,31 @@ async def test_first_write_creates_the_versioned_index_and_alias() -> None:
 
     await store.upsert("docs", [_entry()])
 
-    create = client.indices.create.await_args.kwargs
+    create = cast(
+        "dict[str, object]",
+        cast(
+            "MagicMock",
+            cast("AsyncMock", cast("MagicMock", client.indices).create).await_args,
+        ).kwargs,
+    )
     assert create["index"] == "docs-m1-v1"
-    assert create["body"]["mappings"]["_meta"] == {"model": "m1", "version": "1"}
-    actions = client.indices.update_aliases.await_args.kwargs["body"]["actions"]
+    assert dig(create, "body", "mappings", "_meta") == {"model": "m1", "version": "1"}
+    actions = cast(
+        "object",
+        cast(
+            "MagicMock",
+            cast(
+                "AsyncMock", cast("MagicMock", client.indices).update_aliases
+            ).await_args,
+        ).kwargs["body"]["actions"],
+    )
     assert actions == [{"add": {"index": "docs-m1-v1", "alias": "docs"}}]
-    header = client.bulk.await_args.kwargs["body"][0]["index"]
+    header = cast(
+        "object",
+        cast("MagicMock", cast("AsyncMock", client.bulk).await_args).kwargs["body"][0][
+            "index"
+        ],
+    )
     assert header == {"_index": "docs", "_id": "o1/d:0", "routing": "o1"}
 
 
@@ -180,9 +203,19 @@ async def test_dedicated_org_gets_its_own_index_beside_the_shared_one() -> None:
     )
 
     await store.upsert("docs", [_entry("big")])
-    big = client.bulk.await_args.kwargs["body"][0]["index"]
+    big = cast(
+        "object",
+        cast("MagicMock", cast("AsyncMock", client.bulk).await_args).kwargs["body"][0][
+            "index"
+        ],
+    )
     await store.upsert("docs", [_entry("o1")])
-    shared = client.bulk.await_args.kwargs["body"][0]["index"]
+    shared = cast(
+        "object",
+        cast("MagicMock", cast("AsyncMock", client.bulk).await_args).kwargs["body"][0][
+            "index"
+        ],
+    )
 
     assert big == {"_index": "docs--big", "_id": "big/d:0"}
     assert shared == {"_index": "docs", "_id": "o1/d:0", "routing": "o1"}
@@ -215,16 +248,32 @@ async def test_scope_and_org_rules() -> None:
     with pytest.raises(AppValueError):
         await store.for_org("o1").upsert("docs", [_entry("o2")])
     with pytest.raises(AppValueError):
-        store.for_org("")
+        _ = store.for_org("")
 
     await store.for_org("o1").upsert("docs", [_entry(None)])
-    assert client.bulk.await_args.kwargs["body"][1]["org_id"] == "o1"
+    assert (
+        dig(
+            cast(
+                "dict[str, object]",
+                cast("MagicMock", cast("AsyncMock", client.bulk).await_args).kwargs,
+            ),
+            "body",
+            1,
+            "org_id",
+        )
+        == "o1"
+    )
 
     dedicated = OpenSearchVectorStore(
         client, dimension=1, config=OpenSearchConfig(layout=IndexLayout.DEDICATED)
     )
     await dedicated.for_org("O 1").upsert("Docs", [_entry("O 1")])
-    header = client.bulk.await_args.kwargs["body"][0]["index"]
+    header = cast(
+        "object",
+        cast("MagicMock", cast("AsyncMock", client.bulk).await_args).kwargs["body"][0][
+            "index"
+        ],
+    )
     assert header == {"_index": "docs--o-1", "_id": "O 1/d:0"}
 
 
@@ -242,7 +291,7 @@ async def test_stored_metadata_reads_back_own_org_only() -> None:
         dropped; entity lists come back joined
     """
     client = _client()
-    client.mget.return_value = {
+    cast("MagicMock", client.mget).return_value = {
         "docs": [
             {
                 "_id": "o1/a",
@@ -257,7 +306,10 @@ async def test_stored_metadata_reads_back_own_org_only() -> None:
 
     found = await store.stored_metadata("docs", ["a", "b"])
 
-    assert client.mget.await_args.kwargs["body"] == {"ids": ["o1/a", "o1/b"]}
+    assert cast(
+        "dict[str, object]",
+        cast("MagicMock", cast("AsyncMock", client.mget).await_args).kwargs,
+    )["body"] == {"ids": ["o1/a", "o1/b"]}
     assert found == {"a": {"org_id": "o1", "entities.org": "X|Y"}}
 
 
@@ -290,13 +342,16 @@ async def test_stored_metadata_under_write_targets_needs_every_target() -> None:
         ]
         return {"docs": rows}
 
-    client.mget.side_effect = docs
+    cast("MagicMock", client.mget).side_effect = docs
     store = OpenSearchVectorStore(client, dimension=1).for_org("o1")
     store.set_write_targets("docs", ["live", "shadow"])
 
     found = await store.stored_metadata("docs", ["a", "b", "c"])
 
-    assert [c.kwargs["index"] for c in client.mget.await_args_list] == ["live", "shadow"]
+    assert [
+        cast("dict[str, object]", c.kwargs)["index"]
+        for c in cast("list[object]", cast("AsyncMock", client.mget).await_args_list)
+    ] == ["live", "shadow"]
     assert found == {"a": {"org_id": "o1", "h": "1"}}
 
 
@@ -320,10 +375,16 @@ async def test_delete_by_document_keeps_the_written_ids() -> None:
 
     await store.delete_by_document("docs", "d", ["d:0", "d:1"])
 
-    kwargs = client.delete_by_query.await_args.kwargs
-    clause = kwargs["body"]["query"]["bool"]
-    assert {"term": {"document_id": "d"}} in clause["filter"]
-    assert {"term": {"org_id": "o1"}} in clause["filter"]
+    kwargs = cast(
+        "dict[str, object]",
+        cast("MagicMock", cast("AsyncMock", client.delete_by_query).await_args).kwargs,
+    )
+    clause = cast(
+        "dict[str, object]",
+        dig(kwargs, "body", "query", "bool"),
+    )
+    assert {"term": {"document_id": "d"}} in items(clause["filter"])
+    assert {"term": {"org_id": "o1"}} in items(clause["filter"])
     assert clause["must_not"] == [{"ids": {"values": ["o1/d:0", "o1/d:1"]}}]
 
 
@@ -458,7 +519,7 @@ def test_knn_query_rescoring_shapes_and_store_refuses_bad_shapes() -> None:
         OpenSearchConfig(oversample_factor=-1.0),
     ):
         with pytest.raises(AppValueError):
-            OpenSearchVectorStore(MagicMock(), dimension=4, config=config)
+            _ = OpenSearchVectorStore(MagicMock(), dimension=4, config=config)
 
 
 def test_builder_and_multi_domain_config_errors() -> None:
@@ -480,11 +541,11 @@ def test_builder_and_multi_domain_config_errors() -> None:
     two = replace(config, opensearch=OpenSearchConfig(shard_domains=((0, "a"), (1, "b"))))
 
     with pytest.raises(AppValueError):
-        new_vector_store_from_config(config)
+        _ = new_vector_store_from_config(config)
     with pytest.raises(AppValueError):
-        new_vector_store_from_config(bad, opensearch_clients={"a": _client()})
+        _ = new_vector_store_from_config(bad, opensearch_clients={"a": _client()})
     with pytest.raises(AppValueError):
-        MultiDomainVectorStore({}, {})
+        _ = MultiDomainVectorStore({}, {})
     single = new_vector_store_from_config(config, opensearch_clients={"a": _client()})
     multi = new_vector_store_from_config(
         two, opensearch_clients={"a": _client(), "b": _client()}
@@ -549,8 +610,8 @@ async def test_multi_domain_spreads_unsharded_documents_by_id() -> None:
 
     placed: dict[str, set[str]] = {}
     for name, client in clients.items():
-        for call in client.bulk.await_args_list:
-            for op in call.kwargs["body"]:
+        for call in cast("list[object]", cast("AsyncMock", client.bulk).await_args_list):
+            for op in cast("list[dict[str, object]]", call.kwargs["body"]):
                 if "document_id" in op:
                     placed.setdefault(str(op["document_id"]), set()).add(name)
     assert all(len(domains) == 1 for domains in placed.values())
@@ -573,9 +634,12 @@ async def test_keyword_search_returns_no_vectors() -> None:
     client.search = AsyncMock(return_value={"hits": {"hits": []}})
     store = OpenSearchVectorStore(client, dimension=1)
 
-    await store.keyword_search("docs", "text", 5, {"org_id": "o1"})
+    _ = await store.keyword_search("docs", "text", 5, {"org_id": "o1"})
 
-    body = client.search.await_args.kwargs["body"]
+    body = cast(
+        "dict[str, object]",
+        cast("MagicMock", cast("AsyncMock", client.search).await_args).kwargs["body"],
+    )
     assert body["_source"] == {"excludes": ["embedding", "embedding_full"]}
 
 
@@ -649,7 +713,13 @@ async def test_multi_domain_search_merges_by_score_and_cuts_a_slow_domain() -> N
     hits = await cut.search("docs", [1.0], 3, {"org_id": "o1"})
 
     assert [h.chunk_id for h in hits] == ["a0", "a1"]
-    metrics.counter.return_value.inc.assert_called_once_with(domain="b")
+    cast(
+        "MagicMock",
+        cast(
+            "MagicMock",
+            cast("MagicMock", cast("MagicMock", metrics.counter).return_value).inc,
+        ).assert_called_once_with,
+    )(domain="b")
 
 
 def test_transcript_text_mapping_keeps_positions_and_offsets() -> None:
@@ -668,7 +738,7 @@ def test_transcript_text_mapping_keeps_positions_and_offsets() -> None:
 
     def text_field(
         *, offsets: bool = False, analyzers: tuple[tuple[str, str], ...] = ()
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         body = index_body(
             8,
             "m",
@@ -680,13 +750,16 @@ def test_transcript_text_mapping_keeps_positions_and_offsets() -> None:
                 text_offsets=offsets,
             ),
         )
-        properties = cast("dict[str, Any]", body["mappings"])["properties"]
-        return cast("dict[str, Any]", properties[TEXT_FIELD])
+        properties = cast(
+            "dict[str, object]",
+            cast("dict[str, object]", body["mappings"])["properties"],
+        )
+        return cast("dict[str, object]", properties[TEXT_FIELD])
 
     assert text_field(offsets=True) == {"type": "text", "index_options": "offsets"}
     both = text_field(offsets=True, analyzers=(("de", "german"),))
     assert both["index_options"] == "offsets"
-    assert both["fields"]["de"]["analyzer"] == "german"
+    assert dig(both, "fields", "de", "analyzer") == "german"
     assert text_field() == {"type": "text"}
 
 
@@ -714,15 +787,15 @@ def test_language_analyzers_add_subfields_and_search_them() -> None:
         8, "m", "1", options=IndexBodyOptions(on_disk=False, compression_level="16x")
     )
     properties = cast(
-        "dict[str, dict[str, Any]]",
-        cast("dict[str, Any]", body["mappings"])["properties"],
+        "dict[str, dict[str, object]]",
+        cast("dict[str, object]", body["mappings"])["properties"],
     )
     default = cast(
-        "dict[str, dict[str, Any]]",
-        cast("dict[str, Any]", plain["mappings"])["properties"],
+        "dict[str, dict[str, object]]",
+        cast("dict[str, object]", plain["mappings"])["properties"],
     )
 
-    assert properties[TEXT_FIELD]["fields"]["de"] == {
+    assert dig(properties, TEXT_FIELD, "fields", "de") == {
         "type": "text",
         "analyzer": "german",
     }

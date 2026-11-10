@@ -51,7 +51,7 @@ def test_types_are_frozen_and_spans_are_validated() -> None:
             setattr(target, name, None)
     for start, end in ((-1, 2), (3, 3), (4, 1)):
         with pytest.raises(AppValueError):
-            Entity("ORG", start, end, "x")
+            _ = Entity("ORG", start, end, "x")
 
 
 def test_registry_refuses_unknown_tasks_and_round_trips_registered_ones() -> None:
@@ -74,7 +74,7 @@ def test_registry_refuses_unknown_tasks_and_round_trips_registered_ones() -> Non
     annotation = Annotation(task_results={"speaker": (Speaker("Ann"),)})
 
     with pytest.raises(AppValueError) as unknown:
-        registry.get("speaker")
+        _ = registry.get("speaker")
     registry.register("speaker", Speaker)
     registry.register("speaker", Speaker)
     checked = check_annotations([block], [annotation], registry)
@@ -112,5 +112,5 @@ def test_check_annotations_refuses_a_reply_that_does_not_match() -> None:
     assert check_annotations([block], [good], registry) == [good]
     for blocks, reply in bad:
         with pytest.raises(AppError) as raised:
-            check_annotations(blocks, reply, registry)
+            _ = check_annotations(blocks, reply, registry)
         assert raised.value.code is ErrorCode.INTERNAL

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -45,7 +46,7 @@ class TestAdapt:
             # Derive the response from the parsed request so the id is threaded end to
             # end.
             resp = MagicMock()
-            resp.name = "entity-" + req.id
+            resp.name = "entity-" + cast("str", req.id)
             return resp
 
         async def parse(raw: dict[str, str]) -> MagicMock:
@@ -113,7 +114,7 @@ class TestAdaptNoContent:
         """
         ctrl = BaseController()
 
-        async def handler(req: MagicMock) -> None:
+        async def handler(_req: MagicMock) -> None:
             pass
 
         async def parse(raw: dict[str, str]) -> MagicMock:

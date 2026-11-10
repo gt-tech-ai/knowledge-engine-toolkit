@@ -5,6 +5,8 @@ Factory.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
 import pytest
 
 from techai_webutils.clients.metadata import (
@@ -19,6 +21,9 @@ from techai_webutils.core.domain import DocumentFormat, ParsedDocument
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.metadata import MetadataExtractor
 from tests.child_python import run_python
+
+if TYPE_CHECKING:
+    from techai_webutils.clients.metadata.factory import MetadataKind
 
 _EXPECTED_PAGE_COUNT = 3
 _EXPECTED_WORD_COUNT = 12
@@ -134,7 +139,9 @@ class TestMetadataExtractorFactory:
         (the Go NewFromConfig contract).
         """
         with pytest.raises(AppValueError, match="unknown metadata extractor kind"):
-            metadata_extractor_from_config(MetadataConfig(kind="bogus"))  # type: ignore[arg-type]
+            _ = metadata_extractor_from_config(
+                MetadataConfig(kind=cast("MetadataKind", cast("object", "bogus")))
+            )
 
 
 def test_metadata_package_imports_without_langdetect() -> None:

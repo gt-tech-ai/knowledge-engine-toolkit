@@ -21,7 +21,8 @@ Run with: pytest tests/python/test_foundation/test_cache_local.py -v
 from __future__ import annotations
 
 import time
-from unittest.mock import patch
+from typing import cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -83,7 +84,7 @@ class TestLocalCache:
 
         # Mock time to simulate TTL expiry
         with patch("techai_webutils.clients.cache.local.cache.time") as mock_time:
-            mock_time.monotonic.return_value = time.monotonic() + 2
+            cast("MagicMock", mock_time.monotonic).return_value = time.monotonic() + 2
             result = await cache.get("key1")
 
         assert result is None
@@ -164,6 +165,6 @@ class TestLocalCache:
 
         # Should expire after default TTL
         with patch("techai_webutils.clients.cache.local.cache.time") as mock_time:
-            mock_time.monotonic.return_value = time.monotonic() + 11
+            cast("MagicMock", mock_time.monotonic).return_value = time.monotonic() + 11
             result = await cache.get("key1")
         assert result is None

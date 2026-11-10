@@ -13,6 +13,7 @@ once and closing every built worker at the end.
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import final
 
 import pytest
 
@@ -45,6 +46,7 @@ class _Log:
     processed: list[int] = field(default_factory=list)
 
 
+@final
 class _CountingWorker:
     """PooledWorker that records its own build + every item it processes.
 
@@ -225,7 +227,7 @@ class TestPooledExecutor:
         ex = PooledExecutor(unreachable, pool_size=1, abort_on=(RayUnavailableError,))
 
         with pytest.raises(RayUnavailableError):
-            await ex.run([0, 1, 2, 3], concurrency=1)
+            _ = await ex.run([0, 1, 2, 3], concurrency=1)
         assert builds == 1
 
     @staticmethod
@@ -262,6 +264,6 @@ class TestPooledExecutor:
 
         ex = PooledExecutor(factory, pool_size=4)
 
-        await ex.run(list(range(8)), concurrency=2)
+        _ = await ex.run(list(range(8)), concurrency=2)
 
         assert peak <= _EXPECTED_PEAK

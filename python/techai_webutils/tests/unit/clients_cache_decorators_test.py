@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -66,7 +66,7 @@ def _open_breaker() -> MagicMock:
 
     """
     cb = MagicMock(spec=CircuitBreakerInterface)
-    cb.__enter__.side_effect = CircuitOpenError()
+    cast("MagicMock", cb.__enter__).side_effect = CircuitOpenError()
     return cb
 
 
@@ -80,7 +80,7 @@ def _closed_breaker() -> MagicMock:
 
     """
     cb = MagicMock(spec=CircuitBreakerInterface)
-    cb.__exit__.return_value = False
+    cast("MagicMock", cb.__exit__).return_value = False
     return cb
 
 
@@ -107,7 +107,9 @@ class TestCacheBuilder:
         cache = CacheBuilder(inner).build()
         await cache.set("k", b"v")
         assert await cache.get("k") == b"v"
-        inner.set.assert_awaited_once_with("k", b"v")
+        cast("MagicMock", cast("AsyncMock", inner.set).assert_awaited_once_with)(
+            "k", b"v"
+        )
 
     @staticmethod
     @pytest.mark.asyncio
@@ -127,7 +129,7 @@ class TestCacheBuilder:
         """
         inner = _mock_cache(get=b"v")
         logger = MagicMock()
-        cache = CacheBuilder(inner).with_logging(logger).build()  # type: ignore[arg-type]
+        cache = CacheBuilder(inner).with_logging(logger).build()
 
         await cache.set("k", b"v")
         assert await cache.get("k") == b"v"
@@ -154,7 +156,7 @@ class TestCacheBuilder:
         """
         inner = _mock_cache(get=None)
         logger = MagicMock()
-        cache = CacheBuilder(inner).with_logging(logger).build()  # type: ignore[arg-type]
+        cache = CacheBuilder(inner).with_logging(logger).build()
 
         assert await cache.get("missing") is None
         msg_texts = [c.args[0] for c in logger.mock_calls if c.args]
@@ -176,19 +178,23 @@ class TestCacheBuilder:
           - latency.observe is called 3 times (set + 2 gets)
         """
         inner = AsyncMock(spec=Cache)
-        inner.get.side_effect = lambda key: b"v" if key == "k" else None
+        cast("MagicMock", inner.get).side_effect = lambda key: (
+            b"v" if key == "k" else None
+        )
         hits = MagicMock()
         misses = MagicMock()
         latency = MagicMock()
         cache = CacheBuilder(inner).with_metrics(hits, misses, latency).build()
 
         await cache.set("k", b"v")
-        await cache.get("k")  # hit
-        await cache.get("miss")  # miss
+        _ = await cache.get("k")  # hit
+        _ = await cache.get("miss")  # miss
 
-        hits.increment.assert_called_once()
-        misses.increment.assert_called_once()
-        assert latency.observe.call_count == _EXPECTED_CALL_COUNT  # set + 2 gets
+        cast("MagicMock", cast("MagicMock", hits.increment).assert_called_once)()
+        cast("MagicMock", cast("MagicMock", misses.increment).assert_called_once)()
+        assert (
+            cast("MagicMock", latency.observe).call_count
+        ) == _EXPECTED_CALL_COUNT  # set + 2 gets
 
     @staticmethod
     @pytest.mark.asyncio
@@ -212,7 +218,7 @@ class TestCacheBuilder:
         cache = (
             CacheBuilder(inner)
             .with_metrics(hits, misses, latency)
-            .with_logging(logger)  # type: ignore[arg-type]
+            .with_logging(logger)
             .build()
         )
 
@@ -222,7 +228,7 @@ class TestCacheBuilder:
 
         # Both logging and metrics should fire
         assert len(logger.mock_calls) > 0
-        assert latency.observe.call_count > 0
+        assert cast("float", cast("MagicMock", latency.observe).call_count) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +254,7 @@ class TestCacheCircuitBreakerDecorator:
         """
         inner = _mock_cache(get=b"v")
         cb = _closed_breaker()
-        cache = CacheBuilder(inner).with_circuit_breaker(cb).build()  # type: ignore[arg-type]
+        cache = CacheBuilder(inner).with_circuit_breaker(cb).build()
 
         result = await cache.get("k")
         assert result == b"v"
@@ -268,11 +274,11 @@ class TestCacheCircuitBreakerDecorator:
         """
         inner = _mock_cache(get=b"v")
         cb = _open_breaker()
-        cache = CacheBuilder(inner).with_circuit_breaker(cb).build()  # type: ignore[arg-type]
+        cache = CacheBuilder(inner).with_circuit_breaker(cb).build()
 
         result = await cache.get("k")
         assert result is None
-        inner.get.assert_not_awaited()
+        cast("MagicMock", cast("AsyncMock", inner.get).assert_not_awaited)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -290,12 +296,12 @@ class TestCacheCircuitBreakerDecorator:
         """
         inner = _mock_cache()
         cb = _open_breaker()
-        cache = CacheBuilder(inner).with_circuit_breaker(cb).build()  # type: ignore[arg-type]
+        cache = CacheBuilder(inner).with_circuit_breaker(cb).build()
 
         # Should not raise
         await cache.set("k", b"v")
         # Underlying cache should not receive the write
-        inner.set.assert_not_awaited()
+        cast("MagicMock", cast("AsyncMock", inner.set).assert_not_awaited)()
 
     @staticmethod
     @pytest.mark.asyncio
@@ -313,12 +319,12 @@ class TestCacheCircuitBreakerDecorator:
         """
         inner = _mock_cache()
         cb = _open_breaker()
-        cache = CacheBuilder(inner).with_circuit_breaker(cb).build()  # type: ignore[arg-type]
+        cache = CacheBuilder(inner).with_circuit_breaker(cb).build()
 
         # Should not raise
         await cache.delete("k")
         # Underlying delete was a no-op
-        inner.delete.assert_not_awaited()
+        cast("MagicMock", cast("AsyncMock", inner.delete).assert_not_awaited)()
 
 
 class TestCacheTimeoutDecorator:
@@ -361,11 +367,11 @@ class TestCacheTimeoutDecorator:
           - AppTimeoutError is raised when the cache operation exceeds the timeout
         """
         inner = AsyncMock(spec=Cache)
-        inner.get.side_effect = _slow(2.0)
+        cast("MagicMock", inner.get).side_effect = _slow(2.0)
         cache = CacheBuilder(inner).with_timeout(0.01).build()
 
         with pytest.raises(AppTimeoutError):
-            await cache.get("k")
+            _ = await cache.get("k")
 
 
 class TestCacheFullResilienceChain:
@@ -400,10 +406,10 @@ class TestCacheFullResilienceChain:
 
         cache = (
             CacheBuilder(inner)
-            .with_circuit_breaker(cb)  # type: ignore[arg-type]
+            .with_circuit_breaker(cb)
             .with_timeout(5.0)
             .with_metrics(hits, misses, latency)
-            .with_logging(logger)  # type: ignore[arg-type]
+            .with_logging(logger)
             .build()
         )
 
@@ -411,7 +417,7 @@ class TestCacheFullResilienceChain:
         assert result == b"v"
 
         assert len(logger.mock_calls) > 0
-        assert latency.observe.call_count > 0
+        assert cast("float", cast("MagicMock", latency.observe).call_count) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +436,7 @@ class TestCacheDecoratorGapCoverage:
         **What it tests:**
           - An open breaker makes exists report a miss, so callers hit the source.
         """
-        cache = CacheBuilder(_mock_cache()).with_circuit_breaker(_open_breaker()).build()  # type: ignore[arg-type]
+        cache = CacheBuilder(_mock_cache()).with_circuit_breaker(_open_breaker()).build()
         assert await cache.exists("k") is False
 
     @staticmethod
@@ -442,11 +448,11 @@ class TestCacheDecoratorGapCoverage:
           - The timeout protects writes and probes, not just get.
         """
         set_cache = AsyncMock(spec=Cache)
-        set_cache.set.side_effect = _slow(2.0)
+        cast("MagicMock", set_cache.set).side_effect = _slow(2.0)
         delete_cache = AsyncMock(spec=Cache)
-        delete_cache.delete.side_effect = _slow(2.0)
+        cast("MagicMock", delete_cache.delete).side_effect = _slow(2.0)
         exists_cache = AsyncMock(spec=Cache)
-        exists_cache.exists.side_effect = _slow(2.0)
+        cast("MagicMock", exists_cache.exists).side_effect = _slow(2.0)
 
         cases: list[tuple[AsyncMock, Callable[[Cache], Awaitable[object]]]] = [
             (set_cache, lambda c: c.set("k", b"v")),
@@ -456,7 +462,7 @@ class TestCacheDecoratorGapCoverage:
         for inner, op in cases:
             cache = CacheBuilder(inner).with_timeout(0.01).build()
             with pytest.raises(AppTimeoutError):
-                await op(cache)
+                _ = await op(cache)
 
     @staticmethod
     @pytest.mark.asyncio
@@ -467,7 +473,7 @@ class TestCacheDecoratorGapCoverage:
           - A delete emits a cache.delete log; exists still returns correctly.
         """
         logger = MagicMock()
-        cache = CacheBuilder(_mock_cache(exists=True)).with_logging(logger).build()  # type: ignore[arg-type]
+        cache = CacheBuilder(_mock_cache(exists=True)).with_logging(logger).build()
         await cache.set("k", b"v")
         assert await cache.exists("k") is True
         await cache.delete("k")
@@ -488,6 +494,6 @@ class TestCacheDecoratorGapCoverage:
             .build()
         )
         await cache.set("k", b"v")
-        await cache.exists("k")
+        _ = await cache.exists("k")
         await cache.delete("k")
-        assert latency.observe.call_count >= 1
+        assert cast("float", cast("MagicMock", latency.observe).call_count) >= 1

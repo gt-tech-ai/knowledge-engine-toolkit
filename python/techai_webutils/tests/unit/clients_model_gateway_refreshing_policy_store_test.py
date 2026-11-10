@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast, final
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -48,7 +48,7 @@ def _metrics() -> tuple[MagicMock, MagicMock]:
     """
     counter = MagicMock(spec=MetricCounter)
     metrics = MagicMock(spec=MetricsProvider)
-    metrics.counter.return_value = counter
+    cast("MagicMock", metrics.counter).return_value = counter
     return metrics, counter
 
 
@@ -131,8 +131,17 @@ async def test_failed_refresh_keeps_the_last_snapshot_and_counts() -> None:
     await store.refresh()
 
     assert store.policy("org-1", "").pin("generate") == "a"
-    assert metrics.counter.call_args.args[0] == "routing_policy_refresh_total"
-    assert [c.kwargs for c in counter.inc.call_args_list] == [
+    assert (
+        cast(
+            "list[object]",
+            cast("MagicMock", cast("MagicMock", metrics.counter).call_args).args,
+        )[0]
+        == "routing_policy_refresh_total"
+    )
+    assert [
+        cast("object", c.kwargs)
+        for c in cast("list[object]", cast("MagicMock", counter.inc).call_args_list)
+    ] == [
         {"outcome": "ok"},
         {"outcome": "failed"},
     ]
@@ -148,10 +157,11 @@ def test_rejects_a_non_positive_interval() -> None:
       - ``interval_s=0`` raises ``INVALID_INPUT``
     """
     with pytest.raises(AppError) as caught:
-        RefreshingPolicyStore(AsyncMock(), fallback=_FALLBACK, interval_s=0)
+        _ = RefreshingPolicyStore(AsyncMock(), fallback=_FALLBACK, interval_s=0)
     assert caught.value.code is ErrorCode.INVALID_INPUT
 
 
+@final
 class _Ticks:
     """An injected sleep that returns only when the test releases a tick."""
 

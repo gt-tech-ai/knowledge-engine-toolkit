@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from typing import cast
 
 import pytest
 
@@ -71,14 +72,14 @@ def test_blocks_round_trip_through_json_at_this_and_the_previous_version() -> No
       - the previous ``format_version`` is read; a newer or missing one raises
         ``AppValueError``
     """
-    payload = json.loads(json.dumps(blocks_to_json(_BLOCKS)))
+    payload = cast("dict[str, object]", json.loads(json.dumps(blocks_to_json(_BLOCKS))))
 
     assert blocks_from_json(payload) == _BLOCKS
-    previous = {**payload, "format_version": payload["format_version"] - 1}
+    previous = {**payload, "format_version": cast("int", payload["format_version"]) - 1}
     assert blocks_from_json(previous) == _BLOCKS
-    for version in (payload["format_version"] + 1, None):
+    for version in (cast("int", payload["format_version"]) + 1, None):
         with pytest.raises(AppValueError):
-            blocks_from_json({**payload, "format_version": version})
+            _ = blocks_from_json({**payload, "format_version": version})
 
 
 def test_structure_fields_default_to_empty_so_existing_producers_are_unchanged() -> None:
@@ -118,4 +119,4 @@ def test_turn_refuses_a_negative_index_or_an_empty_span() -> None:
     """
     for index, start, end in ((-1, 0, 1), (0, -1, 1), (0, 5, 5)):
         with pytest.raises(AppValueError):
-            Turn("respondent", index, start, end)
+            _ = Turn("respondent", index, start, end)
