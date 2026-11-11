@@ -6,6 +6,7 @@ import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Self, cast, final, override
+from urllib.parse import urlencode
 
 import aiobotocore.session
 
@@ -28,6 +29,7 @@ _COPY_PART_SIZE = 100 * 1024 * 1024
 """Byte range each UploadPartCopy part covers (100 MiB; above the 5 MiB S3 minimum)."""
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from types import TracebackType
 
     from aiobotocore.response import StreamingBody
@@ -160,7 +162,15 @@ class S3StorageClient(StorageClient):
             await self._client.__aexit__(exc_type, exc_val, exc_tb)
 
     @override
-    async def upload(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
+    async def upload(
+        self,
+        bucket: str,
+        key: str,
+        body: bytes,
+        content_type: str,
+        *,
+        tags: Mapping[str, str] | None = None,
+    ) -> None:
         """Upload an object to S3.
 
         Args:
@@ -168,6 +178,8 @@ class S3StorageClient(StorageClient):
             key: The object key.
             body: The object's bytes.
             content_type: The object's MIME type.
+            tags: Object tags, sent URL-encoded as ``Tagging`` (the writer then needs
+                ``s3:PutObjectTagging`` too); ``None`` or empty sends none.
 
         Raises:
             AppRuntimeError: S3StorageClient not initialized. Use as async context
@@ -177,6 +189,15 @@ class S3StorageClient(StorageClient):
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
+        if tags:
+            _ = await self._client.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=body,
+                ContentType=content_type,
+                Tagging=urlencode(tags),
+            )
+            return
         _ = await self._client.put_object(
             Bucket=bucket,
             Key=key,

@@ -14,11 +14,14 @@ import asyncio
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import override
+from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.errors.errors import NotFoundError
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
@@ -33,7 +36,15 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
         self._objects: dict[tuple[str, str], tuple[bytes, StorageObject]] = {}
 
     @override
-    async def upload(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
+    async def upload(
+        self,
+        bucket: str,
+        key: str,
+        body: bytes,
+        content_type: str,
+        *,
+        tags: Mapping[str, str] | None = None,
+    ) -> None:
         """Store ``body`` under ``(bucket, key)`` with its computed metadata.
 
         Args:
@@ -41,6 +52,8 @@ class InMemoryStorageClient(NoOpAsyncResource, StorageClient):
             key: The object key.
             body: The object's bytes.
             content_type: The object's MIME type.
+            tags: Ignored: the memory backend keeps no object tags (nothing here runs
+                a lifecycle rule).
 
         """
         meta = StorageObject(

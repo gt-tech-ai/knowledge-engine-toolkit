@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.52] - 2026-11-11
+
+Python: `techai-webutils` 0.11.0. The Go module is unchanged.
+
+### Added
+
+- `StorageClient.upload(..., *, tags=None)`: object tags stored with the object. The `s3` kind
+  sends them URL-encoded as `Tagging` (the writer then needs `s3:PutObjectTagging`); `memory`
+  ignores them. Keyword-only and optional, so existing callers and implementations are unchanged.
+- `BedrockSinkConfig.object_tags`: tags the Bedrock sink puts on every file and sidecar it writes
+  (empty by default: no `tags` argument is passed). S3 lifecycle filters take a prefix or tags,
+  never a wildcard, so tags let one bucket rule select sink objects that sit under per-org
+  prefixes (`<org>/kb/<org>/`).
+
 ## [0.0.51] - 2026-11-10
 
 Go only; `techai-webutils` is unchanged at 0.10.0.

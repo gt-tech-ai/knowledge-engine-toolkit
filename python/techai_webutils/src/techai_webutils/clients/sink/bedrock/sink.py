@@ -6,7 +6,8 @@ Bedrock embeds by itself, so the sink takes no vectors: it writes text files and
 ``.metadata.json`` sidecars into the data source's bucket (``BedrockSinkConfig.layout``).
 Writes are idempotent: the document's objects are listed once, keys already present are
 skipped (a redelivery writes nothing), and objects of another version are deleted after
-the new ones are written. The caller starts the data source's ingestion job
+the new ones are written. Every object carries ``BedrockSinkConfig.object_tags`` when any
+are set. The caller starts the data source's ingestion job
 (``StartBudget``) afterwards; until then Bedrock serves the previous files.
 """
 
@@ -97,7 +98,7 @@ class BedrockSink(NoOpAsyncResource, Sink):
         files = self._files(doc_prefix, document, chunks)
         existing = await self._keys(doc_prefix)
         await self._each(
-            self._storage.upload(self._config.bucket, key, body, content_type)
+            self._upload(key, body, content_type)
             for key, (body, content_type) in files.items()
             if key not in existing
         )
@@ -181,9 +182,27 @@ class BedrockSink(NoOpAsyncResource, Sink):
             json.loads(await self._storage.download(self._config.bucket, key)),
         )
         attributes = cast("dict[str, object]", body.get("metadataAttributes", {}))
-        await self._storage.upload(
-            self._config.bucket, key, sidecar({**attributes, **fields}), _JSON
-        )
+        await self._upload(key, sidecar({**attributes, **fields}), _JSON)
+
+    async def _upload(self, key: str, body: bytes, content_type: str) -> None:
+        """Write one object, with the configured tags when there are any.
+
+        No ``tags`` argument is passed when none are configured, so a ``StorageClient``
+        written before tags existed keeps working.
+
+        Args:
+            key: The object's key.
+            body: The object's bytes.
+            content_type: The object's MIME type.
+
+        """
+        tags = self._config.object_tags
+        if tags:
+            await self._storage.upload(
+                self._config.bucket, key, body, content_type, tags=tags
+            )
+            return
+        await self._storage.upload(self._config.bucket, key, body, content_type)
 
     async def _keys(self, doc_prefix: str) -> set[str]:
         """Return the keys of every object under the document's prefix.
