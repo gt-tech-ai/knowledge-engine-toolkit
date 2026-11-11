@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/database"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/llm"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/lock"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/messaging"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox"
@@ -65,6 +66,7 @@ func testClientFamiliesRejectAnUnknownKindEachFamily(t *testing.T) {
 	maps.Copy(families, unknownKindCoordinationBuilders())
 	maps.Copy(families, unknownKindStreamingBuilders())
 	maps.Copy(families, unknownKindDeliveryBuilders())
+	maps.Copy(families, unknownKindModelBuilders())
 
 	for family, build := range families {
 		t.Run(family, func(t *testing.T) {
@@ -218,6 +220,23 @@ func unknownKindBuilders1() map[string]func(ctx context.Context) error {
 					Database: stdx.Zero[infra.DatabaseConfig](),
 				},
 				database.Deps{},
+			)
+
+			return err
+		},
+	}
+}
+
+// unknownKindModelBuilders builds the model-serving client families with the bogus kind.
+func unknownKindModelBuilders() map[string]func(ctx context.Context) error {
+	return map[string]func(ctx context.Context) error{
+		"llm": func(ctx context.Context) error {
+			_, err := llm.NewFromConfig(
+				ctx,
+				fixtures.BuildRef(func(row *llm.Config) {
+					row.Kind = bogusClientKind
+				}),
+				stdx.Zero[llm.Deps](),
 			)
 
 			return err

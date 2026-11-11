@@ -142,6 +142,43 @@ func TestTransportMcpToolResult_IsStepsPlusFailedTails(t *testing.T) {
 	assert.Contains(t, out.Error, "lint found issues")
 }
 
+// outputStepLines is the line count of the output step's answer, more than a failed
+// step's tail keeps.
+const outputStepLines = 60
+
+// TestTransportMcpToolResult_ReturnsOutputSteps tests that a step marked as the
+// operation's output is returned whole, even when it passed.
+//
+// Why this test is important:
+//   - An operation that answers a question (a model's reply) is useless over MCP if the
+//     caller gets only "PASS" and a log path; but returning every passing step's output
+//     would flood the caller's context.
+//
+// What it tests:
+//   - An OutputStep beside a passing step with 100 lines of output gives an output map
+//     holding only the OutputStep's full text (not tailed), keyed by its step name, and
+//     no failed tails or error.
+func TestTransportMcpToolResult_ReturnsOutputSteps(t *testing.T) {
+	t.Parallel()
+
+	answer := string(numberedLines(outputStepLines))
+	reg := stubOpRegistry(t, "stub", `{"type":"object"}`, emitSteps(
+		nil,
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "gofmt"
+			row.Status = types.StatusPass
+			row.Detail = numberedLines(100)
+		}),
+		types.OutputStep("answer", answer),
+	))
+	res, out := callStub(t, reg, new(mcpOpts(t)))
+
+	assert.False(t, res.IsError)
+	assert.Equal(t, map[string]string{"answer": answer}, out.Output)
+	assert.Empty(t, out.FailedTails)
+	assert.Empty(t, out.Error)
+}
+
 // TestTransportMcpFailedStepTail_RespectsConfigN tests that a failed step's tail is the
 // configured number of trailing lines.
 //

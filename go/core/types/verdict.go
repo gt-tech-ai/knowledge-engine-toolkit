@@ -19,6 +19,7 @@ func (v Verdict) Step(name, group string) StepResult {
 		Children: nil,
 		Duration: 0,
 		Tests:    0,
+		Output:   false,
 	}
 	if v.Status == StatusFail || v.Status == StatusWarn {
 		stepResult.Error = v.summary()

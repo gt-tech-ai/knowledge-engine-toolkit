@@ -184,5 +184,6 @@ func pinStep(name string, status types.StepStatus, errText string) types.StepRes
 		Children: nil,
 		Duration: 0,
 		Tests:    0,
+		Output:   false,
 	}
 }

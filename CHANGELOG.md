@@ -6,6 +6,44 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.51] - 2026-11-10
+
+Go only; `techai-webutils` is unchanged at 0.10.0.
+
+### Added
+
+- Go `core/interfaces.LLMClient` (`Complete`) with `core/types.CompletionRequest`,
+  `ChatMessage` and `Completion` (text, model, input and output token counts).
+- Go `clients/llm`: the LLM client family, `NewFromConfig(ctx, *Config, Deps)` over the kinds
+  `stub` (the default: a fixed reply, zero usage, no I/O), `ollama` (the chat API at
+  `ollama.base_url`; `ollama.context_tokens` sets `num_ctx`, since Ollama silently truncates a
+  prompt longer than its context window) and `bedrock` (the Converse API through an injected
+  `Deps.Converse`, so the engine's Bedrock client and its tier carry the call). Run through the client tier as the
+  operation `<name>.complete`; a transport failure, a throttle, 429 or 5xx is
+  `CodeUnavailable`, a rejected request `CodeInvalidInput`.
+- Go default decoration for the `llm` client: a 120 s timeout, a bulkhead, a circuit breaker and
+  retry (transient codes only, backoff with jitter).
+- Go `foundation/awserr.Classify` and `foundation/httperr.Transport`: the AWS SDK and HTTP
+  send error coding every AWS or HTTP client family shares.
+- Go test fixtures `tests/fixtures/dbtest/ollama` and `suite.OllamaIntegrationSuite` (Ollama
+  0.35.0 with `qwen2.5:0.5b` pulled); mocks `MockLLMClient` and `MockLLMConverseAPI`.
+- Go `foundation/paththeory`: `Compile(tokens, rules)` turns an ordered list of path rules (a kind
+  and a whole-path template with `**` and `{token}`s; built-ins `slug`, `snake`, `pascal`,
+  `camel`, `segment`, `date`, `nnnn`, `nn`, `n`, `any`, plus declared patterns or closed lists)
+  into a `Theory`; `Claim(path)` returns the first matching rule and `Classify(paths)` the claims,
+  the unclaimed paths and the rules that claimed nothing. A `forbid` rule names a violation (a
+  misplaced file it claims first is `Forbidden` under its kind). Catch-all templates are refused.
+- Go `core/types.OutputStep` and `StepResult.Output`: a step whose detail is the operation's
+  answer. `transport/mcp`'s tool result returns those details under `output` (step name →
+  text), so an MCP caller gets a passing operation's answer, not only its status.
+
+### Changed
+
+- Go `core/types.StepResult.Tests` is an `int32` (was `int`), so `Output` fits in the existing
+  padding and the struct stays under the 128-byte range-copy limit.
+- Go `clients/outbox` and `clients/prometheus/httpapi` code their errors through
+  `foundation/awserr` and `foundation/httperr` instead of private copies; behavior is unchanged.
+
 ## [0.0.50] - 2026-11-10
 
 Python: `techai-webutils` 0.10.0.

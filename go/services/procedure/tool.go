@@ -221,6 +221,7 @@ func (c *compiled) result(
 		Children: nil,
 		Duration: 0,
 		Tests:    0,
+		Output:   false,
 	}
 }
 
@@ -339,5 +340,6 @@ func statusOnly(status types.StepStatus) types.StepResult {
 		Children: nil,
 		Duration: 0,
 		Tests:    0,
+		Output:   false,
 	}
 }

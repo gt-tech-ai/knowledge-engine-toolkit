@@ -91,6 +91,7 @@ func (b *Base) Check(
 			Children: nil,
 			Duration: 0,
 			Tests:    0,
+			Output:   false,
 		}
 
 		err := run(ctx)

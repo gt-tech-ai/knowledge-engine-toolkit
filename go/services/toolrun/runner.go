@@ -192,6 +192,7 @@ func (r *runner) dispatch(
 			Children: nil,
 			Duration: 0,
 			Tests:    0,
+			Output:   false,
 		}}
 	}
 
@@ -324,6 +325,7 @@ func missing(
 		Children: nil,
 		Duration: 0,
 		Tests:    0,
+		Output:   false,
 	}
 }
 
@@ -389,6 +391,7 @@ func (r *runner) invoke(
 			Children: nil,
 			Duration: 0,
 			Tests:    0,
+			Output:   false,
 		}
 	}
 
@@ -400,6 +403,7 @@ func (r *runner) invoke(
 			Children: nil,
 			Duration: 0,
 			Tests:    0,
+			Output:   false,
 		}
 	}
 

@@ -449,6 +449,7 @@ func (g *guard) tick(
 		Children: nil,
 		Duration: 0,
 		Tests:    0,
+		Output:   false,
 	}
 
 	switch {

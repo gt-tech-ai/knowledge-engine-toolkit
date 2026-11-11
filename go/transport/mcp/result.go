@@ -24,8 +24,12 @@ type StepSummary struct {
 }
 
 // ToolResult is what an MCP tool call returns: every step's one-line summary, the
-// output tail of each failed step, and the run's coded error.
+// output tail of each failed step, the whole output of each output step, and the run's
+// coded error.
 type ToolResult struct {
+	// Output maps each output step's (unique) name to its whole detail: the operation's
+	// answer (types.OutputStep), returned even when the step passed.
+	Output map[string]string `json:"output,omitempty"`
 	// FailedTails maps each failed step's (unique) name to the last tail_lines lines of
 	// its captured output (its step error when it captured none); passing steps never
 	// appear.
@@ -38,15 +42,21 @@ type ToolResult struct {
 }
 
 // buildResult shapes a finished run as a ToolResult from its flattened steps: one
-// summary per step with its log path from logs (aligned with steps), the last tailN
-// output lines of each failed step, and err as a coded message.
+// summary per step with its log path from logs (aligned with steps), the whole detail of
+// each output step, the last tailN output lines of each failed step, and err as a coded
+// message.
 func buildResult(
 	steps []types.StepResult,
 	tailN int,
 	logs []string,
 	err error,
 ) ToolResult {
-	res := ToolResult{Steps: summarize(steps, logs), FailedTails: nil, Error: ""}
+	res := ToolResult{
+		Steps:       summarize(steps, logs),
+		Output:      outputs(steps),
+		FailedTails: nil,
+		Error:       "",
+	}
 	for _, stepResult := range steps {
 		if stepResult.Status != types.StatusFail {
 			continue
@@ -64,6 +74,26 @@ func buildResult(
 	}
 
 	return res
+}
+
+// outputs maps each output step's name to its whole detail; nil when no step is an
+// output step.
+func outputs(steps []types.StepResult) map[string]string {
+	var out map[string]string
+
+	for index := range steps {
+		if !steps[index].Output {
+			continue
+		}
+
+		if out == nil {
+			out = map[string]string{}
+		}
+
+		out[steps[index].Name] = string(steps[index].Detail)
+	}
+
+	return out
 }
 
 // summarize returns one summary per flattened step, in order, with its log path from

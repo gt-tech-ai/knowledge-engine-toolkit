@@ -79,6 +79,7 @@ func (p Pool) FanOut[T any](
 			Children: nil,
 			Duration: 0,
 			Tests:    0,
+			Output:   false,
 		}
 		emitter.complete(&results[index])
 	}
@@ -122,6 +123,7 @@ func runUnit[T any](
 				Group:    "",
 				Children: nil,
 				Tests:    0,
+				Output:   false,
 			}
 			emitter.complete(slot)
 		}

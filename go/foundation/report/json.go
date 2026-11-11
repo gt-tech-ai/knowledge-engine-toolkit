@@ -35,7 +35,7 @@ type jsonStep struct {
 	DurationMS int64 `json:"duration_ms"`
 
 	// Tests is the number of test cases the step ran.
-	Tests int `json:"tests,omitempty"`
+	Tests int32 `json:"tests,omitempty"`
 }
 
 // jsonGate is the JSON report.

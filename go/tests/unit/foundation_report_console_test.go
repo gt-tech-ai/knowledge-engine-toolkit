@@ -65,16 +65,14 @@ func consoleRun() (lint, unit types.StepResults) {
 			row.Status = types.StatusPass
 			row.Duration = durationRun * time.Millisecond
 		}),
-		{
-			Name:     "ruff (Python)",
-			Group:    textLintTitle,
-			Status:   types.StatusFail,
-			Duration: durationConsoleRun * time.Millisecond,
-			Error:    "INTERNAL: ruff found 2 issues",
-			Detail:   noisy,
-			Children: nil,
-			Tests:    0,
-		},
+		fixtures.Build(func(row *types.StepResult) {
+			row.Name = "ruff (Python)"
+			row.Group = textLintTitle
+			row.Status = types.StatusFail
+			row.Duration = durationConsoleRun * time.Millisecond
+			row.Error = "INTERNAL: ruff found 2 issues"
+			row.Detail = noisy
+		}),
 	}
 	unit = types.StepResults{
 		{
@@ -99,6 +97,7 @@ func consoleRun() (lint, unit types.StepResults) {
 			},
 			Error:  "",
 			Detail: nil,
+			Output: false,
 		},
 		fixtures.Build(func(row *types.StepResult) {
 			row.Name = "TypeScript"

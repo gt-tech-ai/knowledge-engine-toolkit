@@ -233,7 +233,7 @@ collaborator or zero timeout skips its layer; recovery needs none.
   component with no entry of its own name. **Observe once per request:** by default clients, workflows and
   jobs are observed and the pipeline, service, repository and store tiers are not; repositories
   retry behind a breaker; the `storage`, `outbox.*` and `prometheus` clients carry a 30 s
-  timeout, bulkhead and breaker.
+  timeout, bulkhead and breaker, and the `llm` client a 120 s timeout, bulkhead, breaker and retry.
 - **Python — the same tiers, the same config.** `foundation/decorate` mirrors Go's package:
   `OpMiddleware`, `chain`, `exec_op`, one `new_*` middleware per layer, `Tier` (layers as data,
   outermost first), `Subject`, `Deps`, and `Decorations`, which builds a component's `Deps` from
@@ -334,7 +334,7 @@ Outermost → innermost:
 
 | Stack | Where | Order |
 | --- | --- | --- |
-| Client | `go/clients/client` (`Tier`; each family's `Decorate`) | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging — decorated: storage, messaging publish, lock, replay buffer, analytics store, connector source, and the SDK/HTTP seam of the outbox sinks (SDK faults coded so only throttling/server faults retry) and the Prometheus querier (op `prometheus.<endpoint>`; the capped body is read inside the attempt; 429/502/503/504 transient) |
+| Client | `go/clients/client` (`Tier`; each family's `Decorate`) | Bulkhead → Retry → CircuitBreaker → Timeout → Tracing → Metrics → Logging — decorated: storage, messaging publish, lock, replay buffer, analytics store, connector source, the LLM client (op `<name>.complete`), and the SDK/HTTP seam of the outbox sinks (SDK faults coded by `foundation/awserr` so only throttling/server faults retry) and the Prometheus querier (op `prometheus.<endpoint>`; the capped body is read inside the attempt; 429/502/503/504 transient) |
 | Message handler | `go/clients/messaging/{sqs,redis}` | the Client tier as `<name>.handler` (`client.NewWireBase` with `client.Handler()`) in CONSUMER spans, each publish in a PRODUCER span (`client.Producer()`; a Redis publish, at-most-once, is never retried — `Kinds.AtMostOnce`): a handler is never retried, broken or bulkheaded — the broker's redelivery is the retry. The publisher's trace context (`tracer.Inject` / `Extract`) rides SQS message attributes and memory-broker metadata, so the handler continues the publisher's trace; Redis Pub/Sub carries the payload alone, so a trace stops at a Redis channel |
 | Controller | `go/transport` (`Tier`; `Base.Handler` for a REST/RPC handler) | Tracing (server span) → Metrics → Logging → Recovery → RateLimit → Bulkhead (sheds when `bulkhead.shed`, the controllers' default) → Auth (`<controller>.<op>`) → Timeout — switched and tuned by `decoration.controllers` |
 | Connect server | `go/transport/connect/interceptors.ServerOptions` | the Controller tier via `transport.Interceptors`, op `pkg.Service/Method`: Connect-native Tracing (continues the caller's trace, sets `traceresponse`), Metrics (`connect_rpc_*`, by status code) and Logging (status-aware access line) stand in for the tier's; `Edge.Authn` (service auth, gateway-header auth, the consumer's principal and tenant-scope interceptors) runs just before Auth; `Edge.Inner` (retry budget, validation) after the tier. A stream gets no timeout; a handler's error is returned verbatim, a tier rejection becomes a `*connect.Error` of its code |
@@ -611,7 +611,7 @@ interceptor's status for an unresolvable caller, and the command-line exit codes
 Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud dependency:
 
 - **Go:** analytics `stub`; lock `local`; outbox sink and outbox store `stub`; messaging, replay buffer, storage `memory`; secrets
-  `env`/`file`; cache, prometheus, transport `stub`; tracer `noop`; metrics no-op when disabled;
+  `env`/`file`; cache, llm, prometheus, transport `stub`; tracer `noop`; metrics no-op when disabled;
   logger `stdlib`. `database` and `rpc` default to `postgres` and `grpc`: their consumers hold the
   `*sql.DB` or connection itself.
 - **Python:** cache `local`/`null`; email, safety `noop`; model_gateway `passthrough`; audit, dataset, embedding, facts, llm, retrieval,
@@ -1157,6 +1157,12 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   `RenderIndex` and `RenderRootIndex` write frontmatter and `index.md` deterministically; `Conform`
   and `ConformLog` report a file that breaks the format or a caller's per-type required keys. It is
   pure (no I/O): a guard or generator walks the `Codebase` and passes each file's bytes.
+- **Path theories.** `foundation/paththeory` compiles an ordered rule set (a kind and a whole-path
+  template with `**` and `{token}`s: the built-in name styles and number shapes plus declared
+  patterns or closed lists) and claims each path by the first matching rule. `Classify` returns a
+  tree's claims, its unclaimed paths and its dead rules, so a guard can require every file to have
+  exactly one place and name; a `forbid` rule names a violation instead of claiming it. A
+  catch-all template is refused. It is pure (no I/O).
 - **Probes.** `interfaces.Probe[T]` is one check returning a `types.Verdict` (status, findings,
   transient). `services/probe.NewSet` runs a set in parallel with a per-probe timeout, retries of
   transient failures and a strict mode that fails a skip, returning one step per probe in probe
@@ -1203,7 +1209,9 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   runs one at a time, each under recovery → timeout → logging → code mapping.
   `execution/runs` tracks background runs of long-running operations. Front-ends:
   `transport/cobra` (a command whose flags come from the input's `flag` and `arg` tags),
-  `transport/mcp` (one MCP tool per admitted operation plus `runs.status|result|cancel|list`)
+  `transport/mcp` (one MCP tool per admitted operation plus `runs.status|result|cancel|list`;
+  a result carries each step's status, a failed step's log tail, and the detail of every step
+  built with `types.OutputStep` under `output`, so a passing operation returns its answer)
   and `transport/cron` (a scheduled job runs one named operation unattended).
 
 Generic methods on concrete types (Go 1.27) carry typed results without a type switch:

@@ -3,16 +3,15 @@ package outbox
 import (
 	"context"
 	"io"
-	"strings"
 
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	awssqs "github.com/aws/aws-sdk-go-v2/service/sqs"
-	smithy "github.com/aws/smithy-go"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	outboxs3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/s3"
 	outboxsqs "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/awserr"
 )
 
 // decorateSQS runs every SQS call through the client tier and codes its errors, so
@@ -51,7 +50,7 @@ func (a *sqsAPI) SendMessageBatch(
 		func(cctx context.Context) (*awssqs.SendMessageBatchOutput, error) {
 			out, err := a.inner.SendMessageBatch(cctx, sendMessageBatchInput, optFns...)
 
-			return out, classify(err)
+			return out, awserr.Classify(err)
 		},
 	)
 }
@@ -68,7 +67,7 @@ func (a *sqsAPI) getQueueURL(
 		func(cctx context.Context) (*awssqs.GetQueueUrlOutput, error) {
 			out, err := a.inner.GetQueueUrl(cctx, queueLookup, optFns...)
 
-			return out, classify(err)
+			return out, awserr.Classify(err)
 		},
 	)
 }
@@ -112,7 +111,7 @@ func (a *s3API) PutObject(
 
 		out, err := a.inner.PutObject(ctx, putObjectInput, optFns...)
 
-		return out, classify(err)
+		return out, awserr.Classify(err)
 	}
 
 	if rewindable {
@@ -120,32 +119,4 @@ func (a *s3API) PutObject(
 	}
 
 	return a.ExecOnce(ctx, "put_object", put)
-}
-
-// classify codes an SDK error: a throttle or server fault is CodeUnavailable
-// (retryable), access denial CodeForbidden, any other client fault
-// CodeInvalidInput; context errors and already-coded errors pass through.
-func classify(err error) error {
-	if err == nil || apperr.Code(err) != apperr.CodeUnknown ||
-		apperr.StdIs(
-			err,
-			context.Canceled,
-		) || apperr.StdIs(err, context.DeadlineExceeded) {
-		return err
-	}
-
-	var apiErr smithy.APIError
-
-	if !apperr.As(err, &apiErr) || apiErr.ErrorFault() != smithy.FaultClient {
-		return apperr.Wrap(err, apperr.CodeUnavailable, "aws call failed")
-	}
-
-	switch name := apiErr.ErrorCode(); {
-	case strings.Contains(name, "Throttl"), name == "SlowDown", name == "RequestTimeout":
-		return apperr.Wrap(err, apperr.CodeUnavailable, "aws call throttled")
-	case strings.HasPrefix(name, "AccessDenied"):
-		return apperr.Wrap(err, apperr.CodeForbidden, "aws call denied")
-	default:
-		return apperr.Wrap(err, apperr.CodeInvalidInput, "aws call rejected")
-	}
 }

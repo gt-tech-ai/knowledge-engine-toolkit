@@ -61,8 +61,14 @@ type StepResult struct {
 
 	// Tests is the number of individual test cases the step ran (Go test
 	// functions, pytest items). Zero when the step is not a test run or the count
-	// is unknown; observers render it as an "N tests" annotation.
-	Tests int
+	// is unknown; observers render it as an "N tests" annotation. An int32 so it
+	// shares a word with Output and the struct stays small enough to range over by value.
+	Tests int32
+
+	// Output marks Detail as the operation's answer rather than a diagnostic: a
+	// front-end returns it to its caller whole, even when the step passed (the MCP tool
+	// result's output). Set it through OutputStep.
+	Output bool
 }
 
 // StepResults is an ordered slice of StepResult values with query helpers.
@@ -126,6 +132,7 @@ func NewStep(name string, status StepStatus, err error) StepResult {
 		Children: nil,
 		Duration: 0,
 		Tests:    0,
+		Output:   false,
 	}
 	if err != nil {
 		stepResult.Error = err.Error()
@@ -141,6 +148,23 @@ func DetailStep(name string, status StepStatus, detail string) StepResult {
 		Name:     name,
 		Status:   status,
 		Detail:   []byte(detail),
+		Group:    "",
+		Error:    "",
+		Children: nil,
+		Duration: 0,
+		Tests:    0,
+		Output:   false,
+	}
+}
+
+// OutputStep returns the passing result of the step name whose detail, output, is the
+// operation's answer: a front-end returns it to its caller even though the step passed.
+func OutputStep(name, output string) StepResult {
+	return StepResult{
+		Name:     name,
+		Status:   StatusPass,
+		Detail:   []byte(output),
+		Output:   true,
 		Group:    "",
 		Error:    "",
 		Children: nil,

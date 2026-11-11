@@ -35,6 +35,7 @@ func reportSteps() types.StepResults {
 			Detail:   []byte("a.go:3: shadowed\n"),
 			Children: nil,
 			Tests:    0,
+			Output:   false,
 		},
 	}
 }

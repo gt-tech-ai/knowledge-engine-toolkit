@@ -40,6 +40,7 @@ func (s Step) Execute(ctx context.Context) types.StepResult {
 		Detail:   nil,
 		Children: nil,
 		Tests:    0,
+		Output:   false,
 	}
 
 	if err == nil {

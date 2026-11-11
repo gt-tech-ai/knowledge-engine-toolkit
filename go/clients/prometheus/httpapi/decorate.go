@@ -10,6 +10,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/httperr"
 )
 
 // DecorateDoer runs every request inner sends through the client tier (c), as the
@@ -56,7 +57,7 @@ func (d *decoratedDoer) Do(req *nethttp.Request) (*nethttp.Response, error) {
 		func(ctx context.Context) (*nethttp.Response, error) {
 			resp, err := d.inner.Do(req.Clone(ctx))
 			if err != nil {
-				return nil, transportError(err, "prometheus request")
+				return nil, httperr.Transport(err, "prometheus request")
 			}
 
 			body, err := d.readBody(resp.Body)
@@ -85,7 +86,7 @@ func (d *decoratedDoer) readBody(src io.ReadCloser) ([]byte, error) {
 
 	body, err := io.ReadAll(r)
 	if err != nil {
-		return nil, transportError(err, "read prometheus response")
+		return nil, httperr.Transport(err, "read prometheus response")
 	}
 
 	if d.maxBodyBytes > 0 && int64(len(body)) > d.maxBodyBytes {

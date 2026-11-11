@@ -20,7 +20,8 @@ coverage_*.dat*
 # Editors / OS
 .DS_Store
 .idea/
-
+# Code-intelligence indexes (per machine)
+.codegraph/
 
 # Local, uncommitted planning notes
 docs/local/
