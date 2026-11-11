@@ -8,7 +8,12 @@ All notable changes to this project are recorded here. The format follows
 
 ## [0.0.52] - 2026-11-11
 
-Python: `techai-webutils` 0.11.0. The Go module is unchanged.
+Python: `techai-webutils` 0.11.0. The Go module changes only its toolchain.
+
+### Security
+
+- Go toolchain `go1.27.3` → `go1.27.4`: fixes GO-2026-6859 (an HTTP/1 server crash from a
+  `MaxBytesReader` header race in `net/http`), which `govulncheck` reports as reachable.
 
 ### Added
 
