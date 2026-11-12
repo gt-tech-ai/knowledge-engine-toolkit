@@ -31,6 +31,7 @@ _DOCS = st.builds(
     pages=st.lists(st.builds(Page, st.integers(min_value=1), st.text()), max_size=5),
     error=st.text(max_size=40),
     attributes=st.dictionaries(st.text(max_size=8), st.text(max_size=8), max_size=3),
+    source_path=st.text(max_size=20),
     blocks=st.lists(
         st.builds(
             DocumentBlock,
@@ -43,7 +44,7 @@ _DOCS = st.builds(
         max_size=4,
     ).map(tuple),
 )
-"""Parsed documents with arbitrary text, pages and blocks."""
+"""Parsed documents with arbitrary text, pages, blocks and source path."""
 
 
 @settings(max_examples=150)

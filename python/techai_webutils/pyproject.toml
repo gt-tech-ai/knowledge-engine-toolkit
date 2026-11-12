@@ -120,6 +120,17 @@ layout = ["docling>=2.147.0", "docling-core>=2.106.0"]
 # tokenizer file is the deployable's; the engine downloads nothing.
 tokenizers = ["tokenizers>=0.23.3"]
 
+# tree-sitter and the Go, Python and TypeScript grammars for the `code` DocumentSplitter Kind (one
+# index unit per top-level declaration). Optional: only a deployable that splits source code
+# installs `techai-webutils[code]`; `splitter_from_config` imports the `code` backend lazily, so the
+# default import graph never pulls it. A file with no grammar falls back to the `kb_unit` pack.
+code = [
+    "tree-sitter>=0.26.0",
+    "tree-sitter-go>=0.25.0",
+    "tree-sitter-python>=0.25.0",
+    "tree-sitter-typescript>=0.23.2",
+]
+
 [project.license]
 text = "MIT"
 
@@ -166,6 +177,12 @@ dev = [
     "ty>=0.0.38",
     # hypothesis drives the property tests (e.g. the token-ledger Decimal cost arithmetic).
     "hypothesis>=6.168.5",
+    # The `code` extra, so basedpyright resolves the code splitter's tree-sitter imports and its
+    # tests parse real Go, Python and TypeScript.
+    "tree-sitter>=0.26.0",
+    "tree-sitter-go>=0.25.0",
+    "tree-sitter-python>=0.25.0",
+    "tree-sitter-typescript>=0.23.2",
     "asyncpg-stubs==0.31.3",
     "types-aiobotocore-lite[s3,sesv2,sqs]==3.9.0",
     "import-linter>=2.15",

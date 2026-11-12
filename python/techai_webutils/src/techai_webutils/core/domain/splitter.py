@@ -8,7 +8,11 @@ same DTO (like Go's ``go/core`` types).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,7 +24,9 @@ class ChunkPayload:
     the 0-based position within the parent. ``section_path``, ``element_type`` and
     ``span`` say where the chunk came from when a structure-aware chunker made it (empty /
     ``None`` otherwise), so a sink can carry them into the vector store's metadata and the
-    sidecar.
+    sidecar. ``symbol``, ``line_start``/``line_end`` and ``frontmatter`` are set by the
+    ``code`` and ``markdown`` splitters: the declaration or section the chunk is, its
+    1-based line range in the source file, and the document's parsed frontmatter.
     """
 
     # chunk_index is the 0-based position of this chunk within its parent document.
@@ -46,6 +52,17 @@ class ChunkPayload:
     span: tuple[int, int] | None = None
     """The chunk's ``[start, end)`` character range in the parent's text (``None`` when
     unknown)."""
+
+    symbol: str = ""
+    """The declaration (``Type.method``) or ``##`` section the chunk is; empty for glue
+    (imports, a preamble) and for splitters that do not know it."""
+    line_start: int | None = None
+    """Inclusive 1-based first source line of the chunk (``None`` when unknown)."""
+    line_end: int | None = None
+    """Inclusive 1-based last source line of the chunk (``None`` when unknown)."""
+    frontmatter: Mapping[str, object] = field(default_factory=dict[str, object])
+    """The source document's parsed YAML frontmatter, the same on every chunk of it
+    (empty when the document has none)."""
 
     @property
     def size_bytes(self) -> int:

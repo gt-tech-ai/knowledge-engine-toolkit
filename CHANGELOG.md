@@ -6,6 +6,21 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Python `SplitterKind.markdown`: one unit per `##` section outside code fences, each prefixed
+  with `# <title>` (frontmatter `title`, else the first `#` heading); a leading YAML
+  frontmatter mapping is stripped from the text and returned on every unit.
+- Python `SplitterKind.code` and the `code` extra (`tree-sitter`, `tree-sitter-go`,
+  `tree-sitter-python`, `tree-sitter-typescript`): one unit per top-level Go, Python or
+  TypeScript declaration with its leading comments; a Go method carries its receiver type's
+  line; a declaration over `SplitterConfig.symbol_max_bytes` (8192) splits at its body into
+  `Parent.child` units; other extensions fall back to `kb_unit`. Without the extra the kind is
+  a coded `INVALID_INPUT`.
+- Python `ChunkPayload.symbol`, `line_start`, `line_end` and `frontmatter`, and
+  `ParsedDocument.source_path` (kept by `parsed_to_json` / `parsed_from_json`; older payloads
+  read it as empty), all optional.
+
 ## [0.0.52] - 2026-11-11
 
 Python: `techai-webutils` 0.11.0. The Go module changes only its toolchain.

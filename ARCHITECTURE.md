@@ -1121,6 +1121,18 @@ under `FORMAT_VERSION`, read at N and N-1; `parsed_to_json` / `parsed_from_json`
 whole `ParsedDocument` under `PARSED_FORMAT_VERSION` (the parse stage's checkpoint artifact).
 `ChunkPayload` gains `section_path`, `element_type` and `span`, all optional.
 
+`ParsedDocument.source_path` (empty by default, kept by the JSON form) names the file, so a
+splitter can choose by extension. `splitter_from_config` (`clients.splitting`) builds a
+`DocumentSplitter` by `SplitterKind`: `kb_unit` (the default) packs paragraphs up to `max_bytes`;
+`markdown` cuts at `##` headings outside code fences, prefixes each section with `# <title>`
+(frontmatter `title`, else the first `#` heading), and strips a YAML frontmatter mapping from
+the text into every unit's `ChunkPayload.frontmatter`; `code` (the `code` extra: tree-sitter with
+the Go, Python and TypeScript grammars; without it the kind is `INVALID_INPUT`) makes one unit per
+top-level declaration with the comments directly above it, a Go method carrying its receiver
+type's declaration line, and splits a declaration over `symbol_max_bytes` (8 KiB) at its body
+into `Parent.child` units; a file with no grammar falls back to `kb_unit`. Their units carry
+`symbol` and the 1-based `line_start` / `line_end`, and tile the file's lines.
+
 `ParserKind.layout` (`clients.parsing.layout`, the `layout` extra) converts PDFs with Docling
 inside the same bounded child as `isolated` (`memory_bytes`, `timeout_seconds`); other formats go
 through `isolated` unchanged. `parse_pages(path, first_page=, last_page=)` converts one page range,
