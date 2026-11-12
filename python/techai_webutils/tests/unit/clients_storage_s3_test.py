@@ -74,6 +74,45 @@ class TestS3StorageClient:
 
     @staticmethod
     @pytest.mark.asyncio
+    async def test_upload_with_tags_sends_them_url_encoded(
+        s3_config: S3Config, aws_client: AsyncMock
+    ) -> None:
+        """Test that upload sends its tags as put_object's URL-encoded ``Tagging``.
+
+        **Why this test is important:**
+          - A bucket lifecycle rule that filters on a tag only reaches objects that were
+            written with it; S3 takes the tags as one query-string-encoded value
+
+        **What it tests:**
+          - two tags, one with a space and an ``&``, reach put_object as
+            ``Tagging="sink=bedrock&note=a+%26+b"``
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
+        """
+        client = await _open(s3_config)
+
+        await client.upload(
+            "bucket",
+            "key.txt",
+            b"content",
+            "text/plain",
+            tags={"sink": "bedrock", "note": "a & b"},
+        )
+        cast(
+            "MagicMock", cast("MagicMock", aws_client.put_object).assert_called_once_with
+        )(
+            Bucket="bucket",
+            Key="key.txt",
+            Body=b"content",
+            ContentType="text/plain",
+            Tagging="sink=bedrock&note=a+%26+b",
+        )
+
+    @staticmethod
+    @pytest.mark.asyncio
     async def test_delete(s3_config: S3Config, aws_client: AsyncMock) -> None:
         """Test that delete calls delete_object with the correct bucket and key.
 

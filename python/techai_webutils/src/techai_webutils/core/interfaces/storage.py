@@ -7,8 +7,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 @dataclass
@@ -37,7 +41,15 @@ class StorageClient(ManagedResource, ABC):
     """
 
     @abstractmethod
-    async def upload(self, bucket: str, key: str, body: bytes, content_type: str) -> None:
+    async def upload(
+        self,
+        bucket: str,
+        key: str,
+        body: bytes,
+        content_type: str,
+        *,
+        tags: Mapping[str, str] | None = None,
+    ) -> None:
         """Store an object with the given key in the specified bucket.
 
         Args:
@@ -45,6 +57,9 @@ class StorageClient(ManagedResource, ABC):
             key: The object key.
             body: The object's bytes.
             content_type: The object's MIME type.
+            tags: Object tags to store with it (S3 object tagging, at most 10), which a
+                bucket lifecycle rule can select on; ``None`` stores none. A backend
+                with no tagging ignores them. Python-only: Go's ``Upload`` takes none.
 
         """
         ...

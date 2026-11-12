@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,6 +20,9 @@ from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.sink import ChunkPayload, Sink, SinkDocument
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
 from tests.json_path import dig
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _EXPECTED_AWAIT_ARGS_LIST_COUNT = 6
 
@@ -61,12 +64,17 @@ def _storage(existing: list[str] | None = None) -> MagicMock:
     return storage
 
 
-def _sink(storage: MagicMock, layout: BedrockLayout = BedrockLayout.CHUNK_FILES) -> Sink:
+def _sink(
+    storage: MagicMock,
+    layout: BedrockLayout = BedrockLayout.CHUNK_FILES,
+    object_tags: Mapping[str, str] | None = None,
+) -> Sink:
     """Return the factory's bedrock sink over ``storage`` in bucket ``kb-bucket``.
 
     Args:
         storage: The mocked storage client.
         layout: How documents are laid out.
+        object_tags: The tags the sink puts on every object it writes.
 
     Returns:
         The factory's bedrock sink over ``storage`` in bucket ``kb-bucket``.
@@ -76,7 +84,10 @@ def _sink(storage: MagicMock, layout: BedrockLayout = BedrockLayout.CHUNK_FILES)
         SinkConfig(
             kind=SinkKind.BEDROCK,
             bedrock=BedrockSinkConfig(
-                bucket="kb-bucket", layout=layout, max_unit_bytes=12
+                bucket="kb-bucket",
+                layout=layout,
+                max_unit_bytes=12,
+                object_tags=object_tags or {},
             ),
         ),
         storage=storage,
@@ -274,6 +285,40 @@ async def test_delete_removes_every_object_and_update_rewrites_only_sidecars() -
         "classification": "secret",
         "chunk_index": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_every_written_object_carries_the_configured_tags() -> None:
+    """Test that the sink tags each object it writes, a sidecar rewrite included.
+
+    **Why this test is important:**
+      - A bucket lifecycle rule can select objects only by a fixed key prefix or by tag;
+        a sink whose files sit under per-tenant prefixes is reachable only by tag, so an
+        untagged object falls under the bucket's default rule instead.
+
+    **What it tests:**
+      - with ``object_tags`` set, every unit and sidecar ``write`` uploads and every
+        sidecar ``update_metadata`` rewrites is uploaded with exactly those tags
+      - with no ``object_tags`` (the default), uploads pass no tags
+    """
+    tags = {"sink": "bedrock"}
+    sidecar_key = f"{_PREFIX}{_VERSION}/0.txt.metadata.json"
+    storage = _storage([sidecar_key])
+    storage.download = AsyncMock(return_value=b'{"metadataAttributes": {}}')
+    sink = _sink(storage, object_tags=tags)
+
+    await sink.write(_DOC, _CHUNKS, None)
+    await sink.update_metadata("o1", "doc1", {"classification": "secret"})
+    untagged = _storage()
+    await _sink(untagged).write(_DOC, _CHUNKS, None)
+
+    def _tags(mock: MagicMock) -> list[dict[str, object]]:
+        calls = cast("list[object]", cast("AsyncMock", mock.upload).await_args_list)
+        return [cast("dict[str, object]", c.kwargs) for c in calls]
+
+    # The write skips the listed sidecar (5 uploads); the rewrite uploads it (1).
+    assert _tags(storage) == [{"tags": tags}] * _EXPECTED_AWAIT_ARGS_LIST_COUNT
+    assert _tags(untagged) == [{}] * _EXPECTED_AWAIT_ARGS_LIST_COUNT
 
 
 @pytest.mark.asyncio

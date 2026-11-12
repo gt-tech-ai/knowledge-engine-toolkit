@@ -887,7 +887,9 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   source; `kb_units` packs contiguous chunks up to `max_unit_bytes` (25 MiB) for `FIXED_SIZE`.
   A write lists the document once, skips present keys (a redelivery writes nothing) and deletes
   other versions; `delete` removes every object; `update_metadata` rewrites only the sidecars.
-  The caller then starts the data source's ingestion job.
+  `object_tags` (empty by default) tags every object written, so a bucket lifecycle rule can
+  select the sink's files wherever their prefix lies. The caller then starts the data source's
+  ingestion job.
 - **`MetricsQuerier`** mirrors Go's: `query(promql)` and `query_range(promql, start, end, step)`.
   Kinds `stub` (zero, no I/O) and `http` (the Prometheus query API, fail closed, coded errors).
 - **`VectorKnowledgeBase(embed_concurrency=…)`** keeps that many sub-batches in flight (1, the
@@ -1250,6 +1252,9 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   `clients/semantic_cache/verifier`). `clients/semantic_cache/admission` decides which queries
   are cached at all.
 - **Usage tap:** `clients/decorators/usage_tap.UsageTapProvider` (see Decorators).
+- **Object tags on upload:** Python's `StorageClient.upload` takes keyword-only `tags`; Go's
+  `StorageObjects.Upload` does not, since only the Python Bedrock sink (`object_tags`) tags
+  what it writes.
 - **Model gateway:** `core/interfaces/model_gateway.py` (`ModelGateway` extends `LLMProvider`
   with `resolve(RouteContext)`; `RouteDecision` in a request-scoped slot read through
   `current_route_decision()`) and `clients/model_gateway` (`passthrough` wraps one provider built
