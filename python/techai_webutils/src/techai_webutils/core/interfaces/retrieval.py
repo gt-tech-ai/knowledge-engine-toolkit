@@ -155,21 +155,25 @@ class RetrievalEngine(ManagedResource, ABC):
         *,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Retrieve relevant document chunks for a query.
 
         ``filters`` is the caller's request scope (e.g. a tenant or the caller's access
         level); a backend may push some of it down, and ``FilteringRetrievalEngine``
-        policies re-validate against it. ``index_id`` selects the index to query per call
-        (e.g. a knowledge base per tenant); ``None`` uses the engine's construction-time
-        index. An engine constructed with no default index and called with ``None`` must
-        fail loudly, not silently fall back.
+        policies re-validate against it. ``where`` narrows further inside that scope (for
+        example a tag or repository) and every backend pushes it down; ``in`` on a
+        list-valued field matches any element on the vector stores. ``index_id`` selects
+        the index to query per call (e.g. a knowledge base per tenant); ``None`` uses the
+        engine's construction-time index. An engine constructed with no default index and
+        called with ``None`` must fail loudly, not silently fall back.
 
         Args:
             query: The search query.
             top_k: The most chunks to return.
             filters: Metadata every returned chunk must match; ``None`` matches all.
+            where: A further filter ANDed with ``filters``; ``None`` adds none.
             index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:

@@ -19,13 +19,17 @@ from typing import Protocol, Self, TypedDict, Unpack, cast, final, override
 import aiobotocore.session
 from botocore.exceptions import BotoCoreError, ClientError
 
+from techai_webutils.clients.retrieval.bedrock.filters import (
+    FilterBuilder,
+    bedrock_filter,
+)
 from techai_webutils.core.errors import InternalError
-from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
+from techai_webutils.core.interfaces.retrieval import (
+    FilterExpr,
+    RetrievalEngine,
+    RetrievalResult,
+)
 from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to_app_error
-
-FilterBuilder = Callable[[Mapping[str, str]], dict[str, object] | None]
-"""Builds the KB metadata filter from the request filters; ``None`` pushes no filter
-down."""
 
 DocumentIdResolver = Callable[[Mapping[str, str], Mapping[str, str]], str]
 """Resolves a passage's document id from ``(chunk metadata, request filters)``; ``""``
@@ -193,6 +197,7 @@ class BedrockRetrievalEngine(RetrievalEngine):
         *,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Retrieve passages from the Bedrock Knowledge Base.
@@ -206,14 +211,15 @@ class BedrockRetrievalEngine(RetrievalEngine):
 
         Builds the Retrieve request from the config-selected strategy: numberOfResults
         (the wide pool), the consumer's metadata filter when a ``filter_builder`` returns
-        one, overrideSearchType for hybrid search, and a Cohere rerankingConfiguration
-        when a reranker is configured. A botocore failure raises a coded ``AppError``
-        (throttling / 5xx → transient ``UNAVAILABLE``).
+        one ANDed with ``where``, overrideSearchType for hybrid search, and a Cohere
+        rerankingConfiguration when a reranker is configured. A botocore failure raises a
+        coded ``AppError`` (throttling / 5xx → transient ``UNAVAILABLE``).
 
         Args:
             query: The search query.
             top_k: The most chunks to return.
             filters: Metadata every returned chunk must match; ``None`` matches all.
+            where: A further filter ANDed with ``filters``; ``None`` adds none.
             index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
@@ -232,7 +238,7 @@ class BedrockRetrievalEngine(RetrievalEngine):
                 retrievalQuery={"text": query},
                 retrievalConfiguration={
                     "vectorSearchConfiguration": self._vector_search_config(
-                        top_k, request
+                        top_k, request, where
                     )
                 },
             )
@@ -272,26 +278,30 @@ class BedrockRetrievalEngine(RetrievalEngine):
         return kb_id
 
     def _vector_search_config(
-        self, top_k: int, request: Mapping[str, str]
+        self, top_k: int, request: Mapping[str, str], where: FilterExpr | None
     ) -> dict[str, object]:
         """Build Retrieve's ``vectorSearchConfiguration``.
 
-        Pool size, filter, search type and reranker.
+        Pool size, filter, search type and reranker. The filter is the builder's and
+        ``where``'s, ``andAll`` when both are present.
 
         Args:
             top_k: The most passages to return.
             request: The request's filter fields.
+            where: The call's further filter; ``None`` adds none.
 
         Returns:
             The ``vectorSearchConfiguration`` value.
 
         """
         vector_config: dict[str, object] = {"numberOfResults": top_k}
-        if (
-            self._build_filter is not None
-            and (kb_filter := self._build_filter(request)) is not None
-        ):
-            vector_config["filter"] = kb_filter
+        built = None if self._build_filter is None else self._build_filter(request)
+        narrowing = None if where is None else bedrock_filter(where)
+        clauses = [f for f in (built, narrowing) if f is not None]
+        if clauses:
+            vector_config["filter"] = (
+                clauses[0] if len(clauses) == 1 else {"andAll": clauses}
+            )
         if self._search_type == "hybrid":
             vector_config["overrideSearchType"] = "HYBRID"
         if self._reranking_model:

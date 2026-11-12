@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
+    from techai_webutils.core.interfaces.retrieval import FilterExpr
     from techai_webutils.core.interfaces.vector_store import (
         VectorSearchResult,
         VectorStore,
@@ -85,9 +86,12 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         *,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
-        """Embed the query, search with the pushed-down filters, map the hits.
+        """Embed the query, search with the pushed-down filters and ``where``.
+
+        Then map the hits.
 
         The query embeds with ``input_type="query"``.
 
@@ -99,6 +103,7 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
             query: The search query.
             top_k: The most chunks to return.
             filters: Metadata every returned chunk must match; ``None`` matches all.
+            where: A further filter ANDed with ``filters``; ``None`` adds none.
             index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
@@ -115,13 +120,17 @@ class VectorRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         pushed = {k: request[k] for k in self._filter_keys if k in request}
         embedding = await self._embedder.embed(query, input_type="query")
         dense_search = self._store.search(
-            self._collection, embedding.embedding, top_k=top_k, filters=pushed
+            self._collection,
+            embedding.embedding,
+            top_k=top_k,
+            filters=pushed,
+            where=where,
         )
         if not self._store.supports_keyword:
             return [_to_retrieval_result(hit) for hit in await dense_search]
         dense, keyword = await asyncio.gather(
             dense_search,
-            self._store.keyword_search(self._collection, query, top_k, pushed),
+            self._store.keyword_search(self._collection, query, top_k, pushed, where),
         )
         return self._fused(dense, keyword, top_k)
 

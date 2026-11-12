@@ -23,7 +23,7 @@ import hashlib
 from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
-from techai_webutils.core.interfaces.vector_store import VectorStore
+from techai_webutils.core.interfaces.vector_store import VectorStore, scalar_metadata
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 from techai_webutils.foundation.logger import get_logger
 
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
     from techai_webutils.clients.vector.opensearch.store import OpenSearchVectorStore
     from techai_webutils.core.interfaces.metrics import MetricsProvider
+    from techai_webutils.core.interfaces.retrieval import FilterExpr
     from techai_webutils.core.interfaces.vector_store import (
         VectorEntry,
         VectorSearchResult,
@@ -296,6 +297,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         query_embedding: Sequence[float],
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
     ) -> list[VectorSearchResult]:
         """Search every domain; return the global top ``top_k`` by score.
 
@@ -306,13 +308,17 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
             query_embedding: The query's vector.
             top_k: The most results to return.
             filters: Metadata every result must match; ``None`` matches all.
+            where: A further filter each domain applies; ``None`` adds none.
 
         Returns:
             The hits, best first.
 
         """
         return await self._merged(
-            lambda store: store.search(collection, query_embedding, top_k, filters), top_k
+            lambda store: store.search(
+                collection, query_embedding, top_k, filters, where
+            ),
+            top_k,
         )
 
     @property
@@ -328,6 +334,7 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
         query: str,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
     ) -> list[VectorSearchResult]:
         """BM25-search every domain; return the global top ``top_k`` by score.
 
@@ -338,13 +345,15 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
             query: The query text.
             top_k: The most results to return.
             filters: Metadata every result must match; ``None`` matches all.
+            where: A further filter each domain applies; ``None`` adds none.
 
         Returns:
             The hits, best first.
 
         """
         return await self._merged(
-            lambda store: store.keyword_search(collection, query, top_k, filters), top_k
+            lambda store: store.keyword_search(collection, query, top_k, filters, where),
+            top_k,
         )
 
     async def _merged(
@@ -486,10 +495,11 @@ class MultiDomainVectorStore(NoOpAsyncResource, VectorStore):
 
         Raises:
             AppValueError: Entry ``entry.id`` has a non-integer ``self._shard_field``:
-                ``raw``; shard ``shard`` of entry ``entry.id`` maps to no domain.
+                ``raw``; shard ``shard`` of entry ``entry.id`` maps to no domain. A
+                callee raises it for a list-valued ``self._shard_field``.
 
         """
-        raw = entry.metadata.get(self._shard_field)
+        raw = scalar_metadata(entry.metadata, self._shard_field)
         if raw is None:
             shards = sorted(self._shard_domains)
             digest = hashlib.sha256(entry.document_id.encode()).digest()

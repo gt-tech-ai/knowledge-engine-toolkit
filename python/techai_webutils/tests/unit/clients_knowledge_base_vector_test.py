@@ -355,6 +355,32 @@ class TestVectorKnowledgeBase:
 
     @staticmethod
     @pytest.mark.asyncio
+    async def test_list_attribute_is_stored_as_a_list_and_resumes() -> None:
+        """A list-valued attribute reaches the store as a list and still resumes.
+
+        Why this test is important:
+          - An ``in`` filter matches a list field on any element, so tags must be stored
+            as a list, not a joined string. A store reads a list back joined, so a resume
+            that compared the list itself would never match and re-embed every redrive.
+
+        What it tests:
+          - With the first sub-batch stored with ``tags`` read back as ``"a|b"``, a
+            re-index with ``tags=("a", "b")`` embeds only the second sub-batch, and its
+            entries carry the tuple.
+        """
+        embedder = _embedder()
+        store = _store(stored=_indexed("doc-1", range(96), tags="a|b"))
+        kb = VectorKnowledgeBase(embedder, store, "documents")
+        chunks = [f"chunk-{i}" for i in range(150)]
+
+        await kb.index_document("doc-1", chunks, attributes={"tags": ("a", "b")})
+
+        embedder.embed_batch.assert_awaited_once_with(chunks[96:])
+        entries = store.upsert.call_args.args[1]
+        assert {e.metadata["tags"] for e in entries} == {("a", "b")}
+
+    @staticmethod
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("stored", "attributes", "document_name"),
         [

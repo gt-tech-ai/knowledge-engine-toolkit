@@ -1,6 +1,6 @@
 """Tests for the retrieval engines, the config-selected factory, and the policy filter."""
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import replace
 from typing import TypedDict, Unpack, cast
@@ -9,12 +9,13 @@ from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 import pytest
 from botocore.exceptions import ClientError
 
+from techai_webutils.clients.retrieval.abstain import TopScoreAbstainer
 from techai_webutils.clients.retrieval.bedrock.engine import (
     BedrockRetrievalEngine,
     BedrockRetrievalOptions,
     DocumentIdResolver,
-    FilterBuilder,
 )
+from techai_webutils.clients.retrieval.bedrock.filters import FilterBuilder
 from techai_webutils.clients.retrieval.builder import (
     RetrievalConfig,
     RetrievalEngineDependencies,
@@ -22,12 +23,18 @@ from techai_webutils.clients.retrieval.builder import (
     new_retrieval_engine_from_config,
     wrap_retrieval_engine,
 )
+from techai_webutils.clients.retrieval.collapse import CollapsingRetrievalEngine
 from techai_webutils.clients.retrieval.filtering import (
     FilteringRetrievalEngine,
     MetadataEquals,
     MinScore,
     OrdinalCeiling,
 )
+from techai_webutils.clients.retrieval.ordering import (
+    OrderingRetrievalEngine,
+    PassageOrder,
+)
+from techai_webutils.clients.retrieval.reranking import RerankingRetrievalEngine
 from techai_webutils.clients.retrieval.stub import StubRetrievalEngine
 from techai_webutils.core.errors import (
     AppError,
@@ -36,7 +43,13 @@ from techai_webutils.core.errors import (
     ErrorCode,
     InternalError,
 )
-from techai_webutils.core.interfaces.retrieval import RetrievalEngine, RetrievalResult
+from techai_webutils.core.interfaces.reranker import Reranker
+from techai_webutils.core.interfaces.retrieval import (
+    FilterExpr,
+    FilterIn,
+    RetrievalEngine,
+    RetrievalResult,
+)
 from tests.json_path import dig
 
 _EXPECTED_RETRIEVE_COUNT = 3
@@ -312,26 +325,45 @@ class TestFilteringRetrievalEngine:
 
     @staticmethod
     @pytest.mark.asyncio
-    async def test_forwards_the_call_to_the_inner_engine() -> None:
-        """The filter decorator forwards top_k, filters and index_id unchanged.
+    @pytest.mark.parametrize(
+        "wrap",
+        [
+            lambda inner: FilteringRetrievalEngine(inner, []),
+            CollapsingRetrievalEngine,
+            lambda inner: TopScoreAbstainer(inner, 0.0),
+            lambda inner: RerankingRetrievalEngine(
+                inner, cast("Reranker", create_autospec(Reranker, instance=True))
+            ),
+            lambda inner: OrderingRetrievalEngine(inner, PassageOrder.RANK),
+        ],
+        ids=["filtering", "collapse", "abstain", "reranking", "ordering"],
+    )
+    async def test_forwards_the_call_to_the_inner_engine(
+        wrap: Callable[[RetrievalEngine], RetrievalEngine],
+    ) -> None:
+        """Every retrieval decorator forwards top_k, filters, where and index_id.
 
-        They reach the inner engine.
+        They reach the inner engine unchanged.
 
         **Why this test is important:**
           - Routing and backend push-down depend on the inner engine seeing the caller's
-            arguments; a dropped index_id would send a routed query to the wrong index.
+            arguments; a dropped index_id would send a routed query to the wrong index,
+            and a dropped ``where`` would widen the search past the caller's narrowing.
 
         **What it tests:**
-          - The inner ``retrieve`` is awaited with the same query, top_k, filters and
+          - For the filtering, collapse, abstain, reranking and ordering decorators, the
+            inner ``retrieve`` is awaited with the same query, top_k, filters, where and
             index_id.
         """
         inner = _inner_returning()
-        engine = FilteringRetrievalEngine(inner, [])
+        where = FilterIn("tags", ("api",))
 
-        _ = await engine.retrieve("q", top_k=5, filters={"tenant": "t1"}, index_id="kb-x")
+        _ = await wrap(inner).retrieve(
+            "q", top_k=5, filters={"tenant": "t1"}, where=where, index_id="kb-x"
+        )
 
         inner.retrieve.assert_awaited_once_with(
-            "q", top_k=5, filters={"tenant": "t1"}, index_id="kb-x"
+            "q", top_k=5, filters={"tenant": "t1"}, where=where, index_id="kb-x"
         )
 
     @staticmethod
@@ -883,6 +915,7 @@ class TestBedrockRetrievalEngineRequest:
 
     @staticmethod
     async def _vector_config(
+        where: FilterExpr | None = None,
         **engine_kwargs: Unpack[_EngineOptions],
     ) -> dict[str, object]:
         """Drive engine.retrieve against a mocked client.
@@ -890,6 +923,7 @@ class TestBedrockRetrievalEngineRequest:
         Return the vectorSearchConfiguration sent.
 
         Args:
+            where: The call's further filter.
             **engine_kwargs: The engine's settings.
 
         Returns:
@@ -904,7 +938,7 @@ class TestBedrockRetrievalEngineRequest:
                     region="us-east-1", knowledge_base_id="kb-1", **engine_kwargs
                 )
             )
-        _ = await engine.retrieve("q", top_k=25, filters={"tenant": "t1"})
+        _ = await engine.retrieve("q", top_k=25, filters={"tenant": "t1"}, where=where)
         config = cast(
             "dict[str, object]",
             cast("MagicMock", cast("MagicMock", client.retrieve).call_args).kwargs[
@@ -944,6 +978,29 @@ class TestBedrockRetrievalEngineRequest:
         """
         vsc = await self._vector_config(filter_builder=lambda _f: None)
         assert "filter" not in vsc
+
+    @pytest.mark.asyncio
+    async def test_where_is_anded_with_the_built_filter(self) -> None:
+        """A call's ``where`` reaches Bedrock, alone or ANDed with the builder's filter.
+
+        **Why this test is important:**
+          - ``where`` narrows a search inside the caller's scope (a tag, a repository);
+            dropping it, or replacing the scope filter with it, would widen the search
+            past the scope.
+
+        **What it tests:**
+          - With no builder the filter is ``where`` alone; with a builder it is
+            ``andAll`` of the builder's filter and ``where``.
+        """
+        where = FilterIn("tags", ("api", "auth"))
+        in_tags = {"in": {"key": "tags", "value": ["api", "auth"]}}
+        scope: dict[str, object] = {"equals": {"key": "tenant", "value": "t1"}}
+
+        alone = await self._vector_config(where)
+        anded = await self._vector_config(where, filter_builder=lambda _f: scope)
+
+        assert alone["filter"] == in_tags
+        assert anded["filter"] == {"andAll": [scope, in_tags]}
 
     @pytest.mark.asyncio
     async def test_hybrid_request_sets_override_search_type(self) -> None:

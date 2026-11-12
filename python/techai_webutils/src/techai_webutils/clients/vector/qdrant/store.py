@@ -15,8 +15,10 @@ from typing import TYPE_CHECKING, cast, final, override
 
 from qdrant_client import models
 
+from techai_webutils.clients.vector.qdrant.filters import qdrant_filter
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.vector_store import (
+    LIST_SEPARATOR,
     VectorEntry,
     VectorSearchResult,
     VectorStore,
@@ -28,6 +30,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from qdrant_client import AsyncQdrantClient
+
+    from techai_webutils.core.interfaces.retrieval import FilterExpr
+    from techai_webutils.core.interfaces.vector_store import MetadataValue
 
 # Qdrant point ids must be an unsigned int or a UUID; VectorEntry.id is an arbitrary
 # string (e.g. "doc-0000.txt:3"). Map each id deterministically to a UUID so upserts stay
@@ -155,7 +160,7 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
                     "entry_id": entry.id,
                     "document_id": entry.document_id,
                     "content": entry.content,
-                    **entry.metadata,
+                    **_payload_values(entry.metadata),
                 },
             )
             for entry in entries
@@ -169,29 +174,27 @@ class QdrantVectorStore(NoOpAsyncResource, VectorStore):
         query_embedding: Sequence[float],
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
     ) -> list[VectorSearchResult]:
         """Vector-search ``collection``.
 
-        ``filters`` become an exact-match payload filter, e.g. a tenant.
+        ``filters`` become exact-match payload conditions (e.g. a tenant) and ``where``
+        adds an expression (``in`` matches a list payload on any element); both must
+        hold.
 
         Args:
             collection: The collection.
             query_embedding: The query's vector.
             top_k: The most results to return.
             filters: Metadata every result must match; ``None`` matches all.
+            where: A further filter every result must match; ``None`` adds none.
 
         Returns:
-            The hits, best first.
+            The hits, best first; an ``in`` in ``where`` with no values raises
+            ``AppValueError`` (``INVALID_INPUT``).
 
         """
-        query_filter = None
-        if filters:
-            query_filter = models.Filter(
-                must=[
-                    models.FieldCondition(key=key, match=models.MatchValue(value=value))
-                    for key, value in filters.items()
-                ],
-            )
+        query_filter = qdrant_filter(filters, where)
         response = await self._client.query_points(
             collection,
             query=list(query_embedding),
@@ -331,10 +334,26 @@ _PROMOTED_PAYLOAD_KEYS = frozenset({"content", "document_id", "entry_id"})
 metadata dict)."""
 
 
+def _payload_values(metadata: Mapping[str, MetadataValue]) -> dict[str, object]:
+    """Return ``metadata`` as payload values: a tuple becomes a list.
+
+    Qdrant matches a list payload on any element, which is what ``in`` asks for.
+
+    Args:
+        metadata: The entry's metadata.
+
+    Returns:
+        The payload values.
+
+    """
+    return {k: v if isinstance(v, str) else list(v) for k, v in metadata.items()}
+
+
 def _metadata(payload: Mapping[str, object]) -> dict[str, str]:
     """Return a point payload's metadata.
 
-    Every key not promoted to an entry field, stringified.
+    Every key not promoted to an entry field, stringified; a list joined with
+    ``LIST_SEPARATOR``.
 
     Args:
         payload: The point's payload.
@@ -344,7 +363,11 @@ def _metadata(payload: Mapping[str, object]) -> dict[str, str]:
 
     """
     return {
-        key: str(value)
+        key: (
+            LIST_SEPARATOR.join(str(v) for v in cast("list[object]", value))
+            if isinstance(value, list)
+            else str(value)
+        )
         for key, value in payload.items()
         if key not in _PROMOTED_PAYLOAD_KEYS
     }

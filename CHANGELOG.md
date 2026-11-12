@@ -20,6 +20,24 @@ All notable changes to this project are recorded here. The format follows
 - Python `ChunkPayload.symbol`, `line_start`, `line_end` and `frontmatter`, and
   `ParsedDocument.source_path` (kept by `parsed_to_json` / `parsed_from_json`; older payloads
   read it as empty), all optional.
+- Python `where: FilterExpr | None` on `VectorStore.search` / `keyword_search` and
+  `RetrievalEngine.retrieve`, ANDed with `filters` and pushed down to the store (Qdrant
+  `must` conditions, OpenSearch filter clauses, the stub's in-process match, Bedrock
+  `andAll` with the engine's `filter_builder` output); every retrieval decorator forwards it.
+- Python list-valued metadata: `VectorEntry.metadata` and `KnowledgeBase` attributes take
+  `MetadataValue` (`str | tuple[str, ...]`). A tuple is stored as a list in Qdrant and
+  OpenSearch, an `eq` / `in` filter matches any element, and reads return it joined with
+  `LIST_SEPARATOR` (`|`), so `VectorSearchResult.metadata` stays `dict[str, str]`;
+  `flat_metadata()` gives that read form. `scalar_metadata(metadata, key)` refuses a list
+  where one value is required (the OpenSearch org field, the multi-domain shard field) with a
+  coded `INVALID_INPUT`.
+
+### Changed
+
+- Python `FilterBuilder` is defined in `clients.retrieval.bedrock.filters` (still re-exported
+  from `clients.retrieval.bedrock`); importing it from `bedrock.engine` no longer works.
+- Bedrock Retrieve matches an `in` filter against a scalar attribute only; a list attribute
+  there would need `listContains`, which the translation does not emit.
 
 ## [0.0.52] - 2026-11-11
 

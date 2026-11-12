@@ -31,7 +31,7 @@ from techai_webutils.foundation.logger import get_logger
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from techai_webutils.core.interfaces.retrieval import RetrievalResult
+    from techai_webutils.core.interfaces.retrieval import FilterExpr, RetrievalResult
 
 __all__ = [
     "FilteringRetrievalEngine",
@@ -179,6 +179,7 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
         *,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Retrieve from the inner engine, then re-validate every passage.
@@ -192,6 +193,7 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
             query: The search query.
             top_k: The most chunks to return.
             filters: Metadata every returned chunk must match; ``None`` matches all.
+            where: A further filter ANDed with ``filters``; ``None`` adds none.
             index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
@@ -199,7 +201,7 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
 
         """
         results = await self._inner.retrieve(
-            query, top_k=top_k, filters=filters, index_id=index_id
+            query, top_k=top_k, filters=filters, where=where, index_id=index_id
         )
         request = dict(filters or {})
         kept: list[RetrievalResult] = []

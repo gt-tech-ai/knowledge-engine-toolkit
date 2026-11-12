@@ -57,8 +57,8 @@ if TYPE_CHECKING:
         BedrockRetrievalEngine,
         BedrockRetrievalOptions,
         DocumentIdResolver,
-        FilterBuilder,
     )
+    from techai_webutils.clients.retrieval.bedrock.filters import FilterBuilder
     from techai_webutils.clients.retrieval.filtering import PassagePolicy
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
     from techai_webutils.core.interfaces.reranker import Reranker

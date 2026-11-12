@@ -932,7 +932,13 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   kind, as is an unknown value.
 - **Neutral filters and citations.** `FilterExpr` (`FilterEq`, `FilterIn`, `FilterAnd`;
   `equals_all(map)`) translates to Bedrock (`bedrock_filter`, `expr_filter_builder` for the
-  engine's `filter_builder`) and to OpenSearch (`filter_clauses`). `Citation` gains `chunk_id`
+  engine's `filter_builder`), to OpenSearch (`filter_clauses`) and to Qdrant
+  (`qdrant_filter`). `VectorStore.search` / `keyword_search` and `RetrievalEngine.retrieve`
+  take it as `where`, ANDed with the exact-match `filters`; every retrieval decorator passes
+  it through. Metadata may be list-valued (`MetadataValue = str | tuple[str, ...]`): the stores
+  keep a tuple as a list, `eq` / `in` match any element, and reads join it with
+  `LIST_SEPARATOR` (`|`); a routing field (OpenSearch org, multi-domain shard) must be one
+  string (`scalar_metadata`). Bedrock's `in` matches scalar attributes only. `Citation` gains `chunk_id`
   (the passage's `chunk_id` metadata, which vector passages now carry) and `span` (`None`: the
   whole chunk).
 - **Verified citations.** `PassageCitationExtractor(verify=)` is `off` by default: one citation

@@ -317,7 +317,8 @@ def entry_source(
 ) -> dict[str, object]:
     """Return the document stored for ``entry``.
 
-    Its metadata, entity lists split, and its fields.
+    Its metadata (a tuple value and a split entity list stored as a keyword array), and
+    its fields.
 
     The org is always stored in ``org_field`` (every read filters on it), so an entry
     written through a scoped view without it in its metadata reads back with it. With a
@@ -332,12 +333,14 @@ def entry_source(
         truncated_dimension: The size the stored vector is cut to; 0 keeps it whole.
 
     Returns:
-        The document stored for ``entry``: its metadata, entity lists split.
+        The document stored for ``entry``: its metadata, list values as arrays.
 
     """
     source: dict[str, object] = {org_field: org_id}
     for key, value in entry.metadata.items():
-        if key.startswith(ENTITY_PREFIX):
+        if not isinstance(value, str):
+            source[key] = list(value)
+        elif key.startswith(ENTITY_PREFIX):
             source[key] = [v for v in value.split(ENTITY_SEPARATOR) if v]
         else:
             source[key] = value
@@ -422,15 +425,35 @@ def filter_clauses(expr: FilterExpr) -> list[dict[str, object]]:
     return [clause for inner in expr.clauses for clause in filter_clauses(inner)]
 
 
+def narrowing_clauses(
+    fields: Mapping[str, str], where: FilterExpr | None
+) -> list[dict[str, object]]:
+    """Return the ``bool.filter`` clauses for exact ``fields`` ANDed with ``where``.
+
+    Args:
+        fields: Field to exact value every hit must match.
+        where: A further filter expression; ``None`` adds none.
+
+    Returns:
+        The ``term`` clauses for ``fields`` followed by ``where``'s clauses; an ``in``
+        with no values raises ``AppValueError`` (``INVALID_INPUT``).
+
+    """
+    clauses = term_filters(fields)
+    return clauses if where is None else [*clauses, *filter_clauses(where)]
+
+
 def knn_query(
     vector: Sequence[float],
     k: int,
-    fields: Mapping[str, str],
+    clauses: Sequence[dict[str, object]],
     *,
     oversample_factor: float = 0.0,
     truncated_dimension: int = 0,
 ) -> dict[str, object]:
-    """Return a k-NN search body restricted to documents matching every field exactly.
+    """Return a k-NN search body restricted to documents matching every filter clause.
+
+    Build ``clauses`` with ``term_filters`` or ``narrowing_clauses``.
 
     ``oversample_factor`` > 0 sets how many candidates per result the first, approximate
     pass fetches before they are rescored at full precision; 0 leaves the domain's
@@ -445,19 +468,19 @@ def knn_query(
     Args:
         vector: The query vector.
         k: The most hits.
-        fields: Field to exact value every hit must match.
+        clauses: The ``bool.filter`` clauses every hit must match.
         oversample_factor: How many more candidates the first pass fetches; 0 disables
             rescoring.
         truncated_dimension: The stored vectors' size; 0 when whole.
 
     Returns:
-        A k-NN search body restricted to documents matching every field exactly.
+        A k-NN search body restricted to documents matching every filter clause.
 
     """
     knn: dict[str, object] = {
         "vector": list(vector[:truncated_dimension] if truncated_dimension else vector),
         "k": k,
-        "filter": {"bool": {"filter": term_filters(fields)}},
+        "filter": {"bool": {"filter": list(clauses)}},
     }
     body: dict[str, object] = {
         "size": k,

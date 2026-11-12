@@ -15,6 +15,8 @@ from techai_webutils.clients.vector.builder import (
     new_vector_store_from_config,
 )
 from techai_webutils.clients.vector.stub import StubVectorStore
+from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.interfaces.retrieval import FilterAnd, FilterEq, FilterIn
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
 _EXPECTED_DIMENSION = 3
@@ -187,3 +189,49 @@ async def test_stub_stored_metadata_reports_present_ids() -> None:
     assert await store.stored_metadata("c", ["1", "2"]) == {"1": {"lang": "en"}}
     assert await store.existing_ids("c", ["1", "2"]) == {"1"}
     assert await store.stored_metadata("missing", ["1"]) == {}
+
+
+@pytest.mark.asyncio
+async def test_stub_where_matches_list_metadata_on_any_element() -> None:
+    """A ``where`` narrows the stub's search, matching a list field on any element.
+
+    Why this test is important:
+        - The stub stands in for Qdrant and OpenSearch in no-infra builds; if it ignored
+          ``where`` or matched a list only as a whole, a consumer's tag filter would pass
+          its unit tests and behave differently against a real store.
+
+    What it tests:
+        - ``in`` over a list field matches an entry holding any of the values; ``eq`` and
+          ``and`` combine with ``filters``; the hit reads the list back joined with ``|``;
+          an empty ``in`` is refused.
+    """
+    store = StubVectorStore(dimension=2)
+    tagged = VectorEntry(
+        id="1",
+        document_id="d1",
+        content="go",
+        embedding=[1.0, 0.0],
+        metadata={"org": "o1", "language": "go", "tags": ("api", "auth")},
+    )
+    other = VectorEntry(
+        id="2",
+        document_id="d2",
+        content="py",
+        embedding=[1.0, 0.0],
+        metadata={"org": "o1", "language": "python", "tags": ("cli",)},
+    )
+    await store.upsert("c", [tagged, other])
+
+    by_tag = await store.search(
+        "c", [1.0, 0.0], filters={"org": "o1"}, where=FilterIn("tags", ("auth", "x"))
+    )
+    both = await store.search(
+        "c",
+        [1.0, 0.0],
+        where=FilterAnd((FilterIn("tags", ("cli", "api")), FilterEq("language", "go"))),
+    )
+
+    assert [(r.chunk_id, r.metadata["tags"]) for r in by_tag] == [("1", "api|auth")]
+    assert [r.chunk_id for r in both] == ["1"]
+    with pytest.raises(AppValueError, match="tags"):
+        _ = await store.search("c", [1.0, 0.0], where=FilterIn("tags", ()))

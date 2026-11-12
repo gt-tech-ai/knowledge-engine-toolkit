@@ -37,11 +37,14 @@ from techai_webutils.clients.vector.opensearch.mapping import (
     index_name,
     knn_query,
     source_metadata,
+    term_filters,
     text_match,
 )
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.metrics import MetricsProvider
+from techai_webutils.core.interfaces.retrieval import FilterIn
 from techai_webutils.core.interfaces.vector_store import (
+    MetadataValue,
     VectorEntry,
     VectorSearchResult,
 )
@@ -74,7 +77,7 @@ def _client(*, alias_exists: bool = True) -> MagicMock:
     return client
 
 
-def _entry(org: str | None = "o1", **metadata: str) -> VectorEntry:
+def _entry(org: str | None = "o1", **metadata: MetadataValue) -> VectorEntry:
     """Return one entry, in ``org`` unless ``None``.
 
     Args:
@@ -243,7 +246,8 @@ async def test_scope_and_org_rules() -> None:
     **What it tests:**
       - unscoped delete, lookup, count and search without an org filter raise; an entry of
         org ``o2`` written through the ``o1`` view raises; a scoped entry without
-        ``org_id`` is stored with it; the dedicated layout names the alias after the org
+        ``org_id`` is stored with it; an entry whose ``org_id`` is a list raises; the
+        dedicated layout names the alias after the org
     """
     client = _client()
     store = OpenSearchVectorStore(client, dimension=1)
@@ -257,6 +261,8 @@ async def test_scope_and_org_rules() -> None:
             await call
     with pytest.raises(AppValueError):
         await store.for_org("o1").upsert("docs", [_entry("o2")])
+    with pytest.raises(AppValueError, match="org_id"):
+        await store.upsert("docs", [_entry(None, org_id=("o1", "o2"))])
     with pytest.raises(AppValueError):
         _ = store.for_org("")
 
@@ -468,8 +474,10 @@ def test_mapping_helpers() -> None:
         )
     )
     entry = _entry(**{"entities.person": "A|B", "tag": "x"})
+    listed = replace(entry, metadata={"org_id": "o1", "tags": ("api", "auth")})
 
     source = entry_source(entry, "org_id", "o1")
+    listed_source = entry_source(listed, "org_id", "o1")
 
     assert index_name("My Docs", "Titan v2", "3") == "my-docs-titan-v2-v3"
     assert doc_id("o", "d:1") == "o/d:1"
@@ -477,6 +485,8 @@ def test_mapping_helpers() -> None:
     assert "method" in memory
     assert source["entities.person"] == ["A", "B"]
     assert source_metadata(source) == entry.metadata
+    assert listed_source["tags"] == ["api", "auth"]
+    assert source_metadata(listed_source)["tags"] == "api|auth"
 
 
 def test_knn_query_rescoring_shapes_and_store_refuses_bad_shapes() -> None:
@@ -498,14 +508,14 @@ def test_knn_query_rescoring_shapes_and_store_refuses_bad_shapes() -> None:
         rescores that window; both vectors are left out of hits.
       - A store refuses a truncation not below its dimension and a negative factor.
     """
-    plain = knn_query([1.0, 0.0, 0.0, 0.0], 4, {"org_id": "o"})
+    plain = knn_query([1.0, 0.0, 0.0, 0.0], 4, term_filters({"org_id": "o"}))
     oversampled = knn_query(
-        [1.0, 0.0, 0.0, 0.0], 4, {"org_id": "o"}, oversample_factor=2.0
+        [1.0, 0.0, 0.0, 0.0], 4, term_filters({"org_id": "o"}), oversample_factor=2.0
     )
     truncated = knn_query(
         [1.0, 2.0, 3.0, 4.0],
         4,
-        {"org_id": "o"},
+        term_filters({"org_id": "o"}),
         oversample_factor=2.5,
         truncated_dimension=2,
     )
@@ -583,13 +593,15 @@ async def test_multi_domain_refuses_bad_shards() -> None:
       - A write to no domain must fail loudly, not vanish.
 
     **What it tests:**
-      - shard ``"x"`` and unmapped shard ``"7"`` raise ``AppValueError``
+      - shard ``"x"``, unmapped shard ``"7"`` and a list of shards raise
+        ``AppValueError``
     """
     multi = MultiDomainVectorStore(
         {"a": OpenSearchVectorStore(_client(), dimension=1)}, {0: "a"}
     )
 
-    for shard in ("x", "7"):
+    shards: tuple[MetadataValue, ...] = ("x", "7", ("0", "1"))
+    for shard in shards:
         with pytest.raises(AppValueError):
             await multi.upsert("docs", [_entry(shard=shard)])
 
@@ -662,6 +674,41 @@ async def test_keyword_search_returns_no_vectors() -> None:
     assert body["_source"] == {"excludes": ["embedding", "embedding_full"]}
 
 
+@pytest.mark.asyncio
+async def test_where_narrows_knn_and_keyword_search_beside_the_org() -> None:
+    """Test that a ``where`` expression joins the org and ``filters`` term clauses.
+
+    **Why this test is important:**
+      - "Which of these languages" is an ``in`` over a list-valued field; dropped, the
+        search would ignore the narrowing, and replacing the term clauses with it would
+        drop the org and leak another tenant's chunks.
+
+    **What it tests:**
+      - Both the k-NN and the keyword request filter on ``org_id`` and ``symbol`` as
+        ``term`` and on ``language`` as ``terms``.
+    """
+    client = _client()
+    client.search = AsyncMock(return_value={"hits": {"hits": []}})
+    store = OpenSearchVectorStore(client, dimension=1)
+    where = FilterIn("language", ("go", "python"))
+
+    _ = await store.search("docs", [1.0], 5, {"org_id": "o1", "symbol": "B"}, where)
+    _ = await store.keyword_search("docs", "q", 5, {"org_id": "o1", "symbol": "B"}, where)
+
+    expected = [
+        {"term": {"org_id": "o1"}},
+        {"term": {"symbol": "B"}},
+        {"terms": {"language": ["go", "python"]}},
+    ]
+    knn_call, keyword_call = cast("AsyncMock", client.search).await_args_list
+    knn_body = cast("dict[str, object]", knn_call.kwargs["body"])
+    keyword_body = cast("dict[str, object]", keyword_call.kwargs["body"])
+    knn_filter = dig(knn_body, "query", "knn", "embedding", "filter", "bool", "filter")
+    assert sorted(map(str, items(knn_filter))) == sorted(map(str, expected))
+    keyword_filter = dig(keyword_body, "query", "bool", "filter")
+    assert sorted(map(str, items(keyword_filter))) == sorted(map(str, expected))
+
+
 def _hit(chunk: str, score: float) -> VectorSearchResult:
     """Return one search hit.
 
@@ -714,7 +761,7 @@ async def test_multi_domain_search_merges_by_score_and_cuts_a_slow_domain() -> N
 
     **What it tests:**
       - Two domains answering (0.9, 0.5) and (0.8, 0.7) give the top 3 by score for both
-        the k-NN and the keyword search.
+        the k-NN and the keyword search, and each domain gets the caller's ``where``.
       - With a 50 ms deadline, a domain answering after 1 s is left out of the hits and
         counted on ``vector_domain_search_cut_total`` with its domain.
     """
@@ -722,11 +769,15 @@ async def test_multi_domain_search_merges_by_score_and_cuts_a_slow_domain() -> N
     other = _domain_store([_hit("b0", 0.8), _hit("b1", 0.7)])
     merged = MultiDomainVectorStore({"a": fast, "b": other}, {0: "a", 1: "b"})
 
-    dense = await merged.search("docs", [1.0], 3, {"org_id": "o1"})
-    keyword = await merged.keyword_search("docs", "q", 3, {"org_id": "o1"})
+    where = FilterIn("language", ("go",))
+    dense = await merged.search("docs", [1.0], 3, {"org_id": "o1"}, where)
+    keyword = await merged.keyword_search("docs", "q", 3, {"org_id": "o1"}, where)
 
     assert [h.chunk_id for h in dense] == ["a0", "b0", "b1"]
     assert [h.chunk_id for h in keyword] == ["a0", "b0", "b1"]
+    forwarded = cast("AsyncMock", other.search).await_args
+    assert forwarded is not None
+    assert where in forwarded.args
 
     metrics = MagicMock(spec=MetricsProvider)
     slow = _domain_store([_hit("b0", 0.8)], delay=1.0)

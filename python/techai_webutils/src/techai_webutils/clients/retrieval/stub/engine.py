@@ -20,6 +20,8 @@ from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from techai_webutils.core.interfaces.retrieval import FilterExpr
+
 
 @final
 class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
@@ -45,6 +47,7 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
         *,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Return copies of the corpus passages, capped at ``top_k``.
@@ -55,11 +58,12 @@ class StubRetrievalEngine(NoOpAsyncResource, RetrievalEngine):
             query: The search query.
             top_k: The most chunks to return.
             filters: Metadata every returned chunk must match; ``None`` matches all.
+            where: A further filter ANDed with ``filters``; ``None`` adds none.
             index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
             Copies of the corpus passages (with their own metadata dicts).
 
         """
-        del query, filters, index_id
+        del query, filters, where, index_id
         return [replace(p, metadata=dict(p.metadata)) for p in self._passages[:top_k]]

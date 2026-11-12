@@ -10,14 +10,28 @@ from __future__ import annotations
 
 import math
 from operator import itemgetter
-from typing import final, override
+from typing import TYPE_CHECKING, final, override
 
+from techai_webutils.core.errors import AppValueError
+from techai_webutils.core.interfaces.retrieval import (
+    FilterAnd,
+    FilterEq,
+    FilterIn,
+    equals_all,
+)
 from techai_webutils.core.interfaces.vector_store import (
     VectorEntry,
     VectorSearchResult,
     VectorStore,
+    flat_metadata,
 )
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from techai_webutils.core.interfaces.retrieval import FilterExpr
+    from techai_webutils.core.interfaces.vector_store import MetadataValue
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -41,20 +55,31 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def _matches(entry: VectorEntry, filters: dict[str, str] | None) -> bool:
-    """Report whether ``entry``'s metadata satisfies every key/value in ``filters``.
+def _holds(metadata: Mapping[str, MetadataValue], expr: FilterExpr) -> bool:
+    """Report whether ``metadata`` satisfies ``expr``, as Qdrant and OpenSearch would.
+
+    ``eq`` and ``in`` match a list value on any element, so a tag list matches either.
 
     Args:
-        entry: The entry.
-        filters: Metadata every result must match; ``None`` matches all.
+        metadata: An entry's metadata.
+        expr: The filter expression.
 
     Returns:
-        Whether the metadata matches every filter.
+        Whether the metadata satisfies the expression.
+
+    Raises:
+        AppValueError: An ``in`` with no values (``INVALID_INPUT``).
 
     """
-    if not filters:
-        return True
-    return all(entry.metadata.get(key) == value for key, value in filters.items())
+    if isinstance(expr, FilterEq | FilterIn):
+        stored = metadata.get(expr.key)
+        held = () if stored is None else (stored,) if isinstance(stored, str) else stored
+        wanted = (expr.value,) if isinstance(expr, FilterEq) else expr.values
+        if not wanted:
+            msg = f"an in filter on {expr.key!r} needs at least one value"
+            raise AppValueError(msg)
+        return any(value in held for value in wanted)
+    return all(_holds(metadata, inner) for inner in expr.clauses)
 
 
 @final
@@ -101,25 +126,31 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
         query_embedding: list[float],
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
     ) -> list[VectorSearchResult]:
         """Return the ``top_k`` entries most similar to ``query_embedding``.
 
-        By cosine, filtered.
+        By cosine, among the entries matching ``filters`` and ``where``.
 
         Args:
             collection: The collection.
             query_embedding: The query's vector.
             top_k: The most results to return.
             filters: Metadata every result must match; ``None`` matches all.
+            where: A further filter (``in`` matches a list on any element); ``None``
+                adds none.
 
         Returns:
             The ``top_k`` entries most similar to ``query_embedding`` (cosine).
 
         """
+        narrowing = equals_all(filters or {})
+        if where is not None:
+            narrowing = FilterAnd((narrowing, where))
         scored = [
             (_cosine(query_embedding, entry.embedding), entry)
             for entry in self._collections.get(collection, {}).values()
-            if _matches(entry, filters)
+            if _holds(entry.metadata, narrowing)
         ]
         scored.sort(key=itemgetter(0), reverse=True)
         return [
@@ -128,7 +159,7 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
                 chunk_id=entry.id,
                 content=entry.content,
                 score=score,
-                metadata=entry.metadata,
+                metadata=flat_metadata(entry.metadata),
             )
             for score, entry in scored[:top_k]
         ]
@@ -187,12 +218,13 @@ class StubVectorStore(NoOpAsyncResource, VectorStore):
             ids: The entry ids to look up.
 
         Returns:
-            ``{id: metadata}`` for the ``ids`` already stored in ``collection``.
+            ``{id: metadata}`` for the ``ids`` already stored in ``collection``, list
+            values joined with ``LIST_SEPARATOR`` as every store reads them back.
 
         """
         store = self._collections.get(collection, {})
         return {
-            entry_id: dict(store[entry_id].metadata)
+            entry_id: flat_metadata(store[entry_id].metadata)
             for entry_id in ids
             if entry_id in store
         }

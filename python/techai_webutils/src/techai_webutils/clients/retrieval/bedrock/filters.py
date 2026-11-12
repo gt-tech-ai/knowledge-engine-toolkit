@@ -7,16 +7,18 @@ a consumer's neutral scope function into the engine's ``filter_builder`` seam.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.retrieval import FilterEq, FilterIn
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
-
-    from techai_webutils.clients.retrieval.bedrock.engine import FilterBuilder
     from techai_webutils.core.interfaces.retrieval import FilterExpr
+
+type FilterBuilder = Callable[[Mapping[str, str]], dict[str, object] | None]
+"""Builds the KB metadata filter from the request filters; ``None`` pushes no filter
+down."""
 
 
 def bedrock_filter(expr: FilterExpr) -> dict[str, object]:

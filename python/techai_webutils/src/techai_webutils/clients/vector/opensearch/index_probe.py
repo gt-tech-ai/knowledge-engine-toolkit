@@ -134,7 +134,7 @@ async def probe_index(
             )
     self_found = 0
     for chunk in current_chunks:
-        body = knn_query(chunk.vector, s.k, fields)
+        body = knn_query(chunk.vector, s.k, term_filters(fields))
         self_found += chunk.document_id in await _documents(clients, current, body, s.k)
     return IndexProbe(
         samples=len(queries),
