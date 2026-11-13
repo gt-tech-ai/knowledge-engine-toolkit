@@ -354,6 +354,10 @@ class TestFilteringRetrievalEngine:
           - For the filtering, collapse, abstain, reranking and ordering decorators, the
             inner ``retrieve`` is awaited with the same query, top_k, filters, where and
             index_id.
+
+        Args:
+            wrap: Wraps the inner engine in the decorator under test.
+
         """
         inner = _inner_returning()
         where = FilterIn("tags", ("api",))

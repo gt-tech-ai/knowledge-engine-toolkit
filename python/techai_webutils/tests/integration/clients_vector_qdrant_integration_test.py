@@ -33,6 +33,10 @@ async def test_in_filter_matches_any_element_of_a_list_payload(qdrant_url: str) 
         ``("api", "auth")``, not the one tagged ``("ops",)``.
       - Combined with ``filters`` the two narrow together (AND).
       - The hit's ``tags`` metadata reads back as ``"api|auth"``.
+
+    Args:
+        qdrant_url: The URL of the throwaway Qdrant container.
+
     """
     collection = f"c-{uuid.uuid4().hex}"
     store = new_vector_store_from_config(

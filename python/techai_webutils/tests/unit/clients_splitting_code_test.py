@@ -321,6 +321,12 @@ def test_units_tile_any_source(parts: list[str], suffix: str, budget: int) -> No
       - For any mix of fragments, extension and budget: at least one unit, indexes in
         order, ranges ascending and disjoint within the file, every non-blank line in a
         unit.
+
+    Args:
+        parts: The source fragments, joined by newlines.
+        suffix: The file extension selecting the language.
+        budget: The unit size budget.
+
     """
     source = "\n".join(parts)
     if not source.strip():

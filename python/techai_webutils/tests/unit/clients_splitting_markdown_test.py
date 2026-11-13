@@ -118,6 +118,10 @@ def test_units_cover_any_document(lines: list[str]) -> None:
     **What it tests:**
       - At least one unit; indexes in order; line ranges ascending, disjoint and within
         the file.
+
+    Args:
+        lines: The document's lines.
+
     """
     units = _units("\n".join(lines))
 

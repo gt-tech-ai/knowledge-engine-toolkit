@@ -197,6 +197,10 @@ class TestKbUnitSplitterFactory:
         **What it tests:**
           - With ``tree_sitter`` unimportable, the factory raises ``AppValueError``
             whose message names the ``code`` extra.
+
+        Args:
+            monkeypatch: Hides ``tree_sitter`` and the code splitter module.
+
         """
         monkeypatch.setitem(sys.modules, "tree_sitter", None)
         monkeypatch.delitem(

@@ -112,7 +112,7 @@ def _spec_names(*spec_types: str) -> Namer:
     """Return a namer that joins the names of a grouped declaration's specs.
 
     Args:
-        spec_types: The spec node types (``const_spec``, ``variable_declarator``, ...).
+        *spec_types: The spec node types (``const_spec``, ``variable_declarator``, ...).
 
     Returns:
         A namer giving ``A,B,C`` for ``const (A = 1; B, C = 2, 3)``.
