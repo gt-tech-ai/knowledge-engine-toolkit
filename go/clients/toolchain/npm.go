@@ -49,7 +49,7 @@ func (i *Installer) npmMethod(
 	userPrefix := filepath.Join(home, ".local")
 	userBin := filepath.Join(userPrefix, "bin")
 
-	if !slices.Contains(filepath.SplitList(os.Getenv(envPath)), userBin) {
+	if !onPath(userBin) {
 		i.log.Warn("npm's global prefix is not writable; installing under the user "+
 			"prefix. Add its bin dir to PATH in your shell profile",
 			"prefix", prefix, logKeyDir, userBin)

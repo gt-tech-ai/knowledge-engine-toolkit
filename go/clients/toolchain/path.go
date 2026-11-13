@@ -13,18 +13,25 @@ import (
 // AddToPathIfMissing prepends dir to the process PATH when it is not already
 // present (case-insensitive). Idempotent: a dir already on PATH is a no-op.
 func AddToPathIfMissing(dir string, log interfaces.Logger) {
-	pathEnv := os.Getenv(envPath)
-	for _, p := range filepath.SplitList(pathEnv) {
-		if strings.EqualFold(p, dir) {
-			log.Debug("PATH entry already present", logKeyDir, dir)
+	if onPath(dir) {
+		log.Debug("PATH entry already present", logKeyDir, dir)
 
-			return
-		}
+		return
 	}
 
 	log.Info("Adding to PATH", logKeyDir, dir)
 
-	_ = os.Setenv(envPath, dir+string(os.PathListSeparator)+pathEnv)
+	_ = os.Setenv(envPath, dir+string(os.PathListSeparator)+os.Getenv(envPath))
+}
+
+// onPath reports whether dir is an entry of the process PATH (case-insensitive).
+func onPath(dir string) bool {
+	return slices.ContainsFunc(
+		filepath.SplitList(os.Getenv(envPath)),
+		func(p string) bool {
+			return strings.EqualFold(p, dir)
+		},
+	)
 }
 
 // moveToPathFront puts dir first on the process PATH, dropping any later copy, so
