@@ -11,7 +11,7 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from qdrant_client import AsyncQdrantClient
+from qdrant_client import AsyncQdrantClient, models
 
 from techai_webutils.clients.vector.builder import (
     VectorStoreConfig,
@@ -20,6 +20,7 @@ from techai_webutils.clients.vector.builder import (
 )
 from techai_webutils.clients.vector.qdrant import QdrantVectorStore
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
+from techai_webutils.core.interfaces.retrieval import FilterAnd, FilterEq, FilterIn
 from techai_webutils.core.interfaces.vector_store import VectorEntry
 
 _EXPECTED_KWARGS = 5
@@ -118,7 +119,11 @@ class TestQdrantVectorStore:
                     document_id="d1",
                     content="chunk text",
                     embedding=[0.1, 0.2, 0.3],
-                    metadata={"tenant": "t1", "document_name": "Doc"},
+                    metadata={
+                        "tenant": "t1",
+                        "document_name": "Doc",
+                        "tags": ("api", "auth"),
+                    },
                 ),
             ],
         )
@@ -134,6 +139,7 @@ class TestQdrantVectorStore:
         assert points[0].payload["document_name"] == "Doc"
         assert points[0].payload["document_id"] == "d1"
         assert points[0].payload["content"] == "chunk text"
+        assert points[0].payload["tags"] == ["api", "auth"]
 
     @staticmethod
     @pytest.mark.asyncio
@@ -256,6 +262,7 @@ class TestQdrantVectorStore:
             "tenant": "t1",
             "document_name": "Doc",
             "page_number": "4",
+            "tags": ["api", "auth"],
         }
         client = _mock_client([hit])
         store = QdrantVectorStore(client, dimension=3)
@@ -277,10 +284,54 @@ class TestQdrantVectorStore:
         assert r.metadata["tenant"] == "t1"
         assert r.metadata["document_name"] == "Doc"
         assert r.metadata["page_number"] == "4"
+        assert r.metadata["tags"] == "api|auth"
         # Keys promoted to top-level fields are not duplicated in metadata.
         assert "content" not in r.metadata
         assert "document_id" not in r.metadata
         assert "entry_id" not in r.metadata
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_where_in_becomes_match_any_anded_with_filters() -> None:
+        """A ``where`` expression narrows the search alongside the exact filters.
+
+        Why this test is important:
+          - "language is go or python" and "tagged onboarding" are ``in`` filters; the
+            exact-match ``filters`` map cannot say them, and dropping the scope while
+            adding them would leak across tenants.
+
+        What it tests:
+          - ``where=FilterAnd((FilterIn, FilterEq))`` and ``filters`` reach
+            ``query_points`` as one ``must`` list: the scope ``MatchValue`` first, then
+            ``MatchAny`` for the ``in`` and ``MatchValue`` for the ``eq``.
+          - An empty ``in`` is ``INVALID_INPUT`` and never queries.
+        """
+        client = _mock_client()
+        store = QdrantVectorStore(client, dimension=3)
+        where = FilterAnd((
+            FilterIn("language", ("go", "python")),
+            FilterEq("symbol", "Beta"),
+        ))
+
+        _ = await store.search(
+            "docs", [0.1, 0.2, 0.3], filters={"tenant": "t1"}, where=where
+        )
+
+        query_filter = client.query_points.call_args.kwargs["query_filter"]
+        assert query_filter == models.Filter(
+            must=[
+                models.FieldCondition(key="tenant", match=models.MatchValue(value="t1")),
+                models.FieldCondition(
+                    key="language", match=models.MatchAny(any=["go", "python"])
+                ),
+                models.FieldCondition(
+                    key="symbol", match=models.MatchValue(value="Beta")
+                ),
+            ]
+        )
+        with pytest.raises(AppValueError, match="language"):
+            _ = await store.search("docs", [0.1], where=FilterIn("language", ()))
+        assert client.query_points.await_count == 1
 
     @staticmethod
     @pytest.mark.asyncio

@@ -529,6 +529,49 @@ def opensearch_url_b() -> Iterator[str]:
     yield from _opensearch()
 
 
+_QDRANT_IMAGE = "qdrant/qdrant:v1.19.1"
+"""Pinned to a release tag so a new upstream image cannot change filter behaviour."""
+
+
+def _await_qdrant(url: str) -> None:
+    """Poll ``/readyz`` until Qdrant answers.
+
+    Args:
+        url: The node's HTTP URL.
+
+    Raises:
+        RuntimeError: Qdrant did not become ready in time.
+
+    """
+    for _ in range(60):
+        try:
+            if httpx.get(f"{url}/readyz", timeout=2).status_code == _EXPECTED_STATUS:
+                return
+        except httpx.TransportError:
+            pass
+        time.sleep(1)
+    msg = "qdrant did not become ready in time"
+    raise RuntimeError(msg)
+
+
+@pytest.fixture(scope="session")
+def qdrant_url() -> Iterator[str]:
+    """Start one Qdrant node for the session and yield its HTTP URL.
+
+    Yields:
+        The node's HTTP URL.
+
+    """
+    container = DockerContainer(_QDRANT_IMAGE).with_exposed_ports(6333)
+    _ = container.start()
+    try:
+        url = f"http://{container.get_container_host_ip()}:{container.get_exposed_port(6333)}"
+        _await_qdrant(url)
+        yield url
+    finally:
+        container.stop()
+
+
 @pytest.fixture(scope="session")
 def opensearch_snapshot_path() -> str:
     """Return the path where OpenSearch containers accept snapshots.

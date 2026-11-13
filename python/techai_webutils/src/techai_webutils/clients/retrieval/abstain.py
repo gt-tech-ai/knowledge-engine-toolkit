@@ -21,7 +21,11 @@ from techai_webutils.core.interfaces.retrieval import RetrievalEngine
 from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
 
 if TYPE_CHECKING:
-    from techai_webutils.core.interfaces.retrieval import PassagePolicy, RetrievalResult
+    from techai_webutils.core.interfaces.retrieval import (
+        FilterExpr,
+        PassagePolicy,
+        RetrievalResult,
+    )
 
 
 class AbstainerKind(StrEnum):
@@ -85,6 +89,7 @@ class TopScoreAbstainer(DelegatingAsyncResource[RetrievalEngine], RetrievalEngin
         *,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Retrieve from the inner engine.
@@ -95,6 +100,7 @@ class TopScoreAbstainer(DelegatingAsyncResource[RetrievalEngine], RetrievalEngin
             query: The search query.
             top_k: The most chunks to return.
             filters: Metadata every returned chunk must match; ``None`` matches all.
+            where: A further filter ANDed with ``filters``; ``None`` adds none.
             index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
@@ -102,7 +108,7 @@ class TopScoreAbstainer(DelegatingAsyncResource[RetrievalEngine], RetrievalEngin
 
         """
         results = await self._inner.retrieve(
-            query, top_k=top_k, filters=filters, index_id=index_id
+            query, top_k=top_k, filters=filters, where=where, index_id=index_id
         )
         if not results or max(r.score for r in results) < self._threshold:
             return []

@@ -7,9 +7,9 @@ from techai_webutils.clients.retrieval.bedrock.engine import (
     SOURCE_URI_KEY,
     BedrockRetrievalEngine,
     DocumentIdResolver,
-    FilterBuilder,
     metadata_document_id,
 )
+from techai_webutils.clients.retrieval.bedrock.filters import FilterBuilder
 
 __all__ = [
     "SOURCE_URI_KEY",

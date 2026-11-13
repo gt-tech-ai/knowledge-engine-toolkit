@@ -7,6 +7,7 @@ and a missing "always >=1 chunk" invariant would silently drop a document.
 
 from __future__ import annotations
 
+import sys
 from typing import cast
 
 import pytest
@@ -16,7 +17,9 @@ from techai_webutils.clients.splitting import (
     SplitterKind,
     splitter_from_config,
 )
+from techai_webutils.clients.splitting.code import CodeSplitter
 from techai_webutils.clients.splitting.kb_unit import KbUnitSplitter, split_into_chunks
+from techai_webutils.clients.splitting.markdown import MarkdownSplitter
 from techai_webutils.core.domain import ChunkPayload, DocumentFormat, Page, ParsedDocument
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.splitter import DocumentSplitter
@@ -160,3 +163,55 @@ class TestKbUnitSplitterFactory:
             _ = splitter_from_config(
                 SplitterConfig(kind=cast("SplitterKind", cast("object", "bogus")))
             )
+
+    @staticmethod
+    def test_factory_returns_code_and_markdown_splitters() -> None:
+        """kind=code and kind=markdown build their splitters behind the seam.
+
+        **Why this test is important:**
+          - A code or wiki corpus switches split strategy by config; a kind the factory
+            cannot build would fail the consumer's boot, not a test.
+
+        **What it tests:**
+          - ``splitter_from_config`` returns a ``CodeSplitter`` for ``code`` and a
+            ``MarkdownSplitter`` for ``markdown``, each a ``DocumentSplitter``.
+        """
+        code = splitter_from_config(SplitterConfig(kind=SplitterKind.CODE))
+        markdown = splitter_from_config(SplitterConfig(kind=SplitterKind.MARKDOWN))
+
+        assert isinstance(code, CodeSplitter)
+        assert isinstance(markdown, MarkdownSplitter)
+        assert isinstance(code, DocumentSplitter)
+        assert isinstance(markdown, DocumentSplitter)
+
+    @staticmethod
+    def test_code_kind_without_the_extra_is_a_coded_error(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """kind=code without the ``code`` extra fails with a coded error naming it.
+
+        **Why this test is important:**
+          - tree-sitter is an optional extra; a bare ImportError at boot would not say
+            which extra to install.
+
+        **What it tests:**
+          - With ``tree_sitter`` unimportable, the factory raises ``AppValueError``
+            whose message names the ``code`` extra.
+
+        Args:
+            monkeypatch: Hides ``tree_sitter`` and the code splitter module.
+
+        """
+        monkeypatch.setitem(sys.modules, "tree_sitter", None)
+        monkeypatch.delitem(
+            sys.modules, "techai_webutils.clients.splitting.code", raising=False
+        )
+        monkeypatch.delitem(
+            sys.modules, "techai_webutils.clients.splitting.code.splitter", raising=False
+        )
+        monkeypatch.delitem(
+            sys.modules, "techai_webutils.clients.splitting.code.languages", raising=False
+        )
+
+        with pytest.raises(AppValueError, match=r"\[code\] extra"):
+            _ = splitter_from_config(SplitterConfig(kind=SplitterKind.CODE))

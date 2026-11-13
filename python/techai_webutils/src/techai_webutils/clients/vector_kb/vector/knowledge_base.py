@@ -21,7 +21,7 @@ from techai_webutils.core.interfaces.knowledge_base import (
     KBSyncResult,
     KnowledgeBase,
 )
-from techai_webutils.core.interfaces.vector_store import VectorEntry
+from techai_webutils.core.interfaces.vector_store import VectorEntry, flat_metadata
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 from techai_webutils.foundation.logger import get_logger
 from techai_webutils.foundation.vectors import require_matching_dimension
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from techai_webutils.core.interfaces.embedding import EmbeddingProvider
-    from techai_webutils.core.interfaces.vector_store import VectorStore
+    from techai_webutils.core.interfaces.vector_store import MetadataValue, VectorStore
 
 logger = get_logger(__name__)
 
@@ -59,7 +59,9 @@ chunk index); an attribute with one of these names would overwrite it in the sto
 payload, so it is refused."""
 
 
-def _validated_attributes(attributes: Mapping[str, str] | None) -> dict[str, str]:
+def _validated_attributes(
+    attributes: Mapping[str, MetadataValue] | None,
+) -> dict[str, MetadataValue]:
     """Return a copy of the consumer's chunk attributes.
 
     One named like a key the index writes is refused.
@@ -131,7 +133,7 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         document_id: str,
         chunks: list[str],
         *,
-        attributes: Mapping[str, str] | None = None,
+        attributes: Mapping[str, MetadataValue] | None = None,
         document_name: str = "",
     ) -> None:
         """Embed and upsert one point per chunk, a sub-batch at a time.
@@ -151,8 +153,8 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         Args:
             document_id: The document's identifier; re-indexing replaces its chunks.
             chunks: The document's chunk texts, in order.
-            attributes: Metadata stamped on every chunk (for example a tenant or
-                sensitivity label); ``None`` stamps none.
+            attributes: Metadata stamped on every chunk (for example a tenant,
+                sensitivity label or tag tuple, stored as a list); ``None`` stamps none.
             document_name: The display name stored with each chunk; empty falls back to
                 ``document_id``.
 
@@ -170,7 +172,10 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         )
 
     async def _index_sub_batches(
-        self, document_id: str, chunks: list[str], base_metadata: Mapping[str, str]
+        self,
+        document_id: str,
+        chunks: list[str],
+        base_metadata: Mapping[str, MetadataValue],
     ) -> int:
         """Index ``chunks`` sub-batch by sub-batch, ``embed_concurrency`` at once.
 
@@ -219,7 +224,7 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         document_id: str,
         base: int,
         batch: list[str],
-        metadata: list[dict[str, str]],
+        metadata: list[dict[str, MetadataValue]],
     ) -> bool:
         """Embed and upsert one sub-batch starting at chunk ``base``.
 
@@ -249,7 +254,7 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         ids = [f"{document_id}:{base + offset}" for offset in range(len(batch))]
         stored = await self._store.stored_metadata(self._collection, ids)
         if all(
-            stored.get(chunk_id) == expected
+            stored.get(chunk_id) == flat_metadata(expected)
             for chunk_id, expected in zip(ids, metadata, strict=True)
         ):
             return False
@@ -262,7 +267,7 @@ class VectorKnowledgeBase(NoOpAsyncResource, KnowledgeBase):
         document_id: str,
         ids: list[str],
         batch: list[str],
-        metadata: list[dict[str, str]],
+        metadata: list[dict[str, MetadataValue]],
     ) -> list[VectorEntry]:
         """Embed ``batch`` and pair each chunk with its id, embedding and metadata.
 

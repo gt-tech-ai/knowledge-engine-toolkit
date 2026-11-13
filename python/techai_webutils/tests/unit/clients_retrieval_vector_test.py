@@ -25,6 +25,7 @@ from techai_webutils.clients.retrieval.filtering import (
 from techai_webutils.clients.retrieval.vector import VectorRetrievalEngine
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
 from techai_webutils.core.interfaces.embedding import EmbeddingProvider, EmbeddingResult
+from techai_webutils.core.interfaces.retrieval import FilterIn
 from techai_webutils.core.interfaces.vector_store import VectorSearchResult, VectorStore
 
 _EXPECTED_KWARGS = 5
@@ -105,7 +106,8 @@ async def test_hybrid_store_fuses_knn_and_keyword_rankings() -> None:
         retrieval must return both, ranked by one fused order.
 
     **What it tests:**
-      - the k-NN and keyword searches both run with the pushed-down filters
+      - the k-NN and keyword searches both run with the pushed-down filters and the
+        call's ``where``
       - ``a`` (first in both) leads, ``b`` (k-NN only) and ``c`` (keyword only) follow;
         scores are the RRF values
     """
@@ -115,9 +117,18 @@ async def test_hybrid_store_fuses_knn_and_keyword_rankings() -> None:
     )
     engine = VectorRetrievalEngine(_embedder(), store, "docs", filter_keys=["org_id"])
 
-    results = await engine.retrieve("q", top_k=3, filters={"org_id": "o1", "x": "y"})
+    where = FilterIn("tags", ("api",))
 
-    store.keyword_search.assert_awaited_once_with("docs", "q", 3, {"org_id": "o1"})
+    results = await engine.retrieve(
+        "q", top_k=3, filters={"org_id": "o1", "x": "y"}, where=where
+    )
+
+    cast("AsyncMock", store.search).assert_awaited_once_with(
+        "docs", [0.1, 0.2, 0.3], top_k=3, filters={"org_id": "o1"}, where=where
+    )
+    cast("AsyncMock", store.keyword_search).assert_awaited_once_with(
+        "docs", "q", 3, {"org_id": "o1"}, where
+    )
     assert [r.document_id for r in results] == ["a", "b", "c"]
     assert results[0].score == pytest.approx(2 / 61)
     assert results[1].score == pytest.approx(1 / 62)

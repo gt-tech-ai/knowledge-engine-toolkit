@@ -19,7 +19,7 @@ from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from techai_webutils.core.interfaces.retrieval import RetrievalResult
+    from techai_webutils.core.interfaces.retrieval import FilterExpr, RetrievalResult
 
 
 class PassageOrder(StrEnum):
@@ -75,6 +75,7 @@ class OrderingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retrieva
         *,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Retrieve from the inner engine and reorder the passages.
@@ -83,6 +84,7 @@ class OrderingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retrieva
             query: The search query.
             top_k: The most chunks to return.
             filters: Metadata every returned chunk must match; ``None`` matches all.
+            where: A further filter ANDed with ``filters``; ``None`` adds none.
             index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
@@ -90,7 +92,7 @@ class OrderingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retrieva
 
         """
         results = await self._inner.retrieve(
-            query, top_k=top_k, filters=filters, index_id=index_id
+            query, top_k=top_k, filters=filters, where=where, index_id=index_id
         )
         return order_passages(results, self._order)
 

@@ -6,6 +6,50 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.53] - 2026-11-12
+
+Python: `techai-webutils` 0.12.0. The Go module is unchanged.
+
+### Added
+
+- Python `SplitterKind.markdown`: one unit per `##` section outside code fences, each prefixed
+  with `# <title>` (frontmatter `title`, else the first `#` heading); a leading YAML
+  frontmatter mapping is stripped from the text and returned on every unit.
+- Python `SplitterKind.code` and the `code` extra (`tree-sitter`, `tree-sitter-go`,
+  `tree-sitter-python`, `tree-sitter-typescript`): one unit per top-level Go, Python or
+  TypeScript declaration with its leading comments; a Go method carries its receiver type's
+  line; a declaration over `SplitterConfig.symbol_max_bytes` (8192) splits at its body into
+  `Parent.child` units; other extensions fall back to `kb_unit`. Without the extra the kind is
+  a coded `INVALID_INPUT`.
+- Python `ChunkPayload.symbol`, `line_start`, `line_end` and `frontmatter`, and
+  `ParsedDocument.source_path` (kept by `parsed_to_json` / `parsed_from_json`; older payloads
+  read it as empty), all optional.
+- Python `where: FilterExpr | None` on `VectorStore.search` / `keyword_search` and
+  `RetrievalEngine.retrieve`, ANDed with `filters` and pushed down to the store (Qdrant
+  `must` conditions, OpenSearch filter clauses, the stub's in-process match, Bedrock
+  `andAll` with the engine's `filter_builder` output); every retrieval decorator forwards it.
+- Python list-valued metadata: `VectorEntry.metadata` and `KnowledgeBase` attributes take
+  `MetadataValue` (`str | tuple[str, ...]`). A tuple is stored as a list in Qdrant and
+  OpenSearch, an `eq` / `in` filter matches any element, and reads return it joined with
+  `LIST_SEPARATOR` (`|`), so `VectorSearchResult.metadata` stays `dict[str, str]`;
+  `flat_metadata()` gives that read form. `scalar_metadata(metadata, key)` refuses a list
+  where one value is required (the OpenSearch org field, the multi-domain shard field) with a
+  coded `INVALID_INPUT`.
+
+### Changed
+
+- Python `FilterBuilder` is defined in `clients.retrieval.bedrock.filters` (still re-exported
+  from `clients.retrieval.bedrock`); importing it from `bedrock.engine` no longer works.
+- Bedrock Retrieve matches an `in` filter against a scalar attribute only; a list attribute
+  there would need `listContains`, which the translation does not emit.
+
+### Security
+
+- Python `soupsieve` (via `beautifulsoup4`) `2.9.2` → `4.0.1`, held by a uv
+  `constraint-dependencies` floor: fixes GHSA-mmhr-3c5m-f64f (a polynomial-time denial of
+  service in the descendant combinator) and GHSA-4j63-6c4x-wfg4 (a quadratic `:has()` match
+  on untrusted HTML). The floor binds this package's lock only; a consumer pins its own.
+
 ## [0.0.52] - 2026-11-11
 
 Python: `techai-webutils` 0.11.0. The Go module changes only its toolchain.

@@ -51,6 +51,7 @@ from techai_webutils.clients.vector.opensearch.mapping import (
     index_body,
     index_name,
     knn_query,
+    narrowing_clauses,
     no_vectors_source,
     require,
     source_metadata,
@@ -58,7 +59,7 @@ from techai_webutils.clients.vector.opensearch.mapping import (
     text_match,
 )
 from techai_webutils.core.errors import AppValueError
-from techai_webutils.core.interfaces.vector_store import VectorStore
+from techai_webutils.core.interfaces.vector_store import VectorStore, scalar_metadata
 from techai_webutils.foundation.lifecycle import NoOpAsyncResource
 
 if TYPE_CHECKING:
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
 
     from opensearchpy import AsyncOpenSearch
 
+    from techai_webutils.core.interfaces.retrieval import FilterExpr
     from techai_webutils.core.interfaces.vector_store import (
         VectorEntry,
         VectorSearchResult,
@@ -203,16 +205,18 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         query_embedding: Sequence[float],
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
     ) -> list[VectorSearchResult]:
         """k-NN search within one org.
 
-        ``filters`` (with the org, unless scoped) match exactly.
+        ``filters`` (with the org, unless scoped) match exactly, and ``where`` must hold.
 
         Args:
             collection: The collection.
             query_embedding: The query's vector.
             top_k: The most results to return.
             filters: Metadata every result must match; ``None`` matches all.
+            where: A further filter (``in`` becomes ``terms``); ``None`` adds none.
 
         Returns:
             The hits, best first.
@@ -231,7 +235,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
                 body=knn_query(
                     query_embedding,
                     top_k,
-                    fields,
+                    narrowing_clauses(fields, where),
                     oversample_factor=self._config.oversample_factor,
                     truncated_dimension=self._config.truncated_dimension,
                 ),
@@ -254,16 +258,18 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
         query: str,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
     ) -> list[VectorSearchResult]:
         """BM25 search of the chunk text within one org.
 
-        ``filters`` match exactly, as in ``search``.
+        ``filters`` and ``where`` narrow it as in ``search``.
 
         Args:
             collection: The collection.
             query: The query text.
             top_k: The most results to return.
             filters: Metadata every result must match; ``None`` matches all.
+            where: A further filter (``in`` becomes ``terms``); ``None`` adds none.
 
         Returns:
             The hits, best first.
@@ -281,7 +287,7 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
             "query": {
                 "bool": {
                     "must": [text_match(query, self._config.language_analyzers)],
-                    "filter": term_filters(fields),
+                    "filter": narrowing_clauses(fields, where),
                 }
             },
         }
@@ -629,10 +635,10 @@ class OpenSearchVectorStore(NoOpAsyncResource, VectorStore):
 
         Raises:
             AppValueError: Entry ``entry.id`` belongs to another org than this store's
-                scope.
+                scope. A callee raises it for a list-valued org field.
 
         """
-        org = entry.metadata.get(self._config.org_field) or self._org
+        org = scalar_metadata(entry.metadata, self._config.org_field) or self._org
         org = require(org, f"an org on every entry ({self._config.org_field})")
         if self._org is not None and org != self._org:
             msg = f"entry {entry.id} belongs to another org than this store's scope"

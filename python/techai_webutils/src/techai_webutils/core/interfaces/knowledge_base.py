@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
+from techai_webutils.core.interfaces.vector_store import MetadataValue
 
 
 @dataclass
@@ -58,14 +59,16 @@ class KnowledgeBase(ManagedResource, ABC):
         document_id: str,
         chunks: list[str],
         *,
-        attributes: Mapping[str, str] | None = None,
+        attributes: Mapping[str, MetadataValue] | None = None,
         document_name: str = "",
     ) -> None:
         """Index a document's chunks into the knowledge base.
 
         ``attributes`` are stamped onto every stored chunk as metadata (e.g. the
         consumer's tenant scope and sensitivity label), so retrieval can push them down
-        and ``FilteringRetrievalEngine`` policies can re-validate them; re-indexing a
+        and ``FilteringRetrievalEngine`` policies can re-validate them. A tuple value is
+        stored as a list an ``eq`` or ``in`` filter matches on any element, and reads back
+        joined with ``LIST_SEPARATOR``. Re-indexing a
         document with other attributes restamps every chunk. An implementation refuses
         attribute names it writes itself (``ValueError``). ``document_name`` is the
         human-readable source name stamped onto each chunk for citation display; an
@@ -74,8 +77,8 @@ class KnowledgeBase(ManagedResource, ABC):
         Args:
             document_id: The document's identifier; re-indexing replaces its chunks.
             chunks: The document's chunk texts, in order.
-            attributes: Metadata stamped on every chunk (for example a tenant or
-                sensitivity label); ``None`` stamps none.
+            attributes: Metadata stamped on every chunk (for example a tenant,
+                sensitivity label or tag tuple); ``None`` stamps none.
             document_name: The display name stored with each chunk; empty falls back to
                 ``document_id``.
 

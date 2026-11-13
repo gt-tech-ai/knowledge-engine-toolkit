@@ -932,7 +932,13 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   kind, as is an unknown value.
 - **Neutral filters and citations.** `FilterExpr` (`FilterEq`, `FilterIn`, `FilterAnd`;
   `equals_all(map)`) translates to Bedrock (`bedrock_filter`, `expr_filter_builder` for the
-  engine's `filter_builder`) and to OpenSearch (`filter_clauses`). `Citation` gains `chunk_id`
+  engine's `filter_builder`), to OpenSearch (`filter_clauses`) and to Qdrant
+  (`qdrant_filter`). `VectorStore.search` / `keyword_search` and `RetrievalEngine.retrieve`
+  take it as `where`, ANDed with the exact-match `filters`; every retrieval decorator passes
+  it through. Metadata may be list-valued (`MetadataValue = str | tuple[str, ...]`): the stores
+  keep a tuple as a list, `eq` / `in` match any element, and reads join it with
+  `LIST_SEPARATOR` (`|`); a routing field (OpenSearch org, multi-domain shard) must be one
+  string (`scalar_metadata`). Bedrock's `in` matches scalar attributes only. `Citation` gains `chunk_id`
   (the passage's `chunk_id` metadata, which vector passages now carry) and `span` (`None`: the
   whole chunk).
 - **Verified citations.** `PassageCitationExtractor(verify=)` is `off` by default: one citation
@@ -1120,6 +1126,18 @@ ran; `markdown_content` is unchanged). `blocks_to_json` / `blocks_from_json` giv
 under `FORMAT_VERSION`, read at N and N-1; `parsed_to_json` / `parsed_from_json` do the same for a
 whole `ParsedDocument` under `PARSED_FORMAT_VERSION` (the parse stage's checkpoint artifact).
 `ChunkPayload` gains `section_path`, `element_type` and `span`, all optional.
+
+`ParsedDocument.source_path` (empty by default, kept by the JSON form) names the file, so a
+splitter can choose by extension. `splitter_from_config` (`clients.splitting`) builds a
+`DocumentSplitter` by `SplitterKind`: `kb_unit` (the default) packs paragraphs up to `max_bytes`;
+`markdown` cuts at `##` headings outside code fences, prefixes each section with `# <title>`
+(frontmatter `title`, else the first `#` heading), and strips a YAML frontmatter mapping from
+the text into every unit's `ChunkPayload.frontmatter`; `code` (the `code` extra: tree-sitter with
+the Go, Python and TypeScript grammars; without it the kind is `INVALID_INPUT`) makes one unit per
+top-level declaration with the comments directly above it, a Go method carrying its receiver
+type's declaration line, and splits a declaration over `symbol_max_bytes` (8 KiB) at its body
+into `Parent.child` units; a file with no grammar falls back to `kb_unit`. Their units carry
+`symbol` and the 1-based `line_start` / `line_end`, and tile the file's lines.
 
 `ParserKind.layout` (`clients.parsing.layout`, the `layout` extra) converts PDFs with Docling
 inside the same bounded child as `isolated` (`memory_bytes`, `timeout_seconds`); other formats go

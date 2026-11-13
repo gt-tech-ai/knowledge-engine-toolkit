@@ -18,7 +18,7 @@ from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
 
 if TYPE_CHECKING:
     from techai_webutils.core.interfaces.reranker import Reranker
-    from techai_webutils.core.interfaces.retrieval import RetrievalResult
+    from techai_webutils.core.interfaces.retrieval import FilterExpr, RetrievalResult
 
 
 class RerankingKind(StrEnum):
@@ -62,6 +62,7 @@ class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
         *,
         top_k: int = 10,
         filters: dict[str, str] | None = None,
+        where: FilterExpr | None = None,
         index_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Retrieve from the inner engine, then sort by reranker score.
@@ -72,6 +73,7 @@ class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
             query: The search query.
             top_k: The most chunks to return.
             filters: Metadata every returned chunk must match; ``None`` matches all.
+            where: A further filter ANDed with ``filters``; ``None`` adds none.
             index_id: The index to search; ``None`` searches the engine's default.
 
         Returns:
@@ -83,7 +85,7 @@ class RerankingRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
 
         """
         results = await self._inner.retrieve(
-            query, top_k=top_k, filters=filters, index_id=index_id
+            query, top_k=top_k, filters=filters, where=where, index_id=index_id
         )
         if not results:
             return results

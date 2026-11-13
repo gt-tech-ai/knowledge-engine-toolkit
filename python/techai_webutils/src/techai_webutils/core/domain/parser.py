@@ -116,6 +116,10 @@ class ParsedDocument:
     """Source facts a later stage needs and no other field holds (an interview's id and
     privacy mode); empty for an ordinary document."""
 
+    source_path: str = ""
+    """The document's path in its source (``pkg/x/y.go``); a splitter that picks its
+    strategy by file type reads the extension. Empty when the source has no paths."""
+
     @property
     def ok(self) -> bool:
         """Whether the document parsed without error."""
@@ -199,6 +203,7 @@ def parsed_to_json(doc: ParsedDocument) -> dict[str, object]:
         "error": doc.error,
         "blocks": blocks_to_json(doc.blocks),
         "attributes": dict(doc.attributes),
+        "source_path": doc.source_path,
     }
 
 
@@ -232,6 +237,7 @@ def parsed_from_json(payload: dict[str, object]) -> ParsedDocument:
             error=str(payload.get("error", "")),
             blocks=_blocks(payload.get("blocks")),
             attributes=_attributes(payload.get("attributes", {})),
+            source_path=str(payload.get("source_path", "")),
         )
     except (KeyError, TypeError, ValueError, InvalidInputError) as exc:
         msg = f"malformed parsed document: {exc}"
