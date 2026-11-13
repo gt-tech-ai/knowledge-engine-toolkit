@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.57] - 2026-11-13
+
+Python: `techai-webutils` 0.13.0.
+
 ### Added
 
 - Python `SourceReader` tier (`core/interfaces/source_reader.py`, `core/types/source_item.py`,
