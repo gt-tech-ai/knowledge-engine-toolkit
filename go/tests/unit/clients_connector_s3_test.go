@@ -379,6 +379,7 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 				STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
 				Decorations:   decorate.Decorations{},
 				GitHub:        nil,
+				Git:           nil,
 			},
 		)
 		_, err := builder.Build(ctx, &cfg)
@@ -749,6 +750,7 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 					STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
 					Decorations:   decorate.Decorations{},
 					GitHub:        nil,
+					Git:           nil,
 				},
 			)
 			src, err := builder.Build(ctx, new(s3Cfg(textAccessKey)))

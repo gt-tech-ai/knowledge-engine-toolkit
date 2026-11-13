@@ -1,6 +1,7 @@
 // Package connector builds ConnectorSources for the connector family: S3 (a bucket
-// listing), S3 Inventory (the bucket's inventory report) and GitHub (a branch's tree,
-// as a GitHub App installation) now, a future kind added as a kinds-table entry +
+// listing), S3 Inventory (the bucket's inventory report), GitHub (a branch's tree, as a
+// GitHub App installation) and Git (a mounted work tree, through the injected
+// GitClient) now, a future kind added as a kinds-table entry +
 // sibling package (ARCHITECTURE.md#the-one-idea). Unlike the other client families, a
 // source is built per request, from the tenant's SourceConfig, so NewSourceBuilder
 // returns the SourceBuilder that runs the kinds table. It imports only the storage
@@ -16,9 +17,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/client"
+	connectorgit "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/git"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/github"
 	connectors3 "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/s3inventory"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 )
@@ -31,6 +34,9 @@ const KindS3Inventory = client.Kind(interfaces.ConnectorKindS3Inventory)
 
 // KindGitHub lists one branch of a GitHub repository as a GitHub App installation.
 const KindGitHub = client.Kind(interfaces.ConnectorKindGitHub)
+
+// KindGit lists a git work tree on a mounted filesystem through Deps.Git.
+const KindGit = client.Kind(interfaces.ConnectorKindGit)
 
 // Config names the sources the builder decorates.
 type Config struct {
@@ -58,6 +64,15 @@ type Deps struct {
 
 	// GitHub carries KindGitHub's collaborators; nil uses an http.Client and time.Now.
 	GitHub *GitHubDeps
+
+	// Git carries KindGit's collaborators; KindGit refuses to build without them.
+	Git *GitDeps
+}
+
+// GitDeps carries KindGit's runtime collaborators.
+type GitDeps struct {
+	// Client lists the work tree; required.
+	Client interfaces.GitClient
 }
 
 // GitHubDeps carries KindGitHub's runtime collaborators.
@@ -101,6 +116,13 @@ func kinds(
 				deps Deps,
 			) (interfaces.ConnectorSource, error) {
 				return newGitHub(cfg.GitHubBaseURL, &src, deps.GitHub)
+			},
+			KindGit: func(
+				_ context.Context,
+				src interfaces.SourceConfig,
+				deps Deps,
+			) (interfaces.ConnectorSource, error) {
+				return newGit(&src, deps.Git)
 			},
 		},
 		Options:    nil,
@@ -189,4 +211,24 @@ func newGitHub(
 		IncludeGlobs: src.IncludeGlobs,
 		ExcludeGlobs: src.ExcludeGlobs,
 	}, auth, doer)
+}
+
+// newGit builds the KindGit source for src's root and globs over deps' GitClient; no
+// GitClient is CodeInvalidInput (an empty root is refused by the source).
+func newGit(
+	src *interfaces.SourceConfig,
+	deps *GitDeps,
+) (interfaces.ConnectorSource, error) {
+	if deps == nil || deps.Client == nil {
+		return nil, apperr.New(
+			apperr.CodeInvalidInput,
+			"connector: git kind needs a GitClient",
+		)
+	}
+
+	return connectorgit.NewSource(&connectorgit.Config{
+		Root:         src.Root,
+		IncludeGlobs: src.IncludeGlobs,
+		ExcludeGlobs: src.ExcludeGlobs,
+	}, deps.Client)
 }

@@ -394,6 +394,7 @@ func (c *Client) put(bucket, key string, data []byte, contentType string) {
 			ContentType:  contentType,
 			LastModified: time.Now().UTC().Format(time.RFC3339),
 			ETag:         hex.EncodeToString(sum[:]),
+			Revision:     "",
 			Size:         int64(len(data)),
 		},
 	}

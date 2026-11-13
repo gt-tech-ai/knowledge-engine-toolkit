@@ -99,6 +99,7 @@ func newInventoryFixture(t *testing.T, format string) inventoryFixture {
 			Key:          key,
 			Size:         size,
 			ETag:         `"` + etag + `"`,
+			Revision:     "",
 			LastModified: "2026-11-" + day + "T10:00:00Z",
 			ContentType:  "",
 		}
@@ -190,6 +191,7 @@ func TestS3Inventory_PagesMatchTheS3Kind(t *testing.T) {
 			Decorations:   decorate.Decorations{},
 			STS:           nil,
 			GitHub:        nil,
+			Git:           nil,
 		},
 	)
 	inventory, err := sourceBuilder.Build(ctx, new(inventoryCfg()))
@@ -383,6 +385,7 @@ func TestConnectorKind_S3StaysTheDefault(t *testing.T) {
 			Decorations:   decorate.Decorations{},
 			STS:           nil,
 			GitHub:        nil,
+			Git:           nil,
 		},
 	)
 

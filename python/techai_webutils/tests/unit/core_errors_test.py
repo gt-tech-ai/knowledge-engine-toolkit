@@ -39,6 +39,7 @@ from techai_webutils.core.errors.errors import (
     InternalError,
     InvalidInputError,
     NotFoundError,
+    ThrottledError,
     UnauthorizedError,
     UnavailableError,
 )
@@ -376,6 +377,23 @@ class TestConvenienceErrors:
         """
         err = UnavailableError()
         assert err.code == ErrorCode.UNAVAILABLE
+
+    @staticmethod
+    def test_throttled_carries_details() -> None:
+        """A throttle is built with its structured details, such as the retry pushback.
+
+        **Why this test is important:**
+          - A provider's ``Retry-After`` reaches the retry layer as a detail on the
+            raised error; a throttle that cannot carry it retries too early
+
+        **What it tests:**
+          - ``ThrottledError(message, details=...)`` keeps the details and is
+            ``UNAVAILABLE``; ``UnavailableError`` takes details the same way
+        """
+        err = ThrottledError("slow down", details={"retry_after_ms": "60000"})
+        assert err.code == ErrorCode.UNAVAILABLE
+        assert err.details == {"retry_after_ms": "60000"}
+        assert UnavailableError(details={"k": "v"}).details == {"k": "v"}
 
     @staticmethod
     def test_ingestion_error() -> None:

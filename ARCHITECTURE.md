@@ -987,11 +987,24 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   Each regular file of the recursive tree that passes `IncludeGlobs` and `ExcludeGlobs`
   (`foundation/codebase.Glob`) is one object: `Key` its path, `ETag` its blob SHA, `Size` its
   size (an oversized file is listed, so the engine's size cap skips it), `LastModified` the
-  commit's committer date. Symlinks and submodules are skipped. A tree GitHub truncated is
+  commit's committer date, `Revision` the pinned commit (a body reader fetches the file at
+  that commit; the S3 kinds leave `Revision` empty, since their ETag names the content).
+  Symlinks and submodules are skipped. A tree GitHub truncated is
   `INVALID_INPUT` (list such a repository with a clone); a missing repository or branch is
   `INVALID_INPUT`; a 5xx, a 429 or a rate-limited 403 is `UNAVAILABLE`. The builder's
   `Config.GitHubBaseURL` points it at GitHub Enterprise Server; `Deps.GitHub` injects the HTTP
   doer and the clock.
+- **`git`** lists a git work tree on a mounted filesystem (`Root`, set by the consumer from its
+  own platform config, never from tenant input) through the injected `Deps.Git.Client`
+  (`interfaces.GitClient`): the tracked files plus the untracked files git does not ignore,
+  filtered by `IncludeGlobs` and `ExcludeGlobs`. The first page takes one listing (paths, HEAD
+  and the paths that differ from it) and later pages reuse it; the token is `v1:<last key>`, so
+  a source that starts mid-crawl lists afresh and resumes after that key. Each regular file is
+  one object: `Key` its path, `ETag` the hex SHA-256 of its bytes (untracked files have no blob
+  SHA), `Size` its size, `LastModified` its modification time, `Revision` HEAD's commit, or
+  `<commit>+worktree` when the bytes differ from HEAD's. Files are read through an `os.Root`, so
+  no path leaves the work tree; symlinks and files gone since the listing are skipped. A root
+  that is not a work tree, an empty `Root` and a missing GitClient are `INVALID_INPUT`.
 
 The S3 kinds authenticate through `connector/s3.NewStorage` (access key, or STS AssumeRole with
 the tenant's ExternalID) and classify object-store failures with `ClassifyListError`
@@ -1289,6 +1302,14 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   `clients/semantic_cache/verifier`). `clients/semantic_cache/admission` decides which queries
   are cached at all.
 - **Usage tap:** `clients/decorators/usage_tap.UsageTapProvider` (see Decorators).
+- **Source reader:** `core/interfaces/source_reader.py` (`SourceReader.read(SourceItem)`),
+  `core/types/source_item.py` and `clients/source_reader` (`stub`; `s3`, through the injected
+  `StorageClient`; `github`, a file at a commit read as a GitHub App installation, behind the
+  `github` extra; `git`, a file's `path` under the configured `git_root`, resolved and refused
+  with `INVALID_INPUT` if it is empty, absolute or leaves the root, symlinks included;
+  `decorate` runs `read` through the client tier). Ingestion reads document bodies in Python;
+  Go's `clients/connector/github` lists a repository and mints the same installation tokens,
+  and `clients/connector/git` lists a work tree, but neither reads bodies.
 - **Object tags on upload:** Python's `StorageClient.upload` takes keyword-only `tags`; Go's
   `StorageObjects.Upload` does not, since only the Python Bedrock sink (`object_tags`) tags
   what it writes.

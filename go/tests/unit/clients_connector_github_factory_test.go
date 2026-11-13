@@ -67,6 +67,7 @@ func TestConnectorSourceBuilder_GitHubKind(t *testing.T) {
 		BuildS3Client: nil,
 		STS:           nil,
 		GitHub:        &connector.GitHubDeps{Doer: doer, Now: ghClock},
+		Git:           nil,
 	})
 
 	src, err := builder.Build(context.Background(), fixtures.BuildRef(

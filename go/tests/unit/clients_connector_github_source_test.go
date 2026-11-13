@@ -26,6 +26,7 @@ const (
 	ghPageSize     = 2
 	ghRegularFiles = 6
 	ghReadme       = "README.md"
+	ghGuide        = "docs/guide.md"
 	ghBigFileSize  = 50_000_000
 )
 
@@ -149,8 +150,9 @@ func ghKeys(t *testing.T, src interfaces.ConnectorSource, limit int) []string {
 //
 // What it tests:
 //   - Pages of two walk the six regular files in path order and end with an empty
-//     token; each object carries the path as Key, the blob SHA as ETag, the size, and
-//     the pinned commit's date as LastModified. Directories, the symlink and the
+//     token; each object carries the path as Key, the blob SHA as ETag, the size, the
+//     pinned commit's date as LastModified and the pinned commit as Revision, so a
+//     reader fetches the same file the listing saw. Directories, the symlink and the
 //     submodule are not listed.
 func TestGitHubSource_ListPagePagesTheTree(t *testing.T) {
 	t.Parallel()
@@ -166,11 +168,12 @@ func TestGitHubSource_ListPagePagesTheTree(t *testing.T) {
 		ContentType:  "",
 		LastModified: ghfixtures.CommitDate,
 		ETag:         strings.Repeat("a1", 20),
+		Revision:     ghfixtures.HeadSHA,
 		Size:         120,
 	}, objs[0])
 
 	assert.Equal(t, []string{
-		ghReadme, "big/data.bin", "docs/guide.md", "docs/img/logo.png",
+		ghReadme, "big/data.bin", ghGuide, "docs/img/logo.png",
 		"go/main.go", "go/vendor/x.go",
 	}, ghKeys(t, src, ghPageSize))
 }
@@ -203,7 +206,7 @@ func TestGitHubSource_ResumeStaysOnOneCommit(t *testing.T) {
 	objs, _, err := resumed.ListPage(t.Context(), token, ghPageSize)
 	require.NoError(t, err)
 	require.Len(t, objs, ghPageSize)
-	assert.Equal(t, "docs/guide.md", objs[0].Key)
+	assert.Equal(t, ghGuide, objs[0].Key)
 
 	_, _, err = resumed.ListPage(t.Context(), "not-a-token", ghPageSize)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -232,7 +235,7 @@ func TestGitHubSource_GlobsFilter(t *testing.T) {
 	assert.NotEmpty(t, next)
 
 	assert.Equal(t,
-		[]string{"docs/guide.md", "docs/img/logo.png", "go/main.go"},
+		[]string{ghGuide, "docs/img/logo.png", "go/main.go"},
 		ghKeys(t, src, ghPageSize))
 }
 

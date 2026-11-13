@@ -6,6 +6,39 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.57] - 2026-11-13
+
+Python: `techai-webutils` 0.13.0.
+
+### Added
+
+- Python `SourceReader` tier (`core/interfaces/source_reader.py`, `core/types/source_item.py`,
+  `clients/source_reader`): reads one document body from a `SourceItem`. Kinds: `stub` (the
+  default, empty bytes), `s3` (`bucket` + `key` through the injected `StorageClient`) and
+  `github` (`path` at `commit` in `owner`/`repo` as App installation `installation_id`, raw
+  media type). The `github` kind signs an RS256 App JWT, caches installation tokens until
+  `token_refresh_margin_seconds` (default 300) before expiry, and codes failures like the Go
+  connector: 404 `NOT_FOUND`, 401 `UNAUTHORIZED`, 5xx `UNAVAILABLE`, a 429 or rate-limited 403
+  a `ThrottledError` carrying GitHub's `Retry-After` / `X-RateLimit-Reset` as
+  `retry_after_ms`, a plain 403 `FORBIDDEN`, other statuses `UPSTREAM`. `decorate` runs `read`
+  through the client tier. The new `github` extra pulls `cryptography`.
+- Go `interfaces.StorageObject.Revision` (`json:"revision,omitempty"`): the source revision an
+  object was listed at. The connector `github` kind sets it to the pinned commit, so a body
+  reader fetches the file the listing saw; object stores leave it empty.
+- Go connector kind `git` (`clients/connector/git`, `connector.KindGit`,
+  `interfaces.ConnectorKindGit`): lists a mounted git work tree's tracked files and its
+  untracked, non-ignored files through the injected `connector.Deps.Git` (`GitDeps.Client`, an
+  `interfaces.GitClient`). `interfaces.SourceConfig.Root` names the work tree; the include and
+  exclude globs apply before paging. `ETag` is the hex SHA-256 of the bytes, `Revision` HEAD's
+  commit (`<commit>+worktree` when the bytes differ from HEAD's); files are read through an
+  `os.Root`, symlinks and files gone since the listing are skipped. A root that is not a work
+  tree, an empty `Root` and a missing GitClient are `INVALID_INPUT`.
+- Python source reader kind `git` (`clients/source_reader/git`, `SourceReaderConfig.git_root`):
+  reads an item's `path` under the work tree root; an empty or absolute path, or one that
+  resolves outside the root (`..`, a symlink), is `INVALID_INPUT`, a missing file `NOT_FOUND`.
+- Python `UnavailableError` and `ThrottledError` take an optional keyword `details`, so a
+  throttle is raised with its `retry_after_ms` pushback in one expression.
+
 ## [0.0.56] - 2026-11-13
 
 Go only: the published Python package is unchanged.
@@ -68,6 +101,7 @@ Go only: the published Python package is unchanged.
   `~/.local/bin` on the process PATH and warns when the shell PATH lacks it. A writable prefix,
   and Windows, keep the plain command. A mocked `CommandRunner` must now expect `npm prefix -g`
   before an npm global install.
+||||||| parent of d02a1f28 (feat(source-reader): add the SourceReader tier with s3 and github kinds)
 
 ## [0.0.54] - 2026-11-13
 

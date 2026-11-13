@@ -56,8 +56,8 @@ type Config struct {
 // Source is the ConnectorSource over one branch of a GitHub repository. The first page
 // pins the branch head's commit, and every continuation token carries it, so a crawl
 // lists one tree even when the branch moves mid-crawl. Each regular file is one object:
-// Key is its path, ETag its blob SHA, Size its byte size and LastModified the pinned
-// commit's committer date. Safe for concurrent use.
+// Key is its path, ETag its blob SHA, Size its byte size, LastModified the pinned
+// commit's committer date and Revision the pinned commit. Safe for concurrent use.
 type Source struct {
 	// tokens yields the installation token each request sends.
 	tokens TokenSource
@@ -320,14 +320,17 @@ func (s *Source) tree(ctx context.Context, pos cursor) (*snapshot, error) {
 		)
 	}
 
-	s.snap = &snapshot{sha: pos.sha, files: s.files(reply.Tree, pos.date)}
+	s.snap = &snapshot{sha: pos.sha, files: s.files(reply.Tree, pos.sha, pos.date)}
 
 	return s.snap, nil
 }
 
 // files are the regular files among entries that pass the globs, in path order, each
-// dated date.
-func (s *Source) files(entries []treeEntry, date string) []interfaces.StorageObject {
+// dated date and stamped with the listed commit sha as its Revision.
+func (s *Source) files(
+	entries []treeEntry,
+	sha, date string,
+) []interfaces.StorageObject {
 	files := make([]interfaces.StorageObject, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Type != blobType || entry.Mode == symlinkMode || !s.keep(entry.Path) {
@@ -339,6 +342,7 @@ func (s *Source) files(entries []treeEntry, date string) []interfaces.StorageObj
 			ContentType:  "",
 			LastModified: date,
 			ETag:         entry.SHA,
+			Revision:     sha,
 			Size:         entry.Size,
 		})
 	}

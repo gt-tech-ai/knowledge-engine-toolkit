@@ -1,6 +1,6 @@
 [project]
 name = "techai-webutils"
-version = "0.12.0"
+version = "0.13.0"
 # The published version, bumped by hand in the release PR whenever the package changes. It must
 # be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
 # earlier release line, so this line continues from 0.4.0.
@@ -88,6 +88,12 @@ langdetect = ["langdetect>=1.0.9"]
 # client (hosts, SigV4 auth, timeouts) and injects it.
 opensearch = ["opensearch-py[async]>=3.2.0"]
 
+# GitHub App source reader (the `github` SourceReader Kind). Optional: only a deployable that reads
+# repository files as a GitHub App installs `techai-webutils[github]`. cryptography signs the App's
+# RS256 JWT; the `clients/source_reader` factory imports the `github` backend lazily, so the default
+# import graph never pulls it.
+github = ["cryptography>=50.0.1"]
+
 # spaCy for the `spacy` Annotator Kind (entities). Optional: only a deployable that annotates text
 # in process installs `techai-webutils[nlp]`; `clients/nlp` imports spaCy lazily in that backend.
 # The `gliner` Kind has no extra: the composition root loads the GLiNER model (and its torch
@@ -174,6 +180,9 @@ dev = [
     # `opensearch` extra.
     "opensearch-py[async]>=3.2.0",
     "testcontainers[postgres,redis]>=4.14.2",
+    # cryptography in dev so basedpyright resolves the `github` source reader and its tests sign and
+    # verify real App JWTs; production consumers pull it via the `github` extra.
+    "cryptography>=50.0.1",
     "ty>=0.0.38",
     # hypothesis drives the property tests (e.g. the token-ledger Decimal cost arithmetic).
     "hypothesis>=6.168.5",
@@ -338,6 +347,7 @@ modules = [
     "techai_webutils.clients.semantic_cache",
     "techai_webutils.clients.sentences",
     "techai_webutils.clients.sink",
+    "techai_webutils.clients.source_reader",
     "techai_webutils.clients.splitting",
     "techai_webutils.clients.start_budget",
     "techai_webutils.clients.storage",
