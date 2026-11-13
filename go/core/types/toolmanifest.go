@@ -270,7 +270,8 @@ type ToolEntry struct {
 	// Description is a one-line summary shown by a tool listing.
 	Description string `yaml:"description,omitempty"`
 
-	// MinVersion is the minimum acceptable version as "major.minor" (optional).
+	// MinVersion is the minimum acceptable version as "major.minor" or
+	// "major.minor.patch" (optional); a patch is compared when given.
 	MinVersion string `yaml:"min_version,omitempty"`
 
 	// VersionParse names the strategy used to extract a version from VersionCmd

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
@@ -157,7 +156,7 @@ func (b *BufferingRunner) runBufferedAndReplay(
 	name string,
 	args ...string,
 ) error {
-	cmdStr := name + textSpace + strings.Join(args, textSpace)
+	cmdStr := commandLine(name, args)
 
 	b.note(">>", cmdStr)
 
@@ -183,7 +182,9 @@ func (b *BufferingRunner) runBufferedAndReplay(
 	if result.Err != nil {
 		b.note("FAIL", cmdStr)
 
-		return apperr.Wrap(result.Err, apperr.CodeInternal, cmdStr+" failed")
+		return apperr.Wrap(
+			result.Err, apperr.CodeInternal, failureMessage(name, args, result.ExitCode),
+		)
 	}
 
 	b.note("ok", cmdStr)

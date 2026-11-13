@@ -133,8 +133,8 @@ func buildInstallMethod(
 	switch installMethodEntry.Kind {
 	case types.InstallKindGoInstall:
 		return types.InstallMethod{
-			Command:  "go",
-			Args:     []string{"install", installMethodEntry.Package},
+			Command:  textGo,
+			Args:     []string{textInstall, installMethodEntry.Package},
 			Download: nil,
 		}
 	case types.InstallKindGitHubRelease:

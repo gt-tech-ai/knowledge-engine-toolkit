@@ -19,12 +19,24 @@ const (
 	// textAt is the literal "@".
 	textAt = "@"
 
+	// textGo is the go command, and the prefix of a Go release name ("go1.27.4").
+	textGo = "go"
+
 	// textCommaSpace is the literal ", ".
 	textCommaSpace = ", "
 
 	// textTool is the literal "tool".
 	textTool = "tool"
 
+	// textInstall is the install subcommand (`go install`, `npm install`).
+	textInstall = "install"
+
 	// textWinget is the literal "winget".
 	textWinget = "winget"
+
+	// envPath is the PATH environment variable.
+	envPath = "PATH"
+
+	// logKeyDir is the log attribute naming a directory.
+	logKeyDir = "dir"
 )

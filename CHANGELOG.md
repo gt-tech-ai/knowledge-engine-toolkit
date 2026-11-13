@@ -6,6 +6,55 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.55] - 2026-11-13
+
+Go only: the published Python package is unchanged.
+
+### Security
+
+- The Python development lock (`python/techai_webutils/uv.lock`) moves `opentelemetry-api`
+  and `opentelemetry-sdk` to 1.45.2 for GHSA-mf5v-w3w3-f6cg. The package's own
+  `>=1.41.0` floors are unchanged.
+- The Go module requires `go.opentelemetry.io/otel` (and `sdk`, `trace`, the OTLP trace
+  exporter, `metric`) 1.47.0 for GHSA-q7gw-24fr-5p69; consumers' builds move to 1.47.0 with
+  it.
+
+### Changed
+
+- `system.Runner.Run` / `RunWithEnv` and `system.BufferingRunner` failures now lead with the
+  program and its exit status, then the command line: `go exited with status 2 (command: go
+  build ./...)` instead of `go build ./... failed`. A CLI that truncates the error to one line
+  still shows why the command failed. A command that never started, or was killed by a signal,
+  reads `<program> failed (command: …)`. The wrapped cause is unchanged.
+- `types.Version` gains `Patch`: `ParseVersion` keeps the patch (its leading digits, so
+  `1.27.4-beta` reads as 1.27.4; none reads as 0), and `MeetsMinimum` compares it after major
+  and minor. A tool entry's `min_version: "1.27.4"` now rejects Go 1.27.1, which used to pass
+  and then failed the build. `String()` prints the patch when it is non-zero. A struct literal
+  of `types.Version` must name `Patch` where `exhaustruct` applies.
+- `toolchain.Installer.CheckPins` also fails a pinned binary that an older Go minor built
+  than the local toolchain (`go env GOVERSION`), with the reinstall command. After a Go upgrade,
+  a mockgen or golines at the pinned version but built by the old Go cannot load packages that
+  need the new one ("package requires newer Go version"); the check used to pass it. When the
+  toolchain version cannot be read, the pin match alone decides. `CheckPins` runs `go env
+  GOVERSION` once per call, so a mocked `CommandRunner` must expect it.
+- `toolchain.Installer.Provision` (setup) and `InstallSet` reinstall a go-install tool whose
+  binary on PATH fails that pin check, logging why. The detector only checks presence and the
+  minimum version, so a binary at the wrong pin, or built by an older Go, used to count as
+  present and was never replaced. Under force every tool is reinstalled and the pin check is
+  skipped. A mocked `CommandRunner` / `PathResolver` for an OK go-install tool must now expect
+  `go env GOVERSION`, the `LookPath` and `go version -m <path>`.
+- `toolchain.Installer.Provision` (setup) puts the go-install bin dir (GOBIN) first on the
+  process PATH, moving it when it is already present further back; it used to add it only
+  when missing. When GOBIN was not first, it warns about each binary there that an earlier
+  PATH directory also holds (a Homebrew `golangci-lint`, an old `wire`), since the user's
+  shell profile still has the old order.
+- `toolchain.Installer.Install` runs an `npm install -g` method with `--prefix ~/.local` when
+  npm's global prefix (`npm prefix -g`, its `lib/node_modules`) is not writable, as with the
+  nodejs.org installer's root-owned `/usr/local`; it used to fail with EACCES. It puts
+  `~/.local/bin` on the process PATH and warns when the shell PATH lacks it. A writable prefix,
+  and Windows, keep the plain command. A mocked `CommandRunner` must now expect `npm prefix -g`
+  before an npm global install.
+
 ## [0.0.54] - 2026-11-13
 
 Go only: the Python package is unchanged.

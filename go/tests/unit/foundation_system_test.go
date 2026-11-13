@@ -388,3 +388,55 @@ const (
 	// textGoversion is the literal "GOVERSION".
 	textGoversion = "GOVERSION"
 )
+
+// Literals for TestRunner_FailureLeadsWithProgramAndStatus.
+const (
+	// textNoSuchGoCmd is a go subcommand that does not exist, so go exits 2.
+	textNoSuchGoCmd = "no-such-subcommand"
+
+	// textLongFlag pads the argv so a truncating display would cut it.
+	textLongFlag = "--a-flag-long-enough-that-a-truncated-display-cuts-the-argv-off"
+
+	// textGoExit2Prefix is how the failure message must begin.
+	textGoExit2Prefix = "go exited with status 2"
+)
+
+// TestRunner_FailureLeadsWithProgramAndStatus tests that a command that exits
+// non-zero yields an error message that starts with the program and its exit
+// status, with the full argv after it.
+//
+// Why this test is important:
+//   - CLIs print these errors on one truncated line; a message that leads with the
+//     full argv (`docker compose --project-name … -f /U...`) hides the exit status,
+//     which is the one fact the reader needs.
+//
+// What it tests:
+//   - Runner.Run and a quiet BufferingRunner over a real Runner both return an
+//     INTERNAL AppError whose Message begins "go exited with status 2" and still
+//     names the argv.
+func TestRunner_FailureLeadsWithProgramAndStatus(t *testing.T) {
+	t.Parallel()
+
+	runners := map[string]system.CommandRunner{
+		"runner":    system.NewRunner(),
+		"buffering": system.NewQuietBufferingRunner(system.NewRunner()),
+	}
+
+	for name, runner := range runners {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			err := runner.Run(
+				context.Background(), "", textGoLower, textNoSuchGoCmd, textLongFlag,
+			)
+
+			var appErr *apperr.AppError
+
+			require.ErrorAs(t, err, &appErr)
+			assert.Equal(t, apperr.CodeInternal, appErr.Code)
+			assert.True(t, strings.HasPrefix(appErr.Message, textGoExit2Prefix),
+				"message %q should lead with the program and status", appErr.Message)
+			assert.Contains(t, appErr.Message, textLongFlag)
+		})
+	}
+}

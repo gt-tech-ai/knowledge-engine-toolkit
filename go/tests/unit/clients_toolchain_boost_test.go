@@ -184,7 +184,7 @@ func TestClientsToolchainDetector_CheckPrerequisites_Outdated(t *testing.T) {
 		[]types.ToolDef{fixtures.Build(func(row *types.ToolDef) {
 			row.Name = "Go"
 			row.Binary = textGoLower
-			row.MinVersion = &types.Version{Major: 1, Minor: 30}
+			row.MinVersion = &types.Version{Major: 1, Minor: 30, Patch: 0}
 			row.VersionCmd = []string{textGoLower, textVersion}
 			row.VersionParse = types.ParseFirstVersion
 			row.FallbackURL = "https://go.dev/dl/"

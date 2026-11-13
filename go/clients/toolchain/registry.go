@@ -22,8 +22,11 @@
 //   - download.go — the pinned download kinds (github-release, url): fetch the host's
 //     os-arch artifact through the [Downloader] seam, refuse it unless its SHA-256
 //     matches the manifest, and atomically place the (extracted) binary in GOBIN.
+//   - npm.go — moves an `npm install -g` to the ~/.local prefix when the global prefix
+//     is not writable, instead of failing with EACCES.
 //   - pins.go — [Installer.CheckPins] compares each go-installed CI tool on PATH with
-//     the build the manifest pins.
+//     the build the manifest pins, and fails one an older Go minor built; setup and
+//     [Installer.InstallSet] reinstall a tool that fails it.
 //
 // The two tool representations (lightweight [Tool], heavy [types.ToolDef]) coexist,
 // both projected from the same manifest list but serving different consumers.

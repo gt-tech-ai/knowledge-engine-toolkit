@@ -112,27 +112,27 @@ func testClientsToolchainDetectorScanClassificationTable() []types.ToolDef {
 		fixtures.Build(func(row *types.ToolDef) {
 			row.Name = "current"
 			row.Binary = textGoLower
-			row.MinVersion = &types.Version{Major: 1, Minor: minor}
+			row.MinVersion = &types.Version{Major: 1, Minor: minor, Patch: 0}
 			row.VersionCmd = []string{textGoLower, textVersion}
 			row.VersionParse = goVersionParse
 		}),
 		fixtures.Build(func(row *types.ToolDef) {
 			row.Name = textStale
 			row.Binary = "node"
-			row.MinVersion = &types.Version{Major: major, Minor: 0}
+			row.MinVersion = &types.Version{Major: major, Minor: 0, Patch: 0}
 			row.VersionCmd = []string{"node", textVersionFlag}
 			row.VersionParse = types.ParseFirstVersion
 		}),
 		fixtures.Build(func(row *types.ToolDef) {
 			row.Name = "broken-version-cmd"
 			row.Binary = textBuf
-			row.MinVersion = &types.Version{Major: 1, Minor: 0}
+			row.MinVersion = &types.Version{Major: 1, Minor: 0, Patch: 0}
 			row.VersionCmd = []string{textBuf, textVersionFlag}
 		}),
 		fixtures.Build(func(row *types.ToolDef) {
 			row.Name = "unparseable-version"
 			row.Binary = "atlas"
-			row.MinVersion = &types.Version{Major: 1, Minor: 0}
+			row.MinVersion = &types.Version{Major: 1, Minor: 0, Patch: 0}
 			row.VersionCmd = []string{"atlas", textVersion}
 		}),
 	}
@@ -203,7 +203,7 @@ func TestClientsToolchainSummarizeMissing_OutdatedAndPrereq(t *testing.T) {
 	outdated := []types.ToolCheckResult{{
 		Tool: fixtures.BuildRef(func(row *types.ToolDef) {
 			row.Name = textGolangciLint
-			row.MinVersion = &types.Version{Major: 1, Minor: minorPrereq}
+			row.MinVersion = &types.Version{Major: 1, Minor: minorPrereq, Patch: 0}
 			row.FallbackURL = "https://golangci-lint.run"
 		}),
 		Status:  types.StatusToolOutdated,
