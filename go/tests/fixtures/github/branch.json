@@ -1,0 +1,11 @@
+{
+  "name": "main",
+  "commit": {
+    "sha": "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00",
+    "commit": {
+      "committer": {"name": "Octo Cat", "date": "2026-11-12T09:30:00Z"},
+      "tree": {"sha": "7ee7ee007ee7ee007ee7ee007ee7ee007ee7ee00"}
+    }
+  },
+  "protected": true
+}

@@ -1,0 +1,104 @@
+{
+  "sha": "7ee7ee007ee7ee007ee7ee007ee7ee007ee7ee00",
+  "url": "https://api.github.com/repos/acme/widgets/git/trees/7ee7ee007ee7ee007ee7ee007ee7ee007ee7ee00",
+  "tree": [
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "size": 120,
+      "url": "https://api.github.com/repos/acme/widgets/git/blobs/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+    },
+    {
+      "path": "big",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+      "url": "https://api.github.com/repos/acme/widgets/git/trees/b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+    },
+    {
+      "path": "big/data.bin",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1",
+      "size": 50000000,
+      "url": "https://api.github.com/repos/acme/widgets/git/blobs/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+    },
+    {
+      "path": "docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0",
+      "url": "https://api.github.com/repos/acme/widgets/git/trees/d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0"
+    },
+    {
+      "path": "docs/guide.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1",
+      "size": 2048,
+      "url": "https://api.github.com/repos/acme/widgets/git/blobs/d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1"
+    },
+    {
+      "path": "docs/img",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2",
+      "url": "https://api.github.com/repos/acme/widgets/git/trees/d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"
+    },
+    {
+      "path": "docs/img/logo.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3",
+      "size": 50000,
+      "url": "https://api.github.com/repos/acme/widgets/git/blobs/d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3"
+    },
+    {
+      "path": "go",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0",
+      "url": "https://api.github.com/repos/acme/widgets/git/trees/e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0"
+    },
+    {
+      "path": "go/main.go",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1",
+      "size": 900,
+      "url": "https://api.github.com/repos/acme/widgets/git/blobs/e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1"
+    },
+    {
+      "path": "go/vendor",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2",
+      "url": "https://api.github.com/repos/acme/widgets/git/trees/e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2"
+    },
+    {
+      "path": "go/vendor/x.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3",
+      "size": 10,
+      "url": "https://api.github.com/repos/acme/widgets/git/blobs/e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3"
+    },
+    {
+      "path": "latest",
+      "mode": "120000",
+      "type": "blob",
+      "sha": "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1",
+      "size": 9,
+      "url": "https://api.github.com/repos/acme/widgets/git/blobs/f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1"
+    },
+    {
+      "path": "third_party/lib",
+      "mode": "160000",
+      "type": "commit",
+      "sha": "f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2"
+    }
+  ],
+  "truncated": false
+}

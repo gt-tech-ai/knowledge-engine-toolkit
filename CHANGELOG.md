@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Go connector kind `github` (`clients/connector/github`, `connector.KindGitHub`): lists one
+  branch of a repository as a GitHub App installation. The first page pins the head commit, so
+  a resumed crawl stays on one tree; `Key` is the path, `ETag` the blob SHA, `Size` the size,
+  `LastModified` the commit date. Include and exclude globs apply before paging; symlinks and
+  submodules are skipped; a truncated tree is `INVALID_INPUT`. Installation tokens are cached
+  until five minutes before expiry. `connector.Config.GitHubBaseURL` selects GitHub Enterprise
+  Server; `connector.Deps.GitHub` injects the HTTP doer and clock.
+- `interfaces.SourceConfig` gains `Owner`, `Repo`, `Branch`, `IncludeGlobs`, `ExcludeGlobs`,
+  `GitHubAppID`, `InstallationID` and `AppPrivateKey`, and `interfaces.ConnectorKindGitHub`.
+- `interfaces.Secret`: a string that formats (`%v`, `%+v`, `%s`, `%#v`) and marshals as
+  `[REDACTED]`; `SourceConfig.AppPrivateKey` uses it.
+
 ## [0.0.53] - 2026-11-12
 
 Python: `techai-webutils` 0.12.0. The Go module is unchanged.

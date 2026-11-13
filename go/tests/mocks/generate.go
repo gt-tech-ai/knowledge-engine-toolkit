@@ -28,6 +28,7 @@
 //go:generate mockgen -destination=mock_fs.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces FS
 //go:generate mockgen -destination=mock_config_loader.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConfigLoader
 //go:generate mockgen -destination=mock_connector.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ConnectorSource,SourceBuilder
+//go:generate mockgen -destination=mock_connector_github.go -package=mocks -mock_names=TokenSource=MockGitHubTokenSource github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/connector/github TokenSource
 //go:generate mockgen -destination=mock_deadletter.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DeadLetterBackend
 //go:generate mockgen -destination=mock_dedup.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Deduplicator
 //go:generate mockgen -destination=mock_docker.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces DockerClient

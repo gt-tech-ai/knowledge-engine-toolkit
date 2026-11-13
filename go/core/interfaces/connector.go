@@ -1,6 +1,10 @@
 package interfaces
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"io"
+)
 
 // ConnectorSource is the connector-family read seam any connector type satisfies — an
 // object store now (S3), a record system (Salesforce) or a file SaaS (GDrive/SharePoint)
@@ -49,11 +53,18 @@ const ConnectorKindS3 ConnectorKind = "s3"
 // the caller; the snapshot is as fresh as the latest report.
 const ConnectorKindS3Inventory ConnectorKind = "s3_inventory"
 
+// ConnectorKindGitHub lists one branch of a GitHub repository as a GitHub App
+// installation sees it: the branch head's recursive git tree, each file an object keyed
+// by its path with its blob SHA as the ETag. A crawl stays on the commit its first page
+// pinned, so a push mid-crawl never mixes two trees.
+const ConnectorKindGitHub ConnectorKind = "github"
+
 // SourceConfig is the primitive, domain-free, AWS-free description a SourceBuilder turns
 // into a ConnectorSource. The consumer maps its own connector record + decrypted
 // credentials onto this at its composition root, so this package never imports consumer
 // types. Its credential fields are already-decrypted plaintext (the consumer owns
-// encryption-at-rest); never log them.
+// encryption-at-rest); never log them. A Secret field formats and marshals as
+// [REDACTED].
 type SourceConfig struct {
 	// Kind selects the connector backend.
 	Kind ConnectorKind
@@ -97,6 +108,54 @@ type SourceConfig struct {
 	// InventoryManifestKey, the source reads the newest report under it whose
 	// manifest.checksum is written (S3 writes it beside a finished manifest.json).
 	InventoryPrefix string
+	// Owner is the repository's owner, a user or organization login (github kind).
+	Owner string
+	// Repo is the repository's name (github kind).
+	Repo string
+	// Branch is the branch listed (github kind); empty means the repository's default
+	// branch.
+	Branch string
+	// AppPrivateKey is the GitHub App's PEM-encoded RSA private key (github kind;
+	// already-decrypted plaintext, redacted when formatted).
+	AppPrivateKey Secret
+	// IncludeGlobs keeps only the paths matching at least one pattern (github kind);
+	// empty keeps every path. A "**" segment matches any number of whole segments.
+	IncludeGlobs []string
+	// ExcludeGlobs drops the paths matching any pattern, after IncludeGlobs (github
+	// kind).
+	ExcludeGlobs []string
+	// GitHubAppID is the GitHub App's numeric id, the JWT issuer (github kind).
+	GitHubAppID int64
+	// InstallationID is the App installation the access token is minted for (github
+	// kind).
+	InstallationID int64
+}
+
+// redactedSecret is how a set Secret formats and marshals.
+const redactedSecret = "[REDACTED]"
+
+// Secret is a credential held as plaintext in memory that prints as [REDACTED] (an empty
+// one as "") under every fmt verb and marshals as text the same way, so a config
+// formatted into an error, a log line or a debug dump leaks nothing. Read the plaintext
+// with string(s), only where the credential is used.
+type Secret string
+
+// Format writes [REDACTED] for a set secret and nothing for an empty one, whatever the
+// verb and flags.
+func (s Secret) Format(state fmt.State, _ rune) {
+	if s != "" {
+		_, _ = io.WriteString(state, redactedSecret)
+	}
+}
+
+// MarshalText returns [REDACTED] for a set secret and nothing for an empty one, so JSON
+// and other text encoders never emit the plaintext.
+func (s Secret) MarshalText() ([]byte, error) {
+	if s == "" {
+		return []byte{}, nil
+	}
+
+	return []byte(redactedSecret), nil
 }
 
 // SourceBuilder builds a ConnectorSource from a SourceConfig, failing loudly on an

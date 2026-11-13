@@ -619,7 +619,9 @@ Most tiers ship an in-process, stub, or no-op backend, so wiring needs no cloud 
   executor `asyncio`.
 
 Go cache (Redis), database (Postgres) and connector (S3, S3 Inventory) have no stub and are covered by
-testcontainers integration tests. `tests/unit/clients_all_stubs_no_network_test.py` builds each
+testcontainers integration tests. The connector `github` kind has no stub either; no container
+stands in for GitHub, so unit tests cover it over GitHub's documented REST reply shapes
+(`tests/fixtures/github`). `tests/unit/clients_all_stubs_no_network_test.py` builds each
 Python stub kind with every real backend constructor patched to fail.
 
 ## What belongs here
@@ -976,7 +978,22 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   `Key`, `ETag` and `Size` columns (without ETags every crawl reads as changed; without
   sizes the oversized-object cap never fires).
 
-Both kinds authenticate through `connector/s3.NewStorage` (access key, or STS AssumeRole with
+- **`github`** lists one branch of a GitHub repository (`Owner`, `Repo`, `Branch`; empty is the
+  default branch) as a GitHub App installation (`GitHubAppID`, `InstallationID`,
+  `AppPrivateKey`, an `interfaces.Secret` that formats and marshals as `[REDACTED]`). The App
+  JWT (RS256) buys an installation token, cached until five minutes before it expires. The
+  first page pins the branch head's commit and every token carries it
+  (`v1/<commit>/<offset>/<commit date>`), so a crawl lists one tree even if the branch moves.
+  Each regular file of the recursive tree that passes `IncludeGlobs` and `ExcludeGlobs`
+  (`foundation/codebase.Glob`) is one object: `Key` its path, `ETag` its blob SHA, `Size` its
+  size (an oversized file is listed, so the engine's size cap skips it), `LastModified` the
+  commit's committer date. Symlinks and submodules are skipped. A tree GitHub truncated is
+  `INVALID_INPUT` (list such a repository with a clone); a missing repository or branch is
+  `INVALID_INPUT`; a 5xx, a 429 or a rate-limited 403 is `UNAVAILABLE`. The builder's
+  `Config.GitHubBaseURL` points it at GitHub Enterprise Server; `Deps.GitHub` injects the HTTP
+  doer and the clock.
+
+The S3 kinds authenticate through `connector/s3.NewStorage` (access key, or STS AssumeRole with
 the tenant's ExternalID) and classify object-store failures with `ClassifyListError`
 (configuration → `INVALID_INPUT`, transport and throttling → `UNAVAILABLE`).
 
