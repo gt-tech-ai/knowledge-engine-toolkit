@@ -15,6 +15,9 @@ Go only: the published Python package is unchanged.
 - The Python development lock (`python/techai_webutils/uv.lock`) moves `opentelemetry-api`
   and `opentelemetry-sdk` to 1.45.2 for GHSA-mf5v-w3w3-f6cg. The package's own
   `>=1.41.0` floors are unchanged.
+- The Go module requires `go.opentelemetry.io/otel` (and `sdk`, `trace`, the OTLP trace
+  exporter, `metric`) 1.47.0 for GHSA-q7gw-24fr-5p69; consumers' builds move to 1.47.0 with
+  it.
 
 ### Changed
 
