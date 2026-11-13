@@ -14,6 +14,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/system"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
@@ -120,7 +121,8 @@ func TestRunner_ContextCancelled(t *testing.T) {
 // What it tests:
 //   - RunBuffered/RunBufferedWithEnv accumulate stdout+stderr into Captured();
 //     Run returns nil on inner success and a wrapped error (naming the command) on
-//     inner failure while still capturing output; RunWithEnv delegates to the
+//     inner failure while still capturing output, its stderr tail under
+//     DetailStderrTail as a streamed Run's; RunWithEnv delegates to the
 //     inner env path; Exists/RequireTool delegate; both quiet and replay
 //     constructors work.
 func TestBufferingRunner(t *testing.T) {
@@ -166,7 +168,19 @@ func TestBufferingRunner(t *testing.T) {
 	assert.True(t, bufferingRunner.Exists("anything"), "Exists delegates")
 	require.NoError(t, bufferingRunner.RequireTool(textX, ""), "RequireTool delegates")
 
-	// Run (no env) wraps a failing inner result and still captures its output.
+	testBufferingRunnerFailure(t, ctrl)
+
+	// Run (no env) success path.
+	okInner := mocks.NewMockCommandRunner(ctrl)
+
+	testBufferingRunnerCommands(t, ctrl, okInner)
+}
+
+// testBufferingRunnerFailure continues TestBufferingRunner: Run (no env) wraps a
+// failing inner result, still captures its output, and carries its stderr tail.
+func testBufferingRunnerFailure(t *testing.T, ctrl *gomock.Controller) {
+	t.Helper()
+
 	failingInner := mocks.NewMockCommandRunner(ctrl)
 	failingInner.EXPECT().
 		RunBuffered(gomock.Any(), "", textTool, "arg").
@@ -181,10 +195,11 @@ func TestBufferingRunner(t *testing.T) {
 	assert.Contains(t, err.Error(), "tool arg", "wrapped error names the command")
 	assert.Equal(t, textBoom, string(failing.Captured()))
 
-	// Run (no env) success path.
-	okInner := mocks.NewMockCommandRunner(ctrl)
+	var failure *apperr.AppError
 
-	testBufferingRunnerCommands(t, ctrl, okInner)
+	require.ErrorAs(t, err, &failure)
+	assert.Equal(t, textBoom, failure.Details[interfaces.DetailStderrTail],
+		"the failure carries its stderr tail as a streamed Run's does")
 }
 
 // testBufferingRunnerCommands continues TestBufferingRunner: commands.
@@ -439,4 +454,64 @@ func TestRunner_FailureLeadsWithProgramAndStatus(t *testing.T) {
 			assert.Contains(t, appErr.Message, textLongFlag)
 		})
 	}
+}
+
+// Literals for TestRunner_StreamedFailureCarriesStderrTail.
+const (
+	// textGoUsageLine is the last line go writes to stderr for an unknown command.
+	textGoUsageLine = "Run 'go help' for usage."
+
+	// longSubcommandLen makes go's stderr longer than the runner keeps.
+	longSubcommandLen = 10_000
+)
+
+// TestRunner_StreamedFailureCarriesStderrTail tests that a streamed command that
+// fails returns the end of its standard error on the error, while still streaming it.
+//
+// Why this test is important:
+//   - A streamed command writes its stderr to the terminal, not to a buffer, so a
+//     caller that reports the failure afterwards (a procedure's failed row, a run
+//     summary) has only "docker exited with status 1 (command: …)" and never the
+//     cause compose printed. The tail must ride on the error.
+//   - The tail is bounded: a command that floods stderr must not put megabytes into
+//     an error that is logged and rendered.
+//
+// What it tests:
+//   - RunWithEnv of a failing go command streams its stderr to the configured writer
+//     and returns an AppError whose DetailStderrTail detail is that stderr, trimmed.
+//   - With stderr longer than the bound, the detail is shorter than what streamed and
+//     keeps its end (go's closing usage line).
+//   - A command that succeeds returns no error.
+func TestRunner_StreamedFailureCarriesStderrTail(t *testing.T) {
+	t.Parallel()
+
+	for name, subcommand := range map[string]string{
+		"short": textNoSuchGoCmd,
+		"long":  strings.Repeat("x", longSubcommandLen),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var streamed bytes.Buffer
+
+			runner := system.NewRunner(system.WithOutput(io.Discard, &streamed))
+			err := runner.RunWithEnv(t.Context(), "", nil, textGoLower, subcommand)
+
+			var appErr *apperr.AppError
+
+			require.ErrorAs(t, err, &appErr)
+
+			tail := appErr.Details[interfaces.DetailStderrTail]
+			assert.True(t, strings.HasSuffix(tail, textGoUsageLine), "tail %q", tail)
+
+			if name == "short" {
+				assert.Equal(t, strings.TrimSpace(streamed.String()), tail)
+			} else {
+				assert.Less(t, len(tail), streamed.Len(), "the tail is bounded")
+			}
+		})
+	}
+
+	require.NoError(t, system.NewRunner(system.WithOutput(io.Discard, io.Discard)).
+		RunWithEnv(t.Context(), "", nil, textGoLower, "version"))
 }

@@ -67,12 +67,14 @@ func NewRunner(opts ...RunnerOption) *Runner {
 
 // Run executes a command, streaming its stdout/stderr to the runner's writers. A
 // failure is an INTERNAL error whose message leads with the program and its exit
-// status ("go exited with status 2 (command: go …)") and wraps the *exec.ExitError.
+// status ("go exited with status 2 (command: go …)") and wraps the *exec.ExitError;
+// it carries the last of the child's stderr under interfaces.DetailStderrTail.
 func (d *Runner) Run(ctx context.Context, dir, name string, args ...string) error {
 	return d.execWithEnv(ctx, dir, nil, name, args...)
 }
 
-// RunWithEnv executes a command with extra environment variables appended.
+// RunWithEnv executes a command with extra environment variables appended; it
+// streams and fails as Run does.
 func (d *Runner) RunWithEnv(
 	ctx context.Context,
 	dir string,
@@ -212,7 +214,10 @@ func (d *Runner) stderrWriter() io.Writer {
 	return os.Stderr
 }
 
-// execWithEnv is the shared implementation for Run and RunWithEnv.
+// execWithEnv is the shared implementation for Run and RunWithEnv. The child's stderr
+// is teed into a bounded tail, and a failed exit carries that tail as the error's
+// interfaces.DetailStderrTail detail: the stream went to the terminal, so without it
+// a caller reporting the failure later has only the exit status.
 func (d *Runner) execWithEnv(
 	ctx context.Context,
 	dir string,
@@ -228,7 +233,10 @@ func (d *Runner) execWithEnv(
 
 	cmd.Dir = dir
 	cmd.Stdout = d.stdoutWriter()
-	cmd.Stderr = d.stderrWriter()
+
+	tail := new(tailBuffer)
+
+	cmd.Stderr = io.MultiWriter(d.stderrWriter(), tail)
 	cmd.Env = types.MergeEnv(os.Environ(), extraEnv)
 	configureProcessGroup(cmd)
 
@@ -245,10 +253,27 @@ func (d *Runner) execWithEnv(
 			exitCode = cmd.ProcessState.ExitCode()
 		}
 
-		return apperr.Wrap(err, apperr.CodeInternal, failureMessage(name, args, exitCode))
+		return withStderrTail(
+			apperr.Wrap(err, apperr.CodeInternal, failureMessage(name, args, exitCode)),
+			tail.String(),
+		)
 	}
 
 	return nil
+}
+
+// withStderrTail attaches a streamed command's stderr tail to its failure under
+// interfaces.DetailStderrTail; the message is unchanged, and an empty tail adds none.
+func withStderrTail(err error, tail string) error {
+	var failure *apperr.AppError
+
+	if tail == "" || !apperr.As(err, &failure) {
+		return err
+	}
+
+	return apperr.WithDetails(failure, map[string]string{
+		interfaces.DetailStderrTail: tail,
+	})
 }
 
 // commandLine joins name and args into the command line as typed.

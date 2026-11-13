@@ -117,8 +117,8 @@ func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
 		DoAndReturn(func(_ context.Context, _ string, env []string, exe string,
 			args ...string,
 		) error {
-			if _, failed := r.recordStreamed(env, exe, args); failed {
-				return apperr.Sentinel("exit 1")
+			if out, failed := r.recordStreamed(env, exe, args); failed {
+				return streamedFailure(out)
 			}
 
 			return nil
@@ -126,6 +126,20 @@ func (r *recorder) runner(ctrl *gomock.Controller) *mocks.MockCommandRunner {
 		AnyTimes()
 
 	return commandRunner
+}
+
+// streamedFailure is how a runner fails a streamed command: a coded error carrying
+// the stderr tail (none when stderr is empty) under DetailStderrTail, wrapped again
+// as a runner decorator would.
+func streamedFailure(stderr string) error {
+	failure := apperr.New(apperr.CodeInternal, "exit 1")
+	if stderr != "" {
+		failure = apperr.WithDetails(failure, map[string]string{
+			interfaces.DetailStderrTail: stderr,
+		})
+	}
+
+	return apperr.Wrap(failure, apperr.CodeInternal, "decorated runner")
 }
 
 // procEngine builds procs over rec with every tool run directly by its name.
@@ -790,12 +804,14 @@ func TestServicesProcedure_SuiteEntry(t *testing.T) {
 //     database defaults, an optional override), so an env entry must expand like an
 //     argument: a `{name...}` splat and a `${expr}` list, not only a placeholder; and a
 //     long job (a seed, a test run) must stream its output to the operator instead of
-//     buffering it until it ends.
+//     buffering it until it ends. A streamed step's stderr went to the terminal, so
+//     its failed row must still show the cause from the error's stderr tail.
 //
 // What it tests:
 //   - env entries splat a list input, keep a literal, and append a `${expr}` list (empty
 //     when the expression yields none); a `stream: true` step runs through RunWithEnv
-//     with its env, passes when the command does and fails when it does not; a streamed
+//     with its env, passes when the command does and fails when it does not, the failed
+//     row's Detail holding the DetailStderrTail its (wrapped) error carries; a streamed
 //     step with an exit capture never fails (a non-zero status is a warning naming it)
 //     and sets the status for a later condition, and a Go step's `sets` declares the
 //     variables a condition may read; a stream step that captures its text is refused
@@ -804,7 +820,7 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 	t.Parallel()
 
 	rec := fixtures.BuildRef(func(row *recorder) {
-		row.out = map[string]string{textUvFail: textBang}
+		row.out = map[string]string{textUvFail: textBang + textBoom}
 	})
 	procs := testServicesProcedureEnvAndStreamTable()
 	eng := procEngine(t, rec, procs, fixtures.BuildRef(func(row *procedure.Deps) {
@@ -837,6 +853,13 @@ func TestServicesProcedure_EnvAndStream(t *testing.T) {
 	assert.Equal(t, types.StatusPass, statusOf["streamed"])
 	assert.Equal(t, types.StatusFail, statusOf[textBroken])
 	assert.Equal(t, types.StatusWarn, statusOf[textProbe], "an exit capture never fails")
+
+	for _, row := range res {
+		if row.Name == textBroken {
+			assert.Equal(t, textBoom, string(row.Detail),
+				"a failed streamed row shows the stderr tail its error carries")
+		}
+	}
 
 	testServicesProcedureEnvAndStreamChecksCalls(t, rec, eng, statusByName, statusOf)
 }

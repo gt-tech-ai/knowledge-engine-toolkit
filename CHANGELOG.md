@@ -6,6 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.56] - 2026-11-13
+
+Go only: the published Python package is unchanged.
+
+### Added
+
+- A failed `system.Runner.Run` / `RunWithEnv` (and `system.BufferingRunner.Run`) carries the
+  last 4 KiB of the command's stderr, trimmed to whole lines, as the `AppError` detail
+  `interfaces.DetailStderrTail`. The stream still goes to the terminal as it ran; the error
+  message is unchanged.
+- A procedure's failed `stream: true` step shows that stderr tail as its row's detail, found
+  through any wrapping a runner decorator adds. Before, the row had only the exit status and
+  the command line, so the cause scrolled away with the stream.
+
 ## [0.0.55] - 2026-11-13
 
 Go only: the published Python package is unchanged.

@@ -89,3 +89,9 @@ type CmdResult struct {
 	// tests collected") without parsing Err.
 	ExitCode int
 }
+
+// DetailStderrTail is the AppError detail key under which a streamed command's
+// failure (Run, RunWithEnv) carries the last lines of its standard error. Streamed
+// output goes straight to the terminal, so without it a caller that reports the
+// failure later (a procedure's failed row) has only the exit status and argv.
+const DetailStderrTail = "stderr_tail"
