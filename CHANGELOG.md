@@ -13,6 +13,11 @@ All notable changes to this project are recorded here. The format follows
   build ./...)` instead of `go build ./... failed`. A CLI that truncates the error to one line
   still shows why the command failed. A command that never started, or was killed by a signal,
   reads `<program> failed (command: …)`. The wrapped cause is unchanged.
+- `types.Version` gains `Patch`: `ParseVersion` keeps the patch (its leading digits, so
+  `1.27.4-beta` reads as 1.27.4; none reads as 0), and `MeetsMinimum` compares it after major
+  and minor. A tool entry's `min_version: "1.27.4"` now rejects Go 1.27.1, which used to pass
+  and then failed the build. `String()` prints the patch when it is non-zero. A struct literal
+  of `types.Version` must name `Patch` where `exhaustruct` applies.
 
 ## [0.0.54] - 2026-11-13
 

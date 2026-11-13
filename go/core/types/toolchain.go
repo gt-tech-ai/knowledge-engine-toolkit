@@ -18,25 +18,40 @@ const minVersionParts = 2
 // Tool lifecycle model (ToolDef): detection + installation
 // ---------------------------------------------------------------------------
 
-// Version represents a semantic version with major and minor components.
+// Version represents a semantic version: major, minor and an optional patch.
 type Version struct {
 	// Major is the major version component.
 	Major int
 
 	// Minor is the minor version component.
 	Minor int
+
+	// Patch is the patch component; 0 when the version names none.
+	Patch int
 }
 
-// String returns the version as "Major.Minor".
-func (v Version) String() string { return fmt.Sprintf("%d.%d", v.Major, v.Minor) }
+// String returns the version as "Major.Minor", or "Major.Minor.Patch" when Patch
+// is non-zero.
+func (v Version) String() string {
+	if v.Patch == 0 {
+		return fmt.Sprintf("%d.%d", v.Major, v.Minor)
+	}
 
-// MeetsMinimum returns true if v >= required.
+	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+}
+
+// MeetsMinimum returns true if v >= required, comparing major, then minor, then
+// patch, so a toolchain one patch behind a patch-level minimum fails it.
 func (v Version) MeetsMinimum(required Version) bool {
 	if v.Major != required.Major {
 		return v.Major > required.Major
 	}
 
-	return v.Minor >= required.Minor
+	if v.Minor != required.Minor {
+		return v.Minor > required.Minor
+	}
+
+	return v.Patch >= required.Patch
 }
 
 // InstallMethod describes how to install a tool on a given platform: either a
@@ -117,6 +132,8 @@ func isVersionDigit(c rune) bool {
 }
 
 // ParseVersion parses a version string like "3.12.4" or "v1.26" into a Version.
+// The patch keeps only its leading digits ("4-beta" reads as 4); a missing or
+// non-numeric patch reads as 0.
 func ParseVersion(text string) (Version, error) {
 	text = strings.TrimPrefix(text, "v")
 	text = strings.TrimSpace(text)
@@ -142,5 +159,27 @@ func ParseVersion(text string) (Version, error) {
 			fmt.Sprintf("invalid minor version %q", parts[1]))
 	}
 
-	return Version{Major: major, Minor: minor}, nil
+	return Version{Major: major, Minor: minor, Patch: parsePatch(parts)}, nil
+}
+
+// parsePatch returns the leading digits of the third dotted part as the patch,
+// or 0 when there is no third part or it starts with a non-digit.
+func parsePatch(parts []string) int {
+	if len(parts) < maxVersionParts {
+		return 0
+	}
+
+	digits := parts[maxVersionParts-1]
+
+	end := strings.IndexFunc(digits, func(c rune) bool { return !isVersionDigit(c) })
+	if end >= 0 {
+		digits = digits[:end]
+	}
+
+	patch, err := strconv.Atoi(digits)
+	if err != nil {
+		return 0
+	}
+
+	return patch
 }
