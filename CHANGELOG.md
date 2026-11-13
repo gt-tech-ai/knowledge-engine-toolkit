@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.56] - 2026-11-13
+
+Go only: the published Python package is unchanged.
+
 ### Added
 
 - A failed `system.Runner.Run` / `RunWithEnv` (and `system.BufferingRunner.Run`) carries the
