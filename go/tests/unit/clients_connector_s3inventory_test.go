@@ -189,6 +189,7 @@ func TestS3Inventory_PagesMatchTheS3Kind(t *testing.T) {
 			BuildS3Client: stubBuilder(storageClient, nil),
 			Decorations:   decorate.Decorations{},
 			STS:           nil,
+			GitHub:        nil,
 		},
 	)
 	inventory, err := sourceBuilder.Build(ctx, new(inventoryCfg()))
@@ -381,6 +382,7 @@ func TestConnectorKind_S3StaysTheDefault(t *testing.T) {
 			BuildS3Client: stubBuilder(storageClient, nil),
 			Decorations:   decorate.Decorations{},
 			STS:           nil,
+			GitHub:        nil,
 		},
 	)
 

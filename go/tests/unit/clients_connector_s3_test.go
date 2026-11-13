@@ -372,12 +372,16 @@ func TestS3ConnectorSource_RejectsInvalidAuthConfig(t *testing.T) {
 
 		cfg.ExternalID = ""
 
-		b := connector.NewSourceBuilder(stdx.Zero[connector.Config](), connector.Deps{
-			BuildS3Client: stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
-			STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
-			Decorations:   decorate.Decorations{},
-		})
-		_, err := b.Build(ctx, &cfg)
+		builder := connector.NewSourceBuilder(
+			stdx.Zero[connector.Config](),
+			connector.Deps{
+				BuildS3Client: stubBuilder(mocks.NewMockStorageClient(ctrl), nil),
+				STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
+				Decorations:   decorate.Decorations{},
+				GitHub:        nil,
+			},
+		)
+		_, err := builder.Build(ctx, &cfg)
 		require.True(t, apperr.Is(err, apperr.CodeInvalidInput), textVLowerAlt, err)
 	})
 }
@@ -738,12 +742,16 @@ func TestConnectorSourceBuilder_Build(t *testing.T) {
 					row.Key = textDocsA
 				})}, nil)
 
-			b := connector.NewSourceBuilder(stdx.Zero[connector.Config](), connector.Deps{
-				BuildS3Client: stubBuilder(storageClient, nil),
-				STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
-				Decorations:   decorate.Decorations{},
-			})
-			src, err := b.Build(ctx, new(s3Cfg(textAccessKey)))
+			builder := connector.NewSourceBuilder(
+				stdx.Zero[connector.Config](),
+				connector.Deps{
+					BuildS3Client: stubBuilder(storageClient, nil),
+					STS:           mocks.NewMockAssumeRoleAPIClient(ctrl),
+					Decorations:   decorate.Decorations{},
+					GitHub:        nil,
+				},
+			)
+			src, err := builder.Build(ctx, new(s3Cfg(textAccessKey)))
 			require.NoError(t, err)
 
 			n, err := src.TestConnection(ctx)
