@@ -1289,6 +1289,12 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
   `clients/semantic_cache/verifier`). `clients/semantic_cache/admission` decides which queries
   are cached at all.
 - **Usage tap:** `clients/decorators/usage_tap.UsageTapProvider` (see Decorators).
+- **Source reader:** `core/interfaces/source_reader.py` (`SourceReader.read(SourceItem)`),
+  `core/types/source_item.py` and `clients/source_reader` (`stub`; `s3`, through the injected
+  `StorageClient`; `github`, a file at a commit read as a GitHub App installation, behind the
+  `github` extra; `decorate` runs `read` through the client tier). Ingestion reads document
+  bodies in Python; Go's `clients/connector/github` lists a repository and mints the same
+  installation tokens, but reads no bodies.
 - **Object tags on upload:** Python's `StorageClient.upload` takes keyword-only `tags`; Go's
   `StorageObjects.Upload` does not, since only the Python Bedrock sink (`object_tags`) tags
   what it writes.

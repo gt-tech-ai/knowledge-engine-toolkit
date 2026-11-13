@@ -6,6 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Python `SourceReader` tier (`core/interfaces/source_reader.py`, `core/types/source_item.py`,
+  `clients/source_reader`): reads one document body from a `SourceItem`. Kinds: `stub` (the
+  default, empty bytes), `s3` (`bucket` + `key` through the injected `StorageClient`) and
+  `github` (`path` at `commit` in `owner`/`repo` as App installation `installation_id`, raw
+  media type). The `github` kind signs an RS256 App JWT, caches installation tokens until
+  `token_refresh_margin_seconds` (default 300) before expiry, and codes failures like the Go
+  connector: 404 `NOT_FOUND`, 401 `UNAUTHORIZED`, 5xx `UNAVAILABLE`, a 429 or rate-limited 403
+  a `ThrottledError` carrying GitHub's `Retry-After` / `X-RateLimit-Reset` as
+  `retry_after_ms`, a plain 403 `FORBIDDEN`, other statuses `UPSTREAM`. `decorate` runs `read`
+  through the client tier. The new `github` extra pulls `cryptography`.
+
 ## [0.0.56] - 2026-11-13
 
 Go only: the published Python package is unchanged.
@@ -68,6 +81,7 @@ Go only: the published Python package is unchanged.
   `~/.local/bin` on the process PATH and warns when the shell PATH lacks it. A writable prefix,
   and Windows, keep the plain command. A mocked `CommandRunner` must now expect `npm prefix -g`
   before an npm global install.
+||||||| parent of d02a1f28 (feat(source-reader): add the SourceReader tier with s3 and github kinds)
 
 ## [0.0.54] - 2026-11-13
 
