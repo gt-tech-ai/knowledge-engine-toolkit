@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.55] - 2026-11-13
+
+Go only: the published Python package is unchanged.
+
+### Security
+
+- The Python development lock (`python/techai_webutils/uv.lock`) moves `opentelemetry-api`
+  and `opentelemetry-sdk` to 1.45.2 for GHSA-mf5v-w3w3-f6cg. The package's own
+  `>=1.41.0` floors are unchanged.
+
 ### Changed
 
 - `system.Runner.Run` / `RunWithEnv` and `system.BufferingRunner` failures now lead with the
