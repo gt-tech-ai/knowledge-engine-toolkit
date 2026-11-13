@@ -7,9 +7,11 @@ package suite
 
 import (
 	"context"
+	"time"
 
 	"go.uber.org/mock/gomock"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
 	cassandradb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/cassandra"
 	elasticmqdb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/elasticmq"
 	miniodb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/minio"
@@ -177,6 +179,25 @@ func (s *CassandraIntegrationSuite) SetupSuite() {
 	s.Cassandra = c
 	s.CassandraHost = c.Host()
 	s.CassandraPort = c.Port()
+}
+
+// cqlRequestTimeout bounds each CQL request a suite session sends.
+const cqlRequestTimeout = 20 * time.Second
+
+// CQLConfig is the session configuration for the suite's node and keyspace. It pins
+// the session to the mapped contact point (DisableHostDiscovery): the node
+// advertises its container address with the unmapped native port, and a ring
+// refresh (a late node-up event, a reconnect) would otherwise move the pool there,
+// failing every query with "no hosts available in the pool".
+func (s *CassandraIntegrationSuite) CQLConfig(keyspace string) cql.Config {
+	cfg := cql.DefaultConfig()
+
+	cfg.Cassandra.Hosts, cfg.Cassandra.Port = []string{s.CassandraHost}, s.CassandraPort
+	cfg.Cassandra.LocalDC = cassandradb.LocalDC
+	cfg.Cassandra.DisableHostDiscovery = true
+	cfg.Keyspace, cfg.Timeout = keyspace, cqlRequestTimeout
+
+	return cfg
 }
 
 // TearDownSuite terminates the Cassandra container.

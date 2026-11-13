@@ -26,7 +26,6 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/listquery"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
-	cassandradb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/cassandra"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
 
@@ -80,11 +79,7 @@ func (s *AnalyticsCassandraSuite) SetupSuite() {
 		s.Require().NoError(s.Cassandra.Exec(ctx, ddl))
 	}
 
-	cfg := cql.DefaultConfig()
-
-	cfg.Cassandra.Hosts, cfg.Cassandra.Port = []string{s.CassandraHost}, s.CassandraPort
-	cfg.Cassandra.LocalDC = cassandradb.LocalDC
-	cfg.Keyspace, cfg.Timeout = itKeyspace, seconds*time.Second
+	cfg := s.CQLConfig(itKeyspace)
 
 	session, err := cql.NewFromConfig(ctx, &cfg, cql.Deps{})
 	s.Require().NoError(err)
