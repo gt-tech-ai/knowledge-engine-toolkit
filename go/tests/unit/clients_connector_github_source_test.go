@@ -149,8 +149,9 @@ func ghKeys(t *testing.T, src interfaces.ConnectorSource, limit int) []string {
 //
 // What it tests:
 //   - Pages of two walk the six regular files in path order and end with an empty
-//     token; each object carries the path as Key, the blob SHA as ETag, the size, and
-//     the pinned commit's date as LastModified. Directories, the symlink and the
+//     token; each object carries the path as Key, the blob SHA as ETag, the size, the
+//     pinned commit's date as LastModified and the pinned commit as Revision, so a
+//     reader fetches the same file the listing saw. Directories, the symlink and the
 //     submodule are not listed.
 func TestGitHubSource_ListPagePagesTheTree(t *testing.T) {
 	t.Parallel()
@@ -166,6 +167,7 @@ func TestGitHubSource_ListPagePagesTheTree(t *testing.T) {
 		ContentType:  "",
 		LastModified: ghfixtures.CommitDate,
 		ETag:         strings.Repeat("a1", 20),
+		Revision:     ghfixtures.HeadSHA,
 		Size:         120,
 	}, objs[0])
 

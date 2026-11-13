@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -39,14 +40,8 @@ func (c *s3Client) ListObjects(
 
 		// Grow once per page so the inner appends don't repeatedly reallocate.
 		objs = slices.Grow(objs, len(page.Contents))
-		for _, o := range page.Contents {
-			objs = append(objs, interfaces.StorageObject{
-				Key:          aws.ToString(o.Key),
-				ETag:         aws.ToString(o.ETag),
-				Size:         aws.ToInt64(o.Size),
-				LastModified: formatTime(o.LastModified),
-				ContentType:  "",
-			})
+		for i := range page.Contents {
+			objs = append(objs, listedObject(&page.Contents[i]))
 		}
 	}
 
@@ -85,14 +80,8 @@ func (c *s3Client) ListObjectsPage(
 	}
 
 	objs := make([]interfaces.StorageObject, 0, len(page.Contents))
-	for _, o := range page.Contents {
-		objs = append(objs, interfaces.StorageObject{
-			Key:          aws.ToString(o.Key),
-			ETag:         aws.ToString(o.ETag),
-			Size:         aws.ToInt64(o.Size),
-			LastModified: formatTime(o.LastModified),
-			ContentType:  "",
-		})
+	for i := range page.Contents {
+		objs = append(objs, listedObject(&page.Contents[i]))
 	}
 
 	return objs, nil
@@ -135,14 +124,8 @@ func (c *s3Client) ListObjectsPageToken(
 	}
 
 	objs := make([]interfaces.StorageObject, 0, len(page.Contents))
-	for _, o := range page.Contents {
-		objs = append(objs, interfaces.StorageObject{
-			Key:          aws.ToString(o.Key),
-			ETag:         aws.ToString(o.ETag),
-			Size:         aws.ToInt64(o.Size),
-			LastModified: formatTime(o.LastModified),
-			ContentType:  "",
-		})
+	for i := range page.Contents {
+		objs = append(objs, listedObject(&page.Contents[i]))
 	}
 
 	// IsTruncated + NextContinuationToken together signal "more pages"; when not
@@ -154,4 +137,17 @@ func (c *s3Client) ListObjectsPageToken(
 	}
 
 	return objs, next, nil
+}
+
+// listedObject maps one ListObjectsV2 entry onto the storage contract. A listing carries
+// no content type, and an object store has no revision: the ETag names the content.
+func listedObject(obj *types.Object) interfaces.StorageObject {
+	return interfaces.StorageObject{
+		Key:          aws.ToString(obj.Key),
+		ETag:         aws.ToString(obj.ETag),
+		Revision:     "",
+		Size:         aws.ToInt64(obj.Size),
+		LastModified: formatTime(obj.LastModified),
+		ContentType:  "",
+	}
 }

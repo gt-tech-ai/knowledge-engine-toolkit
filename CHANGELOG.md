@@ -18,6 +18,9 @@ All notable changes to this project are recorded here. The format follows
   a `ThrottledError` carrying GitHub's `Retry-After` / `X-RateLimit-Reset` as
   `retry_after_ms`, a plain 403 `FORBIDDEN`, other statuses `UPSTREAM`. `decorate` runs `read`
   through the client tier. The new `github` extra pulls `cryptography`.
+- Go `interfaces.StorageObject.Revision` (`json:"revision,omitempty"`): the source revision an
+  object was listed at. The connector `github` kind sets it to the pinned commit, so a body
+  reader fetches the file the listing saw; object stores leave it empty.
 
 ## [0.0.56] - 2026-11-13
 

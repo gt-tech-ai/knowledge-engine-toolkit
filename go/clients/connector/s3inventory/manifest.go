@@ -160,6 +160,7 @@ func (s schema) storageObject(
 		LastModified: rfc3339(s.field(row, colLastModified)),
 		ContentType:  "",
 		ETag:         "",
+		Revision:     "",
 		Size:         0,
 	}
 	if etag := s.field(row, colETag); etag != "" {

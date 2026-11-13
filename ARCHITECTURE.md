@@ -987,7 +987,9 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   Each regular file of the recursive tree that passes `IncludeGlobs` and `ExcludeGlobs`
   (`foundation/codebase.Glob`) is one object: `Key` its path, `ETag` its blob SHA, `Size` its
   size (an oversized file is listed, so the engine's size cap skips it), `LastModified` the
-  commit's committer date. Symlinks and submodules are skipped. A tree GitHub truncated is
+  commit's committer date, `Revision` the pinned commit (a body reader fetches the file at
+  that commit; the S3 kinds leave `Revision` empty, since their ETag names the content).
+  Symlinks and submodules are skipped. A tree GitHub truncated is
   `INVALID_INPUT` (list such a repository with a clone); a missing repository or branch is
   `INVALID_INPUT`; a 5xx, a 429 or a rate-limited 403 is `UNAVAILABLE`. The builder's
   `Config.GitHubBaseURL` points it at GitHub Enterprise Server; `Deps.GitHub` injects the HTTP

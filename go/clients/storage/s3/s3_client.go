@@ -406,6 +406,7 @@ func (c *s3Client) Stat(
 		Key:          key,
 		ContentType:  aws.ToString(out.ContentType),
 		ETag:         aws.ToString(out.ETag),
+		Revision:     "",
 		Size:         aws.ToInt64(out.ContentLength),
 		LastModified: formatTime(out.LastModified),
 	}, nil

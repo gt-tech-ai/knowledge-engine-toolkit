@@ -99,6 +99,7 @@ func newInventoryFixture(t *testing.T, format string) inventoryFixture {
 			Key:          key,
 			Size:         size,
 			ETag:         `"` + etag + `"`,
+			Revision:     "",
 			LastModified: "2026-11-" + day + "T10:00:00Z",
 			ContentType:  "",
 		}
