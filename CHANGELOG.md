@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.53] - 2026-11-12
+
+Python: `techai-webutils` 0.12.0. The Go module is unchanged.
+
 ### Added
 
 - Python `SplitterKind.markdown`: one unit per `##` section outside code fences, each prefixed
