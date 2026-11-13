@@ -264,6 +264,7 @@ func testS3InventoryListsAWrittenReportLikeTheBucketComparesListingsKeys(
 			Decorations:   decorate.Decorations{},
 			STS:           nil,
 			GitHub:        nil,
+			Git:           nil,
 		},
 	)
 	cfg := minioAccessKeySource(bucket)

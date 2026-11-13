@@ -16,6 +16,9 @@ class SourceReaderKind(StrEnum):
     GITHUB = "github"
     """Reads ``path`` at ``commit`` from ``owner``/``repo`` as a GitHub App installation
     (needs the ``github`` extra)."""
+    GIT = "git"
+    """Reads ``path`` under the mounted work tree ``git_root``; a path that leaves the
+    root is refused."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,3 +37,6 @@ class SourceReaderConfig:
     """Per-request timeout of the HTTP client the factory builds (``github`` kind)."""
     token_refresh_margin_seconds: float = 300.0
     """Mint a new installation token once less than this remains on the cached one."""
+    git_root: str = ""
+    """The work tree's directory (``git`` kind; required there). Set it from the
+    platform's own config, never from tenant input."""

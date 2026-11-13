@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import httpx
@@ -11,6 +12,7 @@ from techai_webutils.clients.source_reader.config import (
     SourceReaderConfig,
     SourceReaderKind,
 )
+from techai_webutils.clients.source_reader.git.reader import GitSourceReader
 from techai_webutils.clients.source_reader.s3.reader import S3SourceReader
 from techai_webutils.clients.source_reader.stub.reader import StubSourceReader
 from techai_webutils.core.errors import AppValueError
@@ -41,8 +43,9 @@ def source_reader_from_config(
         The ``SourceReader`` ``config.kind`` selects.
 
     Raises:
-        AppValueError: An unknown kind, ``s3`` without ``storage``, or ``github``
-            without an App id or a readable RSA private key (``INVALID_INPUT``).
+        AppValueError: An unknown kind, ``s3`` without ``storage``, ``github``
+            without an App id or a readable RSA private key, or ``git`` without
+            ``git_root`` (``INVALID_INPUT``).
 
     """
     if config.kind == SourceReaderKind.STUB:
@@ -54,6 +57,11 @@ def source_reader_from_config(
         return S3SourceReader(storage)
     if config.kind == SourceReaderKind.GITHUB:
         return _github(config, client)
+    if config.kind == SourceReaderKind.GIT:
+        if not config.git_root:
+            msg = "source_reader: the git kind requires git_root"
+            raise AppValueError(msg)
+        return GitSourceReader(Path(config.git_root))
     msg = f"unknown source_reader kind: {config.kind!r}"
     raise AppValueError(msg)
 

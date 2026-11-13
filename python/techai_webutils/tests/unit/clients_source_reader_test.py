@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 from datetime import UTC, datetime
-from typing import cast, final
+from typing import TYPE_CHECKING, cast, final
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -26,6 +26,7 @@ from techai_webutils.core.errors import (
     AppValueError,
     ErrorCode,
     ForbiddenError,
+    InvalidInputError,
     NotFoundError,
     ThrottledError,
     UnauthorizedError,
@@ -37,6 +38,9 @@ from techai_webutils.core.types.source_item import SourceItem
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations
 from techai_webutils.foundation.resilience.async_retry import retry_after_s
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.mark.asyncio
@@ -497,3 +501,102 @@ async def test_decorated_reader_forwards_read() -> None:
 
     assert await reader.read(_ITEM) == b"body"
     cast("MagicMock", cast("AsyncMock", inner.read).assert_awaited_once_with)(_ITEM)
+
+
+def _git_reader(root: Path) -> SourceReader:
+    """Build the ``git`` reader over ``root`` through the factory.
+
+    Args:
+        root: The work tree's directory.
+
+    Returns:
+        The ``git`` reader.
+
+    """
+    return source_reader_from_config(
+        SourceReaderConfig(kind=SourceReaderKind.GIT, git_root=str(root))
+    )
+
+
+@pytest.mark.asyncio
+async def test_git_reader_reads_key(tmp_path: Path) -> None:
+    """The git reader reads the item's path under the work tree root.
+
+    Why this test is important:
+        The ingestion worker reads each listed file's body through this reader; a wrong
+        join (or reading ``key`` instead of ``path``) would ingest nothing or the wrong
+        file, and a missing file must be a terminal ``NOT_FOUND``, not a crash.
+
+    What it tests:
+        ``docs/a.md`` under the root reads back its bytes; ``docs/gone.md`` raises
+        ``NotFoundError``.
+    """
+    (tmp_path / "docs").mkdir()
+    _ = (tmp_path / "docs" / "a.md").write_bytes(b"# A\n")
+    reader = _git_reader(tmp_path)
+
+    assert await reader.read(SourceItem(path="docs/a.md")) == b"# A\n"
+    with pytest.raises(NotFoundError):
+        _ = await reader.read(SourceItem(path="docs/gone.md"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["../outside.txt", "docs/../../outside.txt", "", "/x"])
+async def test_git_reader_refuses_traversal(tmp_path: Path, path: str) -> None:
+    """The git reader refuses a path that is empty, absolute or climbs out of the root.
+
+    Why this test is important:
+        An item's path comes from a queue message; a crafted ``..`` or absolute path
+        must never read a file beside the work tree (a secrets file, another checkout).
+
+    What it tests:
+        With a real file just outside the root, each of ``../outside.txt``,
+        ``docs/../../outside.txt``, ``""`` and an absolute path raises
+        ``InvalidInputError`` coded ``INVALID_INPUT``.
+    """
+    root = tmp_path / "root"
+    (root / "docs").mkdir(parents=True)
+    _ = (tmp_path / "outside.txt").write_bytes(b"secret")
+    absolute = str(tmp_path / "outside.txt") if path == "/x" else path
+
+    with pytest.raises(InvalidInputError) as err:
+        _ = await _git_reader(root).read(SourceItem(path=absolute))
+
+    assert err.value.code is ErrorCode.INVALID_INPUT
+
+
+@pytest.mark.asyncio
+async def test_git_reader_refuses_symlink_out_of_root(tmp_path: Path) -> None:
+    """The git reader refuses a symlink in the root that points outside it.
+
+    Why this test is important:
+        A link committed to the tree is a path, not content; following it out of the
+        root would read whatever it names on the host.
+
+    What it tests:
+        ``link.md`` → a file outside the root raises ``InvalidInputError``.
+    """
+    root = tmp_path / "root"
+    root.mkdir()
+    _ = (tmp_path / "outside.txt").write_bytes(b"secret")
+    (root / "link.md").symlink_to(tmp_path / "outside.txt")
+
+    with pytest.raises(InvalidInputError):
+        _ = await _git_reader(root).read(SourceItem(path="link.md"))
+
+
+def test_git_reader_without_root_fails_loudly() -> None:
+    """The ``git`` kind with no root is refused at build time.
+
+    Why this test is important:
+        An empty root would read relative to the process's working directory; the
+        deployable must stop at startup instead.
+
+    What it tests:
+        ``source_reader_from_config(kind=git)`` with no ``git_root`` raises
+        ``AppValueError`` coded ``INVALID_INPUT``.
+    """
+    with pytest.raises(AppValueError, match="git_root") as err:
+        _ = source_reader_from_config(SourceReaderConfig(kind=SourceReaderKind.GIT))
+
+    assert err.value.code is ErrorCode.INVALID_INPUT

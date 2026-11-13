@@ -26,6 +26,7 @@ const (
 	ghPageSize     = 2
 	ghRegularFiles = 6
 	ghReadme       = "README.md"
+	ghGuide        = "docs/guide.md"
 	ghBigFileSize  = 50_000_000
 )
 
@@ -172,7 +173,7 @@ func TestGitHubSource_ListPagePagesTheTree(t *testing.T) {
 	}, objs[0])
 
 	assert.Equal(t, []string{
-		ghReadme, "big/data.bin", "docs/guide.md", "docs/img/logo.png",
+		ghReadme, "big/data.bin", ghGuide, "docs/img/logo.png",
 		"go/main.go", "go/vendor/x.go",
 	}, ghKeys(t, src, ghPageSize))
 }
@@ -205,7 +206,7 @@ func TestGitHubSource_ResumeStaysOnOneCommit(t *testing.T) {
 	objs, _, err := resumed.ListPage(t.Context(), token, ghPageSize)
 	require.NoError(t, err)
 	require.Len(t, objs, ghPageSize)
-	assert.Equal(t, "docs/guide.md", objs[0].Key)
+	assert.Equal(t, ghGuide, objs[0].Key)
 
 	_, _, err = resumed.ListPage(t.Context(), "not-a-token", ghPageSize)
 	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
@@ -234,7 +235,7 @@ func TestGitHubSource_GlobsFilter(t *testing.T) {
 	assert.NotEmpty(t, next)
 
 	assert.Equal(t,
-		[]string{"docs/guide.md", "docs/img/logo.png", "go/main.go"},
+		[]string{ghGuide, "docs/img/logo.png", "go/main.go"},
 		ghKeys(t, src, ghPageSize))
 }
 

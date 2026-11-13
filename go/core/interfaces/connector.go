@@ -59,6 +59,12 @@ const ConnectorKindS3Inventory ConnectorKind = "s3_inventory"
 // pinned, so a push mid-crawl never mixes two trees.
 const ConnectorKindGitHub ConnectorKind = "github"
 
+// ConnectorKindGit lists a git work tree on a mounted filesystem: its tracked files and
+// the untracked files git does not ignore, each an object keyed by its path with the
+// SHA-256 of its bytes as the ETag and HEAD (HEAD+worktree when the bytes differ) as its
+// Revision. It needs no credential; the consumer decides which root a connector reads.
+const ConnectorKindGit ConnectorKind = "git"
+
 // SourceConfig is the primitive, domain-free, AWS-free description a SourceBuilder turns
 // into a ConnectorSource. The consumer maps its own connector record + decrypted
 // credentials onto this at its composition root, so this package never imports consumer
@@ -118,11 +124,15 @@ type SourceConfig struct {
 	// AppPrivateKey is the GitHub App's PEM-encoded RSA private key (github kind;
 	// already-decrypted plaintext, redacted when formatted).
 	AppPrivateKey Secret
-	// IncludeGlobs keeps only the paths matching at least one pattern (github kind);
-	// empty keeps every path. A "**" segment matches any number of whole segments.
+	// Root is the work tree's directory (git kind). The consumer sets it from its own
+	// platform config, never from tenant input.
+	Root string
+	// IncludeGlobs keeps only the paths matching at least one pattern (github and git
+	// kinds); empty keeps every path. A "**" segment matches any number of whole
+	// segments.
 	IncludeGlobs []string
-	// ExcludeGlobs drops the paths matching any pattern, after IncludeGlobs (github
-	// kind).
+	// ExcludeGlobs drops the paths matching any pattern, after IncludeGlobs (github and
+	// git kinds).
 	ExcludeGlobs []string
 	// GitHubAppID is the GitHub App's numeric id, the JWT issuer (github kind).
 	GitHubAppID int64

@@ -21,6 +21,17 @@ All notable changes to this project are recorded here. The format follows
 - Go `interfaces.StorageObject.Revision` (`json:"revision,omitempty"`): the source revision an
   object was listed at. The connector `github` kind sets it to the pinned commit, so a body
   reader fetches the file the listing saw; object stores leave it empty.
+- Go connector kind `git` (`clients/connector/git`, `connector.KindGit`,
+  `interfaces.ConnectorKindGit`): lists a mounted git work tree's tracked files and its
+  untracked, non-ignored files through the injected `connector.Deps.Git` (`GitDeps.Client`, an
+  `interfaces.GitClient`). `interfaces.SourceConfig.Root` names the work tree; the include and
+  exclude globs apply before paging. `ETag` is the hex SHA-256 of the bytes, `Revision` HEAD's
+  commit (`<commit>+worktree` when the bytes differ from HEAD's); files are read through an
+  `os.Root`, symlinks and files gone since the listing are skipped. A root that is not a work
+  tree, an empty `Root` and a missing GitClient are `INVALID_INPUT`.
+- Python source reader kind `git` (`clients/source_reader/git`, `SourceReaderConfig.git_root`):
+  reads an item's `path` under the work tree root; an empty or absolute path, or one that
+  resolves outside the root (`..`, a symlink), is `INVALID_INPUT`, a missing file `NOT_FOUND`.
 
 ## [0.0.56] - 2026-11-13
 
