@@ -76,7 +76,8 @@ func (c *compiled) missingTool(
 	return c.result(name, types.StatusFail, msg)
 }
 
-// runInvocation runs the command, streaming its output when the step asks.
+// runInvocation runs the command, streaming its output when the step asks. A streamed
+// run captures nothing: its failure's stderr tail rides on the error (see ran).
 func (e *engine) runInvocation(
 	ctx context.Context, st *types.ProcStep, inv *invocation,
 ) interfaces.CmdResult {
@@ -156,17 +157,35 @@ func exitStatus(cmdResult *interfaces.CmdResult) int {
 	return 1
 }
 
-// ran is the result of a command that ran: a failure carries its output as detail.
+// ran is the result of a command that ran: a failure carries its output as detail —
+// the captured output, or for a streamed step the stderr tail its error carries.
 func (c *compiled) ran(name string, cmdResult *interfaces.CmdResult) types.StepResult {
 	if cmdResult.Err == nil {
 		return c.result(name, types.StatusPass, "")
 	}
 
-	f := c.result(name, types.StatusFail, cmdResult.Err.Error())
+	failed := c.result(name, types.StatusFail, cmdResult.Err.Error())
 
-	f.Detail = slices.Concat(cmdResult.Stdout, cmdResult.Stderr)
+	failed.Detail = slices.Concat(cmdResult.Stdout, cmdResult.Stderr)
+	if len(failed.Detail) == 0 {
+		failed.Detail = stderrTail(cmdResult.Err)
+	}
 
-	return f
+	return failed
+}
+
+// stderrTail is the interfaces.DetailStderrTail a streamed command's failure carries,
+// found on any AppError in the chain (a decorator may wrap the runner's), or nil.
+func stderrTail(err error) []byte {
+	var failure *apperr.AppError
+
+	for cur := err; apperr.As(cur, &failure); cur = failure.Unwrap() {
+		if tail, ok := failure.Details[interfaces.DetailStderrTail]; ok {
+			return []byte(tail)
+		}
+	}
+
+	return nil
 }
 
 // capture converts a tool's standard output to a variable value.

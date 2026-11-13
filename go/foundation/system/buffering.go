@@ -148,7 +148,8 @@ func (b *BufferingRunner) Captured() []byte {
 }
 
 // runBufferedAndReplay runs a command, replays output to the terminal (unless
-// quiet), and accumulates it in the internal buffer.
+// quiet), and accumulates it in the internal buffer. A failure carries the stderr
+// tail as Runner's streamed failure does (interfaces.DetailStderrTail).
 func (b *BufferingRunner) runBufferedAndReplay(
 	ctx context.Context,
 	dir string,
@@ -182,9 +183,13 @@ func (b *BufferingRunner) runBufferedAndReplay(
 	if result.Err != nil {
 		b.note("FAIL", cmdStr)
 
-		return apperr.Wrap(
+		tail := new(tailBuffer)
+
+		_, _ = tail.Write(result.Stderr)
+
+		return withStderrTail(apperr.Wrap(
 			result.Err, apperr.CodeInternal, failureMessage(name, args, result.ExitCode),
-		)
+		), tail.String())
 	}
 
 	b.note("ok", cmdStr)
