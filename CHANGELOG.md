@@ -36,6 +36,8 @@ Python: `techai-webutils` 0.13.0.
 - Python source reader kind `git` (`clients/source_reader/git`, `SourceReaderConfig.git_root`):
   reads an item's `path` under the work tree root; an empty or absolute path, or one that
   resolves outside the root (`..`, a symlink), is `INVALID_INPUT`, a missing file `NOT_FOUND`.
+- Python `UnavailableError` and `ThrottledError` take an optional keyword `details`, so a
+  throttle is raised with its `retry_after_ms` pushback in one expression.
 
 ## [0.0.56] - 2026-11-13
 

@@ -201,14 +201,21 @@ class AppTimeoutError(AppError):
 class UnavailableError(AppError):
     """Service unavailable."""
 
-    def __init__(self, message: str = "service unavailable") -> None:
+    def __init__(
+        self,
+        message: str = "service unavailable",
+        *,
+        details: dict[str, str] | None = None,
+    ) -> None:
         """Initialize with an optional message describing the unavailable service.
 
         Args:
             message: Which dependency is unavailable.
+            details: Structured context, such as the provider's retry pushback
+                (``retry_after_ms``).
 
         """
-        super().__init__(ErrorCode.UNAVAILABLE, message)
+        super().__init__(ErrorCode.UNAVAILABLE, message, details)
 
 
 class ThrottledError(UnavailableError):

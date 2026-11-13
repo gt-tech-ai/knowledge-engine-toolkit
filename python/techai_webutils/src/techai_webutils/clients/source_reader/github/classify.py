@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 from http import HTTPStatus
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -64,9 +64,9 @@ def raise_for(response: httpx.Response, *, expected: int, now: float) -> None:
         expected: The success status.
         now: The wall clock in Unix seconds, against which ``X-RateLimit-Reset`` is read.
 
-    A 429 or a rate-limited 403 raises a ``ThrottledError`` (``UNAVAILABLE``).
-
     Raises:
+        ThrottledError: A 429 or a rate-limited 403 (``UNAVAILABLE``), carrying GitHub's
+            pushback.
         NotFoundError: 404 (``NOT_FOUND``).
         UnauthorizedError: 401 (``UNAUTHENTICATED``).
         ForbiddenError: Any other 403 (``FORBIDDEN``).
@@ -85,7 +85,7 @@ def raise_for(response: httpx.Response, *, expected: int, now: float) -> None:
     if status == HTTPStatus.TOO_MANY_REQUESTS or (
         status == HTTPStatus.FORBIDDEN and _rate_limited(response)
     ):
-        _raise_throttled(what, response, now)
+        raise ThrottledError(what, details=_pushback_details(response, now))
     if status == HTTPStatus.FORBIDDEN:
         raise ForbiddenError(what)
     if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
@@ -112,24 +112,25 @@ def _rate_limited(response: httpx.Response) -> bool:
     )
 
 
-def _raise_throttled(what: str, response: httpx.Response, now: float) -> NoReturn:
-    """Raise a throttle carrying GitHub's pushback (``retry_after_ms``) if it gave one.
+def _pushback_details(response: httpx.Response, now: float) -> dict[str, str]:
+    """Return a throttle's details: GitHub's pushback (``retry_after_ms``) if it gave one.
 
     ``Retry-After`` (whole seconds) wins; otherwise a spent primary limit waits until
     ``X-RateLimit-Reset`` (Unix seconds). The ``ThrottledError`` is ``UNAVAILABLE``, so
-    the retry layer backs off.
+    the retry layer backs off, no sooner than this pushback.
 
     Args:
-        what: The error message.
         response: The rate-limited response.
         now: The wall clock in Unix seconds.
 
+    Returns:
+        ``{retry_after_ms: <ms>}``, or empty when GitHub named no wait.
+
     """
-    err = ThrottledError(what)
     delay_s = _pushback_s(response, now)
-    if delay_s is not None:
-        err.details[RETRY_AFTER_MS_DETAIL] = str(math.ceil(delay_s * _MS_PER_S))
-    raise err
+    if delay_s is None:
+        return {}
+    return {RETRY_AFTER_MS_DETAIL: str(math.ceil(delay_s * _MS_PER_S))}
 
 
 def _pushback_s(response: httpx.Response, now: float) -> float | None:

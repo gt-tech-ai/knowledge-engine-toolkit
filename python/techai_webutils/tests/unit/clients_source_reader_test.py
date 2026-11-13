@@ -154,6 +154,13 @@ class _GitHub:
     """Answers the installation-token exchange and the contents read, recording each."""
 
     def __init__(self, read: httpx.Response | Exception | None = None) -> None:
+        """Answer the contents read with ``read`` (the file's bytes when None).
+
+        Args:
+            read: The contents read's response or transport failure; None answers
+                200 with the file's bytes.
+
+        """
         self.requests: list[httpx.Request] = []
         self.mints = 0
         self.read = read
@@ -258,6 +265,10 @@ async def test_blob_read_at_commit(app_key: rsa.RSAPrivateKey) -> None:
         - The read is ``GET /repos/{owner}/{repo}/contents/{path}?ref={commit}`` with the
           path percent-encoded, the raw media type, and the installation token.
         - The response bytes come back unchanged.
+
+    Args:
+        app_key: The test GitHub App's RSA private key.
+
     """
     github = _GitHub()
     reader = _github_reader(app_key, github, _Clock())
@@ -298,6 +309,10 @@ async def test_token_reused_until_five_minutes_before_expiry(
     What it tests:
         A read just over five minutes before the token's expiry sends the first token and
         mints no second one.
+
+    Args:
+        app_key: The test GitHub App's RSA private key.
+
     """
     github, clock = _GitHub(), _Clock()
     reader = _github_reader(app_key, github, clock)
@@ -320,6 +335,10 @@ async def test_token_refreshed_near_expiry(app_key: rsa.RSAPrivateKey) -> None:
 
     What it tests:
         A read inside the five-minute margin mints a second token and sends it.
+
+    Args:
+        app_key: The test GitHub App's RSA private key.
+
     """
     github, clock = _GitHub(), _Clock()
     reader = _github_reader(app_key, github, clock)
@@ -361,6 +380,10 @@ async def test_5xx_is_transient(app_key: rsa.RSAPrivateKey) -> None:
 
     What it tests:
         A 502 on the contents read raises ``UnavailableError``, which is transient.
+
+    Args:
+        app_key: The test GitHub App's RSA private key.
+
     """
     err = await _read_failure(httpx.Response(502), app_key)
 
@@ -382,6 +405,10 @@ async def test_secondary_rate_limit_carries_retry_after(
     What it tests:
         A 403 with ``Retry-After: 60`` and a secondary-rate-limit body raises
         ``ThrottledError`` whose retry pushback is 60 seconds.
+
+    Args:
+        app_key: The test GitHub App's RSA private key.
+
     """
     response = httpx.Response(
         403,
@@ -405,6 +432,10 @@ async def test_404_is_not_found(app_key: rsa.RSAPrivateKey) -> None:
 
     What it tests:
         A 404 on the contents read raises ``NotFoundError``, which is not transient.
+
+    Args:
+        app_key: The test GitHub App's RSA private key.
+
     """
     err = await _read_failure(httpx.Response(404), app_key)
 
@@ -450,6 +481,12 @@ async def test_other_failures_are_coded(
         (``X-RateLimit-Remaining: 0``) and a 429 are throttles; any other status is
         ``UPSTREAM``; a transport timeout is ``TIMEOUT`` and a refused connection
         ``UNAVAILABLE``.
+
+    Args:
+        read: GitHub's answer to the contents read, or the transport failure.
+        expected: The coded error the read must raise.
+        app_key: The test GitHub App's RSA private key.
+
     """
     err = await _read_failure(read, app_key)
 
@@ -467,6 +504,10 @@ async def test_primary_rate_limit_waits_until_reset(app_key: rsa.RSAPrivateKey) 
 
     What it tests:
         ``X-RateLimit-Remaining: 0`` with a reset 30 s after now yields a 30 s pushback.
+
+    Args:
+        app_key: The test GitHub App's RSA private key.
+
     """
     response = httpx.Response(
         403,
@@ -530,6 +571,10 @@ async def test_git_reader_reads_key(tmp_path: Path) -> None:
     What it tests:
         ``docs/a.md`` under the root reads back its bytes; ``docs/gone.md`` raises
         ``NotFoundError``.
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     (tmp_path / "docs").mkdir()
     _ = (tmp_path / "docs" / "a.md").write_bytes(b"# A\n")
@@ -553,6 +598,11 @@ async def test_git_reader_refuses_traversal(tmp_path: Path, path: str) -> None:
         With a real file just outside the root, each of ``../outside.txt``,
         ``docs/../../outside.txt``, ``""`` and an absolute path raises
         ``InvalidInputError`` coded ``INVALID_INPUT``.
+
+    Args:
+        tmp_path: A fresh directory for the test.
+        path: The refused item path.
+
     """
     root = tmp_path / "root"
     (root / "docs").mkdir(parents=True)
@@ -575,6 +625,10 @@ async def test_git_reader_refuses_symlink_out_of_root(tmp_path: Path) -> None:
 
     What it tests:
         ``link.md`` → a file outside the root raises ``InvalidInputError``.
+
+    Args:
+        tmp_path: A fresh directory for the test.
+
     """
     root = tmp_path / "root"
     root.mkdir()
