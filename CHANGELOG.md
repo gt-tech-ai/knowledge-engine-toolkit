@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `system.Runner.Run` / `RunWithEnv` and `system.BufferingRunner` failures now lead with the
+  program and its exit status, then the command line: `go exited with status 2 (command: go
+  build ./...)` instead of `go build ./... failed`. A CLI that truncates the error to one line
+  still shows why the command failed. A command that never started, or was killed by a signal,
+  reads `<program> failed (command: …)`. The wrapped cause is unchanged.
+
 ## [0.0.54] - 2026-11-13
 
 Go only: the Python package is unchanged.

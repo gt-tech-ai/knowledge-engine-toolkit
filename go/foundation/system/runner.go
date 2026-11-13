@@ -65,7 +65,9 @@ func NewRunner(opts ...RunnerOption) *Runner {
 	return r
 }
 
-// Run executes a command, streaming its stdout/stderr to the runner's writers.
+// Run executes a command, streaming its stdout/stderr to the runner's writers. A
+// failure is an INTERNAL error whose message leads with the program and its exit
+// status ("go exited with status 2 (command: go …)") and wraps the *exec.ExitError.
 func (d *Runner) Run(ctx context.Context, dir, name string, args ...string) error {
 	return d.execWithEnv(ctx, dir, nil, name, args...)
 }
@@ -232,17 +234,42 @@ func (d *Runner) execWithEnv(
 
 	err := cmd.Run()
 	if err != nil {
-		text := name
-		if len(args) > 0 {
-			text = name + textSpace + strings.Join(args, textSpace)
-		}
-
 		if ctx.Err() != nil {
-			return apperr.Wrap(ctx.Err(), apperr.CodeInternal, text+" interrupted")
+			return apperr.Wrap(
+				ctx.Err(), apperr.CodeInternal, commandLine(name, args)+" interrupted",
+			)
 		}
 
-		return apperr.Wrap(err, apperr.CodeInternal, text+" failed")
+		exitCode := -1
+		if cmd.ProcessState != nil {
+			exitCode = cmd.ProcessState.ExitCode()
+		}
+
+		return apperr.Wrap(err, apperr.CodeInternal, failureMessage(name, args, exitCode))
 	}
 
 	return nil
+}
+
+// commandLine joins name and args into the command line as typed.
+func commandLine(name string, args []string) string {
+	if len(args) == 0 {
+		return name
+	}
+
+	return name + textSpace + strings.Join(args, textSpace)
+}
+
+// failureMessage describes a failed command, leading with the program and its exit
+// status so a display that truncates the line still shows why it failed; the full
+// command line follows. Only a positive exitCode is reported as a status: a negative
+// one means the process never exited normally (it never started, or a signal killed
+// it), and zero with an error means the failure was not the exit (e.g. an I/O error).
+func failureMessage(name string, args []string, exitCode int) string {
+	cmdLine := commandLine(name, args)
+	if exitCode <= 0 {
+		return fmt.Sprintf("%s failed (command: %s)", name, cmdLine)
+	}
+
+	return fmt.Sprintf("%s exited with status %d (command: %s)", name, exitCode, cmdLine)
 }
