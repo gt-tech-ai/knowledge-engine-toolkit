@@ -8,6 +8,7 @@ package cassandra
 import (
 	"context"
 	"io"
+	"net"
 	"strconv"
 	"time"
 
@@ -65,7 +66,7 @@ func NewTestCassandra(ctx context.Context) (*TestCassandra, error) {
 		)
 	}
 
-	host, err := container.Host(ctx)
+	host, err := hostIP(ctx, container)
 	if err != nil {
 		_ = container.Terminate(ctx) // best-effort cleanup on setup failure
 
@@ -93,7 +94,30 @@ func NewTestCassandra(ctx context.Context) (*TestCassandra, error) {
 	return &TestCassandra{container: container, host: host, port: port}, nil
 }
 
-// Host returns the host the test process connects to.
+// hostIP is the container host as an IP literal (IPv4 preferred): a session pinned
+// to its contact point (cql's DisableHostDiscovery) needs an IP, and the host is
+// usually the name "localhost".
+func hostIP(ctx context.Context, container testcontainers.Container) (string, error) {
+	host, err := container.Host(ctx)
+	if err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "container host")
+	}
+
+	addrs, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+	if err != nil || len(addrs) == 0 {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "resolve container host "+host)
+	}
+
+	for _, addr := range addrs {
+		if addr.To4() != nil {
+			return addr.String(), nil
+		}
+	}
+
+	return addrs[0].String(), nil
+}
+
+// Host returns the IP literal the test process connects to.
 func (c *TestCassandra) Host() string { return c.host }
 
 // Port returns the mapped native-protocol port.
@@ -111,6 +135,27 @@ func (c *TestCassandra) Exec(ctx context.Context, cql string) error {
 		text, _ := io.ReadAll(out)
 
 		return apperr.New(apperr.CodeInternal, "cqlsh: "+string(text))
+	}
+
+	return nil
+}
+
+// RestartNativeTransport stops and restarts the node's CQL listener with nodetool
+// (disablebinary, enablebinary): every client connection drops, so a driver
+// reconnects its control connection and refreshes its view of the ring, as it does
+// when a node restarts. A failed or non-zero nodetool is CodeInternal.
+func (c *TestCassandra) RestartNativeTransport(ctx context.Context) error {
+	for _, sub := range []string{"disablebinary", "enablebinary"} {
+		code, out, err := c.container.Exec(ctx, []string{"nodetool", sub})
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInternal, "nodetool "+sub+" failed")
+		}
+
+		if code != 0 {
+			text, _ := io.ReadAll(out)
+
+			return apperr.New(apperr.CodeInternal, "nodetool "+sub+": "+string(text))
+		}
 	}
 
 	return nil

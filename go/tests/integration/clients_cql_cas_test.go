@@ -14,7 +14,6 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/cql"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
-	cassandradb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/dbtest/cassandra"
 	testsuite "github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures/suite"
 )
 
@@ -61,11 +60,7 @@ func (s *CQLCASSuite) SetupSuite() {
 		"CREATE TABLE IF NOT EXISTS "+casKeyspace+".kv (k text PRIMARY KEY, v int, w text)",
 	))
 
-	cfg := cql.DefaultConfig()
-
-	cfg.Cassandra.Hosts, cfg.Cassandra.Port = []string{s.CassandraHost}, s.CassandraPort
-	cfg.Cassandra.LocalDC = cassandradb.LocalDC
-	cfg.Keyspace, cfg.Timeout = casKeyspace, seconds*time.Second
+	cfg := s.CQLConfig(casKeyspace)
 
 	session, err := cql.NewFromConfig(ctx, &cfg, cql.Deps{})
 	s.Require().NoError(err)
@@ -127,3 +122,31 @@ const (
 	// TestApplyCAS_ReportsWhetherTheConditionHeld.
 	equalInputHeld = 3
 )
+
+// TestSession_SurvivesRingRefresh tests that a session on a port-mapped node still
+// reaches it after the driver refreshes its view of the ring.
+//
+// Why this test is important:
+//   - A container node advertises its internal address with the native port. On a
+//     ring refresh gocql replaces the contact point with that address, so with a
+//     mapped port the pool targets an address nothing listens on and every query
+//     fails "no hosts available in the pool". A late node-up event triggers the same
+//     refresh, which made this suite fail intermittently on CI.
+//
+// What it tests:
+//   - After the node's CQL listener restarts (the driver reconnects and refreshes
+//     the ring), a write through the same session succeeds again.
+func (s *CQLCASSuite) TestSession_SurvivesRingRefresh() {
+	ctx := context.Background()
+
+	s.Require().NoError(s.Cassandra.RestartNativeTransport(ctx))
+
+	write := func() bool {
+		return s.session.Query(
+			"INSERT INTO "+casKeyspace+".kv (k, v) VALUES (?, ?)", "ring-refresh", 1,
+		).WithContext(ctx).Exec() == nil
+	}
+
+	s.Eventually(write, seconds*time.Second, time.Second,
+		"the session reaches the node again after a ring refresh")
+}
