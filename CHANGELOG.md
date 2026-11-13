@@ -43,6 +43,13 @@ Python: `techai-webutils` 0.12.0. The Go module is unchanged.
 - Bedrock Retrieve matches an `in` filter against a scalar attribute only; a list attribute
   there would need `listContains`, which the translation does not emit.
 
+### Security
+
+- Python `soupsieve` (via `beautifulsoup4`) `2.9.2` → `4.0.1`, held by a uv
+  `constraint-dependencies` floor: fixes GHSA-mmhr-3c5m-f64f (a polynomial-time denial of
+  service in the descendant combinator) and GHSA-4j63-6c4x-wfg4 (a quadratic `:has()` match
+  on untrusted HTML). The floor binds this package's lock only; a consumer pins its own.
+
 ## [0.0.52] - 2026-11-11
 
 Python: `techai-webutils` 0.11.0. The Go module changes only its toolchain.
