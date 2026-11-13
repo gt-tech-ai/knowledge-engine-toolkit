@@ -162,7 +162,9 @@ func NewInstaller(
 // platform, returning a CodeUnavailable error when no method applies. A pinned
 // download method is fetched, verified against its SHA-256, and placed in the
 // install dir (GOBIN) without running any command; it fails, leaving nothing
-// installed, on a mismatch or when the host's os-arch has no pinned checksum.
+// installed, on a mismatch or when the host's os-arch has no pinned checksum. An
+// `npm install -g` whose global prefix this user cannot write installs under
+// ~/.local instead (see npmMethod).
 func (i *Installer) Install(
 	ctx context.Context,
 	root string,
@@ -179,7 +181,7 @@ func (i *Installer) Install(
 		return i.installDownload(ctx, tool.Name, method.Download)
 	}
 
-	inv := i.buildInvocation(method)
+	inv := i.buildInvocation(i.npmMethod(ctx, root, method))
 	if inv.command == textWinget {
 		return i.runWinget(ctx, root, tool.Name, inv.args)
 	}
@@ -622,7 +624,7 @@ func (i *Installer) resolveMethod(tool *types.ToolDef) (types.InstallMethod, boo
 
 // isGoInstall reports whether a method is a `go install` invocation.
 func isGoInstall(m types.InstallMethod) bool {
-	return m.Command == "go" && len(m.Args) > 0 && m.Args[0] == "install"
+	return m.Command == "go" && len(m.Args) > 0 && m.Args[0] == textInstall
 }
 
 // buildInvocation turns an install method into the exact command to run: winget

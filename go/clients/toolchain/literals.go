@@ -28,6 +28,9 @@ const (
 	// textTool is the literal "tool".
 	textTool = "tool"
 
+	// textInstall is the install subcommand (`go install`, `npm install`).
+	textInstall = "install"
+
 	// textWinget is the literal "winget".
 	textWinget = "winget"
 

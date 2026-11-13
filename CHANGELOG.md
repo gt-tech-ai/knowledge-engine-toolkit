@@ -35,6 +35,12 @@ All notable changes to this project are recorded here. The format follows
   when missing. When GOBIN was not first, it warns about each binary there that an earlier
   PATH directory also holds (a Homebrew `golangci-lint`, an old `wire`), since the user's
   shell profile still has the old order.
+- `toolchain.Installer.Install` runs an `npm install -g` method with `--prefix ~/.local` when
+  npm's global prefix (`npm prefix -g`, its `lib/node_modules`) is not writable, as with the
+  nodejs.org installer's root-owned `/usr/local`; it used to fail with EACCES. It puts
+  `~/.local/bin` on the process PATH and warns when the shell PATH lacks it. A writable prefix,
+  and Windows, keep the plain command. A mocked `CommandRunner` must now expect `npm prefix -g`
+  before an npm global install.
 
 ## [0.0.54] - 2026-11-13
 
