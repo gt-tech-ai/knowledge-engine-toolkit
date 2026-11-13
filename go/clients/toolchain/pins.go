@@ -52,6 +52,11 @@ func WithReinstallHint(hint func(binary, pkgAtVersion string) string) Option {
 // reinstall command; a tool that is not on PATH, or whose binary carries no build info,
 // is skipped (the lint/format steps that need it report a missing tool themselves).
 //
+// A binary at the pinned version still fails when an older Go minor built it than the
+// local toolchain (`go env GOVERSION`): it embeds that Go's go/types, so it cannot load
+// packages that need the newer Go. When the toolchain version cannot be read, the pin
+// match alone decides.
+//
 // This is the guard for formatter drift: gofumpt and golines at another version format
 // the same file differently, so a local run that "passes" fails CI's format check.
 func (i *Installer) CheckPins(
@@ -60,6 +65,8 @@ func (i *Installer) CheckPins(
 	tools []types.ToolDef,
 ) types.StepResults {
 	var out types.StepResults
+
+	toolchainGo := i.toolchainGoVersion(ctx, root)
 
 	for j := range tools {
 		tool := &tools[j]
@@ -74,18 +81,20 @@ func (i *Installer) CheckPins(
 			continue
 		}
 
-		out = append(out, i.checkPin(ctx, root, tool, pkg, want))
+		out = append(out, i.checkPin(ctx, root, tool, pkg, want, toolchainGo))
 	}
 
 	return out
 }
 
-// checkPin compares one tool's binary on PATH with its pinned package and version.
+// checkPin compares one tool's binary on PATH with its pinned package and version, and
+// the Go that built it with toolchainGo (read once, on first use).
 func (i *Installer) checkPin(
 	ctx context.Context,
 	root string,
 	tool *types.ToolDef,
 	pkg, want string,
+	toolchainGo func() string,
 ) types.StepResult {
 	name := tool.Name + " is the pinned " + want
 
@@ -94,20 +103,21 @@ func (i *Installer) checkPin(
 		return pinStep(name, types.StatusSkip, "not on PATH")
 	}
 
-	res := i.runner.RunBuffered(ctx, root, "go", "version", "-m", path)
+	res := i.runner.RunBuffered(ctx, root, textGo, "version", "-m", path)
 	gotPkg, got := buildInfo(string(res.Stdout))
 
 	if res.Err != nil || got == "" {
 		return pinStep(name, types.StatusSkip, path+" carries no Go build info to check")
 	}
 
-	if gotPkg == pkg && got == want {
-		return pinStep(name, types.StatusPass, "")
-	}
-
 	fix := "go install " + pkg + textAt + want
 	if i.reinstallHint != nil {
 		fix = i.reinstallHint(tool.Binary, pkg+textAt+want)
+	}
+
+	if gotPkg == pkg && got == want {
+		return builtByStep(name, path, buildGoVersion(string(res.Stdout)),
+			toolchainGo(), fix)
 	}
 
 	return pinStep(name, types.StatusFail, fmt.Sprintf(
@@ -120,6 +130,67 @@ func (i *Installer) checkPin(
 		want,
 		fix,
 	))
+}
+
+// builtByStep passes a pinned binary unless an older Go minor built it than the local
+// toolchain; either version unreadable passes, since the pin itself matched.
+func builtByStep(name, path, builtBy, toolchain, fix string) types.StepResult {
+	built, builtErr := types.ParseVersion(strings.TrimPrefix(builtBy, textGo))
+	local, localErr := types.ParseVersion(strings.TrimPrefix(toolchain, textGo))
+
+	if builtErr != nil || localErr != nil {
+		return pinStep(name, types.StatusPass, "")
+	}
+
+	local.Patch = 0
+	if built.MeetsMinimum(local) {
+		return pinStep(name, types.StatusPass, "")
+	}
+
+	return pinStep(name, types.StatusFail, fmt.Sprintf(
+		"%s was built by %s, older than the local %s toolchain "+
+			"(it cannot load packages that need the newer Go): run %#q",
+		path,
+		builtBy,
+		toolchain,
+		fix,
+	))
+}
+
+// toolchainGoVersion returns a function that reads the local toolchain's version
+// (`go env GOVERSION`, e.g. "go1.27.4") on its first call and reuses it after; it is ""
+// when the command fails.
+func (i *Installer) toolchainGoVersion(ctx context.Context, root string) func() string {
+	var (
+		read    bool
+		version string
+	)
+
+	return func() string {
+		if !read {
+			read = true
+
+			res := i.runner.RunBuffered(ctx, root, textGo, "env", "GOVERSION")
+			if res.Err == nil {
+				version = strings.TrimSpace(string(res.Stdout))
+			}
+		}
+
+		return version
+	}
+}
+
+// buildGoVersion returns the Go release that built a binary, from the first line of
+// `go version -m` output ("<path>: go1.27.4"); it is "" when absent.
+func buildGoVersion(out string) string {
+	first, _, _ := strings.Cut(out, "\n")
+	_, version, found := strings.Cut(first, ": ")
+
+	if !found || !strings.HasPrefix(version, textGo) {
+		return ""
+	}
+
+	return strings.TrimSpace(version)
 }
 
 // buildInfo extracts the main package path and its module version from `go version -m`
@@ -156,7 +227,7 @@ func (i *Installer) InstalledVersion(
 		return ""
 	}
 
-	res := i.runner.RunBuffered(ctx, root, "go", "version", "-m", path)
+	res := i.runner.RunBuffered(ctx, root, textGo, "version", "-m", path)
 	if pkg, ver := buildInfo(string(res.Stdout)); res.Err == nil && ver != "" {
 		return pkg + textAt + ver
 	}

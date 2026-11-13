@@ -19,6 +19,9 @@ const (
 	// textAt is the literal "@".
 	textAt = "@"
 
+	// textGo is the go command, and the prefix of a Go release name ("go1.27.4").
+	textGo = "go"
+
 	// textCommaSpace is the literal ", ".
 	textCommaSpace = ", "
 

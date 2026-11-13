@@ -67,6 +67,13 @@ func checkGofumptPin(
 		RunBuffered(gomock.Any(), textRoot, textGoLower, textVersion, "-m", path).
 		Return(*res)
 
+	commandRunner.EXPECT().
+		RunBuffered(gomock.Any(), textRoot, textGoLower, textEnv, textGOVERSION).
+		Return(fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte(textGo1270 + textNewline)
+		})).
+		MaxTimes(1)
+
 	paths := mocks.NewMockPathResolver(ctrl)
 	paths.EXPECT().LookPath(textGofumpt).Return(path, nil)
 
@@ -88,11 +95,11 @@ func checkGofumptPin(
 func testClientsToolchainCheckPinsRunsCases(t *testing.T) {
 	t.Helper()
 
-	const path = "/usr/local/bin/gofumpt"
+	const path = textGofumptPath
 
 	info := func(pkg, ver string) interfaces.CmdResult {
 		return fixtures.Build(func(row *interfaces.CmdResult) {
-			row.Stdout = []byte(path + ": go1.27.0\n\tpath\t" + pkg +
+			row.Stdout = []byte(path + ": " + textGo1270 + "\n\tpath\t" + pkg +
 				"\n\tmod\t" + pkg + "\t" + ver + "\th1:x=\n")
 		})
 	}
@@ -170,6 +177,89 @@ func testClientsToolchainCheckPinsFailsWhenTheBinaryOnPathIsNotThePinSkipsWhenUn
 		CheckPins(t.Context(), textRoot, tools)
 	require.Len(t, got, 1)
 	assert.Equal(t, types.StatusSkip, got[0].Status)
+}
+
+// Literals for the pinned-tool checks.
+const (
+	// textGOVERSION is the `go env` key naming the local toolchain's version.
+	textGOVERSION = "GOVERSION"
+
+	// textGo1270 is a Go release, as `go version -m` and `go env GOVERSION` print it.
+	textGo1270 = "go1.27.0"
+
+	// textGo1274 is the local toolchain in the build-Go cases.
+	textGo1274 = "go1.27.4"
+
+	// textGofumptPath is where the pinned-tool checks find gofumpt.
+	textGofumptPath = "/usr/local/bin/gofumpt"
+)
+
+// TestClientsToolchainCheckPins_FailsWhenAnOlderGoBuiltThePin tests that the pin check
+// rejects a pinned binary built by an older Go than the local toolchain.
+//
+// Why this test is important:
+//   - A `go install` binary embeds the go/types of the Go that built it. After a Go
+//     upgrade, a mockgen or golines at the pinned version but built by the old Go cannot
+//     load packages that need the new one ("package requires newer Go version"), and
+//     every generator or formatter run fails with that instead of "reinstall the tool".
+//
+// What it tests (the PATH lookup and the subprocesses are generated mocks):
+//   - The pinned build from an older Go minor fails, naming both Go versions and the
+//     reinstall command.
+//   - The same or a newer Go minor passes; an older patch alone passes.
+//   - When `go env GOVERSION` fails, the pin match alone decides (pass).
+func TestClientsToolchainCheckPins_FailsWhenAnOlderGoBuiltThePin(t *testing.T) {
+	t.Parallel()
+
+	check := func(builtBy string, toolchainRes interfaces.CmdResult) types.StepResult {
+		t.Helper()
+
+		ctrl := gomock.NewController(t)
+		commandRunner := mocks.NewMockCommandRunner(ctrl)
+		commandRunner.EXPECT().
+			RunBuffered(gomock.Any(), textRoot, textGoLower, textVersion, "-m",
+				textGofumptPath).
+			Return(fixtures.Build(func(row *interfaces.CmdResult) {
+				row.Stdout = []byte(textGofumptPath + ": " + builtBy +
+					"\n\tpath\tmvdan.cc/gofumpt" +
+					"\n\tmod\tmvdan.cc/gofumpt\tv0.10.0\th1:x=\n")
+			}))
+		commandRunner.EXPECT().
+			RunBuffered(gomock.Any(), textRoot, textGoLower, textEnv, textGOVERSION).
+			Return(toolchainRes)
+
+		paths := mocks.NewMockPathResolver(ctrl)
+		paths.EXPECT().LookPath(textGofumpt).Return(textGofumptPath, nil)
+
+		got := toolchain.NewInstaller(commandRunner, fixtures.NopLogger(), textLinuxApt,
+			denyPrompter(t),
+			toolchain.WithPathResolver(paths),
+		).
+			CheckPins(t.Context(), textRoot,
+				[]types.ToolDef{pinnedGoTool(textGofumpt, "mvdan.cc/gofumpt@v0.10.0")})
+		require.Len(t, got, 1)
+
+		return got[0]
+	}
+	goVersion := func(text string) interfaces.CmdResult {
+		return fixtures.Build(func(row *interfaces.CmdResult) {
+			row.Stdout = []byte(text + textNewline)
+		})
+	}
+
+	stale := check("go1.26.3", goVersion(textGo1274))
+	assert.Equal(t, types.StatusFail, stale.Status)
+	assert.Contains(t, stale.Error, "built by go1.26.3")
+	assert.Contains(t, stale.Error, textGo1274)
+	assert.Contains(t, stale.Error, "run `go install mvdan.cc/gofumpt@v0.10.0`")
+
+	for _, builtBy := range []string{textGo1270, "go1.28.1"} {
+		got := check(builtBy, goVersion(textGo1274))
+		assert.Equal(t, types.StatusPass, got.Status, builtBy+": "+got.Error)
+	}
+
+	failed := fixtures.Build(func(row *interfaces.CmdResult) { row.Err = assert.AnError })
+	assert.Equal(t, types.StatusPass, check("go1.26.3", failed).Status)
 }
 
 // TestClientsToolchainInstalledVersion_ReadsTheBinaryOnPath tests the installed-version

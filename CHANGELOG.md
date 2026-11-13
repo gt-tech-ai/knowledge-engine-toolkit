@@ -18,6 +18,12 @@ All notable changes to this project are recorded here. The format follows
   and minor. A tool entry's `min_version: "1.27.4"` now rejects Go 1.27.1, which used to pass
   and then failed the build. `String()` prints the patch when it is non-zero. A struct literal
   of `types.Version` must name `Patch` where `exhaustruct` applies.
+- `toolchain.Installer.CheckPins` also fails a pinned binary that an older Go minor built
+  than the local toolchain (`go env GOVERSION`), with the reinstall command. After a Go upgrade,
+  a mockgen or golines at the pinned version but built by the old Go cannot load packages that
+  need the new one ("package requires newer Go version"); the check used to pass it. When the
+  toolchain version cannot be read, the pin match alone decides. `CheckPins` runs `go env
+  GOVERSION` once per call, so a mocked `CommandRunner` must expect it.
 
 ## [0.0.54] - 2026-11-13
 

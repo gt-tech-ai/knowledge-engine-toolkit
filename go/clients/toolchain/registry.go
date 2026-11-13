@@ -23,7 +23,7 @@
 //     os-arch artifact through the [Downloader] seam, refuse it unless its SHA-256
 //     matches the manifest, and atomically place the (extracted) binary in GOBIN.
 //   - pins.go — [Installer.CheckPins] compares each go-installed CI tool on PATH with
-//     the build the manifest pins.
+//     the build the manifest pins, and fails one an older Go minor built.
 //
 // The two tool representations (lightweight [Tool], heavy [types.ToolDef]) coexist,
 // both projected from the same manifest list but serving different consumers.
