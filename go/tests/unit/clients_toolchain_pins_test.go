@@ -360,3 +360,52 @@ func testClientsToolchainInstalledVersionReadsTheBinaryOnPathChecksProbes(t *tes
 			InstalledVersion(t.Context(), textRoot, &shellcheck),
 	)
 }
+
+// TestClientsToolchainProvision_ReinstallsADriftedPin tests that setup reinstalls a
+// required go-install tool whose binary on PATH is not the pinned build.
+//
+// Why this test is important:
+//   - The detector only asks whether the binary exists and meets a minimum, so a stale
+//     go-install binary (another pin, or built by an older Go) scanned as OK and setup
+//     kept it; the developer then hit the pin check or a "requires newer Go version"
+//     failure later, with no setup run that would fix it.
+//
+// What it tests (the PATH lookup and the subprocesses are generated mocks):
+//   - A required tool on PATH at another version is reinstalled at its pin and
+//     verified, and Provision succeeds.
+func TestClientsToolchainProvision_ReinstallsADriftedPin(t *testing.T) {
+	t.Setenv(textGobin, t.TempDir())
+
+	const wirePath = "/usr/local/bin/wire"
+
+	ctrl := gomock.NewController(t)
+	commandRunner := mocks.NewMockCommandRunner(ctrl)
+	commandRunner.EXPECT().Exists(textGoLower).Return(true)
+	gomock.InOrder(
+		commandRunner.EXPECT().Exists(textWire).Return(true),
+		commandRunner.EXPECT().
+			RunBuffered(gomock.Any(), textRoot, textGoLower, textVersion, "-m", wirePath).
+			Return(fixtures.Build(func(row *interfaces.CmdResult) {
+				row.Stdout = []byte(wirePath + ": " + textGo1270 +
+					"\n\tpath\tx/wire\n\tmod\tx/wire\tv0\th1:x=\n")
+			})),
+		commandRunner.EXPECT().RunWithEnv(
+			gomock.Any(), textRoot, []string{textGotoolchainLocal},
+			textGoLower, textInstall, "x/wire@v1",
+		).Return(nil),
+		commandRunner.EXPECT().Exists(textWire).Return(true),
+	)
+
+	paths := mocks.NewMockPathResolver(ctrl)
+	paths.EXPECT().LookPath(textWire).Return(wirePath, nil)
+
+	err := toolchain.NewInstaller(commandRunner, fixtures.NopLogger(), textLinuxApt,
+		denyPrompter(t),
+		toolchain.WithPathResolver(paths),
+	).
+		Provision(t.Context(), textRoot, provisionCatalog(t),
+			fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+				row.AutoYes = true
+			}))
+	require.NoError(t, err)
+}

@@ -197,8 +197,10 @@ func (i *Installer) Install(
 
 // Provision runs the required-tool flow for setup: pin the local Go
 // toolchain, ensure the go-install bin dir is on PATH, check prerequisites, scan
-// the required toolchain, and — unless opts.CheckOnly — install the missing ones that
-// have an applicable method, verifying each afterwards. A required tool with no
+// the required toolchain, and — unless opts.CheckOnly — install the missing or
+// outdated ones that have an applicable method, verifying each afterwards. A
+// go-install tool whose binary on PATH is not the pinned build (see CheckPins)
+// counts as outdated. A required tool with no
 // install method for this platform (e.g. gcc off Windows) is reported, not
 // force-installed.
 func (i *Installer) Provision(
@@ -223,6 +225,10 @@ func (i *Installer) Provision(
 
 	if opts.CheckOnly {
 		return SummarizeMissing(prereqErr, results)
+	}
+
+	if !i.force {
+		i.markDriftedPins(ctx, root, required, results)
 	}
 
 	toInstall := i.selectInstallable(required, results, i.force)
@@ -337,8 +343,9 @@ func (i *Installer) preparePlatform() {
 	}
 }
 
-// pendingTargets keeps the targets to install: force rebuilds even an OK tool (the
-// post-Go-bump case: right version, stale build-Go); otherwise a current one is skipped.
+// pendingTargets keeps the targets to install: force rebuilds even an OK tool; a
+// go-install tool whose binary is not the pinned build (another version, or a stale
+// build Go after a Go bump) is reinstalled; otherwise a current one is skipped.
 func (i *Installer) pendingTargets(
 	ctx context.Context,
 	root string,
@@ -346,11 +353,14 @@ func (i *Installer) pendingTargets(
 	opts *types.InstallToolsOptions,
 ) []types.ToolDef {
 	det := NewDetector(i.runner, i.log)
+	toolchainGo := i.toolchainGoVersion(ctx, root)
 
 	var pending []types.ToolDef
 
 	for j := range targets {
-		if opts.Force || det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK {
+		if opts.Force ||
+			det.Check(ctx, root, &targets[j]).Status != types.StatusToolOK ||
+			i.pinDrifted(ctx, root, &targets[j], toolchainGo) {
 			pending = append(pending, targets[j])
 		}
 	}
@@ -384,6 +394,24 @@ func (i *Installer) installAll(
 	i.log.Info("All tools installed successfully")
 
 	return nil
+}
+
+// markDriftedPins marks each required go-install tool the detector found OK as
+// outdated when its binary on PATH is not the pinned build, so setup reinstalls it.
+func (i *Installer) markDriftedPins(
+	ctx context.Context,
+	root string,
+	required []types.ToolDef,
+	results []types.ToolCheckResult,
+) {
+	toolchainGo := i.toolchainGoVersion(ctx, root)
+
+	for j := range results {
+		if results[j].Status == types.StatusToolOK &&
+			i.pinDrifted(ctx, root, &required[j], toolchainGo) {
+			results[j].Status = types.StatusToolOutdated
+		}
+	}
 }
 
 // selectInstallable returns the indices of required tools that need installing

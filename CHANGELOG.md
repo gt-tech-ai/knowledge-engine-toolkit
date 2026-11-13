@@ -24,6 +24,12 @@ All notable changes to this project are recorded here. The format follows
   need the new one ("package requires newer Go version"); the check used to pass it. When the
   toolchain version cannot be read, the pin match alone decides. `CheckPins` runs `go env
   GOVERSION` once per call, so a mocked `CommandRunner` must expect it.
+- `toolchain.Installer.Provision` (setup) and `InstallSet` reinstall a go-install tool whose
+  binary on PATH fails that pin check, logging why. The detector only checks presence and the
+  minimum version, so a binary at the wrong pin, or built by an older Go, used to count as
+  present and was never replaced. Under force every tool is reinstalled and the pin check is
+  skipped. A mocked `CommandRunner` / `PathResolver` for an OK go-install tool must now expect
+  `go env GOVERSION`, the `LookPath` and `go version -m <path>`.
 
 ## [0.0.54] - 2026-11-13
 

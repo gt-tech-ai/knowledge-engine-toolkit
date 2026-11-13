@@ -1240,7 +1240,7 @@ CLIs), so each one does not re-walk the tree or re-implement a runner.
   resolves and caches verified credentials. `clients/toolchain` declares developer tools as data
   (`types.ToolEntry`), detects them, installs them per platform (pinned downloads verified by SHA-256),
   and checks that each go-installed CI tool on PATH is the pinned build, built by a Go no
-  older than the local toolchain.
+  older than the local toolchain; setup and `InstallSet` reinstall one that is not.
 - **Operations.** `execution/ops` registers typed operations once (descriptor data plus a
   `Builder`; `ops.Func` reflects the input schema from the input type) and admits them per
   front-end by an `ExposurePolicy` (safety-class ceiling, lifecycles, allow and deny lists); it

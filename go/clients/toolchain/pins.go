@@ -70,13 +70,8 @@ func (i *Installer) CheckPins(
 
 	for j := range tools {
 		tool := &tools[j]
-		method, ok := i.resolveMethod(tool)
 
-		if !ok || !isGoInstall(method) {
-			continue
-		}
-
-		pkg, want, pinned := strings.Cut(method.Args[len(method.Args)-1], textAt)
+		pkg, want, pinned := i.goInstallPin(tool)
 		if !pinned {
 			continue
 		}
@@ -85,6 +80,42 @@ func (i *Installer) CheckPins(
 	}
 
 	return out
+}
+
+// goInstallPin returns the package and version a tool is installed at with
+// `go install <package>@<version>` on this platform; pinned is false otherwise.
+func (i *Installer) goInstallPin(tool *types.ToolDef) (pkg, version string, pinned bool) {
+	method, ok := i.resolveMethod(tool)
+	if !ok || !isGoInstall(method) {
+		return "", "", false
+	}
+
+	return strings.Cut(method.Args[len(method.Args)-1], textAt)
+}
+
+// pinDrifted reports whether a go-install-pinned tool's binary on PATH fails the pin
+// check (another build, or one an older Go minor built), logging why, so an install
+// flow treats it as outdated rather than present.
+func (i *Installer) pinDrifted(
+	ctx context.Context,
+	root string,
+	tool *types.ToolDef,
+	toolchainGo func() string,
+) bool {
+	pkg, want, pinned := i.goInstallPin(tool)
+	if !pinned {
+		return false
+	}
+
+	step := i.checkPin(ctx, root, tool, pkg, want, toolchainGo)
+	if step.Status != types.StatusFail {
+		return false
+	}
+
+	i.log.Warn("Pinned build drifted; reinstalling", textTool, tool.Name,
+		"reason", step.Error)
+
+	return true
 }
 
 // checkPin compares one tool's binary on PATH with its pinned package and version, and
