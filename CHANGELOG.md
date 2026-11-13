@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.54] - 2026-11-13
+
+Go only: the Python package is unchanged.
+
 ### Added
 
 - Go connector kind `github` (`clients/connector/github`, `connector.KindGitHub`): lists one
