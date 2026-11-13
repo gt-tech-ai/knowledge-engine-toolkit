@@ -30,4 +30,10 @@ const (
 
 	// textWinget is the literal "winget".
 	textWinget = "winget"
+
+	// envPath is the PATH environment variable.
+	envPath = "PATH"
+
+	// logKeyDir is the log attribute naming a directory.
+	logKeyDir = "dir"
 )

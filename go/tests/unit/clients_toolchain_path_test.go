@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -114,3 +115,44 @@ const (
 	// textOptToolBin is the literal "/opt/tool/bin".
 	textOptToolBin = "/opt/tool/bin"
 )
+
+// TestClientsToolchainProvision_MovesGoBinToTheFront tests that setup puts the go-install
+// bin dir first on PATH when it is already present further back, and warns about each
+// tool an earlier directory shadows.
+//
+// Why this test is important:
+//   - A Homebrew golangci-lint or an old wire ahead of GOBIN wins every lookup, so setup
+//     installs the pinned build and the checks still run the other one. Adding GOBIN only
+//     when missing left it behind the shadowing directory.
+//   - Setup can fix only its own process PATH; the user's shell profile keeps the old
+//     order, so the warning is the only way they learn to fix it.
+//
+// What it tests:
+//   - With PATH = shadow:/usr/bin:GOBIN and wire in both shadow and GOBIN, a check-only
+//     Provision leaves GOBIN first and listed once, and logs a shadowing warning.
+func TestClientsToolchainProvision_MovesGoBinToTheFront(t *testing.T) {
+	shadow, gobin := t.TempDir(), t.TempDir()
+	for _, dir := range []string{shadow, gobin} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, textWire), nil, fileModeInput))
+	}
+
+	sep := string(os.PathListSeparator)
+	t.Setenv(textPath, shadow+sep+textUsrBin+sep+gobin)
+	t.Setenv(textGobin, gobin)
+
+	ctrl := gomock.NewController(t)
+	runner := mocks.NewMockCommandRunner(ctrl)
+	registerToolScanMock(runner)
+
+	spy := fixtures.NewSpyLogger()
+	inst := toolchain.NewInstaller(runner, spy, textLinuxApt, denyPrompter(t))
+
+	_ = inst.Provision(t.Context(), textRoot, provisionCatalog(t),
+		fixtures.BuildRef(func(row *types.InstallToolsOptions) { row.CheckOnly = true }))
+
+	assert.Equal(t, []string{gobin, shadow, textUsrBin},
+		filepath.SplitList(os.Getenv(textPath)))
+	assert.True(t, slices.ContainsFunc(spy.WarnCalls, func(msg string) bool {
+		return strings.Contains(msg, "shadow")
+	}), "want a shadowing warning, got %q", spy.WarnCalls)
+}

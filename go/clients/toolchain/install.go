@@ -196,7 +196,8 @@ func (i *Installer) Install(
 }
 
 // Provision runs the required-tool flow for setup: pin the local Go
-// toolchain, ensure the go-install bin dir is on PATH, check prerequisites, scan
+// toolchain, put the go-install bin dir first on PATH (warning about any tool an
+// earlier PATH entry shadows), check prerequisites, scan
 // the required toolchain, and — unless opts.CheckOnly — install the missing or
 // outdated ones that have an applicable method, verifying each afterwards. A
 // go-install tool whose binary on PATH is not the pinned build (see CheckPins)

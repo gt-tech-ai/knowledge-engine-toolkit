@@ -30,6 +30,11 @@ All notable changes to this project are recorded here. The format follows
   present and was never replaced. Under force every tool is reinstalled and the pin check is
   skipped. A mocked `CommandRunner` / `PathResolver` for an OK go-install tool must now expect
   `go env GOVERSION`, the `LookPath` and `go version -m <path>`.
+- `toolchain.Installer.Provision` (setup) puts the go-install bin dir (GOBIN) first on the
+  process PATH, moving it when it is already present further back; it used to add it only
+  when missing. When GOBIN was not first, it warns about each binary there that an earlier
+  PATH directory also holds (a Homebrew `golangci-lint`, an old `wire`), since the user's
+  shell profile still has the old order.
 
 ## [0.0.54] - 2026-11-13
 
