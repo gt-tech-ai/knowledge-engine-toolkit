@@ -4,6 +4,8 @@ Two backends implement the ``Bulkhead`` ABC from core/interfaces: ``SemaphoreBul
 fixed-size ``asyncio.Semaphore``) and ``AdaptiveBulkhead`` (a self-tuning AIMD limit that
 shrinks under latency and recovers). ``bulkhead_from_config`` selects between them by
 ``BulkheadKind``, mirroring Go's ``bulkhead.NewFromConfig`` (KindChannel / KindAdaptive).
+A standalone ``SemaphoreBulkhead`` counts its refusals through ``with_recorder``; under a
+decorate tier the bulkhead layer counts them instead.
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ from typing import TYPE_CHECKING, Self, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.bulkhead import Bulkhead
+from techai_webutils.foundation.resilience.observer import UNOBSERVED
+from techai_webutils.foundation.resilience.series import Reason
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -48,6 +52,20 @@ class SemaphoreBulkhead(Bulkhead):
 
         """
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._recorder: Recorder = UNOBSERVED.recorder
+
+    def with_recorder(self, recorder: Recorder) -> Self:
+        """Count each refusal as a ``bulkhead_full`` rejection (operation "").
+
+        Args:
+            recorder: Where the refusals are counted.
+
+        Returns:
+            This bulkhead.
+
+        """
+        self._recorder = recorder
+        return self
 
     @override
     async def execute(self, fn: Callable[[], Awaitable[object]]) -> object:
@@ -82,6 +100,7 @@ class SemaphoreBulkhead(Bulkhead):
 
         """
         if self._semaphore.locked():
+            self._recorder.rejected("", Reason.BULKHEAD_FULL)
             raise BulkheadFullError
         async with self._semaphore:
             return await fn()

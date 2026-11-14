@@ -2,7 +2,8 @@
 
 The async analog of ``circuit_breaker.CircuitBreaker`` -- an ``async with`` context
 manager backed by an ``asyncio.Lock`` so it composes with the asyncio ingestion path.
-Reuses the sync module's ``CircuitState`` and ``CircuitOpenError``.
+Reuses the sync module's ``CircuitState`` and ``CircuitOpenError``, and reports
+through an ``Observer`` (``with_observer``) exactly as the sync breaker does.
 """
 
 from __future__ import annotations
@@ -15,10 +16,13 @@ from techai_webutils.foundation.resilience.circuit_breaker import (
     CircuitOpenError,
     CircuitState,
 )
+from techai_webutils.foundation.resilience.series import BreakerState
 
 if TYPE_CHECKING:
     import types
     from collections.abc import Callable
+
+    from techai_webutils.foundation.resilience.observer import Observer
 
 
 @final
@@ -68,6 +72,43 @@ class AsyncCircuitBreaker:
         self._last_failure_time: float = 0.0
         # _lock serializes state reads/writes across concurrent callers.
         self._lock = asyncio.Lock()
+        # _observer receives the state and each move; None reports nothing.
+        self._observer: Observer | None = None
+
+    def with_observer(self, observer: Observer) -> Self:
+        """Report the breaker's state, each move and one Warning per opening.
+
+        It reports the current state at once. Set it before the first call: it does
+        not take the lock, which only an awaiting caller can hold.
+
+        Args:
+            observer: Where the breaker reports.
+
+        Returns:
+            This breaker.
+
+        """
+        self._observer = observer
+        observer.recorder.set_breaker_state(BreakerState(self._state.value))
+        return self
+
+    def _move(self, to: CircuitState) -> None:
+        """Change to ``to`` and report the move (caller holds the lock).
+
+        Args:
+            to: The new state.
+
+        """
+        if self._state is to:
+            return
+        self._state = to
+        if self._observer is None:
+            return
+        state = BreakerState(to.value)
+        self._observer.recorder.set_breaker_state(state)
+        self._observer.recorder.breaker_moved(state)
+        if to is CircuitState.OPEN:
+            self._observer.warn("circuit breaker opened")
 
     async def current_state(self) -> CircuitState:
         """Return the current state.
@@ -83,7 +124,7 @@ class AsyncCircuitBreaker:
                 self._state == CircuitState.OPEN
                 and time.monotonic() - self._last_failure_time >= self._recovery_timeout
             ):
-                self._state = CircuitState.HALF_OPEN
+                self._move(CircuitState.HALF_OPEN)
             return self._state
 
     async def __aenter__(self) -> Self:
@@ -124,10 +165,10 @@ class AsyncCircuitBreaker:
                 self._counts is not None and not self._counts(exc_val)
             ):
                 self._failure_count = 0
-                self._state = CircuitState.CLOSED
+                self._move(CircuitState.CLOSED)
                 return
 
             self._failure_count += 1
             self._last_failure_time = time.monotonic()
             if self._failure_count >= self._failure_threshold:
-                self._state = CircuitState.OPEN
+                self._move(CircuitState.OPEN)

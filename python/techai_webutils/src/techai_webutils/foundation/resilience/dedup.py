@@ -2,13 +2,20 @@
 
 The default ``Deduplicator`` backend: a process-local map of ``key -> first-seen time``.
 Mirrors Go's ``foundation/resilience/dedup.Memory``. For cross-replica dedup, a shared
-store (Redis/Postgres) implements the same ``Deduplicator`` Protocol.
+store (Redis/Postgres) implements the same ``Deduplicator`` Protocol. ``with_recorder``
+counts each duplicate, as Go's ``Memory.WithRecorder`` does.
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
+from typing import TYPE_CHECKING, Self
+
+from techai_webutils.foundation.resilience.observer import UNOBSERVED
+
+if TYPE_CHECKING:
+    from techai_webutils.foundation.resilience.series import Recorder
 
 
 class MemoryDeduplicator:
@@ -30,6 +37,20 @@ class MemoryDeduplicator:
         self._ttl: float = ttl_seconds
         self._seen: dict[str, float] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
+        self._recorder: Recorder = UNOBSERVED.recorder
+
+    def with_recorder(self, recorder: Recorder) -> Self:
+        """Count each duplicate ``seen`` reports.
+
+        Args:
+            recorder: Where the duplicates are counted.
+
+        Returns:
+            This deduplicator.
+
+        """
+        self._recorder = recorder
+        return self
 
     async def seen(self, key: str) -> bool:
         """Return True if ``key`` is a live (un-expired) repeat.
@@ -47,6 +68,7 @@ class MemoryDeduplicator:
         async with self._lock:
             first = self._seen.get(key)
             if first is not None and (self._ttl <= 0 or now - first < self._ttl):
+                self._recorder.deduplicated()
                 return True
             self._seen[key] = now
             return False

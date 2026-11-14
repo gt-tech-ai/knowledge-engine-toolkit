@@ -22,9 +22,12 @@ from techai_webutils.core.interfaces.retrier import Retrier
 from techai_webutils.foundation.resilience.async_retry import retry_after_s
 from techai_webutils.foundation.resilience.backoff import exponential_jitter_wait
 from techai_webutils.foundation.resilience.classify import is_transient
+from techai_webutils.foundation.resilience.observer import UNOBSERVED, retries_done
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from techai_webutils.foundation.resilience.series import Recorder
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,20 +59,28 @@ class ExponentialRetrier(Retrier):
         config: ExponentialRetrierConfig,
         *,
         sleep: Callable[[float], Awaitable[None]] | None = None,
+        recorder: Recorder | None = None,
     ) -> None:
         """Bind the tuning; ``sleep`` (optional) replaces the wait between attempts.
 
         Args:
             config: The attempts and backoff.
             sleep: Waits between attempts; ``None`` uses ``asyncio.sleep``.
+            recorder: Counts each call's retries and exhaustion (operation "");
+                ``None`` records nothing. The decorate retry layer passes none and
+                counts through its own Observer.
 
         """
         self._config = config
         self._sleep = sleep
+        self._recorder = recorder or UNOBSERVED.recorder
 
     @override
     async def retry(self, op: Callable[[], Awaitable[object]]) -> object:
         """Run ``op``, retrying a transient failure; the last failure is raised.
+
+        The finished call is recorded through ``retries_done``: one retry per attempt
+        after the first, and an exhaustion when it still failed after a retry.
 
         Args:
             op: The call to run; it is retried only on a transient coded error.
@@ -119,4 +130,23 @@ class ExponentialRetrier(Retrier):
                 sleep=cast("Callable[[float], None]", self._sleep),
             )
         )
-        return await retrying(op)
+        attempts = 0
+
+        async def attempt() -> object:
+            """Run ``op`` once, counting the attempt.
+
+            Returns:
+                What ``op`` returns.
+
+            """
+            nonlocal attempts
+            attempts += 1
+            return await op()
+
+        try:
+            result: object = await retrying(attempt)
+        except Exception as exc:
+            _ = retries_done(self._recorder, "", attempts, exc)
+            raise
+        _ = retries_done(self._recorder, "", attempts, None)
+        return result

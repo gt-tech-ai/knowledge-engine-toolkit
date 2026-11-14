@@ -466,6 +466,26 @@ and `name` (the component or primitive) first, then its own labels.
   (its state at once, each move, one `circuit breaker opened` Warning per opening) and an
   adaptive bulkhead with `bulkhead_from_config(config, recorder)` →
   `AdaptiveBulkhead.with_recorder`.
+- **Python standalone primitives.** As in Go, a primitive outside a tier records only when
+  handed a recorder (`Recorder(metrics, TIER_STANDALONE, name)`), with `operation=""`:
+  - retriers: `ExponentialRetrier(config, sleep=…, recorder=…)`,
+    `retry_transient(…, recorder=…)` and `retry_transient_async(…, recorder=…)` count each
+    finished call through `retries_done`, without the Warning. They never consume a
+    `RetryBudget`, so they record no `budget_exhausted`.
+  - async breaker: `AsyncCircuitBreaker(…).with_observer(observer)` reports as the sync
+    breaker does (state, moves, one Warning per opening).
+  - refusals: `TokenBucketRateLimiter`, `InMemoryRateLimiter` and `RedisPerKeyRateLimiter`
+    take `.with_recorder(r)` and count each refusal as `rejections{rate_limited}`;
+    `per_key_rate_limiter_from_config(…, recorder=…)` threads it to either kind.
+    `SemaphoreBulkhead(…).with_recorder(r)` counts each refused `try_execute` as
+    `rejections{bulkhead_full}`; `bulkhead_from_config` gives the semaphore kind none, as its
+    refusals are the decorate layer's.
+  - `AdaptiveThrottler(…).with_recorder(r)` sets `throttle_rejection_ratio` after each `do`
+    and counts a shed call as `rejections{throttled}`; `hedger_from_config(config, recorder)`
+    gives the delay hedger the recorder (`fired` per backup, `won` when the backup's result is
+    returned).
+  - `DeadLetterQueue(backend).with_recorder(r)` counts `dead_letters_total{outcome}`;
+    `MemoryDeduplicator(…).with_recorder(r)` counts each duplicate.
 - **Deprecated Python series.** With the metrics layer on, the Python breaker also exports
   `circuit_breaker_state{dependency}` (0 closed, 1 half-open, 2 open) and
   `circuit_breaker_transitions_total{dependency,to}` for one more release; they are removed in

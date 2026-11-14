@@ -124,7 +124,8 @@ languages share one engine:
   that call (`foundation/resilience/hedge`, `reswire.NewHedge` in Go;
   `foundation.resilience.hedge.hedger_from_config` in Python), never switched on per tier.
   `reswire.WithMetrics(metrics, name)` makes `reswire.NewHedge` / `NewAdaptiveThrottle`
-  report their `resilience_*` series under tier `standalone`.
+  report their `resilience_*` series under tier `standalone`; in Python,
+  `hedger_from_config(config, recorder)` and the primitives' `with_recorder` do the same.
 - **Resilience metrics.** The retry, circuit-breaker, bulkhead, rate-limit and timeout layers,
   and the resilience primitives, record `resilience_*` series through a `series.Recorder`
   generated from `taxonomy/resilience-metrics.yaml` (`go generate

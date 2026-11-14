@@ -5,21 +5,25 @@ one pipeline; the call is allowed while the count is within ``max_per_window``. 
 index is ``floor(clock() / window_seconds)``, so every replica agrees on the window
 without coordination. ``max_per_window == 0`` is unlimited and never touches Redis. A
 Redis error raises a coded ``UNAVAILABLE``: the caller's policy decides whether that
-serves or rejects.
+serves or rejects. ``with_recorder`` counts each refusal as a ``rate_limited`` rejection.
 """
 
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, cast, final, override
+from typing import TYPE_CHECKING, Self, cast, final, override
 
 from techai_webutils.core.errors import AppError, ErrorCode
 from techai_webutils.core.interfaces.rate_limiter import PerKeyRateLimiter
+from techai_webutils.foundation.resilience.observer import UNOBSERVED
+from techai_webutils.foundation.resilience.series import Reason
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from redis.asyncio import Redis
+
+    from techai_webutils.foundation.resilience.series import Recorder
 
 
 @final
@@ -52,6 +56,20 @@ class RedisPerKeyRateLimiter(PerKeyRateLimiter):
         self._window = window_seconds
         self._prefix = prefix
         self._clock = clock
+        self._recorder: Recorder = UNOBSERVED.recorder
+
+    def with_recorder(self, recorder: Recorder) -> Self:
+        """Count each refusal as a ``rate_limited`` rejection (operation "").
+
+        Args:
+            recorder: Where the refusals are counted.
+
+        Returns:
+            This limiter.
+
+        """
+        self._recorder = recorder
+        return self
 
     @override
     async def allow_key(self, key: str) -> bool:
@@ -78,4 +96,7 @@ class RedisPerKeyRateLimiter(PerKeyRateLimiter):
         except Exception as exc:
             msg = "rate limiter unavailable"
             raise AppError(ErrorCode.UNAVAILABLE, msg, cause=exc) from exc
-        return int(count) <= self._max
+        if int(count) <= self._max:
+            return True
+        self._recorder.rejected("", Reason.RATE_LIMITED)
+        return False
