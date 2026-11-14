@@ -5,7 +5,7 @@ package rpc
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/wire"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
@@ -40,7 +40,7 @@ func ToConnectError(ctx context.Context, err error) error {
 
 	code, msg := Sanitize(err)
 
-	return connect.NewError(code, apperr.Sentinel(msg))
+	return connect.NewError(code, msg)
 }
 
 // FromRPCError maps a Connect or gRPC status error to a domain AppError, keeping the

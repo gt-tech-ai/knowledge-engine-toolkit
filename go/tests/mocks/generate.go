@@ -78,7 +78,7 @@
 //go:generate mockgen -destination=mock_storage.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces StorageClient
 //go:generate mockgen -destination=mock_store.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Store
 //go:generate mockgen -destination=mock_stream.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Stream
-//go:generate mockgen -destination=mock_stream_conn.go -package=mocks connectrpc.com/connect StreamingHandlerConn
+//go:generate mockgen -destination=mock_server_stream.go -package=mocks connectrpc.com/connect/v2 ServerStream
 //go:generate mockgen -destination=mock_terraform.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces TerraformClient
 //go:generate mockgen -destination=mock_toolchain.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain Downloader,PathResolver
 //go:generate mockgen -destination=mock_toolrun.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces StepCache,ToolRunner,TargetSelector,Parser

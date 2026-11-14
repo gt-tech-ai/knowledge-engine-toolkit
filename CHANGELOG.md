@@ -6,6 +6,45 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.59] - 2026-11-14
+
+Go only: the published Python package is unchanged.
+
+### Changed
+
+- Go: **breaking.** The Connect transport moves to connect-go v2 (`connectrpc.com/connect/v2`
+  v2.0.2) and `connectrpc.com/validate` v0.9.0; no file imports connect v1, and a depguard rule
+  (`connect-v2-only`) keeps it out. A consumer regenerates its Connect code with the v2
+  `protoc-gen-connect-go` and runs `connect-go-v2-migrate` before bumping to this version.
+  - `transport/connect/interceptors.ServerOptions` is now `ServerInterceptors(name, deps, edge)
+    []connect.ServerInterceptor`, passed to `connect.NewServer`; `Edge.Authn` and `Edge.Inner` are
+    `[]connect.ServerInterceptor`.
+  - Every server interceptor constructor returns a `connect.ServerInterceptor`, which wraps every
+    RPC shape the same way: `NewAuthInterceptor`, `NewServiceAuthInterceptor`,
+    `NewPrincipalInterceptor`, `NewTenantScopeInterceptor`, `TracingInterceptor`,
+    `MetricsInterceptor`, `NewLoggingInterceptor`, `BudgetInterceptor` (still unary only) and
+    `ValidateInterceptor` (`validate.NewServerInterceptor` with response validation).
+  - `clients/rpc/connect/interceptors.ClientOptions` is now `ClientInterceptors(base)
+    []connect.ClientInterceptor`, passed to `connect.NewClient`. A unary call still runs as one
+    client-tier operation (retried only when the schema declares it idempotent); v2 opens a unary
+    stream before sending, so the interceptor runs the open, send and receive inside the tier, one
+    fresh stream per attempt.
+  - `TracingInterceptor` sets `traceresponse` before the handler runs on every RPC shape: v2 flushes
+    a unary response's headers when the handler sends it, so a failed unary RPC now carries the
+    header too.
+  - The generated `tests/mocks.MockStreamingHandlerConn` is replaced by `MockServerStream`
+    (`connect.ServerStream`).
+
+### Added
+
+- Go `clients/rpc/wire.HeaderCarrier`: an OpenTelemetry `TextMapCarrier` over a connect-go v2
+  `*connect.Header`, so trace context is read from and written to `connect.CallInfo` metadata.
+
+### Fixed
+
+- `ARCHITECTURE.md` no longer says `rpc.NewFromConfig` installs the Connect client interceptor; it
+  builds the gRPC client only.
+
 ## [0.0.58] - 2026-11-14
 
 Python: `techai-webutils` 0.14.0. The Go module is unchanged.
@@ -33,6 +72,7 @@ Python: `techai-webutils` 0.14.0. The Go module is unchanged.
 - Python: **breaking for implementers.** `ingest_documents` and `delete_documents` are abstract
   on `KnowledgeBaseIngestor`, so a consumer's own subclass or wrapper must implement them (a
   wrapper delegates them, as `PollingIngestor` does).
+||||||| parent of 4b4a653f (feat(transport)!: move to connect-go v2)
 
 ## [0.0.57] - 2026-11-13
 

@@ -4,18 +4,16 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
-// metricsInterceptor records RPC metrics (request count + duration) for BOTH unary and
-// server-streaming RPCs. A stream is measured as one RPC — one counter increment and one
-// duration observation for the whole stream, keyed on the procedure.
-//
-// It is a server-side interceptor (a client's calls are metered by the client tier, see
-// ClientOptions), so WrapStreamingClient is a no-op.
+// metricsInterceptor records RPC metrics (request count + duration) for every RPC shape.
+// A stream is measured as one RPC — one counter increment and one duration observation
+// for the whole stream, keyed on the procedure. It is server-side: a client's calls are
+// metered by the client tier (clients/rpc/connect/interceptors.ClientInterceptors).
 type metricsInterceptor struct {
 	// requestsTotal counts RPCs, labelled by service, method, and outcome.
 	requestsTotal interfaces.Counter
@@ -23,12 +21,12 @@ type metricsInterceptor struct {
 	requestDuration interfaces.Histogram
 }
 
-// MetricsInterceptor creates an interceptor that records RPC metrics using the
+// MetricsInterceptor creates a server interceptor that records RPC metrics using the
 // interfaces.Metrics abstraction. Records total requests (with service, method,
 // and code labels) and request duration (with service and method labels), for unary
-// and server-streaming RPCs alike.
-func MetricsInterceptor(metrics interfaces.Metrics) connect.Interceptor {
-	return metricsInterceptor{
+// and streaming RPCs alike.
+func MetricsInterceptor(metrics interfaces.Metrics) connect.ServerInterceptor {
+	recorder := metricsInterceptor{
 		requestsTotal: metrics.Counter(
 			"connect_rpc_requests_total",
 			"Total number of Connect RPC requests",
@@ -41,42 +39,24 @@ func MetricsInterceptor(metrics interfaces.Metrics) connect.Interceptor {
 			"service", "method",
 		),
 	}
-}
 
-// WrapUnary records metrics for a unary RPC.
-func (i metricsInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		start := time.Now()
-		resp, err := next(ctx, req)
-		i.record(req.Spec().Procedure, start, err)
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(
+			ctx context.Context,
+			spec connect.Spec,
+			stream connect.ServerStream,
+		) error {
+			start := time.Now()
+			err := next(ctx, spec, stream)
+			recorder.record(spec.Procedure, start, err)
 
-		return resp, err
-	}
-}
-
-// WrapStreamingClient is a no-op — this is a server-side interceptor.
-func (metricsInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler records one counter increment + one duration observation for a
-// whole server-streaming RPC.
-func (i metricsInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		start := time.Now()
-		err := next(ctx, conn)
-		i.record(conn.Spec().Procedure, start, err)
-
-		return err
+			return err
+		}
 	}
 }
 
 // record observes the duration and increments the request counter for one completed RPC
-// (unary or stream). Shared by both wrap paths.
+// (unary or stream).
 func (i metricsInterceptor) record(procedure string, start time.Time, err error) {
 	service, method := parseConnectProcedure(procedure)
 	i.requestDuration.Observe(time.Since(start).Seconds(), service, method)

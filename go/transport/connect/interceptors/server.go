@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/wire"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
@@ -18,17 +18,18 @@ type Edge struct {
 	// service auth (NewServiceAuthInterceptor), gateway-header auth
 	// (NewAuthInterceptor), then the consumer's principal (NewPrincipalInterceptor) and
 	// tenant-scope (NewTenantScopeInterceptor) interceptors.
-	Authn []connect.Interceptor
+	Authn []connect.ServerInterceptor
 
 	// Inner run after the tier, nearest the handler: the per-request retry budget
 	// (BudgetInterceptor), request validation (ValidateInterceptor).
-	Inner []connect.Interceptor
+	Inner []connect.ServerInterceptor
 }
 
-// ServerOptions returns the handler options that run every RPC of a generated Connect
-// handler through the controller tier as the controller named name over d (see
+// ServerInterceptors returns the interceptors that run every RPC registered on a
+// *connect.Server through the controller tier as the controller named name over d (see
 // transport.Interceptors), so its layers are switched and tuned by the decoration
-// config's controllers tier:
+// config's controllers tier. Pass them to connect.NewServer, which applies them to every
+// service registered on it:
 //
 //   - Tracing continues the caller's trace in a server span and returns the
 //     traceresponse header (TracingInterceptor), metrics count requests by status code
@@ -36,30 +37,31 @@ type Edge struct {
 //     (NewLoggingInterceptor).
 //   - Recovery, the rate limit, the shedding bulkhead, auth and the timeout run the
 //     tier's own middleware, the operation named by the procedure
-//     ("pkg.Service/Method"); a stream gets no timeout.
+//     ("pkg.Service/Method"); a streaming RPC (any StreamType but unary) gets no
+//     timeout.
 //   - edge.Authn run just before the auth layer, edge.Inner after the tier.
 //
 // A handler's error reaches the caller unchanged; a rejection the tier produced itself
 // (a panic, a shed request, a denial, a timeout) becomes a *connect.Error of its code.
 // d must not be nil.
-func ServerOptions(name string, d *decorate.Deps, edge Edge) []connect.HandlerOption {
+func ServerInterceptors(
+	name string,
+	d *decorate.Deps,
+	edge Edge,
+) []connect.ServerInterceptor {
 	chain := transport.Interceptors(name, d, native(d), adapt, edge.Authn)
 
-	chain = append(chain, edge.Inner...)
-
-	if len(chain) == 0 {
-		return nil
-	}
-
-	return []connect.HandlerOption{connect.WithInterceptors(chain...)}
+	return append(chain, edge.Inner...)
 }
 
 // native returns the Connect interceptors standing in for the tier's observability
 // layers.
-func native(dRef *decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bool) {
+func native(
+	dRef *decorate.Deps,
+) func(decorate.Layer) ([]connect.ServerInterceptor, bool) {
 	deps := *dRef
 
-	return func(layer decorate.Layer) ([]connect.Interceptor, bool) {
+	return func(layer decorate.Layer) ([]connect.ServerInterceptor, bool) {
 		switch layer {
 		case decorate.LayerTracing:
 			return nativeTracing(&deps), true
@@ -84,110 +86,78 @@ func native(dRef *decorate.Deps) func(decorate.Layer) ([]connect.Interceptor, bo
 }
 
 // nativeTracing is the tracing interceptor, when a tracer is wired.
-func nativeTracing(dRef *decorate.Deps) []connect.Interceptor {
+func nativeTracing(dRef *decorate.Deps) []connect.ServerInterceptor {
 	d := *dRef
 
 	return when(
 		d.Tracer,
-		func() connect.Interceptor { return TracingInterceptor(d.Tracer) },
+		func() connect.ServerInterceptor { return TracingInterceptor(d.Tracer) },
 	)
 }
 
 // nativeMetrics is the metrics interceptor, when a recorder is wired.
-func nativeMetrics(dRef *decorate.Deps) []connect.Interceptor {
+func nativeMetrics(dRef *decorate.Deps) []connect.ServerInterceptor {
 	d := *dRef
 
 	return when(
 		d.Metrics,
-		func() connect.Interceptor { return MetricsInterceptor(d.Metrics) },
+		func() connect.ServerInterceptor { return MetricsInterceptor(d.Metrics) },
 	)
 }
 
 // nativeLogging is the access-log interceptor, when a logger is wired.
-func nativeLogging(dRef *decorate.Deps) []connect.Interceptor {
+func nativeLogging(dRef *decorate.Deps) []connect.ServerInterceptor {
 	d := *dRef
 
 	return when(
 		d.Logger,
-		func() connect.Interceptor { return NewLoggingInterceptor(d.Logger) },
+		func() connect.ServerInterceptor { return NewLoggingInterceptor(d.Logger) },
 	)
 }
 
 // when returns the interceptor build makes, or none when its collaborator is unset.
 func when[C comparable](
 	collaborator C,
-	build func() connect.Interceptor,
-) []connect.Interceptor {
+	build func() connect.ServerInterceptor,
+) []connect.ServerInterceptor {
 	var unset C
 
 	if collaborator == unset {
 		return nil
 	}
 
-	return []connect.Interceptor{build()}
+	return []connect.ServerInterceptor{build()}
 }
 
-// tierInterceptor runs a Connect handler's RPCs through a run of the tier's layers.
-type tierInterceptor struct {
-	// unary decorates a unary RPC.
-	unary decorate.OpMiddleware
+// adapt builds the interceptor over one run of the tier's layers: a unary RPC runs
+// through unary, any streaming RPC through stream (no timeout). The handler's own error
+// is returned unchanged; an error the run produced becomes a sanitized *connect.Error.
+func adapt(unary, stream decorate.OpMiddleware) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(
+			ctx context.Context,
+			spec connect.Spec,
+			serverStream connect.ServerStream,
+		) error {
+			run := stream
+			if spec.StreamType == connect.StreamTypeUnary {
+				run = unary
+			}
 
-	// stream decorates a streaming RPC (no timeout).
-	stream decorate.OpMiddleware
-}
+			var handlerErr error
 
-// adapt builds the interceptor over one run of the tier's layers.
-func adapt(unary, stream decorate.OpMiddleware) connect.Interceptor {
-	return tierInterceptor{unary: unary, stream: stream}
-}
+			err := run.WrapOp(
+				ctx,
+				operation(spec),
+				func(ctx context.Context) error {
+					handlerErr = next(ctx, spec, serverStream)
 
-// WrapUnary runs a unary RPC through the run.
-func (i tierInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		var (
-			resp       connect.AnyResponse
-			handlerErr error
-		)
+					return handlerErr
+				},
+			)
 
-		err := i.unary.WrapOp(
-			ctx,
-			operation(req.Spec()),
-			func(ctx context.Context) error {
-				resp, handlerErr = next(ctx, req)
-
-				return handlerErr
-			},
-		)
-
-		return resp, connectError(ctx, err, handlerErr)
-	}
-}
-
-// WrapStreamingClient is a no-op — this is a server-side interceptor.
-func (tierInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler runs a streaming RPC through the run.
-func (i tierInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		var handlerErr error
-
-		err := i.stream.WrapOp(
-			ctx,
-			operation(conn.Spec()),
-			func(ctx context.Context) error {
-				handlerErr = next(ctx, conn)
-
-				return handlerErr
-			},
-		)
-
-		return connectError(ctx, err, handlerErr)
+			return connectError(ctx, err, handlerErr)
+		}
 	}
 }
 
@@ -209,4 +179,43 @@ func operation(
 	spec connect.Spec,
 ) string {
 	return strings.TrimPrefix(spec.Procedure, "/")
+}
+
+// contextInterceptor is a server interceptor that derives the RPC's context from its
+// request header before the handler runs, for every RPC shape alike; an error from
+// derive rejects the RPC without calling the handler.
+func contextInterceptor(
+	derive func(ctx context.Context, spec connect.Spec, header *connect.Header) (
+		context.Context, error,
+	),
+) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(
+			ctx context.Context,
+			spec connect.Spec,
+			stream connect.ServerStream,
+		) error {
+			ctx, err := derive(ctx, spec, requestHeader(ctx))
+			if err != nil {
+				return err
+			}
+
+			return next(ctx, spec, stream)
+		}
+	}
+}
+
+// callInfo returns the RPC's server CallInfo, or an empty one when ctx did not come
+// through connect.Server.Call (a ServerFunc invoked directly).
+func callInfo(ctx context.Context) *connect.CallInfo {
+	if info, ok := connect.CallInfoForServerContext(ctx); ok {
+		return info
+	}
+
+	return new(connect.CallInfo)
+}
+
+// requestHeader returns the RPC's request header (empty outside connect.Server.Call).
+func requestHeader(ctx context.Context) *connect.Header {
+	return callInfo(ctx).RequestHeader()
 }

@@ -99,7 +99,7 @@ linters:
       # count). Enums the code only inspects and does not own, gRPC and Connect
       # status codes, reflect.Kind and the Alloy syntax tokens, are wide, externally owned
       # sets where a catch-all `default` is the right handling, so they are not checked.
-      ignore-enum-types: ^(google\.golang\.org/grpc/codes\.Code|connectrpc\.com/connect\.Code|reflect\.Kind|github\.com/grafana/alloy/syntax/token\.Token)$
+      ignore-enum-types: ^(google\.golang\.org/grpc/codes\.Code|connectrpc\.com/connect/v2\.Code|reflect\.Kind|github\.com/grafana/alloy/syntax/token\.Token)$
     gocritic:
       # Every check on. A heavy value (80 bytes and up) goes by pointer.
       enable-all: true
@@ -336,6 +336,14 @@ linters:
               desc: "use interfaces.Logger (core/interfaces) instead of log/slog directly"
             - pkg: "log$"
               desc: "use interfaces.Logger (core/interfaces) instead of stdlib log"
+
+        # ── Connect is v2 only: the v1 module stays out of every file, tests included ──
+        connect-v2-only:
+          files:
+            - "**/go/**/*.go"
+          deny:
+            - pkg: "connectrpc.com/connect$"
+              desc: "use connectrpc.com/connect/v2; connect v1 was retired"
 
         # ── go/stdx is a leaf utility: must not import other layers ──
         stdx-is-leaf:

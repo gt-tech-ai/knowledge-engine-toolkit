@@ -3,10 +3,9 @@ package interceptors
 import (
 	"context"
 	"crypto/subtle"
-	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -100,9 +99,7 @@ func GetCallerIdentity(ctx context.Context) (string, bool) {
 }
 
 // serviceAuthInterceptor authenticates the CALLING SERVICE on the internal, non-gateway
-// RPCs for BOTH unary and streaming handlers — Connect applies a
-// connect.UnaryInterceptorFunc only to unary calls, so a unary-only guard would leave
-// server-streaming handlers unauthenticated.
+// RPCs for every RPC shape, so a server-streaming handler is guarded like a unary one.
 type serviceAuthInterceptor struct {
 	// validator validates the caller service's bearer token.
 	validator interfaces.ServiceTokenValidator
@@ -114,7 +111,7 @@ type serviceAuthInterceptor struct {
 	audit bool
 }
 
-// NewServiceAuthInterceptor returns an interceptor that validates the caller's
+// NewServiceAuthInterceptor returns a server interceptor that validates the caller's
 // `authorization: Bearer <token>` against the validator and attaches the resolved caller
 // identity to the context; a missing/invalid credential is rejected with
 // CodeUnauthenticated (fail-closed). When stub is true it bypasses validation for local
@@ -124,47 +121,21 @@ func NewServiceAuthInterceptor(
 	validator interfaces.ServiceTokenValidator,
 	stub, audit bool,
 	logger interfaces.Logger,
-) connect.Interceptor {
-	return serviceAuthInterceptor{
+) connect.ServerInterceptor {
+	guard := serviceAuthInterceptor{
 		validator: validator,
 		stub:      stub,
 		audit:     audit,
 		logger:    logger,
 	}
-}
 
-// WrapUnary authenticates the caller before the unary handler runs.
-func (s serviceAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx, err := s.authenticate(ctx, req.Header(), req.Spec().Procedure)
-		if err != nil {
-			return nil, err
-		}
-
-		return next(ctx, req)
-	}
-}
-
-// WrapStreamingClient is a no-op — this is a server-side authentication interceptor.
-func (serviceAuthInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler authenticates the caller before the streaming handler runs, so
-// server-streaming RPCs are guarded identically to unary ones.
-func (s serviceAuthInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		ctx, err := s.authenticate(ctx, conn.RequestHeader(), conn.Spec().Procedure)
-		if err != nil {
-			return err
-		}
-
-		return next(ctx, conn)
-	}
+	return contextInterceptor(
+		func(ctx context.Context, spec connect.Spec, header *connect.Header) (
+			context.Context, error,
+		) {
+			return guard.authenticate(ctx, header, spec.Procedure)
+		},
+	)
 }
 
 // authenticate resolves + validates the caller credential, returning a context carrying
@@ -173,7 +144,7 @@ func (s serviceAuthInterceptor) WrapStreamingHandler(
 // admits.
 func (s serviceAuthInterceptor) authenticate(
 	ctx context.Context,
-	header http.Header,
+	header *connect.Header,
 	procedure string,
 ) (context.Context, error) {
 	if s.stub {
@@ -203,7 +174,7 @@ func (s serviceAuthInterceptor) unauthenticated(
 	if !s.audit {
 		return nil, connect.NewError(
 			connect.CodeUnauthenticated,
-			apperr.Unauthorized("service authentication required"),
+			apperr.Unauthorized("service authentication required").Error(),
 		)
 	}
 

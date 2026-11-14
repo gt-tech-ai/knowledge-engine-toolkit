@@ -1,7 +1,7 @@
 package wire
 
 import (
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -38,7 +38,7 @@ func SanitizeConnect(err error) error {
 
 	c := apperr.Code(err)
 
-	return connect.NewError(Code(c), apperr.Sentinel(SafeMessage(c)))
+	return connect.NewError(Code(c), SafeMessage(c))
 }
 
 // SanitizeGRPC returns err as the gRPC status error a server sends: the status the chain

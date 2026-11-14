@@ -7,7 +7,7 @@
 package wire
 
 import (
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -136,5 +136,5 @@ func ToConnect(err error) error {
 		return cerr
 	}
 
-	return connect.NewError(Code(apperr.Code(err)), err)
+	return connect.NewError(Code(apperr.Code(err)), err.Error()).WithCause(err)
 }

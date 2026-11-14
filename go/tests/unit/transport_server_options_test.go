@@ -1,15 +1,12 @@
 package unit_test
 
 import (
-	"bytes"
 	"context"
 	"net"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -103,74 +100,27 @@ func TestInterceptors_LaysOutTheControllerTier(t *testing.T) {
 	assert.NoError(t, runs[1].stream.WrapOp(t.Context(), textOp, slow))
 }
 
-// optionsProcedure is the procedure the ServerOptions tests serve.
-const optionsProcedure = "/test.v1.Probe/Do"
-
-// serveUnary serves one unary Connect call to optionsProcedure, handled by fn through a
-// handler built with opts, in process (no socket), and returns the HTTP status.
+// serveUnary dispatches one unary call through a connect.Server built with ics, handled
+// by callback, and returns the call's error.
 func serveUnary(
 	ctx context.Context,
-	opts []connect.HandlerOption,
+	ics []connect.ServerInterceptor,
 	callback func(context.Context) error,
-) int {
-	handler := connect.NewUnaryHandler(
-		optionsProcedure,
-		func(
-			ctx context.Context,
-			_ *connect.Request[probeMsg],
-		) (*connect.Response[probeMsg], error) {
-			err := callback(ctx)
-			if err != nil {
-				return nil, err
-			}
-
-			return connect.NewResponse(&probeMsg{}), nil
-		},
-		append(opts, connect.WithCodec(probeCodec{}))...)
-	req := httptest.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		optionsProcedure,
-		http.NoBody,
-	)
-	req.Header.Set(textContentType, "application/proto")
-
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	return rec.Code
+) error {
+	return serveRPC(ctx, ics, newTestRequest(), callback)
 }
 
-// serveStream serves one server-streaming Connect call to optionsProcedure, handled by fn
-// through a handler built with opts, in process, and returns the response body (the
-// end-of-stream message carries any error).
+// serveStream dispatches one server-streaming call through a connect.Server built with
+// ics, handled by callback, and returns the call's error.
 func serveStream(
 	ctx context.Context,
-	opts []connect.HandlerOption,
+	ics []connect.ServerInterceptor,
 	callback func(context.Context) error,
-) string {
-	handler := connect.NewServerStreamHandler(
-		optionsProcedure,
-		func(
-			ctx context.Context,
-			_ *connect.Request[probeMsg],
-			_ *connect.ServerStream[probeMsg],
-		) error {
-			return callback(ctx)
-		},
-		append(opts, connect.WithCodec(probeCodec{}))...)
-	// One enveloped, empty request message: flags 0, length 0.
-	body := bytes.NewReader([]byte{0, 0, 0, 0, 0})
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, optionsProcedure, body)
-	req.Header.Set(textContentType, "application/connect+proto")
-
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	return rec.Body.String()
+) error {
+	return serveRPC(ctx, ics, newTestStream(nil), callback)
 }
 
-// TestConnectServerOptions_DecoratesEveryRPC tests interceptors.ServerOptions.
+// TestConnectServerInterceptors_DecoratesEveryRPC tests interceptors.ServerInterceptors.
 //
 // Why this test is important:
 //   - A Connect server must reject excess load, contain a panic and authorize each RPC
@@ -178,19 +128,19 @@ func serveStream(
 //     own error reaches the caller untouched.
 //
 // What it tests:
-//   - No layers (recovery switched off) and no edge interceptors yield no options.
-//   - A denied rate limit is 429 (resource exhausted), a panic 500 (internal), a
-//     denial 403, and a handler's not-found 404.
+//   - No layers (recovery switched off) and no edge interceptors yield no interceptors.
+//   - A denied rate limit is resource exhausted, a panic internal, a denial permission
+//     denied, and a handler's not-found stays not found.
 //   - Auth sees "<controller>.<procedure>"; a denial's own text never reaches the
 //     caller, only the code's client-safe message.
 //   - A stream is rate limited too, a panic in a stream handler is an internal error
 //     rather than a dropped connection, and a stream outlives the timeout.
-func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
+func TestConnectServerInterceptors_DecoratesEveryRPC(t *testing.T) {
 	t.Parallel()
 
 	callback := func(context.Context) error { return nil }
 
-	assert.Nil(t, interceptors.ServerOptions(
+	assert.Empty(t, interceptors.ServerInterceptors(
 		textProbe,
 		fixtures.BuildRef(func(row *decorate.Deps) {
 			row.SkipRecovery = true
@@ -198,28 +148,51 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 		stdx.Zero[interceptors.Edge](),
 	))
 
-	limited := interceptors.ServerOptions(
+	limited := interceptors.ServerInterceptors(
 		textProbe,
 		fixtures.BuildRef(func(row *decorate.Deps) {
 			row.RateLimiter = fixtures.DenyingRateLimiter()
 		}),
 		stdx.Zero[interceptors.Edge](),
 	)
-	assert.Equal(
+	assertCode(
 		t,
-		http.StatusTooManyRequests,
+		connect.CodeResourceExhausted,
 		serveUnary(t.Context(), limited, callback),
 	)
-	assert.Contains(t, serveStream(t.Context(), limited, callback), "resource_exhausted")
+	assertCode(
+		t,
+		connect.CodeResourceExhausted,
+		serveStream(t.Context(), limited, callback),
+	)
 
 	var actions []string
 
-	guarded := interceptors.ServerOptions(
+	guarded := guardedInterceptors(&actions)
+	require.NoError(t, serveUnary(t.Context(), guarded, callback))
+	assert.Equal(t, []string{"probe.test.v1.TestService/Do"}, actions)
+	assertCode(
+		t,
+		connect.CodePermissionDenied,
+		serveUnary(t.Context(), guarded, callback),
+	)
+
+	denied := serveStream(t.Context(), guarded, callback)
+	assertCode(t, connect.CodePermissionDenied, denied)
+
+	testConnectServerInterceptorsDeniedAndPanics(t, denied)
+}
+
+// guardedInterceptors returns server interceptors whose auth layer records each action
+// in actions and denies every call after the first, with a detail the caller must
+// never see.
+func guardedInterceptors(actions *[]string) []connect.ServerInterceptor {
+	return interceptors.ServerInterceptors(
 		textProbe,
 		fixtures.BuildRef(func(row *decorate.Deps) {
 			row.Auth = func(_ context.Context, action string) error {
-				actions = append(actions, action)
-				if len(actions) > 1 {
+				*actions = append(*actions, action)
+				if len(*actions) > 1 {
 					return apperr.New(
 						apperr.CodeForbidden,
 						"denied: secret-action-detail",
@@ -232,50 +205,35 @@ func TestConnectServerOptions_DecoratesEveryRPC(t *testing.T) {
 		}),
 		stdx.Zero[interceptors.Edge](),
 	)
-	assert.Equal(t, http.StatusOK, serveUnary(t.Context(), guarded, callback))
-	assert.Equal(t, []string{"probe.test.v1.Probe/Do"}, actions)
-	assert.Equal(t, http.StatusForbidden, serveUnary(t.Context(), guarded, callback))
-
-	denied := serveStream(t.Context(), guarded, callback)
-	assert.Contains(t, denied, "permission denied")
-
-	testConnectServerOptionsDecoratesEveryRPCDeniedAndPanics(t, denied)
 }
 
-// testConnectServerOptionsDecoratesEveryRPCDeniedAndPanics continues
-// TestConnectServerOptions_DecoratesEveryRPC: denied and panics.
-func testConnectServerOptionsDecoratesEveryRPCDeniedAndPanics(
-	t *testing.T,
-	denied string,
-) {
+// testConnectServerInterceptorsDeniedAndPanics continues
+// TestConnectServerInterceptors_DecoratesEveryRPC: denied and panics.
+func testConnectServerInterceptorsDeniedAndPanics(t *testing.T, denied error) {
 	t.Helper()
 
-	assert.NotContains(t, denied, "secret-action-detail")
+	assert.NotContains(t, denied.Error(), "secret-action-detail")
 
 	panicking := func(context.Context) error { panic(textBoom) }
-	recovering := interceptors.ServerOptions(
+	recovering := interceptors.ServerInterceptors(
 		textProbe,
 		new(decorate.Deps),
 		stdx.Zero[interceptors.Edge](),
 	)
-	assert.Equal(
-		t,
-		http.StatusInternalServerError,
-		serveUnary(t.Context(), recovering, panicking),
-	)
-	assert.Contains(t, serveStream(t.Context(), recovering, panicking), textInternal)
+	assertCode(t, connect.CodeInternal, serveUnary(t.Context(), recovering, panicking))
+	assertCode(t, connect.CodeInternal, serveStream(t.Context(), recovering, panicking))
 
 	notFound := func(context.Context) error {
-		return connect.NewError(connect.CodeNotFound, apperr.Sentinel("no such probe"))
+		return connect.NewError(connect.CodeNotFound, "no such probe")
 	}
-	bounded := interceptors.ServerOptions(
+	bounded := interceptors.ServerInterceptors(
 		textProbe,
 		fixtures.BuildRef(func(row *decorate.Deps) {
 			row.Timeout = 5 * time.Millisecond
 		}),
 		stdx.Zero[interceptors.Edge](),
 	)
-	assert.Equal(t, http.StatusNotFound, serveUnary(t.Context(), bounded, notFound))
+	assertCode(t, connect.CodeNotFound, serveUnary(t.Context(), bounded, notFound))
 
 	slow := func(ctx context.Context) error {
 		select {
@@ -285,7 +243,7 @@ func testConnectServerOptionsDecoratesEveryRPCDeniedAndPanics(
 			return nil
 		}
 	}
-	assert.NotContains(t, serveStream(t.Context(), bounded, slow), textError)
+	assert.NoError(t, serveStream(t.Context(), bounded, slow))
 }
 
 // TestGRPCServerOptions_DecoratesEveryRPC tests grpc interceptors.ServerOptions.

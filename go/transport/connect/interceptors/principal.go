@@ -4,7 +4,7 @@ import (
 	"context"
 	"reflect"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	coreprincipal "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/principal"
@@ -23,9 +23,9 @@ const errPrincipalResolution = "principal resolution failed"
 type PrincipalResolver[P any] func(ctx context.Context, claims *AuthClaims) (P, error)
 
 // principalInterceptor resolves the request's AuthClaims into a principal of type P
-// for BOTH unary and streaming RPCs. It must run after the auth interceptor so the
-// claims are present. Streaming coverage matters because a unary-only resolver would
-// leave server-streaming handlers without an authorization context.
+// for every RPC shape. It must run after the auth interceptor so the claims are present.
+// Streaming coverage matters because a unary-only resolver would leave server-streaming
+// handlers without an authorization context.
 type principalInterceptor[P any] struct {
 	// resolve maps claims to the consumer's principal.
 	resolve PrincipalResolver[P]
@@ -34,7 +34,7 @@ type principalInterceptor[P any] struct {
 	stub func(claims *AuthClaims) P
 }
 
-// NewPrincipalInterceptor returns an interceptor that resolves each authenticated
+// NewPrincipalInterceptor returns a server interceptor that resolves each authenticated
 // request's claims into the consumer's principal type P and stores it with
 // core/principal.WithPrincipal (read it with core/principal.From). Per RPC:
 //   - no AuthClaims (unauthenticated/public request) → pass through
@@ -54,46 +54,20 @@ type principalInterceptor[P any] struct {
 func NewPrincipalInterceptor[P any](
 	resolve PrincipalResolver[P],
 	stub func(claims *AuthClaims) P,
-) connect.Interceptor {
+) connect.ServerInterceptor {
 	if resolve == nil {
 		panic("interceptors: NewPrincipalInterceptor requires a non-nil resolver")
 	}
 
-	return principalInterceptor[P]{resolve: resolve, stub: stub}
-}
+	resolver := principalInterceptor[P]{resolve: resolve, stub: stub}
 
-// WrapUnary resolves the unary request's principal, failing closed on a resolver error.
-func (i principalInterceptor[P]) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		resolvedCtx, err := i.withPrincipal(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		return next(resolvedCtx, req)
-	}
-}
-
-// WrapStreamingClient is a no-op — this is a server-side resolution interceptor.
-func (principalInterceptor[P]) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler resolves the streaming request's principal, failing closed on a
-// resolver error so a streaming call cannot proceed without an authorization context.
-func (i principalInterceptor[P]) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		resolvedCtx, err := i.withPrincipal(ctx)
-		if err != nil {
-			return err
-		}
-
-		return next(resolvedCtx, conn)
-	}
+	return contextInterceptor(
+		func(ctx context.Context, _ connect.Spec, _ *connect.Header) (
+			context.Context, error,
+		) {
+			return resolver.withPrincipal(ctx)
+		},
+	)
 }
 
 // withPrincipal resolves the caller's principal and returns a context carrying it,
@@ -136,7 +110,7 @@ func (i principalInterceptor[P]) withPrincipal(
 func resolveError(ctx context.Context, err error, code connect.Code) error {
 	apperr.Capture(ctx, err)
 
-	return connect.NewError(code, apperr.Sentinel(errPrincipalResolution))
+	return connect.NewError(code, errPrincipalResolution)
 }
 
 // resolveErrorCode classifies a resolver error from its code, never its message: a

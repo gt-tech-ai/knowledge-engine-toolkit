@@ -3,7 +3,7 @@ package interceptors
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/budget"
 )
@@ -14,20 +14,22 @@ import (
 // retriers), so one request can never fan out into unbounded retries.
 const DefaultRetryBudget int32 = 10
 
-// BudgetInterceptor attaches a fresh retry budget to each inbound request's
-// context at the server entrypoint. Every retrier in the downstream chain —
-// the handler's repo/DB retriers and any outbound client retriers — then draws
-// from this one shared per-request cap instead of each multiplying retries
-// independently. maxRetries <= 0 disables it (retries are then bounded only
-// per-call by each retrier's own MaxRetries).
-func BudgetInterceptor(maxRetries int32) connect.UnaryInterceptorFunc {
-	return func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if maxRetries > 0 {
+// BudgetInterceptor attaches a fresh retry budget to each inbound unary request's
+// context at the server entrypoint. Every retrier in the downstream chain — the
+// handler's repo/DB retriers and any outbound client retriers — then draws from this
+// one shared per-request cap instead of each multiplying retries independently. A
+// streaming RPC passes through without a budget, as before. maxRetries <= 0 disables it
+// (retries are then bounded only per-call by each retrier's own MaxRetries).
+func BudgetInterceptor(maxRetries int32) connect.ServerInterceptor {
+	return contextInterceptor(
+		func(ctx context.Context, spec connect.Spec, _ *connect.Header) (
+			context.Context, error,
+		) {
+			if maxRetries > 0 && spec.StreamType == connect.StreamTypeUnary {
 				ctx = budget.WithRetryBudget(ctx, budget.NewBudget(maxRetries))
 			}
 
-			return next(ctx, req)
-		}
-	}
+			return ctx, nil
+		},
+	)
 }

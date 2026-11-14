@@ -167,7 +167,7 @@ tier out in the framework's interceptor shape.
   `Edge.inner`). A stream runs without the timeout. A handler's own status reaches the caller
   unchanged; a rejection the tier produced becomes the status of its code with only that code's
   client-safe message. References:
-  `transport/connect/interceptors.ServerOptions`, `transport/grpc/interceptors.ServerOptions`,
+  `transport/connect/interceptors.ServerInterceptors`, `transport/grpc/interceptors.ServerOptions`,
   `controllers/grpc/interceptors.server_interceptors`.
 - **RPC clients.** Each unary call runs through the client tier as op `pkg.Service/Method`; every
   attempt carries the trace context and the service token. A server status is coded for the tier

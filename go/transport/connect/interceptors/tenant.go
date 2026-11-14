@@ -3,7 +3,7 @@ package interceptors
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 
@@ -46,7 +46,7 @@ func SessionVarStamper(name string) TenantStamper {
 }
 
 // tenantScopeInterceptor stamps the extracted tenant onto the request context with
-// each stamper, for BOTH unary and streaming RPCs.
+// each stamper, for every RPC shape.
 type tenantScopeInterceptor struct {
 	// extract resolves the request's tenant.
 	extract TenantExtractor
@@ -54,7 +54,7 @@ type tenantScopeInterceptor struct {
 	stamper TenantStamper
 }
 
-// NewTenantScopeInterceptor returns an interceptor that stamps the tenant resolved
+// NewTenantScopeInterceptor returns a server interceptor that stamps the tenant resolved
 // by extract onto each request with every stamper. It must run after whatever
 // resolves the tenant (typically the principal interceptor). A request with no
 // resolved tenant (or the nil UUID) passes through unstamped, so tenant-scoped data
@@ -67,7 +67,7 @@ type tenantScopeInterceptor struct {
 func NewTenantScopeInterceptor(
 	extract TenantExtractor,
 	stampers ...TenantStamper,
-) connect.Interceptor {
+) connect.ServerInterceptor {
 	if extract == nil {
 		panic("interceptors: NewTenantScopeInterceptor requires a non-nil extractor")
 	}
@@ -82,7 +82,15 @@ func NewTenantScopeInterceptor(
 		}
 	}
 
-	return tenantScopeInterceptor{extract: extract, stamper: composeStampers(stampers)}
+	scope := tenantScopeInterceptor{extract: extract, stamper: composeStampers(stampers)}
+
+	return contextInterceptor(
+		func(ctx context.Context, _ connect.Spec, _ *connect.Header) (
+			context.Context, error,
+		) {
+			return scope.stamp(ctx), nil
+		},
+	)
 }
 
 // composeStampers folds a non-empty stamper list into one stamper that applies them in
@@ -99,30 +107,6 @@ func composeStampers(stampers []TenantStamper) TenantStamper {
 	}
 
 	return chain
-}
-
-// WrapUnary stamps the tenant on the unary request context.
-func (i tenantScopeInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return next(i.stamp(ctx), req)
-	}
-}
-
-// WrapStreamingClient is a no-op — this is a server-side propagation interceptor.
-func (tenantScopeInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler stamps the tenant on the streaming request context, so a
-// server-streaming handler carries the same tenant scope.
-func (i tenantScopeInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return next(i.stamp(ctx), conn)
-	}
 }
 
 // stamp applies the stamper chain for the extracted tenant, or returns ctx unchanged

@@ -2,10 +2,8 @@ package unit_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -16,30 +14,18 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
 )
 
-// streamProcedure is the procedure the streaming-interceptor tests report from the
-// mocked StreamingHandlerConn, so metrics/tracing/logging label it like a real RPC.
+// streamProcedure is the procedure the streaming-interceptor tests' RPCs run as, so
+// metrics/tracing/logging label it like a real RPC.
 const streamProcedure = "/test.v1.StreamService/Stream"
 
-// newStreamConn returns a mocked StreamingHandlerConn whose Spec() reports
-// streamProcedure (the streaming interceptors read conn.Spec().Procedure), with the
-// spec available any number of times so a test only asserts the behavior it cares about.
-func newStreamConn(t *testing.T) *mocks.MockStreamingHandlerConn {
-	t.Helper()
+// newStreamConn returns a server-streaming RPC run as streamProcedure, with an empty
+// request header.
+func newStreamConn() *testRequest {
+	req := newTestStream(nil)
 
-	conn := mocks.NewMockStreamingHandlerConn(gomock.NewController(t))
-	conn.EXPECT().
-		Spec().
-		Return(fixtures.Build(func(row *connect.Spec) {
-			row.Procedure = streamProcedure
-		})).
-		AnyTimes()
-	// Tracing reads the request headers (propagation + X-Request-ID) and writes the
-	// response header (the traceresponse trace id); the others don't, so empty
-	// headers available AnyTimes keep the helper reusable across all tests.
-	conn.EXPECT().RequestHeader().Return(http.Header{}).AnyTimes()
-	conn.EXPECT().ResponseHeader().Return(http.Header{}).AnyTimes()
+	req.spec.Procedure = streamProcedure
 
-	return conn
+	return req
 }
 
 // TestMetricsInterceptor_Streaming_RecordsCounterAndDuration tests that the metrics
@@ -75,10 +61,9 @@ func TestMetricsInterceptor_Streaming_RecordsCounterAndDuration(t *testing.T) {
 	hist.EXPECT().Observe(gomock.Any(), textTestV1Streamservice, "Stream")
 
 	interceptor := interceptors.MetricsInterceptor(metrics)
-	conn := newStreamConn(t)
-	next := func(context.Context, connect.StreamingHandlerConn) error { return nil }
+	next := func(context.Context, *testRequest) error { return nil }
 
-	err := interceptor.WrapStreamingHandler(next)(context.Background(), conn)
+	err := wrapStream(interceptor, next)(context.Background(), newStreamConn())
 	require.NoError(t, err)
 }
 
@@ -91,7 +76,7 @@ func TestMetricsInterceptor_Streaming_RecordsCounterAndDuration(t *testing.T) {
 //     the streaming path opens a span attributed to the RPC's service, like unary.
 //
 // What it tests:
-//   - WrapStreamingHandler starts a span and sets the rpc.service attribute to the
+//   - A server-streaming RPC starts a span and sets the rpc.service attribute to the
 //     stream's service (captured via the SpyTracer attribute hook).
 func TestTracingInterceptor_Streaming_CreatesSpan(t *testing.T) {
 	t.Parallel()
@@ -104,10 +89,9 @@ func TestTracingInterceptor_Streaming_CreatesSpan(t *testing.T) {
 		}
 	})
 	interceptor := interceptors.TracingInterceptor(tracer)
-	conn := newStreamConn(t)
-	next := func(context.Context, connect.StreamingHandlerConn) error { return nil }
+	next := func(context.Context, *testRequest) error { return nil }
 
-	err := interceptor.WrapStreamingHandler(next)(context.Background(), conn)
+	err := wrapStream(interceptor, next)(context.Background(), newStreamConn())
 	require.NoError(t, err)
 	assert.Equal(t, textTestV1Streamservice, gotService,
 		"the streaming path must open a span with the rpc.service attribute")
@@ -127,10 +111,9 @@ func TestLoggingInterceptor_Streaming_EmitsOneAccessLine(t *testing.T) {
 
 	spy := fixtures.NewSpyLogger()
 	interceptor := interceptors.NewLoggingInterceptor(spy)
-	conn := newStreamConn(t)
-	next := func(context.Context, connect.StreamingHandlerConn) error { return nil }
+	next := func(context.Context, *testRequest) error { return nil }
 
-	err := interceptor.WrapStreamingHandler(next)(context.Background(), conn)
+	err := wrapStream(interceptor, next)(context.Background(), newStreamConn())
 	require.NoError(t, err)
 	// The interceptor logs via logger.WithContext(ctx) (for trace correlation), so the
 	// access line lands on the child logger, exactly like the unary path.
