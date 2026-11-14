@@ -89,9 +89,10 @@ func (s source) Get(_ context.Context, ref types.Ref) (types.Secret, error) {
 }
 
 // Put writes value under ref's key, but only after `git check-ignore` confirms the file
-// path is git-ignored — otherwise it refuses with a coded error so a credential can
-// never be committed. The raw value is revealed here (the legitimate injection boundary:
-// persisting to the git-ignored store) and nowhere else.
+// path (its directory resolved through any symlink) is git-ignored — otherwise it
+// refuses with a coded error so a credential can never be committed. The raw value is
+// revealed here (the legitimate injection boundary: persisting to the git-ignored store)
+// and nowhere else.
 func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) error {
 	loc, ok := s.locs[ref]
 	if !ok {
@@ -108,16 +109,25 @@ func (s source) Put(ctx context.Context, ref types.Ref, value types.Secret) erro
 		return apperr.Wrap(err, apperr.CodeInternal, "creating credential directory")
 	}
 
+	// Git resolves the repository from the physical directory, so the check runs on the
+	// symlink-resolved path: a store directory symlinked into another checkout (a git
+	// worktree sharing the main checkout's .secrets/) is asked of the repository that
+	// actually holds the file, not refused as "outside repository".
+	dir, err := filepath.EvalSymlinks(filepath.Dir(loc.Path))
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "resolving credential directory")
+	}
+
 	// `git check-ignore -q <path>` exits 0 when the path IS ignored; the CommandRunner
 	// returns a non-nil error for any non-zero exit (not-ignored, or git unavailable),
 	// so we fail SAFE — refuse the write unless git positively confirms the path ignored.
 	err = s.runner.Run(
 		ctx,
-		filepath.Dir(loc.Path),
+		dir,
 		"git",
 		"check-ignore",
 		"-q",
-		loc.Path,
+		filepath.Join(dir, filepath.Base(loc.Path)),
 	)
 	if err != nil {
 		return apperr.New(
