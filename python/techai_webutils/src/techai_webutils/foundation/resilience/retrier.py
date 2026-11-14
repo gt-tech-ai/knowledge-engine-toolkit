@@ -7,8 +7,8 @@ server's pushback; a permanent one is raised at once.
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING, cast, final, override
 
 from tenacity import (
@@ -23,7 +23,11 @@ from techai_webutils.core.interfaces.retrier import Retrier
 from techai_webutils.foundation.resilience.async_retry import retry_after_s
 from techai_webutils.foundation.resilience.backoff import exponential_jitter_wait
 from techai_webutils.foundation.resilience.classify import is_transient
-from techai_webutils.foundation.resilience.observer import UNOBSERVED, retries_done
+from techai_webutils.foundation.resilience.observer import (
+    UNOBSERVED,
+    RetriedCall,
+    retries_done,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -89,10 +93,6 @@ class ExponentialRetrier(Retrier):
         Returns:
             What ``op`` returns.
 
-        Raises:
-            CancelledError: The caller cancelled the call; re-raised once its retries are
-                counted (no exhaustion).
-
         """
         cfg = self._config
         stop = stop_after_attempt(cfg.max_retries + 1)
@@ -135,23 +135,16 @@ class ExponentialRetrier(Retrier):
                 sleep=cast("Callable[[float], None]", self._sleep),
             )
         )
-        attempts = 0
+        with RetriedCall(partial(retries_done, self._recorder), "") as call:
 
-        async def attempt() -> object:
-            """Run ``op`` once, counting the attempt.
+            async def attempt() -> object:
+                """Run ``op`` once, counting the attempt.
 
-            Returns:
-                What ``op`` returns.
+                Returns:
+                    What ``op`` returns.
 
-            """
-            nonlocal attempts
-            attempts += 1
-            return await op()
+                """
+                call.attempted()
+                return await op()
 
-        try:
-            result: object = await retrying(attempt)
-        except (Exception, asyncio.CancelledError) as exc:
-            _ = retries_done(self._recorder, "", attempts, exc)
-            raise
-        _ = retries_done(self._recorder, "", attempts, None)
-        return result
+            return await retrying(attempt)

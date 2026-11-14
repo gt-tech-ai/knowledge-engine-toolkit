@@ -465,8 +465,9 @@ and `name` (the component or primitive) first, then its own labels.
   `new_timeout(seconds, observer)`, `new_circuit_breaker(cb, name, observer)`,
   `new_bulkhead(bulkhead, shed=…, observer=…)`, `new_rate_limit(limiter, observer)`; `None`
   reports nothing) and record what their Go twins do; `retries_done` is the one counting rule
-  for the retry layer and the standalone retriers (a call ended by
-  `asyncio.CancelledError` counts its retries and no exhaustion). The timeout layer runs the op under
+  for the retry layer and the standalone retriers, which run each call inside a `RetriedCall`
+  so it is counted however the call ends (a call stopped rather than failed, by
+  `asyncio.CancelledError` or an interrupt, counts its retries and no exhaustion). The timeout layer runs the op under
   `asyncio.timeout` and counts only when that deadline expired (`expired()`), so a builtin
   `TimeoutError` the op raises itself is not counted, whenever it arrives. `build(tier, name, layers, collab)` (`Decorations.deps` passes the tier's name)
   builds the breaker in `decorate/primitives.py` with `CircuitBreaker(…).with_observer(observer)`

@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import TYPE_CHECKING, cast, final
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -115,41 +115,41 @@ def _value(registry: CollectorRegistry, metric: str, **labels: str) -> float:
     return registry.get_sample_value(metric, wanted) or 0.0
 
 
-async def _no_sleep(_: float) -> None:
+async def _no_sleep(seconds: float) -> None:
     """Wait no time between attempts.
 
     Args:
-        _: The backoff, ignored.
+        seconds: The backoff, ignored.
 
     """
+    del seconds
     await asyncio.sleep(0)
 
 
-@final
-class _Script:
-    """Raises each scripted error in turn, then succeeds; counts its calls."""
+def _script(failures: Sequence[BaseException]) -> MagicMock:
+    """Return an op that raises each scripted error in turn, then returns the name.
 
-    def __init__(self, failures: Sequence[BaseException]) -> None:
-        """Bind the failures to raise, in order.
+    Args:
+        failures: The errors the leading calls raise.
 
-        Args:
-            failures: The errors the leading calls raise.
+    Returns:
+        The op, a mock that also counts its calls.
 
-        """
-        self._failures = failures
-        self.calls = 0
+    """
+    return MagicMock(side_effect=[*failures, _NAME])
 
-    def __call__(self) -> str:
-        """Run one attempt.
 
-        Returns:
-            The name, once the failures are spent.
+def _attempt(script: MagicMock) -> str:
+    """Run one attempt of ``script``.
 
-        """
-        self.calls += 1
-        if self.calls <= len(self._failures):
-            raise self._failures[self.calls - 1]
-        return _NAME
+    Args:
+        script: An op from ``_script``.
+
+    Returns:
+        The name, once the failures are spent.
+
+    """
+    return cast("str", script())
 
 
 def _down(count: int) -> list[AppError]:
@@ -209,6 +209,12 @@ class TestRetriers:
         What it tests:
           - each case's retries and exhaustions under tier standalone, operation "";
             a call its caller cancelled after a retry counts the retry, no exhaustion.
+
+        Args:
+            failures: What the leading attempts raise.
+            retried: The expected retries.
+            exhausted: The expected exhaustions.
+
         """
         registry, recorder = _recorder()
         retrier = ExponentialRetrier(
@@ -216,11 +222,17 @@ class TestRetriers:
             sleep=_no_sleep,
             recorder=recorder,
         )
-        script = _Script(failures)
+        script = _script(failures)
 
         async def op() -> object:
+            """Run one scripted attempt.
+
+            Returns:
+                The name, once the failures are spent.
+
+            """
             await asyncio.sleep(0)
-            return script()
+            return _attempt(script)
 
         with contextlib.suppress(
             UnavailableError, InvalidInputError, asyncio.CancelledError
@@ -244,12 +256,18 @@ class TestRetriers:
         What it tests:
           - each case's retries and exhaustions under tier standalone, operation "";
             a call its caller cancelled after a retry counts the retry, no exhaustion.
+
+        Args:
+            failures: What the leading attempts raise.
+            retried: The expected retries.
+            exhausted: The expected exhaustions.
+
         """
         registry, recorder = _recorder()
-        script = _Script(failures)
+        script = _script(failures)
         retried_fn = retry_transient(
             max_attempts=_RETRIES + 1, base_delay=0.0, max_delay=0.0, recorder=recorder
-        )(script)
+        )(cast("Callable[[], object]", script))
 
         with contextlib.suppress(
             UnavailableError, InvalidInputError, asyncio.CancelledError
@@ -274,13 +292,25 @@ class TestRetriers:
         What it tests:
           - each case's retries and exhaustions under tier standalone, operation "";
             a call its caller cancelled after a retry counts the retry, no exhaustion.
+
+        Args:
+            failures: What the leading attempts raise.
+            retried: The expected retries.
+            exhausted: The expected exhaustions.
+
         """
         registry, recorder = _recorder()
-        script = _Script(failures)
+        script = _script(failures)
 
         async def op() -> object:
+            """Run one scripted attempt.
+
+            Returns:
+                The name, once the failures are spent.
+
+            """
             await asyncio.sleep(0)
-            return script()
+            return _attempt(script)
 
         retried_fn = retry_transient_async(
             max_attempts=_RETRIES + 1, base_delay=0.0, sleep=_no_sleep, recorder=recorder
@@ -322,7 +352,7 @@ class TestAsyncCircuitBreaker:
 
         with contextlib.suppress(UnavailableError):
             async with breaker:
-                _ = _Script(_down(1))()
+                _ = _attempt(_script(_down(1)))
 
         assert _value(registry, "resilience_breaker_state") == _GAUGE_OPEN
         assert _value(registry, "resilience_breaker_transitions_total", to="open") == 1
@@ -458,11 +488,23 @@ async def _try_held(bulkhead: Bulkhead) -> list[bool]:
     release = asyncio.Event()
 
     async def hold() -> object:
+        """Hold the bulkhead's only slot until released.
+
+        Returns:
+            Nothing.
+
+        """
         held.set()
         _ = await release.wait()
         return None
 
     async def idle() -> object:
+        """Return at once.
+
+        Returns:
+            Nothing.
+
+        """
         await asyncio.sleep(0)
         return None
 
@@ -506,6 +548,11 @@ class TestRefusals:
         What it tests:
           - exactly one ``resilience_rejections_total`` under the primitive's reason
             and operation "", and none under the other refusal reason.
+
+        Args:
+            run: Drives the primitive to refuse once.
+            reason: The rejection reason it records.
+
         """
         registry, recorder = _recorder()
 
@@ -539,11 +586,17 @@ class TestThrottlerAndHedger:
         """
         registry, recorder = _recorder()
         throttler = AdaptiveThrottler(rand=lambda: 0.0).with_recorder(recorder)
-        script = _Script(_down(1))
+        script = _script(_down(1))
 
         async def op() -> str:
+            """Run one scripted attempt.
+
+            Returns:
+                The name, once the failures are spent.
+
+            """
             await asyncio.sleep(0)
-            return script()
+            return _attempt(script)
 
         with contextlib.suppress(UnavailableError):
             _ = await throttler.do(op)
@@ -553,7 +606,7 @@ class TestThrottlerAndHedger:
         with pytest.raises(ThrottledError):
             _ = await throttler.do(op)
 
-        assert script.calls == 1
+        assert script.call_count == 1
         rejections = "resilience_rejections_total"
         assert _value(registry, rejections, operation="", reason=Reason.THROTTLED) == 1
 
@@ -574,6 +627,12 @@ class TestThrottlerAndHedger:
         What it tests:
           - when the first attempt outlasts the delay, one backup fires and wins
             (fired 1, won 1); when it answers within the delay, neither is counted.
+
+        Args:
+            delay: How long the first attempt runs alone.
+            fired: The expected fired (and won) count; a positive one stalls the
+                first attempt.
+
         """
         registry, recorder = _recorder()
         hedger = hedger_from_config(
@@ -583,6 +642,12 @@ class TestThrottlerAndHedger:
         calls = [0]
 
         async def op() -> str:
+            """Answer, stalling the first attempt when a backup should win.
+
+            Returns:
+                The name.
+
+            """
             calls[0] += 1
             if calls[0] == 1 and fired > 0:
                 _ = await stalled.wait()
@@ -618,6 +683,11 @@ class TestDeadLettersAndDedup:
         What it tests:
           - a letter the backend takes counts ``sent``; one it refuses counts
             ``failed``, and the other outcome stays 0.
+
+        Args:
+            failure: What the backend raises, or None when it takes the letter.
+            outcome: The outcome the letter must count.
+
         """
         registry, recorder = _recorder()
         backend = MagicMock(spec=DeadLetterBackend)

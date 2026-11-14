@@ -23,7 +23,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, NoReturn, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -275,6 +275,10 @@ class TestRetryLayer:
           - each row's retries, exhaustion and budget rejections under the operation;
             one "retries exhausted" Warning exactly when the row is exhausted; a call
             its caller cancelled after a retry counts the retry and no exhaustion.
+
+        Args:
+            case: One row of the retry layer's table.
+
         """
         harness = _harness()
         layer = new_retry(
@@ -326,7 +330,7 @@ async def _fast() -> object:
     return _OP
 
 
-async def _inner_timeout() -> object:
+async def _inner_timeout() -> NoReturn:
     """Raise a deeper layer's coded timeout at once.
 
     Raises:
@@ -338,7 +342,7 @@ async def _inner_timeout() -> object:
     raise AppTimeoutError(msg)
 
 
-async def _builtin_timeout() -> object:
+async def _builtin_timeout() -> NoReturn:
     """Raise a builtin TimeoutError before any deadline (a socket timeout, say).
 
     Raises:
@@ -349,7 +353,7 @@ async def _builtin_timeout() -> object:
     raise TimeoutError
 
 
-async def _builtin_timeout_late() -> object:
+async def _builtin_timeout_late() -> NoReturn:
     """Hold the loop past the deadline, then raise a builtin TimeoutError itself.
 
     A CPU-bound spin (no await) keeps the layer's timer from firing, so the op's own
@@ -416,6 +420,12 @@ class TestTimeoutLayer:
             timeout, a builtin TimeoutError the op raised itself (before the deadline,
             or after it but before the layer's timer fired) and an unrelated error
             raised on cancellation count 0.
+
+        Args:
+            op: The operation the layer bounds.
+            seconds: The layer's deadline.
+            want: The expected resilience_timeouts_total.
+
         """
         harness = _harness()
 
@@ -510,6 +520,12 @@ class TestRefusingLayers:
         runs: list[str] = []
 
         async def op() -> object:
+            """Run once, recording the run.
+
+            Returns:
+                The operation's name.
+
+            """
             await asyncio.sleep(0)
             runs.append(_OP)
             return _OP
@@ -692,6 +708,10 @@ class TestBuildWiring:
             deprecated ``circuit_breaker_state``, counts one move to open in each, warns
             once, and the adaptive bulkhead reports its initial limit 2.
           - off: the same records nothing and logs nothing.
+
+        Args:
+            switched: Whether the metrics and logging layers are on.
+
         """
         harness = _harness()
         deps = _built(harness, switched=switched)
@@ -744,6 +764,12 @@ class TestBuildWiring:
         held, release = asyncio.Event(), asyncio.Event()
 
         async def hold() -> object:
+            """Hold the bulkhead's only slot until released.
+
+            Returns:
+                Whatever the release wait returns.
+
+            """
             held.set()
             return await release.wait()
 

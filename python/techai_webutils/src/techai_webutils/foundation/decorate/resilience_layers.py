@@ -19,7 +19,7 @@ from techai_webutils.core.errors.errors import (
 )
 from techai_webutils.foundation.resilience.bulkhead import BulkheadFullError
 from techai_webutils.foundation.resilience.circuit_breaker import CircuitOpenError
-from techai_webutils.foundation.resilience.observer import UNOBSERVED
+from techai_webutils.foundation.resilience.observer import UNOBSERVED, RetriedCall
 from techai_webutils.foundation.resilience.series import Reason
 
 if TYPE_CHECKING:
@@ -122,25 +122,14 @@ class _Retry:
         Returns:
             What the operation returns.
 
-        Raises:
-            CancelledError: The caller cancelled the call; re-raised once its retries are
-                counted (no exhaustion).
-
         """
-        attempts = 0
+        with RetriedCall(self._observer.retries_done, op) as call:
 
-        async def attempt() -> object:
-            nonlocal attempts
-            attempts += 1
-            return await next_()
+            async def attempt() -> object:
+                call.attempted()
+                return await next_()
 
-        try:
-            result = await self._retrier.retry(attempt)
-        except (Exception, asyncio.CancelledError) as exc:
-            self._observer.retries_done(op, attempts, exc)
-            raise
-        self._observer.retries_done(op, attempts, None)
-        return result
+            return await self._retrier.retry(attempt)
 
 
 def new_retry(retrier: Retrier, observer: Observer | None = None) -> OpMiddleware:

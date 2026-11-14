@@ -6,9 +6,9 @@ Permanent errors are not retried.
 
 from __future__ import annotations
 
-import asyncio
 import functools
 from collections.abc import Callable
+from functools import partial
 from typing import TYPE_CHECKING, TypeVar, cast
 
 from tenacity import (
@@ -19,7 +19,11 @@ from tenacity import (
 
 from techai_webutils.core.errors.errors import AppError
 from techai_webutils.foundation.resilience.backoff import exponential_jitter_wait
-from techai_webutils.foundation.resilience.observer import UNOBSERVED, retries_done
+from techai_webutils.foundation.resilience.observer import (
+    UNOBSERVED,
+    RetriedCall,
+    retries_done,
+)
 
 if TYPE_CHECKING:
     from techai_webutils.foundation.resilience.series import Recorder
@@ -99,31 +103,20 @@ def retry_transient(
             Returns:
                 What the function returns.
 
-            Raises:
-                CancelledError: The caller cancelled the call; re-raised once its
-                    retries are counted (no exhaustion).
-
             """
-            attempts = 0
+            with RetriedCall(partial(retries_done, counted), "") as call:
 
-            def attempt() -> object:
-                """Run the function once, counting the attempt.
+                def attempt() -> object:
+                    """Run the function once, counting the attempt.
 
-                Returns:
-                    What the function returns.
+                    Returns:
+                        What the function returns.
 
-                """
-                nonlocal attempts
-                attempts += 1
-                return func(*args, **kwargs)
+                    """
+                    call.attempted()
+                    return func(*args, **kwargs)
 
-            try:
-                result: object = retrying.copy()(attempt)
-            except (Exception, asyncio.CancelledError) as exc:
-                _ = retries_done(counted, "", attempts, exc)
-                raise
-            _ = retries_done(counted, "", attempts, None)
-            return result
+                return retrying.copy()(attempt)
 
         return cast("F", wrapper)
 

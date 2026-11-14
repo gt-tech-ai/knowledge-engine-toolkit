@@ -156,11 +156,9 @@ class AdaptiveThrottler:
 
         try:
             result = await op()  # a failure propagates and is NOT counted as an accept
-        except Exception:
+            async with self._lock:
+                self._accepts += 1
+                ratio = self._rejection_probability()
+        finally:
             self._recorder.set_throttle_rejection_ratio(ratio)
-            raise
-        async with self._lock:
-            self._accepts += 1
-            ratio = self._rejection_probability()
-        self._recorder.set_throttle_rejection_ratio(ratio)
         return result
