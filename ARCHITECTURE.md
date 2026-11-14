@@ -452,6 +452,25 @@ and `name` (the component or primitive) first, then its own labels.
     counts each duplicate it reports.
   - Every recorder field is tagged `yaml:"-" mapstructure:"-" json:"-"`: wired in code, never
     decoded from config.
+- **Python wiring.** The twin of `series.Observer` is
+  `foundation.resilience.observer.Observer(recorder, logger, tier, name)`
+  (`Observer.of(metrics, logger, tier, name)`; `UNOBSERVED` reports nothing). The layers in
+  `foundation/decorate/resilience_layers.py` take `observer=` (`new_retry(retrier, observer)`,
+  `new_timeout(seconds, observer)`, `new_circuit_breaker(cb, name, observer)`,
+  `new_bulkhead(bulkhead, shed=…, observer=…)`, `new_rate_limit(limiter, observer)`; `None`
+  reports nothing) and record what their Go twins do; `retries_done` is the one counting rule
+  for the retry layer and the standalone retriers. The timeout layer counts only once the loop
+  clock reaches its own deadline, so a builtin `TimeoutError` raised early inside the op is not
+  counted. `build(tier, name, layers, collab)` (`Decorations.deps` passes the tier's name)
+  builds the breaker in `decorate/primitives.py` with `CircuitBreaker(…).with_observer(observer)`
+  (its state at once, each move, one `circuit breaker opened` Warning per opening) and an
+  adaptive bulkhead with `bulkhead_from_config(config, recorder)` →
+  `AdaptiveBulkhead.with_recorder`.
+- **Deprecated Python series.** With the metrics layer on, the Python breaker also exports
+  `circuit_breaker_state{dependency}` (0 closed, 1 half-open, 2 open) and
+  `circuit_breaker_transitions_total{dependency,to}` for one more release; they are removed in
+  the next one. Query `resilience_breaker_state` and `resilience_breaker_transitions_total`.
+  Like the new series, they now follow the component's metrics layer.
 
 ### Conversation threading
 

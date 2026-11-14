@@ -12,13 +12,15 @@ import asyncio
 import time
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, final, override
+from typing import TYPE_CHECKING, Self, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.bulkhead import Bulkhead
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from techai_webutils.foundation.resilience.series import Recorder
 
 
 class BulkheadFullError(Exception):
@@ -166,6 +168,21 @@ class AdaptiveBulkhead(Bulkhead):
         self._backoff: float = backoff_ratio if 0 < backoff_ratio < 1 else 0.9
         self._in_flight: int = 0
         self._cond: asyncio.Condition = asyncio.Condition()
+        self._recorder: Recorder | None = None
+
+    def with_recorder(self, recorder: Recorder) -> Self:
+        """Report the limit the bulkhead admits now and after each adjustment.
+
+        Args:
+            recorder: Where ``resilience_bulkhead_limit`` is set.
+
+        Returns:
+            This bulkhead.
+
+        """
+        self._recorder = recorder
+        recorder.set_bulkhead_limit(float(self.limit))
+        return self
 
     @property
     def limit(self) -> int:
@@ -246,7 +263,7 @@ class AdaptiveBulkhead(Bulkhead):
             self._cond.notify_all()
 
     def _adjust(self, rtt: float, *, op_err: bool) -> None:
-        """Apply AIMD to the limit.
+        """Apply AIMD to the limit, then report the limit it admits.
 
         A slow or failed sample shrinks it; a fast, successful one grows it.
 
@@ -259,13 +276,19 @@ class AdaptiveBulkhead(Bulkhead):
             self._limit = max(self._min, self._limit * self._backoff)
         else:
             self._limit = min(self._max, self._limit + 1)
+        if self._recorder is not None:
+            self._recorder.set_bulkhead_limit(float(self.limit))
 
 
-def bulkhead_from_config(config: BulkheadConfig) -> Bulkhead:
+def bulkhead_from_config(
+    config: BulkheadConfig, recorder: Recorder | None = None
+) -> Bulkhead:
     """Create a ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.
 
     Args:
         config: Selects the backend and carries its settings.
+        recorder: Where an ADAPTIVE bulkhead reports its limit; the SEMAPHORE kind
+            has no limit to report and its refusals are its decorate layer's.
 
     Returns:
         A ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.
@@ -277,12 +300,13 @@ def bulkhead_from_config(config: BulkheadConfig) -> Bulkhead:
     if config.kind == BulkheadKind.SEMAPHORE:
         return SemaphoreBulkhead(config.max_concurrent)
     if config.kind == BulkheadKind.ADAPTIVE:
-        return AdaptiveBulkhead(
+        adaptive = AdaptiveBulkhead(
             min_concurrent=config.min_concurrent,
             max_concurrent=config.max_concurrent,
             initial_concurrent=config.initial_concurrent,
             rtt_threshold_seconds=config.rtt_threshold_seconds,
             backoff_ratio=config.backoff_ratio,
         )
+        return adaptive if recorder is None else adaptive.with_recorder(recorder)
     msg = f"unknown bulkhead kind: {config.kind}"
     raise AppValueError(msg)

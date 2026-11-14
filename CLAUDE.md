@@ -131,8 +131,8 @@ languages share one engine:
   ./go/foundation/resilience/series/...`; edit the YAML, never the outputs). Layers record the
   operation-labelled events, primitives their state; a nil provider records nothing. A Go
   component reports through a `series.Observer` (recorder, logger, tier, name), which the
-  decorate builder binds per subject from the metrics and logging switches
-  (ARCHITECTURE.md#resilience-metrics).
+  decorate builder binds per subject from the metrics and logging switches; the Python
+  twin is `foundation.resilience.observer.Observer` (ARCHITECTURE.md#resilience-metrics).
 
 | Tier | Order (outermost first) | Go base | Python base |
 | --- | --- | --- | --- |

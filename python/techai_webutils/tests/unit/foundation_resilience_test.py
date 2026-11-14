@@ -379,19 +379,20 @@ class TestObservedCircuitBreaker:
             dependency that is just recovering.
 
         What it tests:
-          - Tripping the breaker sets ``circuit_breaker_state`` to 2 and counts one
-            transition to ``open``.
+          - With the metrics layer on, tripping the breaker sets the deprecated
+            ``circuit_breaker_state`` to 2 and counts one transition to ``open``.
           - Half-open with ``max_requests=1`` admits one trial and fails a second caller
             fast; the trial's failure reopens the breaker (state 2, a second ``open``).
         """
         registry = CollectorRegistry()
         layers = decoration.Layers(
+            metrics=True,
             circuit_breaker=decoration.CircuitBreaker(
                 enabled=True, consecutive_failures=1, timeout=0.0, max_requests=1
-            )
+            ),
         )
         collab = Collaborators(observability=Observability(metrics=new_metrics(registry)))
-        breaker = build("nlp", layers, collab).breaker
+        breaker = build("client", "nlp", layers, collab).breaker
         assert breaker is not None
         assert _sample(registry, "circuit_breaker_state", dependency="nlp") == 0
 

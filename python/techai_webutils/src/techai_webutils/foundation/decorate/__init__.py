@@ -22,15 +22,17 @@ from techai_webutils.foundation.decorate.middleware import (
     chain,
     exec_op,
     new_auth,
-    new_bulkhead,
-    new_circuit_breaker,
     new_logging,
     new_metrics,
-    new_rate_limit,
     new_recovery,
+    new_tracing,
+)
+from techai_webutils.foundation.decorate.resilience_layers import (
+    new_bulkhead,
+    new_circuit_breaker,
+    new_rate_limit,
     new_retry,
     new_timeout,
-    new_tracing,
 )
 from techai_webutils.foundation.decorate.tier import (
     Chains,

@@ -3,7 +3,10 @@
 Tracks consecutive failures and opens the circuit when threshold is reached. In open
 state, calls fail fast without executing the wrapped operation. Half-open admits at most
 ``half_open_max_calls`` trial calls at once (0: every caller), and each state change is
-reported to ``on_transition``, so a decorator can export the state.
+reported to ``on_transition``, so a decorator can export the state. With an
+``Observer`` (``with_observer``) the breaker reports ``resilience_breaker_state`` (its
+state at once, then each state it enters), ``resilience_breaker_transitions_total{to}``
+and one Warning each time it opens, like Go's gobreaker.
 """
 
 from __future__ import annotations
@@ -14,10 +17,13 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Self, final, override
 
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
+from techai_webutils.foundation.resilience.series import BreakerState
 
 if TYPE_CHECKING:
     import types
     from collections.abc import Callable
+
+    from techai_webutils.foundation.resilience.observer import Observer
 
 
 class CircuitState(StrEnum):
@@ -91,8 +97,27 @@ class CircuitBreaker(CircuitBreakerInterface):
         self._last_failure_time: float = 0.0
         self._half_open_max_calls = half_open_max_calls
         self._on_transition = on_transition
+        self._observer: Observer | None = None
         self._trials = 0
         self._lock = threading.Lock()
+
+    def with_observer(self, observer: Observer) -> Self:
+        """Report the breaker's state, each move and one Warning per opening.
+
+        It reports the current state at once; each later move is reported after
+        ``on_transition``.
+
+        Args:
+            observer: Where the breaker reports.
+
+        Returns:
+            This breaker.
+
+        """
+        with self._lock:
+            self._observer = observer
+            observer.recorder.set_breaker_state(BreakerState(self._state.value))
+        return self
 
     def _move(self, to: CircuitState) -> None:
         """Change to ``to`` and report the transition (caller holds the lock).
@@ -105,6 +130,22 @@ class CircuitBreaker(CircuitBreakerInterface):
             previous, self._state = self._state, to
             if self._on_transition is not None:
                 self._on_transition(previous, to)
+            self._report(to)
+
+    def _report(self, to: CircuitState) -> None:
+        """Report a move to ``to`` through the Observer (caller holds the lock).
+
+        Args:
+            to: The new state.
+
+        """
+        if self._observer is None:
+            return
+        state = BreakerState(to.value)
+        self._observer.recorder.set_breaker_state(state)
+        self._observer.recorder.breaker_moved(state)
+        if to is CircuitState.OPEN:
+            self._observer.warn("circuit breaker opened")
 
     def _current(self) -> CircuitState:
         """Return the state, moving open to half-open once recovery elapsed.

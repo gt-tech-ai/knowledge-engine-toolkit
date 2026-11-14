@@ -17,6 +17,13 @@ from typing import TYPE_CHECKING, final
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.config.decoration import load, on, sections
 from techai_webutils.foundation.decorate.contract import ops_of
+from techai_webutils.foundation.decorate.primitives import (
+    breaker_for,
+    bulkhead_for,
+    layer_primitive,
+    rate_limiter_for,
+    retrier_for,
+)
 from techai_webutils.foundation.decorate.tier import (
     Chains,
     Deps,
@@ -24,31 +31,12 @@ from techai_webutils.foundation.decorate.tier import (
     Observability,
     Subject,
 )
-from techai_webutils.foundation.resilience.bulkhead import (
-    BulkheadConfig,
-    BulkheadKind,
-    bulkhead_from_config,
-)
-from techai_webutils.foundation.resilience.circuit_breaker import (
-    CircuitBreaker,
-    CircuitState,
-)
-from techai_webutils.foundation.resilience.classify import is_transient
-from techai_webutils.foundation.resilience.rate_limiter import TokenBucketRateLimiter
-from techai_webutils.foundation.resilience.retrier import (
-    ExponentialRetrier,
-    ExponentialRetrierConfig,
-)
+from techai_webutils.foundation.resilience.observer import Observer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from techai_webutils.core.interfaces.bulkhead import Bulkhead
-    from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
     from techai_webutils.core.interfaces.config_loader import ConfigLoader
-    from techai_webutils.core.interfaces.metrics import MetricsProvider
-    from techai_webutils.core.interfaces.rate_limiter import RateLimiter
-    from techai_webutils.core.interfaces.retrier import Retrier
     from techai_webutils.foundation.config import decoration
     from techai_webutils.foundation.decorate.middleware import Authorizer
     from techai_webutils.foundation.decorate.tier import Tier
@@ -172,7 +160,7 @@ class Decorations:
             msg = f"decoration: no config for tier {tier.name!r}"
             raise AppValueError(msg)
         _check(tier, name, tc.overriding(name))
-        return build(name, tc.layers_for(name), self._collab)
+        return build(tier.name, name, tc.layers_for(name), self._collab)
 
     def subject(self, tier: Tier, name: str) -> Subject:
         """Return the Subject of the component ``name`` in ``tier``.
@@ -531,14 +519,18 @@ def _check(tier: Tier, name: str, layers: decoration.Layers) -> None:
             raise AppValueError(msg)
 
 
-def build(name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:
-    """Return the Deps of the component ``name`` from its resolved ``layers``.
+def build(tier: str, name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:
+    """Return the Deps of the component ``name`` in ``tier`` from its resolved ``layers``.
 
     Each layer that is on gets its collaborator from ``collab``, or its primitive built
-    from its tuning (the breaker guards ``name``). An invalid tuning raises
-    ``AppValueError``.
+    from its tuning (the breaker guards ``name``). The breaker and an adaptive bulkhead
+    report their own state through an ``Observer`` bound to ``tier`` and ``name``, whose
+    recorder follows the metrics layer and whose logger follows the logging layer; the
+    retrier, limiter and semaphore bulkhead get none, since their layers record for them.
+    An invalid tuning raises ``AppValueError``.
 
     Args:
+        tier: The tier's name (Go ``Build``'s tier).
         name: The component's dotted name.
         layers: Its resolved layers.
         collab: The process collaborators.
@@ -548,215 +540,42 @@ def build(name: str, layers: decoration.Layers, collab: Collaborators) -> Deps:
 
     """
     obs = collab.observability
+    metrics = obs.metrics if on(switch=layers.metrics) else None
+    logger = obs.logger if on(switch=layers.logging) else None
+    observer = Observer.of(metrics, logger, tier, name)
     return Deps(
         observability=Observability(
-            logger=obs.logger if on(switch=layers.logging) else None,
-            metrics=obs.metrics if on(switch=layers.metrics) else None,
+            logger=logger,
+            metrics=metrics,
             tracer=obs.tracer if on(switch=layers.tracing) else None,
         ),
         auth=collab.auth if on(switch=layers.auth) else None,
         timeout=layers.timeout or 0.0,
         skip_recovery=not on(switch=layers.recovery),
         panic_logger=obs.logger if on(switch=layers.recovery) else None,
-        retrier=_layer(
+        retrier=layer_primitive(
             name,
             "retry",
             enabled=on(switch=layers.retry.enabled),
-            make=lambda: _retrier(layers.retry),
+            make=lambda: retrier_for(layers.retry),
         ),
-        breaker=_layer(
+        breaker=layer_primitive(
             name,
             "circuit_breaker",
             enabled=on(switch=layers.circuit_breaker.enabled),
-            make=lambda: _breaker(layers.circuit_breaker, name, obs.metrics),
+            make=lambda: breaker_for(layers.circuit_breaker, metrics, observer),
         ),
-        bulkhead=_layer(
+        bulkhead=layer_primitive(
             name,
             "bulkhead",
             enabled=on(switch=layers.bulkhead.enabled),
-            make=lambda: _bulkhead(layers.bulkhead),
+            make=lambda: bulkhead_for(layers.bulkhead, observer.recorder),
         ),
         shed_load=on(switch=layers.bulkhead.enabled) and on(switch=layers.bulkhead.shed),
-        rate_limiter=_layer(
+        rate_limiter=layer_primitive(
             name,
             "rate_limit",
             enabled=on(switch=layers.rate_limit.enabled),
-            make=lambda: _rate_limiter(layers.rate_limit),
+            make=lambda: rate_limiter_for(layers.rate_limit),
         ),
     )
-
-
-def _layer[C](name: str, layer: str, *, enabled: bool, make: Callable[[], C]) -> C | None:
-    """Build a layer's primitive when it is on.
-
-    A bad tuning names the component and the layer.
-
-    Args:
-        name: The component's dotted name.
-        layer: The layer.
-        enabled: Whether it is on.
-        make: Builds the primitive.
-
-    Returns:
-        A layer's primitive when it is on.
-
-    Raises:
-        AppValueError: Decoration: ``name``.``layer``: ``exc``.
-
-    """
-    if not enabled:
-        return None
-    try:
-        return make()
-    except AppValueError as exc:
-        msg = f"decoration: {name}.{layer}: {exc}"
-        raise AppValueError(msg) from exc
-
-
-def _retrier(r: decoration.Retry) -> Retrier:
-    """Build the exponential-backoff retrier ``r`` tunes.
-
-    Args:
-        r: The retry settings.
-
-    Returns:
-        The exponential-backoff retrier ``r`` tunes.
-
-    """
-    r.validate()
-    return ExponentialRetrier(
-        ExponentialRetrierConfig(
-            max_retries=r.max_retries,
-            initial_interval=r.initial_interval,
-            max_interval=r.max_interval,
-            multiplier=r.multiplier,
-            max_elapsed_time=r.max_elapsed_time,
-        )
-    )
-
-
-_BREAKER_STATE_VALUES = {
-    CircuitState.CLOSED: 0.0,
-    CircuitState.HALF_OPEN: 1.0,
-    CircuitState.OPEN: 2.0,
-}
-"""``circuit_breaker_state``'s value per state."""
-
-
-def _export_transitions(
-    metrics: MetricsProvider, name: str
-) -> Callable[[CircuitState, CircuitState], None]:
-    """Return a transition callback for ``name``'s breaker.
-
-    It exports the breaker's state and counts its moves.
-
-    ``circuit_breaker_state{dependency}`` reads 0 closed, 1 half-open and 2 open, starting
-    at 0; ``circuit_breaker_transitions_total{dependency, to}`` counts each state entered.
-
-    Args:
-        metrics: Where the transition counter is created.
-        name: The component's dotted name.
-
-    Returns:
-        A transition callback that exports ``name``'s breaker state.
-
-    """
-    state = metrics.gauge(
-        "circuit_breaker_state",
-        "A dependency's circuit breaker state (0 closed, 1 half-open, 2 open).",
-        ["dependency"],
-    )
-    moves = metrics.counter(
-        "circuit_breaker_transitions_total",
-        "A dependency's circuit breaker state changes, by the state entered.",
-        ["dependency", "to"],
-    )
-    state.set(0.0, dependency=name)
-
-    def on_transition(_: CircuitState, to: CircuitState) -> None:
-        state.set(_BREAKER_STATE_VALUES[to], dependency=name)
-        moves.inc(dependency=name, to=to.value)
-
-    return on_transition
-
-
-def _breaker(
-    b: decoration.CircuitBreaker, name: str, metrics: MetricsProvider | None
-) -> CircuitBreakerInterface:
-    """Build the breaker ``b`` tunes for ``name``.
-
-    Only a transient failure counts against it.
-
-    With a metrics provider the breaker exports its state (``_export_transitions``);
-    ``max_requests`` bounds the half-open trial calls.
-
-    Args:
-        b: The breaker settings.
-        name: The component's dotted name.
-        metrics: Where the transition counter is created.
-
-    Returns:
-        The breaker ``b`` tunes for ``name``.
-
-    """
-    b.validate()
-    return CircuitBreaker(
-        failure_threshold=max(b.consecutive_failures, 1),
-        recovery_timeout=b.timeout,
-        is_failure=is_transient,
-        half_open_max_calls=b.max_requests,
-        on_transition=None if metrics is None else _export_transitions(metrics, name),
-    )
-
-
-_BULKHEAD_KINDS: dict[str, BulkheadKind] = {
-    "": BulkheadKind.SEMAPHORE,
-    "channel": BulkheadKind.SEMAPHORE,
-    "semaphore": BulkheadKind.SEMAPHORE,
-    "adaptive": BulkheadKind.ADAPTIVE,
-}
-"""Maps the config's bulkhead kind (Go's "channel" is the fixed limit) to a backend."""
-
-
-def _bulkhead(b: decoration.Bulkhead) -> Bulkhead:
-    """Build the bulkhead ``b`` tunes.
-
-    Args:
-        b: The bulkhead settings.
-
-    Returns:
-        The bulkhead ``b`` tunes.
-
-    Raises:
-        AppValueError: Unknown bulkhead kind ``b.kind`` (want channel|adaptive).
-
-    """
-    b.validate()
-    kind = _BULKHEAD_KINDS.get(b.kind)
-    if kind is None:
-        msg = f"unknown bulkhead kind {b.kind!r} (want channel|adaptive)"
-        raise AppValueError(msg)
-    return bulkhead_from_config(
-        BulkheadConfig(
-            kind=kind,
-            max_concurrent=b.max_concurrent,
-            min_concurrent=b.min_concurrent,
-            initial_concurrent=b.initial_concurrent,
-            rtt_threshold_seconds=b.rtt_threshold,
-            backoff_ratio=b.backoff_ratio,
-        )
-    )
-
-
-def _rate_limiter(r: decoration.RateLimit) -> RateLimiter:
-    """Build the token-bucket limiter ``r`` tunes.
-
-    Args:
-        r: The rate-limit settings.
-
-    Returns:
-        The token-bucket limiter ``r`` tunes.
-
-    """
-    r.validate()
-    return TokenBucketRateLimiter(rate=r.rate, burst=r.burst)
