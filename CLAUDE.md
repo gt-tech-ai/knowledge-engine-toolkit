@@ -123,6 +123,8 @@ languages share one engine:
   safe for a read the caller knows is idempotent. It is a primitive the app composes around
   that call (`foundation/resilience/hedge`, `reswire.NewHedge` in Go;
   `foundation.resilience.hedge.hedger_from_config` in Python), never switched on per tier.
+  `reswire.WithMetrics(metrics, name)` makes `reswire.NewHedge` / `NewAdaptiveThrottle`
+  report their `resilience_*` series under tier `standalone`.
 - **Resilience metrics.** The retry, circuit-breaker, bulkhead, rate-limit and timeout layers,
   and the resilience primitives, record `resilience_*` series through a `series.Recorder`
   generated from `taxonomy/resilience-metrics.yaml` (`go generate

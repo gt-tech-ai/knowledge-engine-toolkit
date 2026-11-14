@@ -15,6 +15,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // defaultK is the default accepts multiplier.
@@ -34,6 +35,11 @@ var _ interfaces.AdaptiveThrottler = (*Throttler)(nil)
 
 // Config tunes the SRE throttler.
 type Config struct {
+	// Recorder receives the rejection ratio after each Do and counts each shed call as
+	// throttled with no operation; nil records nothing. It is wired in code
+	// (reswire.WithMetrics), never decoded from config.
+	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
+
 	// Rand is the [0,1) random source used for probabilistic shedding (nil → rand.Float64).
 	Rand func() float64
 	// K is the accepts multiplier in the rejection formula; higher K sheds less
@@ -46,11 +52,13 @@ type Config struct {
 
 // DefaultConfig returns SRE-typical throttler defaults.
 func DefaultConfig() Config {
-	return Config{K: defaultK, Decay: defaultDecay, Rand: nil}
+	return Config{K: defaultK, Decay: defaultDecay, Rand: nil, Recorder: nil}
 }
 
 // Throttler is the SRE client-side adaptive throttler.
 type Throttler struct {
+	// recorder receives the ratio and the shed calls; nil records nothing.
+	recorder *series.Recorder
 	// rand is the [0,1) random source used to decide whether to shed a request.
 	rand func() float64
 	// requests is the decayed count of recent request attempts (shed or allowed).
@@ -101,6 +109,7 @@ func New(cfg Config) *Throttler {
 	}
 
 	return &Throttler{
+		recorder: cfg.Recorder,
 		k:        amount,
 		decay:    decay,
 		rand:     callback,
@@ -113,7 +122,9 @@ func New(cfg Config) *Throttler {
 // Do runs op unless the throttler sheds it locally, in which case it returns ErrThrottled
 // WITHOUT invoking op. A success feeds the accept window; every attempt (shed or allowed)
 // feeds the request window, so a sustained backend failure raises the rejection
-// probability and a recovery lowers it.
+// probability and a recovery lowers it. After each call the rejection ratio, computed
+// under the lock, is reported through Config.Recorder outside it, and a shed call is
+// counted as throttled.
 func (t *Throttler) Do(_ context.Context, operation func() error) error {
 	t.mu.Lock()
 
@@ -124,9 +135,14 @@ func (t *Throttler) Do(_ context.Context, operation func() error) error {
 
 	shed := t.rand() < t.rejectionChance()
 	t.requests++ // this attempt counts as a request whether shed or allowed
+
+	ratio := t.rejectionChance()
 	t.mu.Unlock()
 
 	if shed {
+		t.recorder.SetThrottleRejectionRatio(ratio)
+		t.recorder.Rejected("", series.ReasonThrottled)
+
 		return ErrThrottled
 	}
 
@@ -135,8 +151,12 @@ func (t *Throttler) Do(_ context.Context, operation func() error) error {
 		t.mu.Lock()
 
 		t.accepts++
+
+		ratio = t.rejectionChance()
 		t.mu.Unlock()
 	}
+
+	t.recorder.SetThrottleRejectionRatio(ratio)
 
 	return err
 }

@@ -253,6 +253,7 @@ func TestExponential_RetryWithResult(t *testing.T) {
 	t.Parallel()
 
 	retrier := exponential.New(exponential.Config{
+		Recorder:        nil,
 		MaxRetries:      3,
 		InitialInterval: 1 * time.Millisecond,
 		MaxInterval:     10 * time.Millisecond,
@@ -324,7 +325,9 @@ func TestRateLimiter_OptionFunctions(t *testing.T) {
 func TestRateLimiter_ToOptions(t *testing.T) {
 	t.Parallel()
 
-	src := ratelimiter.Config{Kind: ratelimiter.KindToken, Rate: rate, Burst: burst}
+	src := ratelimiter.Config{
+		Recorder: nil, Kind: ratelimiter.KindToken, Rate: rate, Burst: burst,
+	}
 	opts := src.ToOptions()
 	dst := ratelimiter.DefaultConfig()
 
@@ -479,7 +482,7 @@ func TestChannel_DefaultConfig(t *testing.T) {
 func TestChannel_TryExecuteSuccess(t *testing.T) {
 	t.Parallel()
 
-	bh := channel.New(channel.Config{MaxConcurrent: 2})
+	bh := channel.New(channel.Config{Recorder: nil, MaxConcurrent: 2})
 	err := bh.TryExecute(func() error { return nil })
 	require.NoError(t, err, "TryExecute must not return error when capacity is available")
 }
@@ -499,7 +502,7 @@ func TestChannel_ExecuteCancelledContext(t *testing.T) {
 	t.Parallel()
 
 	// Fill all slots
-	currentBulkhead := channel.New(channel.Config{MaxConcurrent: 1})
+	currentBulkhead := channel.New(channel.Config{Recorder: nil, MaxConcurrent: 1})
 	blocker := make(chan struct{})
 
 	go func() {

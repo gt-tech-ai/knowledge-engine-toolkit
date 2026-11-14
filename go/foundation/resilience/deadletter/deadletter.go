@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // Queue is a facade over a DeadLetterBackend that swallows and logs backend failures.
@@ -22,19 +23,33 @@ type Queue struct {
 
 	// logger records a backend failure once (nil disables the log).
 	logger interfaces.Logger
+
+	// recorder counts each letter sent or failed; nil records nothing.
+	recorder *series.Recorder
 }
 
 // New builds a Queue over the given backend, logging backend failures via logger.
 func New(backend interfaces.DeadLetterBackend, logger interfaces.Logger) *Queue {
-	return &Queue{backend: backend, logger: logger}
+	return &Queue{backend: backend, logger: logger, recorder: nil}
+}
+
+// WithRecorder makes the Queue count each letter as sent or failed through recorder,
+// bound to series.TierStandalone and the queue's name by its caller, and returns it.
+func (q *Queue) WithRecorder(recorder *series.Recorder) *Queue {
+	q.recorder = recorder
+
+	return q
 }
 
 // Send records the dead letter, returning true on success and false if the backend
 // failed. A backend failure is logged at Error (a DLQ outage is a genuine data-loss
 // risk, not an inner-seam retry) and never propagated, so the consumer loop survives.
+// Each letter is counted as sent or failed.
 func (q *Queue) Send(ctx context.Context, letter interfaces.DeadLetter) bool {
 	err := q.backend.Send(ctx, letter)
 	if err != nil {
+		q.recorder.DeadLettered(series.DeadLetterOutcomeFailed)
+
 		if q.logger != nil {
 			q.logger.Error(
 				"failed to record dead letter",
@@ -46,6 +61,8 @@ func (q *Queue) Send(ctx context.Context, letter interfaces.DeadLetter) bool {
 
 		return false
 	}
+
+	q.recorder.DeadLettered(series.DeadLetterOutcomeSent)
 
 	return true
 }

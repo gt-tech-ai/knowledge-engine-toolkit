@@ -60,8 +60,8 @@ const (
 	observedTwice = 2
 )
 
-// layerHarness is one layer test's registry, the Observer recording into it and the mock
-// logger receiving its Warn lines.
+// layerHarness is one layer test's registry, the Observer recording into it and the
+// mock logger receiving its Warn lines.
 type layerHarness struct {
 	// registry is the in-process Prometheus registry the recorder writes to.
 	registry *prometheus.Registry
@@ -69,12 +69,36 @@ type layerHarness struct {
 	// logger is the strict mock logger; a Warn the test did not expect fails it.
 	logger *mocks.MockLogger
 
-	// obs is the Observer the layer under test reports through.
+	// tier is the tier label the recorder binds and value reads.
+	tier string
+
+	// obs is the Observer the component under test reports through.
 	obs decorate.Observer
 }
 
-// newObserved builds an Observer over a fresh registry and a strict mock logger.
+// newObserved builds an Observer for the client-tier subject observedName over a
+// fresh registry and a strict mock logger.
 func newObserved(t *testing.T) layerHarness {
+	t.Helper()
+
+	return newHarness(t, observedTier)
+}
+
+// newStandalone builds an Observer for a primitive named observedName used outside a
+// tier: its recorder binds tier "standalone" and its Warn lines name no tier.
+func newStandalone(t *testing.T) layerHarness {
+	t.Helper()
+
+	harness := newHarness(t, series.TierStandalone)
+
+	harness.obs.Tier = ""
+
+	return harness
+}
+
+// newHarness builds an Observer for the subject observedName in tier over a fresh
+// registry and a strict mock logger.
+func newHarness(t *testing.T, tier string) layerHarness {
 	t.Helper()
 
 	registry := prometheus.NewRegistry()
@@ -83,27 +107,23 @@ func newObserved(t *testing.T) layerHarness {
 	return layerHarness{
 		registry: registry,
 		logger:   logger,
-		obs: decorate.Observer{
-			Recorder: series.NewRecorder(
-				prom.NewFromRegistry(registry), observedTier, observedName,
-			),
-			Logger: logger,
-			Tier:   observedTier,
-			Name:   observedName,
-		},
+		tier:     tier,
+		obs: series.NewObserver(
+			prom.NewFromRegistry(registry), logger, tier, observedName,
+		),
 	}
 }
 
-// value sums the samples of metric labelled with the subject's tier and name and with
-// label=labelValue; a series never recorded reads 0.
-func (o layerHarness) value(t *testing.T, metric, label, labelValue string) float64 {
+// value sums the samples of metric labelled with the harness's tier, the subject's name
+// and label=labelValue; a series never recorded reads 0.
+func (o *layerHarness) value(t *testing.T, metric, label, labelValue string) float64 {
 	t.Helper()
 
 	families, err := o.registry.Gather()
 	require.NoError(t, err)
 
 	want := map[string]string{
-		"tier": observedTier, textName: observedName, label: labelValue,
+		"tier": o.tier, textName: observedName, label: labelValue,
 	}
 
 	var total float64
@@ -280,7 +300,7 @@ func TestRetryMW_RecordsRetriesAndExhaustion(t *testing.T) {
 				"attempts", len(row.results)).
 				Times(row.want.warns)
 
-			runRetried(t, harness, &row)
+			runRetried(t, &harness, &row)
 
 			require.InDelta(
 				t,
@@ -303,7 +323,7 @@ func TestRetryMW_RecordsRetriesAndExhaustion(t *testing.T) {
 
 // runRetried runs one operation through the retry layer, returning each attempt's
 // result from row in turn.
-func runRetried(t *testing.T, harness layerHarness, row *retryCase) {
+func runRetried(t *testing.T, harness *layerHarness, row *retryCase) {
 	t.Helper()
 
 	ctx := context.Background()

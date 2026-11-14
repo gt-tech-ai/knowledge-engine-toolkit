@@ -31,6 +31,7 @@ func TestExponentialRetry_CustomIsRetryable(t *testing.T) {
 
 	terminal := apperr.Sentinel("terminal")
 	retrier := exponential.New(exponential.Config{
+		Recorder:        nil,
 		MaxRetries:      5,
 		InitialInterval: time.Millisecond,
 		MaxInterval:     5 * time.Millisecond,

@@ -359,6 +359,7 @@ func newRetrier(retrier decoration.Retry) (interfaces.Retrier, error) {
 	}
 
 	return retry.NewFromConfig(retry.Config{
+		Recorder:        nil,
 		Kind:            retry.KindExponential,
 		MaxRetries:      retrier.RetryConfig.MaxRetries,
 		InitialInterval: retrier.RetryConfig.InitialInterval,

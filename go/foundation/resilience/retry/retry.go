@@ -19,6 +19,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // defaultConfigMaxRetries is the default MaxRetries of Config.
@@ -58,6 +59,11 @@ func (k Kind) String() string {
 // Config is the superset configuration for all retrier kinds.
 // Kind-incompatible fields are silently ignored.
 type Config struct {
+	// Recorder counts a standalone retrier's retries, exhaustion and budget refusals
+	// with no operation; nil records nothing. It is wired in code (WithRecorder), never
+	// decoded from config.
+	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
+
 	// Kind specifies which retrier implementation to use.
 	Kind Kind
 
@@ -80,6 +86,7 @@ type Config struct {
 // DefaultConfig returns the default retry configuration with KindExponential.
 func DefaultConfig() Config {
 	return Config{
+		Recorder:        nil,
 		Kind:            KindExponential,
 		MaxRetries:      defaultConfigMaxRetries,
 		InitialInterval: defaultConfigInitialInterval,
@@ -94,6 +101,12 @@ func (c Config) ToOptions() []options.Option[Config] {
 	return []options.Option[Config]{
 		func(target *Config) { *target = c },
 	}
+}
+
+// WithRecorder counts the retrier's retries, exhaustion and budget refusals through
+// recorder, bound to series.TierStandalone and the retrier's name by its caller.
+func WithRecorder(recorder *series.Recorder) options.Option[Config] {
+	return func(c *Config) { c.Recorder = recorder }
 }
 
 // WithMaxRetries sets the maximum number of retry attempts.
@@ -138,6 +151,7 @@ func NewFromConfig(cfg Config) (interfaces.Retrier, error) {
 	switch cfg.Kind {
 	case KindExponential:
 		expCfg := exponential.Config{
+			Recorder:        cfg.Recorder,
 			MaxRetries:      cfg.MaxRetries,
 			InitialInterval: cfg.InitialInterval,
 			MaxInterval:     cfg.MaxInterval,

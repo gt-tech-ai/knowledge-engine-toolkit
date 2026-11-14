@@ -806,6 +806,7 @@ func TestRetryWithResult_Success(t *testing.T) {
 	t.Parallel()
 
 	retrier := exponential.New(exponential.Config{
+		Recorder:        nil,
 		MaxRetries:      3,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -838,6 +839,7 @@ func TestRetryWithResult_SucceedsAfterRetries(t *testing.T) {
 	t.Parallel()
 
 	retrier := exponential.New(exponential.Config{
+		Recorder:        nil,
 		MaxRetries:      5,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -877,6 +879,7 @@ func TestRetryWithResult_AllFailures(t *testing.T) {
 	t.Parallel()
 
 	retrier := exponential.New(exponential.Config{
+		Recorder:        nil,
 		MaxRetries:      3,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -908,6 +911,7 @@ func TestRetryWithResult_BudgetExhausted(t *testing.T) {
 	t.Parallel()
 
 	retrier := exponential.New(exponential.Config{
+		Recorder:        nil,
 		MaxRetries:      10,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -943,6 +947,7 @@ func TestRetry_Retry_BudgetExhausted(t *testing.T) {
 	t.Parallel()
 
 	retrier := exponential.New(exponential.Config{
+		Recorder:        nil,
 		MaxRetries:      10,
 		InitialInterval: 10 * time.Millisecond,
 		MaxInterval:     50 * time.Millisecond,
@@ -979,6 +984,7 @@ func TestRetry_ContextCancelled(t *testing.T) {
 	t.Parallel()
 
 	retrier := exponential.New(exponential.Config{
+		Recorder:        nil,
 		MaxRetries:      100,
 		InitialInterval: 50 * time.Millisecond,
 		MaxInterval:     200 * time.Millisecond,

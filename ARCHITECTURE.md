@@ -428,6 +428,30 @@ and `name` (the component or primitive) first, then its own labels.
     `name`) per opening, from its `OnStateChange` callback.
   - adaptive bulkhead: `bulkhead_limit`, the whole limit it admits, when built and after each
     adjustment.
+- **Go standalone primitives.** A primitive used outside a decorate tier records only when
+  its caller hands it a recorder, conventionally `series.NewRecorder(metrics,
+  series.TierStandalone, name)`, and labels its events `operation=""`:
+  - exponential retrier: `retry.WithRecorder` (`retry.Config.Recorder` →
+    `exponential.Config.Recorder`); `Retry` and `RetryWithResult` count a finished call
+    exactly as the retry layer does (`series.Recorder.RetriesDone`), without the Warn.
+  - token limiter: `ratelimiter.WithRecorder` (→ `token.Config.Recorder`); each refused
+    `Allow` is `rejections{rate_limited}`.
+  - channel bulkhead and keyed limiter: `channel.Config.Recorder`, `keyed.Config.Recorder`;
+    each refused `TryExecute` / `TryAcquire` is `rejections{bulkhead_full}` (a key is never a
+    label). `bulkhead.NewFromConfig` leaves the channel kind without one: its refusals are
+    the decorate layer's.
+  - adaptive throttle and hedger: `reswire.NewAdaptiveThrottle(loader,
+    reswire.WithMetrics(metrics, name))` and `reswire.NewHedge(loader, …)`, or
+    `adaptivethrottle.Config.Recorder` / `hedge.WithRecorder` directly. The throttle sets
+    `throttle_rejection_ratio` after each `Do` and counts a shed call as
+    `rejections{throttled}`; the delay hedger counts `hedges_total{outcome="fired"}` per
+    backup and `won` when the backup's result is the one returned. The disabled kinds record
+    nothing.
+  - dead-letter queue and deduplicator: `deadletter.New(…).WithRecorder(r)` counts each
+    letter `dead_letters_total{outcome="sent"|"failed"}`; `dedup.NewMemory(…).WithRecorder(r)`
+    counts each duplicate it reports.
+  - Every recorder field is tagged `yaml:"-" mapstructure:"-" json:"-"`: wired in code, never
+    decoded from config.
 
 ### Conversation threading
 

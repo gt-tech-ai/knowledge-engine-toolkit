@@ -139,6 +139,8 @@ func NewFromConfig(cfg Config) (interfaces.Bulkhead, error) {
 	switch cfg.Kind {
 	case KindChannel:
 		chCfg := channel.Config{
+			// The channel bulkhead's refusals are its decorate layer's to count.
+			Recorder:      nil,
 			MaxConcurrent: cfg.MaxConcurrent,
 		}
 

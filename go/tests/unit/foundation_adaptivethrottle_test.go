@@ -26,8 +26,9 @@ func TestThrottler_RejectionRisesOnFailureAndEasesOnRecovery(t *testing.T) {
 	t.Parallel()
 
 	throttler := adaptivethrottle.New(adaptivethrottle.Config{
-		K:     2.0,
-		Decay: 1.0, // cumulative window → deterministic
+		Recorder: nil,
+		K:        2.0,
+		Decay:    1.0, // cumulative window → deterministic
 		// never shed, so op always runs (isolates the ratio)
 		Rand: func() float64 { return 1.0 },
 	})
@@ -84,9 +85,10 @@ func TestThrottler_ShedsLocallyWithoutCallingOp(t *testing.T) {
 	t.Parallel()
 
 	throttler := adaptivethrottle.New(adaptivethrottle.Config{
-		K:     2.0,
-		Decay: 1.0,
-		Rand:  func() float64 { return 0.0 }, // draw 0 → shed whenever probability > 0
+		Recorder: nil,
+		K:        2.0,
+		Decay:    1.0,
+		Rand:     func() float64 { return 0.0 }, // draw 0 → shed whenever probability > 0
 	})
 	ctx := context.Background()
 
