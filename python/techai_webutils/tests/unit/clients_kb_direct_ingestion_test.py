@@ -94,7 +94,7 @@ async def _stubbed() -> AsyncGenerator[tuple[BedrockKnowledgeBaseIngestor, AioSt
     real = aiobotocore.session.get_session()
     real.set_credentials("test", "test")
     async with AsyncExitStack() as stack:
-        client = cast(
+        client: AioBaseClient = cast(
             "AioBaseClient",
             await stack.enter_async_context(
                 real.create_client("bedrock-agent", region_name="us-east-1")
