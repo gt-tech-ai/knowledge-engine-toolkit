@@ -2,8 +2,11 @@
 
 Distinct from the retrieval-oriented ``knowledge_base.py`` (chunk/index/query): this
 models the *ingestion job* lifecycle a caller drives — start a sync job, then poll it to
-completion. Implementations: a no-op stub (dev, no Bedrock emulator) and a real Bedrock
-client (stage/prod), selected by a config-keyed factory.
+completion — and the direct path that skips the job: ingest or delete up to
+``MAX_DIRECT_DOCUMENTS`` named documents per call (Bedrock
+``IngestKnowledgeBaseDocuments`` / ``DeleteKnowledgeBaseDocuments``). Implementations: a
+no-op stub (dev, no Bedrock emulator) and a real Bedrock client (stage/prod), selected by
+a config-keyed factory.
 """
 
 from __future__ import annotations
@@ -13,10 +16,17 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from techai_webutils.core.errors import InvalidInputError
 from techai_webutils.core.interfaces.lifecycle import ManagedResource
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Collection
+    from collections.abc import AsyncIterator, Collection, Sequence
+
+MAX_DIRECT_DOCUMENTS = 25
+"""The most documents one ``ingest_documents`` or ``delete_documents`` call accepts.
+
+Every backend refuses a larger batch with ``InvalidInputError`` before any I/O, so a
+caller sizes its batches by this one number whatever the Kind."""
 
 
 class IngestionJobState(StrEnum):
@@ -60,6 +70,9 @@ class IngestionJob:
     documents_scanned: int = 0
     """How many source documents the job has scanned so far (0 when the provider reports
     none); a count that moves between polls tells a slow job from a wedged one."""
+    documents_failed: int = 0
+    """How many documents the job failed to index (0 when the provider reports none). A
+    COMPLETE job can still carry failures; this count is the signal to look them up."""
 
     @property
     def is_terminal(self) -> bool:
@@ -101,10 +114,57 @@ class KnowledgeBaseDocument:
     """Failure/ignore detail when Bedrock reported one (empty otherwise)."""
 
 
+@dataclass(frozen=True, slots=True)
+class S3Document:
+    """One S3 object to ingest directly, with its optional metadata sidecar."""
+
+    uri: str
+    """The source object URI (``s3://bucket/key``)."""
+    metadata_uri: str | None = None
+    """The URI of the object's ``.metadata.json`` sidecar; ``None`` sends no metadata."""
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentIngestResult:
+    """Bedrock's answer for one document of a direct ingest or delete call.
+
+    ``status`` mirrors Bedrock's per-document status verbatim (``STARTING``,
+    ``IN_PROGRESS``, ``INDEXED``, ``FAILED``, ``DELETING``, …); the call is asynchronous,
+    so the final status is read later (``iter_cohort``).
+    """
+
+    uri: str
+    """The document's source URI (``s3://bucket/key``); empty for a non-S3 identifier."""
+    status: str
+    """Bedrock's per-document status, verbatim."""
+    status_reason: str = ""
+    """Failure detail when Bedrock reported one (empty otherwise)."""
+
+
+def check_direct_batch(count: int, what: str) -> None:
+    """Refuse a direct ingest or delete batch larger than ``MAX_DIRECT_DOCUMENTS``.
+
+    Args:
+        count: How many items the call names.
+        what: The items' name in the message (``documents``, ``uris``).
+
+    Raises:
+        InvalidInputError: ``count`` exceeds ``MAX_DIRECT_DOCUMENTS``.
+
+    """
+    if count > MAX_DIRECT_DOCUMENTS:
+        msg = (
+            f"direct knowledge-base call takes at most {MAX_DIRECT_DOCUMENTS} {what}, "
+            f"got {count}"
+        )
+        raise InvalidInputError(msg)
+
+
 class KnowledgeBaseIngestor(ManagedResource, ABC):
     """Drives knowledge-base ingestion jobs (start and poll).
 
-    It also lists a data source's documents.
+    It also lists a data source's documents, and ingests or deletes named documents
+    directly, without a job.
     """
 
     @abstractmethod
@@ -226,6 +286,61 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
 
         Returns:
             The job's state after the stop request.
+
+        """
+        ...
+
+    @abstractmethod
+    async def ingest_documents(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        documents: Sequence[S3Document],
+    ) -> list[DocumentIngestResult]:
+        """Ingest up to ``MAX_DIRECT_DOCUMENTS`` S3 documents directly, without a job.
+
+        Ingestion is asynchronous: each result carries the document's status when the
+        call returned; read the final status later. Ingesting a document again replaces
+        it, so a retried call is safe.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            documents: The documents, each with its optional metadata sidecar.
+
+        Returns:
+            One result per document Bedrock reported.
+
+        Raises:
+            InvalidInputError: More than ``MAX_DIRECT_DOCUMENTS`` documents.
+
+        """
+        ...
+
+    @abstractmethod
+    async def delete_documents(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        uris: Sequence[str],
+    ) -> list[DocumentIngestResult]:
+        """Delete up to ``MAX_DIRECT_DOCUMENTS`` S3 documents directly, without a job.
+
+        Deletion is asynchronous, like ``ingest_documents``; deleting a document that is
+        already gone is safe to retry.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            uris: The documents' source URIs (``s3://bucket/key``).
+
+        Returns:
+            One result per document Bedrock reported.
+
+        Raises:
+            InvalidInputError: More than ``MAX_DIRECT_DOCUMENTS`` URIs.
 
         """
         ...
