@@ -9,6 +9,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry/exponential"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // defaultConfigInterval is the default Interval of Config.
@@ -31,6 +32,10 @@ var _ interfaces.CircuitBreaker = (*Breaker)(nil)
 
 // Config holds gobreaker-specific circuit breaker settings.
 type Config struct {
+	// Observer receives the breaker's state, its transitions and one Warn each time it
+	// opens; nil reports nothing. It is wired in code, never decoded from config.
+	Observer *series.Observer `yaml:"-" mapstructure:"-" json:"-"`
+
 	// Name identifies the circuit breaker instance for logging and metrics.
 	Name string
 
@@ -60,6 +65,7 @@ type Config struct {
 // DefaultConfig returns sensible defaults for the given circuit breaker name.
 func DefaultConfig(name string) Config {
 	return Config{
+		Observer:            nil,
 		Name:                name,
 		MaxRequests:         1,
 		Interval:            defaultConfigInterval,
@@ -79,7 +85,8 @@ type Breaker struct {
 	inner *gb.CircuitBreaker[noResult]
 }
 
-// New creates a circuit breaker from the given config.
+// New creates a circuit breaker from the given config. It reports the closed state at
+// once, and each later state change, through cfg.Observer.
 func New(cfg Config) *Breaker {
 	circuitBreaker := gb.NewCircuitBreaker[noResult](gb.Settings{
 		Name:        cfg.Name,
@@ -106,11 +113,40 @@ func New(cfg Config) *Breaker {
 				float64(counts.TotalFailures)/float64(counts.Requests) >= cfg.FailureRatio
 		},
 		BucketPeriod:  0,
-		OnStateChange: nil,
+		OnStateChange: cfg.stateChanged,
 		IsExcluded:    nil,
 	})
 
+	cfg.Observer.Record().SetBreakerState(series.BreakerStateClosed)
+
 	return &Breaker{inner: circuitBreaker}
+}
+
+// stateChanged reports a move to state next: the state gauge, the transition count
+// and, on opening, one Warn. gobreaker calls it under its mutex, so it only records and
+// logs.
+func (c *Config) stateChanged(_ string, _, next gb.State) {
+	state := breakerState(next)
+
+	c.Observer.Record().SetBreakerState(state)
+	c.Observer.Record().BreakerMoved(state)
+
+	if next == gb.StateOpen {
+		c.Observer.Warn("circuit breaker opened")
+	}
+}
+
+// breakerState maps a gobreaker state to the series' breaker state.
+func breakerState(state gb.State) series.BreakerState {
+	if state == gb.StateOpen {
+		return series.BreakerStateOpen
+	}
+
+	if state == gb.StateHalfOpen {
+		return series.BreakerStateHalfOpen
+	}
+
+	return series.BreakerStateClosed
 }
 
 // Execute runs fn through the circuit breaker. A call the breaker rejects (open, or
@@ -120,7 +156,7 @@ func (b *Breaker) Execute(fn func() error) error {
 	_, err := b.inner.Execute(func() (struct{}, error) {
 		return struct{}{}, fn()
 	})
-	if apperr.StdIs(err, gb.ErrOpenState) || apperr.StdIs(err, gb.ErrTooManyRequests) {
+	if IsOpen(err) {
 		return apperr.Wrap(
 			err,
 			apperr.CodeUnavailable,
@@ -129,4 +165,10 @@ func (b *Breaker) Execute(fn func() error) error {
 	}
 
 	return err
+}
+
+// IsOpen reports whether err is the breaker refusing a call (open, or half-open with its
+// probe quota spent) rather than the call's own failure; both are CodeUnavailable.
+func IsOpen(err error) bool {
+	return apperr.StdIs(err, gb.ErrOpenState) || apperr.StdIs(err, gb.ErrTooManyRequests)
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 	gb "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/circuitbreaker/gobreaker"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // defaultConfigInterval is the default Interval of Config.
@@ -58,6 +59,11 @@ func (k Kind) String() string {
 // Config is the superset configuration for all circuit breaker kinds.
 // Kind-incompatible fields are silently ignored.
 type Config struct {
+	// Observer receives the breaker's state, its transitions and one Warn each time it
+	// opens; nil reports nothing. It is wired in code (decorate's Build), never decoded
+	// from config.
+	Observer *series.Observer `yaml:"-" mapstructure:"-" json:"-"`
+
 	// Name identifies the circuit breaker instance for logging and metrics.
 	Name string `yaml:"name" mapstructure:"name"`
 
@@ -87,6 +93,7 @@ type Config struct {
 // DefaultConfig returns the default circuit breaker configuration with KindGoBreaker.
 func DefaultConfig(name string) Config {
 	return Config{
+		Observer:            nil,
 		Kind:                KindGoBreaker,
 		Name:                name,
 		MaxRequests:         1,
@@ -164,6 +171,7 @@ func NewFromConfig(cfg Config) (interfaces.CircuitBreaker, error) {
 	switch cfg.Kind {
 	case KindGoBreaker:
 		gbCfg := gb.Config{
+			Observer:            cfg.Observer,
 			Name:                cfg.Name,
 			MaxRequests:         cfg.MaxRequests,
 			Interval:            cfg.Interval,
@@ -181,4 +189,10 @@ func NewFromConfig(cfg Config) (interfaces.CircuitBreaker, error) {
 			fmt.Sprintf("unknown circuit breaker kind: %v", cfg.Kind),
 		)
 	}
+}
+
+// IsOpen reports whether err is a circuit breaker refusing a call rather than the
+// call's own failure; both are CodeUnavailable.
+func IsOpen(err error) bool {
+	return gb.IsOpen(err)
 }

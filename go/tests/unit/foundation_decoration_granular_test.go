@@ -34,7 +34,7 @@ func granularCollab(t *testing.T) decorate.Collaborators {
 
 	return decorate.Collaborators{
 		Logger:  mocks.NewMockLogger(ctrl),
-		Metrics: mocks.NewMockMetrics(ctrl),
+		Metrics: resilienceTolerantMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
 		Auth:    nil,
 	}

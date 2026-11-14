@@ -78,6 +78,7 @@ func TestCircuitBreaker_OpensAfterConsecutiveFailures(t *testing.T) {
 	)
 
 	circuitBreaker, err = circuitbreaker.NewFromConfig(circuitbreaker.Config{
+		Observer:            nil,
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                "test-cb",
 		MaxRequests:         1,
@@ -125,6 +126,7 @@ func TestCircuitBreaker_DomainErrorsDoNotTrip(t *testing.T) {
 	t.Parallel()
 
 	circuitBreaker, err := circuitbreaker.NewFromConfig(circuitbreaker.Config{
+		Observer:            nil,
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                "cb-domain",
 		MaxRequests:         1,
@@ -170,6 +172,7 @@ func TestCircuitBreaker_FailureRatioTrips(t *testing.T) {
 	t.Parallel()
 
 	circuitBreaker, err := circuitbreaker.NewFromConfig(circuitbreaker.Config{
+		Observer:            nil,
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                "cb-ratio",
 		MaxRequests:         1,
@@ -227,6 +230,7 @@ func TestCircuitBreaker_CallerCancellationDoesNotTrip(t *testing.T) {
 	t.Parallel()
 
 	circuitBreaker, err := circuitbreaker.NewFromConfig(circuitbreaker.Config{
+		Observer:            nil,
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                "cb-cancel",
 		MaxRequests:         1,

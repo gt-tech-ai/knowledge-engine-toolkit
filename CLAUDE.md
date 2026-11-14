@@ -127,7 +127,9 @@ languages share one engine:
   and the resilience primitives, record `resilience_*` series through a `series.Recorder`
   generated from `taxonomy/resilience-metrics.yaml` (`go generate
   ./go/foundation/resilience/series/...`; edit the YAML, never the outputs). Layers record the
-  operation-labelled events, primitives their state; a nil provider records nothing
+  operation-labelled events, primitives their state; a nil provider records nothing. A Go
+  component reports through a `series.Observer` (recorder, logger, tier, name), which the
+  decorate builder binds per subject from the metrics and logging switches
   (ARCHITECTURE.md#resilience-metrics).
 
 | Tier | Order (outermost first) | Go base | Python base |

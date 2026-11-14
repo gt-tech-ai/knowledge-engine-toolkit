@@ -401,6 +401,33 @@ and `name` (the component or primitive) first, then its own labels.
 - **Gating.** A component records these series only when its metrics layer is on, and writes
   the two Warn logs (a breaker opening, a retrier giving up) only when its logging layer is on.
   A nil (`None`) provider records nothing and changes no behavior.
+- **Go wiring.** A component reports through a `series.Observer` (`Recorder`, `Logger`, and
+  the `Tier` and `Name` a Warn line names; built by `series.NewObserver(metrics, logger, tier,
+  name)`; the zero value and a nil `*Observer` report nothing). `decorate.Observer` is that
+  type. Each resilience layer takes one: `NewRetry(retrier, obs)`, `NewTimeout(d, obs)`,
+  `NewCircuitBreaker(cb, obs)`, `NewBulkhead(b, obs)`, `NewSheddingBulkhead(b, obs)` and
+  `NewRateLimit(l, obs)`; `Tier.Middleware` binds it to the tier and subject from `Deps.Metrics`
+  and `Deps.Logger`, which `Build` fills only when the metrics and logging layers are on.
+  `Build(tier, name, layers, collaborators)` (called by `Decorations.Deps` with the tier's name)
+  hands the same Observer to the breaker (`circuitbreaker.Config.Observer`, threaded into
+  `gobreaker.Config.Observer`, never decoded from config) and its recorder to an adaptive
+  bulkhead (`bulkhead.Config.Recorder` → `adaptive.Config.Recorder`). What each records:
+  - retry layer: `retries_total` (attempts − 1), then `rejections{budget_exhausted}` when the
+    retry budget refused, else `retry_exhausted_total` and a `retries exhausted` Warn (`tier`,
+    `name`, `operation`, `attempts`) when it still failed after a retry; nothing inside a
+    transaction.
+  - timeout layer: `timeouts_total` when its own deadline cut the call, not the caller's
+    earlier one and not an unrelated error returned late.
+  - circuit-breaker layer: `rejections{breaker_open}` when `circuitbreaker.IsOpen(err)` (the
+    breaker refused; the dependency's own `UNAVAILABLE` is not counted).
+  - shedding bulkhead layer: `rejections{bulkhead_full}`; the waiting bulkhead layer records
+    nothing (it never refuses).
+  - rate-limit layer: `rejections{rate_limited}`.
+  - gobreaker: `breaker_state` (closed when built, then each state it moves to),
+    `breaker_transitions_total{to}`, and one `circuit breaker opened` Warn (`tier` when set,
+    `name`) per opening, from its `OnStateChange` callback.
+  - adaptive bulkhead: `bulkhead_limit`, the whole limit it admits, when built and after each
+    adjustment.
 
 ### Conversation threading
 

@@ -240,6 +240,14 @@ func TestLoggingMW_LogsOnEntryAndFailure(t *testing.T) {
 	)
 }
 
+// unobserved returns the zero Observer, which reports nothing: the layer tests that
+// predate the resilience series run every layer without one.
+func unobserved() decorate.Observer {
+	var obs decorate.Observer
+
+	return obs
+}
+
 // TestTimeoutMW_AppliesDeadline tests that the timeout middleware bounds the operation
 // with a deadline.
 //
@@ -256,7 +264,7 @@ func TestTimeoutMW_AppliesDeadline(t *testing.T) {
 
 	_, err := decorate.Exec(
 		context.Background(),
-		decorate.NewTimeout(50*time.Millisecond),
+		decorate.NewTimeout(50*time.Millisecond, unobserved()),
 		textOp,
 		func(ctx context.Context) (struct{}, error) {
 			_, hadDeadline = ctx.Deadline()
@@ -269,7 +277,8 @@ func TestTimeoutMW_AppliesDeadline(t *testing.T) {
 
 	var passthrough bool
 
-	_, _ = decorate.Exec(context.Background(), decorate.NewTimeout(0), textOp,
+	_, _ = decorate.Exec(
+		context.Background(), decorate.NewTimeout(0, unobserved()), textOp,
 		func(ctx context.Context) (struct{}, error) {
 			_, passthrough = ctx.Deadline()
 
@@ -300,7 +309,7 @@ func TestRetryMW_TxGuardedRunsOnce(t *testing.T) {
 		mr := mocks.NewMockRetrier(ctrl) // strict: any Retry call fails the test
 		calls := 0
 		_, err := decorate.Exec(interfaces.WithInTx(context.Background()),
-			decorate.NewRetry(mr), textUpdatestatus,
+			decorate.NewRetry(mr, unobserved()), textUpdatestatus,
 			func(context.Context) (struct{}, error) {
 				calls++
 
@@ -324,7 +333,8 @@ func TestRetryMW_TxGuardedRunsOnce(t *testing.T) {
 		)
 
 		calls := 0
-		_, err := decorate.Exec(context.Background(), decorate.NewRetry(retrier), "List",
+		retry := decorate.NewRetry(retrier, unobserved())
+		_, err := decorate.Exec(context.Background(), retry, "List",
 			func(context.Context) (struct{}, error) {
 				calls++
 
@@ -360,7 +370,7 @@ func TestCircuitBreakerMW_ShortCircuitsWhenOpen(t *testing.T) {
 	ran := false
 	_, err := decorate.Exec(
 		context.Background(),
-		decorate.NewCircuitBreaker(circuitBreaker),
+		decorate.NewCircuitBreaker(circuitBreaker, unobserved()),
 		textGetTitle,
 		func(context.Context) (struct{}, error) {
 			ran = true

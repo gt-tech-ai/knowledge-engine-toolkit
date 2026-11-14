@@ -15,6 +15,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // defaultConfigMaxConcurrent is the default MaxConcurrent of Config.
@@ -40,6 +41,10 @@ var _ interfaces.Bulkhead = (*Bulkhead)(nil)
 
 // Config holds adaptive bulkhead settings.
 type Config struct {
+	// Recorder receives the limit when the bulkhead is built and after each
+	// adjustment; nil records nothing. It is wired in code, never decoded from config.
+	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
+
 	// MinConcurrent is the floor the limit never drops below (coerced to >= 1).
 	MinConcurrent int
 
@@ -61,6 +66,7 @@ type Config struct {
 // DefaultConfig returns sensible adaptive defaults.
 func DefaultConfig() Config {
 	return Config{
+		Recorder:          nil,
 		MinConcurrent:     1,
 		MaxConcurrent:     defaultConfigMaxConcurrent,
 		InitialConcurrent: defaultConfigInitialConcurrent,
@@ -71,6 +77,8 @@ func DefaultConfig() Config {
 
 // Bulkhead limits concurrency with a self-tuning (AIMD) limit.
 type Bulkhead struct {
+	// recorder receives the limit after each change; nil records nothing.
+	recorder *series.Recorder
 	// notify is a broadcast channel closed on each release to wake acquire waiters.
 	notify chan struct{}
 	// limit is the current adaptive concurrency limit (float for AIMD adjustment).
@@ -101,7 +109,10 @@ func New(cfg Config) *Bulkhead {
 		ratio = defaultRatio
 	}
 
+	cfg.Recorder.SetBulkheadLimit(math.Floor(init))
+
 	return &Bulkhead{
+		recorder:     cfg.Recorder,
 		limit:        init,
 		minLimit:     minL,
 		maxLimit:     maxL,
@@ -204,13 +215,14 @@ func (b *Bulkhead) release(rtt time.Duration, opErr error) {
 
 // adjust applies AIMD (caller holds b.mu): a slow or failed sample multiplicatively
 // decreases the limit; a fast, successful sample additively increases it, clamped into
-// [min, max].
+// [min, max]. It then reports the limit the bulkhead admits (the whole part, as Limit
+// returns it); one gauge write under the mutex.
 func (b *Bulkhead) adjust(rtt time.Duration, opErr error) {
 	if opErr != nil || (b.rttThreshold > 0 && rtt > b.rttThreshold) {
 		b.limit = math.Max(b.minLimit, b.limit*b.backoffRatio)
-
-		return
+	} else {
+		b.limit = math.Min(b.maxLimit, b.limit+1)
 	}
 
-	b.limit = math.Min(b.maxLimit, b.limit+1)
+	b.recorder.SetBulkheadLimit(math.Floor(b.limit))
 }

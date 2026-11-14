@@ -19,6 +19,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead/adaptive"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead/channel"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // defaultConfigMaxConcurrent is the default MaxConcurrent of Config.
@@ -64,6 +65,11 @@ func (k Kind) String() string {
 // Config is the superset configuration for all bulkhead kinds.
 // Kind-incompatible fields are silently ignored.
 type Config struct {
+	// Recorder receives the adaptive limit (KindAdaptive only; the channel bulkhead has
+	// no limit to report and its rejections are the decorate layer's); nil records
+	// nothing. It is wired in code (decorate's Build), never decoded from config.
+	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
+
 	// Kind specifies which bulkhead implementation to use.
 	Kind Kind
 
@@ -91,6 +97,7 @@ type Config struct {
 // limiter.
 func DefaultConfig() Config {
 	return Config{
+		Recorder:          nil,
 		Kind:              KindChannel,
 		MaxConcurrent:     defaultConfigMaxConcurrent,
 		MinConcurrent:     1,
@@ -139,6 +146,7 @@ func NewFromConfig(cfg Config) (interfaces.Bulkhead, error) {
 
 	case KindAdaptive:
 		adCfg := adaptive.Config{
+			Recorder:          cfg.Recorder,
 			MinConcurrent:     cfg.MinConcurrent,
 			MaxConcurrent:     cfg.MaxConcurrent,
 			InitialConcurrent: cfg.InitialConcurrent,
