@@ -6,6 +6,34 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.58] - 2026-11-14
+
+Python: `techai-webutils` 0.14.0. The Go module is unchanged.
+
+### Added
+
+- Python direct knowledge-base ingestion (`core/interfaces/kb_ingestion.py`):
+  `KnowledgeBaseIngestor.ingest_documents(*, knowledge_base_id, data_source_id, documents)`
+  takes `S3Document(uri, metadata_uri=None)` values and
+  `delete_documents(*, knowledge_base_id, data_source_id, uris)` takes S3 URIs; both return one
+  `DocumentIngestResult(uri, status, status_reason)` per document, with Bedrock's status
+  verbatim. A call takes at most `MAX_DIRECT_DOCUMENTS` (25) items and every backend refuses more
+  with `InvalidInputError` before any I/O (`check_direct_batch`). The `bedrock` kind calls
+  `IngestKnowledgeBaseDocuments` (content `dataSourceType: S3` with `s3.s3Location.uri`, the
+  sidecar as metadata `type: S3_LOCATION`) and `DeleteKnowledgeBaseDocuments`, ten documents per
+  call (the service model's maximum), and codes SDK errors through the botocore boundary, so a
+  throttle is transient. The `stub` kind answers `INDEXED` / `DELETING` and records the calls
+  (`ingested`, `deleted`). `RetryingIngestor` retries both calls on a transient error;
+  `PollingIngestor` passes them through.
+- Python `IngestionJob.documents_failed` (default 0), mapped from
+  `statistics.numberOfDocumentsFailed`; a poll timeout keeps it.
+
+### Changed
+
+- Python: **breaking for implementers.** `ingest_documents` and `delete_documents` are abstract
+  on `KnowledgeBaseIngestor`, so a consumer's own subclass or wrapper must implement them (a
+  wrapper delegates them, as `PollingIngestor` does).
+
 ## [0.0.57] - 2026-11-13
 
 Python: `techai-webutils` 0.13.0.

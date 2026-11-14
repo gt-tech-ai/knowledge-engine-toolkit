@@ -24,17 +24,25 @@ from typing import TYPE_CHECKING, final, override
 
 from techai_webutils.core.interfaces.kb_ingestion import (
     POLL_TIMEOUT_ERROR,
+    DocumentIngestResult,
     IngestionJob,
     IngestionJobState,
     KnowledgeBaseDocument,
     KnowledgeBaseIngestor,
     ReattachableIngestor,
+    S3Document,
 )
 from techai_webutils.foundation.lifecycle import DelegatingAsyncResource
 from techai_webutils.foundation.resilience.async_retry import retry_transient_async
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Awaitable, Callable, Collection
+    from collections.abc import (
+        AsyncIterator,
+        Awaitable,
+        Callable,
+        Collection,
+        Sequence,
+    )
 
 _DEFAULT_POLL_INTERVAL_SECONDS = 5.0
 """Seconds between ``get_ingestion_job`` polls (Bedrock ingestion is not push-based)."""
@@ -255,6 +263,56 @@ class PollingIngestor(
             job_id=job_id,
         )
 
+    @override
+    async def ingest_documents(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        documents: Sequence[S3Document],
+    ) -> list[DocumentIngestResult]:
+        """Delegate a direct ingest to the wrapped ingestor (no job, so no polling).
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            documents: The documents to ingest.
+
+        Returns:
+            The wrapped ingestor's per-document results.
+
+        """
+        return await self._inner.ingest_documents(
+            knowledge_base_id=knowledge_base_id,
+            data_source_id=data_source_id,
+            documents=documents,
+        )
+
+    @override
+    async def delete_documents(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        uris: Sequence[str],
+    ) -> list[DocumentIngestResult]:
+        """Delegate a direct delete to the wrapped ingestor (no job, so no polling).
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            uris: The documents to delete.
+
+        Returns:
+            The wrapped ingestor's per-document results.
+
+        """
+        return await self._inner.delete_documents(
+            knowledge_base_id=knowledge_base_id,
+            data_source_id=data_source_id,
+            uris=uris,
+        )
+
     async def _poll_to_terminal(
         self,
         knowledge_base_id: str,
@@ -281,6 +339,7 @@ class PollingIngestor(
                     state=IngestionJobState.FAILED,
                     error=POLL_TIMEOUT_ERROR,
                     documents_scanned=job.documents_scanned,
+                    documents_failed=job.documents_failed,
                 )
             await self._sleep(self._poll_interval)
             job = await self._inner.get_ingestion_job(
@@ -458,10 +517,11 @@ class RetryingIngestor(
 
         The caller owns the stop backoff.
 
-        Unlike ``start``/``get``/``list`` (which wrap ``self._retry``), stop is a plain
-        pass-through so a transient stop failure surfaces to the caller (typically a
-        supervisor that stops stuck jobs), whose own bounded backoff is the single source
-        of stop-retry — nesting the two would compose multiplicatively.
+        Unlike ``start``/``get``/``list`` and the direct ingest/delete (which wrap
+        ``self._retry``), stop is a plain pass-through so a transient stop failure
+        surfaces to the caller (typically a supervisor that stops stuck jobs), whose own
+        bounded backoff is the single source of stop-retry — nesting the two would
+        compose multiplicatively.
 
         Args:
             knowledge_base_id: The knowledge base.
@@ -477,3 +537,64 @@ class RetryingIngestor(
             data_source_id=data_source_id,
             job_id=job_id,
         )
+
+    @override
+    async def ingest_documents(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        documents: Sequence[S3Document],
+    ) -> list[DocumentIngestResult]:
+        """Ingest documents directly, retrying transient failures with backoff.
+
+        Ingesting a document again replaces it, so a retry is safe even when an earlier
+        attempt landed part of the batch.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            documents: The documents to ingest.
+
+        Returns:
+            The per-document results.
+
+        """
+
+        async def _op() -> list[DocumentIngestResult]:
+            return await self._inner.ingest_documents(
+                knowledge_base_id=knowledge_base_id,
+                data_source_id=data_source_id,
+                documents=documents,
+            )
+
+        return await self._retry(_op)()
+
+    @override
+    async def delete_documents(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        uris: Sequence[str],
+    ) -> list[DocumentIngestResult]:
+        """Delete documents directly, retrying transient failures with backoff.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            uris: The documents to delete.
+
+        Returns:
+            The per-document results.
+
+        """
+
+        async def _op() -> list[DocumentIngestResult]:
+            return await self._inner.delete_documents(
+                knowledge_base_id=knowledge_base_id,
+                data_source_id=data_source_id,
+                uris=uris,
+            )
+
+        return await self._retry(_op)()

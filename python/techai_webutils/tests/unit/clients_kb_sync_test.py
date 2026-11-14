@@ -30,6 +30,7 @@ from techai_webutils.core.interfaces.kb_ingestion import (
 _EXPECTED_AWAIT_COUNT = 2
 _EXPECTED_AWAIT_COUNT_3 = 3
 _EXPECTED_DOCUMENTS_SCANNED = 42
+_EXPECTED_DOCUMENTS_FAILED = 1234
 
 
 async def _noop_sleep(_seconds: float) -> None:
@@ -546,6 +547,33 @@ class TestJobFromPayload:
         })
         assert scanned.documents_scanned == _EXPECTED_DOCUMENTS_SCANNED
         assert job_from_payload({"ingestionJobId": "j"}).documents_scanned == 0
+
+    @staticmethod
+    def test_maps_the_failed_count() -> None:
+        """Test that a payload's failed-document count maps onto the job, 0 when absent.
+
+        **Why this test is important:**
+          - A job can end COMPLETE with documents that failed to index; the count is the
+            only job-level signal a caller has to go and find them.
+
+        **What it tests:**
+          - ``statistics.numberOfDocumentsFailed`` 1,234 maps to ``documents_failed``
+            1234; a payload without statistics, or with a non-number, maps to 0.
+        """
+        failed = job_from_payload({
+            "ingestionJobId": "j",
+            "status": "COMPLETE",
+            "statistics": {"numberOfDocumentsFailed": 1234},
+        })
+        assert failed.documents_failed == _EXPECTED_DOCUMENTS_FAILED
+        assert job_from_payload({"ingestionJobId": "j"}).documents_failed == 0
+        assert (
+            job_from_payload({
+                "ingestionJobId": "j",
+                "statistics": {"numberOfDocumentsFailed": "x"},
+            }).documents_failed
+            == 0
+        )
 
     @staticmethod
     def test_unknown_or_missing_status_falls_back_to_failed() -> None:

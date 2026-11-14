@@ -13,9 +13,11 @@ from typing import cast
 
 from techai_webutils.core.errors import AppError, ConflictError, UnavailableError
 from techai_webutils.core.interfaces.kb_ingestion import (
+    DocumentIngestResult,
     IngestionJob,
     IngestionJobState,
     KnowledgeBaseDocument,
+    S3Document,
 )
 
 
@@ -26,7 +28,8 @@ def job_from_payload(job: dict[str, object]) -> IngestionJob:
     statuses verbatim); an unknown or missing status falls back to ``FAILED`` (a safe
     terminal state). ``failureReasons`` is flattened into the ``error`` string — see
     ``_flatten_reasons`` for the shape handling. ``statistics.numberOfDocumentsScanned``
-    becomes ``documents_scanned`` (0 when absent).
+    becomes ``documents_scanned`` and ``statistics.numberOfDocumentsFailed``
+    ``documents_failed`` (each 0 when absent).
 
     Args:
         job: The ``ingestionJob`` payload.
@@ -40,11 +43,13 @@ def job_from_payload(job: dict[str, object]) -> IngestionJob:
         state = IngestionJobState(status)
     except ValueError:
         state = IngestionJobState.FAILED
+    statistics = job.get("statistics")
     return IngestionJob(
         job_id=str(job["ingestionJobId"]),
         state=state,
         error=_flatten_reasons(job.get("failureReasons")),
-        documents_scanned=_documents_scanned(job.get("statistics")),
+        documents_scanned=_statistic(statistics, "numberOfDocumentsScanned"),
+        documents_failed=_statistic(statistics, "numberOfDocumentsFailed"),
     )
 
 
@@ -103,22 +108,23 @@ def _flatten_reasons(reasons: object) -> str:
     return str(reasons)
 
 
-def _documents_scanned(statistics: object) -> int:
-    """Return ``numberOfDocumentsScanned`` from a job's ``statistics``.
+def _statistic(statistics: object, key: str) -> int:
+    """Return the count ``key`` from a job's ``statistics``.
 
     0 when it is absent or not a number.
 
     Args:
         statistics: The payload's ``statistics``.
+        key: The statistic (``numberOfDocumentsScanned``, ``numberOfDocumentsFailed``).
 
     Returns:
-        ``numberOfDocumentsScanned`` from a job's ``statistics``.
+        The count, or 0.
 
     """
     if not isinstance(statistics, dict):
         return 0
-    scanned = cast("dict[str, object]", statistics).get("numberOfDocumentsScanned")
-    return scanned if isinstance(scanned, int) else 0
+    value = cast("dict[str, object]", statistics).get(key)
+    return value if isinstance(value, int) else 0
 
 
 TRANSIENT_START_ERRORS = frozenset({
@@ -205,3 +211,77 @@ def cohort_batches(s3_uris: list[str]) -> list[list[dict[str, object]]]:
         ]
         for i in range(0, len(s3_uris), COHORT_BATCH)
     ]
+
+
+DIRECT_BATCH = 10
+"""The most documents one ``IngestKnowledgeBaseDocuments`` or
+``DeleteKnowledgeBaseDocuments`` call accepts (the service model's list maximum), so a
+larger direct batch is sent as several calls."""
+
+
+def ingest_batches(documents: list[S3Document]) -> list[list[dict[str, object]]]:
+    """Split ``documents`` into ``IngestKnowledgeBaseDocuments`` ``documents`` lists.
+
+    Each document becomes ``content`` of ``dataSourceType`` ``S3`` with its
+    ``s3Location``; a document with a sidecar also gets ``metadata`` of type
+    ``S3_LOCATION``. Each list holds at most ``DIRECT_BATCH`` documents.
+
+    Args:
+        documents: The documents, in order.
+
+    Returns:
+        The request lists, in order.
+
+    """
+    payloads: list[dict[str, object]] = []
+    for doc in documents:
+        payload: dict[str, object] = {
+            "content": {"dataSourceType": "S3", "s3": {"s3Location": {"uri": doc.uri}}}
+        }
+        if doc.metadata_uri:
+            payload["metadata"] = {
+                "type": "S3_LOCATION",
+                "s3Location": {"uri": doc.metadata_uri},
+            }
+        payloads.append(payload)
+    return [payloads[i : i + DIRECT_BATCH] for i in range(0, len(payloads), DIRECT_BATCH)]
+
+
+def delete_batches(uris: list[str]) -> list[list[dict[str, object]]]:
+    """Split ``uris`` into ``DeleteKnowledgeBaseDocuments`` identifier lists.
+
+    Each list holds at most ``DIRECT_BATCH`` S3 identifiers.
+
+    Args:
+        uris: The documents' S3 URIs, in order.
+
+    Returns:
+        The identifier lists, in order.
+
+    """
+    return [
+        [
+            {"dataSourceType": "S3", "s3": {"uri": uri}}
+            for uri in uris[i : i + DIRECT_BATCH]
+        ]
+        for i in range(0, len(uris), DIRECT_BATCH)
+    ]
+
+
+def document_result_from_payload(detail: dict[str, object]) -> DocumentIngestResult:
+    """Map a direct call's ``documentDetails`` entry to a ``DocumentIngestResult``.
+
+    The URI, status and reason are read as ``kb_document_from_payload`` reads them, so a
+    non-S3 identifier degrades to an empty ``uri``.
+
+    Args:
+        detail: One ``documentDetails`` entry.
+
+    Returns:
+        The mapped result.
+
+    """
+    doc = kb_document_from_payload(detail)
+    return DocumentIngestResult(
+        uri=doc.s3_uri, status=doc.status, status_reason=doc.status_reason
+    )

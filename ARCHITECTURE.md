@@ -829,7 +829,15 @@ stopped instead of paying for every stage again. Python only; the defaults chang
   `ServiceQuotaExceededException` and `ThrottlingException` are `UNAVAILABLE` (transient);
   `ConflictException` stays `CONFLICT`. `iter_cohort(..., s3_uris=…)` yields a round's documents:
   Bedrock looks them up with `GetKnowledgeBaseDocuments`, ten per call and five calls per second;
-  any other Kind filters `list_documents`.
+  any other Kind filters `list_documents`. A job reports `documents_failed` beside
+  `documents_scanned` (`statistics.numberOfDocumentsFailed`).
+- **Direct ingest and delete.** `ingest_documents(..., documents=[S3Document(uri,
+  metadata_uri)])` and `delete_documents(..., uris=…)` change named documents without a job,
+  at most `MAX_DIRECT_DOCUMENTS` (25) per call; every Kind refuses more with `INVALID_INPUT`.
+  Bedrock's `IngestKnowledgeBaseDocuments` / `DeleteKnowledgeBaseDocuments` take ten per call,
+  so the `bedrock` Kind splits a batch; each `DocumentIngestResult` carries Bedrock's status
+  verbatim and the final status is read later (`iter_cohort`). `RetryingIngestor` retries both
+  on a transient error (a throttle); a retry is safe because re-ingesting replaces a document.
 
 ## OpenSearch store and sinks
 

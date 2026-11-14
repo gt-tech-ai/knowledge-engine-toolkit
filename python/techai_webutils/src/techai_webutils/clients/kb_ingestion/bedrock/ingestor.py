@@ -1,4 +1,4 @@
-"""Real Bedrock Knowledge Base ingestor (bedrock-agent StartIngestionJob/GetIngestionJob).
+"""Real Bedrock Knowledge Base ingestor (bedrock-agent ingestion jobs and direct calls).
 
 Thin aiobotocore wrapper used in stage/prod (dev uses the no-op stub). Carved out of unit
 coverage (its lines are the live AWS calls) and exercised against real Bedrock in staging.
@@ -17,6 +17,9 @@ from botocore.exceptions import ClientError
 
 from techai_webutils.clients.kb_ingestion.mapping import (
     cohort_batches,
+    delete_batches,
+    document_result_from_payload,
+    ingest_batches,
     job_from_payload,
     kb_document_from_payload,
     start_client_token,
@@ -24,14 +27,17 @@ from techai_webutils.clients.kb_ingestion.mapping import (
 )
 from techai_webutils.core.errors import AppError, ConflictError
 from techai_webutils.core.interfaces.kb_ingestion import (
+    DocumentIngestResult,
     IngestionJob,
     KnowledgeBaseDocument,
     KnowledgeBaseIngestor,
+    S3Document,
+    check_direct_batch,
 )
 from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to_app_error
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Collection
+    from collections.abc import AsyncIterator, Collection, Sequence
     from typing import NotRequired
 
 COHORT_REQUEST_INTERVAL_SECONDS = 0.2
@@ -92,6 +98,32 @@ class _ListKnowledgeBaseDocumentsRequest(TypedDict):
 
 class _GetKnowledgeBaseDocumentsRequest(TypedDict):
     """The keyword arguments of the AWS ``get_knowledge_base_documents`` call."""
+
+    knowledgeBaseId: str
+    """The AWS ``knowledgeBaseId`` request field."""
+
+    dataSourceId: str
+    """The AWS ``dataSourceId`` request field."""
+
+    documentIdentifiers: list[dict[str, object]]
+    """The AWS ``documentIdentifiers`` request field."""
+
+
+class _IngestKnowledgeBaseDocumentsRequest(TypedDict):
+    """The keyword arguments of the AWS ``ingest_knowledge_base_documents`` call."""
+
+    knowledgeBaseId: str
+    """The AWS ``knowledgeBaseId`` request field."""
+
+    dataSourceId: str
+    """The AWS ``dataSourceId`` request field."""
+
+    documents: list[dict[str, object]]
+    """The AWS ``documents`` request field (``content`` plus optional ``metadata``)."""
+
+
+class _DeleteKnowledgeBaseDocumentsRequest(TypedDict):
+    """The keyword arguments of the AWS ``delete_knowledge_base_documents`` call."""
 
     knowledgeBaseId: str
     """The AWS ``knowledgeBaseId`` request field."""
@@ -178,6 +210,34 @@ class _BedrockAgentClient(Protocol):
 
         Args:
             **kwargs: The ``GetKnowledgeBaseDocuments`` request fields.
+
+        Returns:
+            The response, carrying ``documentDetails``.
+
+        """
+        ...
+
+    async def ingest_knowledge_base_documents(
+        self, **kwargs: Unpack[_IngestKnowledgeBaseDocumentsRequest]
+    ) -> dict[str, object]:
+        """Ingest up to ten documents directly; returns ``documentDetails``.
+
+        Args:
+            **kwargs: The ``IngestKnowledgeBaseDocuments`` request fields.
+
+        Returns:
+            The response, carrying ``documentDetails``.
+
+        """
+        ...
+
+    async def delete_knowledge_base_documents(
+        self, **kwargs: Unpack[_DeleteKnowledgeBaseDocumentsRequest]
+    ) -> dict[str, object]:
+        """Delete up to ten documents directly; returns ``documentDetails``.
+
+        Args:
+            **kwargs: The ``DeleteKnowledgeBaseDocuments`` request fields.
 
         Returns:
             The response, carrying ``documentDetails``.
@@ -460,6 +520,106 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
                 "list[dict[str, object]]", resp.get("documentDetails", [])
             ):
                 yield kb_document_from_payload(detail)
+
+    @override
+    async def ingest_documents(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        documents: Sequence[S3Document],
+    ) -> list[DocumentIngestResult]:
+        """Ingest documents with ``IngestKnowledgeBaseDocuments``, ten per call.
+
+        Each document is sent as S3 content with its sidecar as an ``S3_LOCATION``
+        metadata location. Calls run in order; a failed call raises the coded error
+        (a throttle is transient) after the earlier calls landed, which a retry
+        replaces.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            documents: The documents to ingest.
+
+        Returns:
+            Every call's per-document results, in order.
+
+        Raises:
+            botocore_error_to_app_error: The coded error for a failed call.
+
+        """
+        check_direct_batch(len(documents), "documents")
+        client = await self._agent_client()
+        results: list[DocumentIngestResult] = []
+        for batch in ingest_batches(list(documents)):
+            try:
+                resp = await client.ingest_knowledge_base_documents(
+                    knowledgeBaseId=knowledge_base_id,
+                    dataSourceId=data_source_id,
+                    documents=batch,
+                )
+            except ClientError as exc:
+                raise botocore_error_to_app_error(
+                    exc, "bedrock ingest knowledge base documents"
+                ) from exc
+            results.extend(_results(resp))
+        return results
+
+    @override
+    async def delete_documents(
+        self,
+        *,
+        knowledge_base_id: str,
+        data_source_id: str,
+        uris: Sequence[str],
+    ) -> list[DocumentIngestResult]:
+        """Delete documents with ``DeleteKnowledgeBaseDocuments``, ten per call.
+
+        Args:
+            knowledge_base_id: The knowledge base.
+            data_source_id: The data source within it.
+            uris: The documents to delete.
+
+        Returns:
+            Every call's per-document results, in order.
+
+        Raises:
+            botocore_error_to_app_error: The coded error for a failed call.
+
+        """
+        check_direct_batch(len(uris), "uris")
+        client = await self._agent_client()
+        results: list[DocumentIngestResult] = []
+        for batch in delete_batches(list(uris)):
+            try:
+                resp = await client.delete_knowledge_base_documents(
+                    knowledgeBaseId=knowledge_base_id,
+                    dataSourceId=data_source_id,
+                    documentIdentifiers=batch,
+                )
+            except ClientError as exc:
+                raise botocore_error_to_app_error(
+                    exc, "bedrock delete knowledge base documents"
+                ) from exc
+            results.extend(_results(resp))
+        return results
+
+
+def _results(resp: dict[str, object]) -> list[DocumentIngestResult]:
+    """Map a direct call's ``documentDetails`` to results.
+
+    Args:
+        resp: The ``IngestKnowledgeBaseDocuments`` / ``DeleteKnowledgeBaseDocuments``
+            response.
+
+    Returns:
+        One result per entry, in order.
+
+    """
+    return [
+        document_result_from_payload(detail)
+        for detail in cast("list[dict[str, object]]", resp.get("documentDetails", []))
+    ]
 
 
 def _start_failure(exc: ClientError, data_source_id: str) -> AppError:
