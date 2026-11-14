@@ -5,18 +5,15 @@ import (
 	"net/http"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/mock/gomock"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/budget"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
 )
 
@@ -31,22 +28,6 @@ func testHeaders() interceptors.HeaderMap {
 		NickName: "X-User-Nickname",
 		Roles:    "X-Roles",
 	}
-}
-
-// newTestRequest returns a minimal AnyRequest for testing.
-// Uses connect.NewRequest with a nil proto message.
-func newTestRequest() connect.AnyRequest {
-	return connect.NewRequest[*emptyMessage](nil)
-}
-
-// emptyMessage is a minimal type satisfying proto.Message for test requests.
-type emptyMessage struct{}
-
-func (*emptyMessage) ProtoReflect() {}
-
-// newTestResponse returns a minimal AnyResponse for testing.
-func newTestResponse() connect.AnyResponse {
-	return connect.NewResponse[*emptyMessage](nil)
 }
 
 // ---------------------------------------------------------------------------
@@ -68,8 +49,8 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 
 	var withBudget int32 = -99
 
-	unaryFunc := interceptors.BudgetInterceptor(7).WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	unaryFunc := wrapUnary(interceptors.BudgetInterceptor(wantWithBudget),
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			withBudget = budget.Remaining(ctx)
 
 			return newTestResponse(), nil
@@ -86,8 +67,8 @@ func TestBudgetInterceptor_AttachesSharedBudget(t *testing.T) {
 
 	var disabled int32 = -99
 
-	currentUnaryFunc := interceptors.BudgetInterceptor(0).WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	currentUnaryFunc := wrapUnary(interceptors.BudgetInterceptor(0),
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			disabled = budget.Remaining(ctx)
 
 			return newTestResponse(), nil
@@ -154,16 +135,6 @@ func TestGetAuthClaims_Missing(t *testing.T) {
 	assert.False(t, ok, "expected no claims in empty context")
 }
 
-// newTestRequestWithHeaders creates a request with specific HTTP headers.
-func newTestRequestWithHeaders(headers map[string]string) connect.AnyRequest {
-	req := connect.NewRequest[*emptyMessage](nil)
-	for k, v := range headers {
-		req.Header().Set(k, v)
-	}
-
-	return req
-}
-
 // TestAuthInterceptor_WithAllHeaders tests that the auth interceptor extracts
 // all identity headers and stores them as AuthClaims in context.
 //
@@ -186,8 +157,9 @@ func TestAuthInterceptor_WithAllHeaders(t *testing.T) {
 		found  bool
 	)
 
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
@@ -229,8 +201,9 @@ func TestAuthInterceptor_NoSub(t *testing.T) {
 
 	var found bool
 
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			_, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
@@ -264,8 +237,9 @@ func TestAuthInterceptor_SubOnly_NoRoles(t *testing.T) {
 		found  bool
 	)
 
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
@@ -304,8 +278,9 @@ func TestAuthInterceptor_EmptyRoles(t *testing.T) {
 		found  bool
 	)
 
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
@@ -344,8 +319,9 @@ func TestAuthInterceptor_RolesWithTrailingComma(t *testing.T) {
 		found  bool
 	)
 
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
@@ -386,8 +362,9 @@ func TestAuthInterceptor_StubMode_SynthesizesDevClaims(t *testing.T) {
 		found  bool
 	)
 
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
@@ -437,8 +414,9 @@ func TestAuthInterceptor_StubMode_RealHeadersWin(t *testing.T) {
 		found  bool
 	)
 
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			claims, found = interceptors.GetAuthClaims(ctx)
 
 			return newTestResponse(), nil
@@ -483,8 +461,9 @@ func TestLoggingInterceptor_Success(t *testing.T) {
 	interceptor := interceptors.NewLoggingInterceptor(logger)
 
 	expected := newTestResponse()
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(_ context.Context, _ *testRequest) (any, error) {
 			return expected, nil
 		},
 	)
@@ -532,8 +511,9 @@ func TestLoggingInterceptor_UsesWithContext_Success(t *testing.T) {
 	spy := fixtures.NewSpyLogger()
 	interceptor := interceptors.NewLoggingInterceptor(spy)
 
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(_ context.Context, _ *testRequest) (any, error) {
 			return newTestResponse(), nil
 		},
 	)
@@ -565,9 +545,10 @@ func TestLoggingInterceptor_UsesWithContext_Error(t *testing.T) {
 	spy := fixtures.NewSpyLogger()
 	interceptor := interceptors.NewLoggingInterceptor(spy)
 
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, connect.NewError(connect.CodeInternal, apperr.Sentinel(textBoom))
+	handler := wrapUnary(
+		interceptor,
+		func(_ context.Context, _ *testRequest) (any, error) {
+			return nil, connect.NewError(connect.CodeInternal, textBoom)
 		},
 	)
 
@@ -659,8 +640,9 @@ func TestMetricsInterceptor_Success(t *testing.T) {
 	interceptor := interceptors.MetricsInterceptor(metrics)
 
 	expected := newTestResponse()
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(_ context.Context, _ *testRequest) (any, error) {
 			return expected, nil
 		},
 	)
@@ -686,9 +668,10 @@ func TestMetricsInterceptor_Error(t *testing.T) {
 	metrics := fixtures.NopMetrics()
 	interceptor := interceptors.MetricsInterceptor(metrics)
 
-	innerErr := connect.NewError(connect.CodeInternal, apperr.Sentinel(textBoom))
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	innerErr := connect.NewError(connect.CodeInternal, textBoom)
+	handler := wrapUnary(
+		interceptor,
+		func(_ context.Context, _ *testRequest) (any, error) {
 			return nil, innerErr
 		},
 	)
@@ -716,8 +699,9 @@ func TestMetricsInterceptor_WithProcedure(t *testing.T) {
 	// The newTestRequest has an empty Spec().Procedure, which exercises
 	// parseConnectProcedure with a minimal input. This test confirms that the
 	// interceptor handles it without panicking.
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(_ context.Context, _ *testRequest) (any, error) {
 			return newTestResponse(), nil
 		},
 	)
@@ -746,8 +730,9 @@ func TestTracingInterceptor_Success(t *testing.T) {
 	interceptor := interceptors.TracingInterceptor(tracer)
 
 	expected := newTestResponse()
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(_ context.Context, _ *testRequest) (any, error) {
 			return expected, nil
 		},
 	)
@@ -818,7 +803,7 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 	)
 
 	// Create a Connect request with the headers
-	req := connect.NewRequest[*emptyMessage](nil)
+	req := newTestRequest()
 	for k, v := range headers {
 		req.Header().Set(k, v[0])
 	}
@@ -835,8 +820,9 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 	// Capture the context the inner handler receives to verify extraction.
 	var extracted trace.SpanContext
 
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			extracted = trace.SpanContextFromContext(ctx)
 
 			return newTestResponse(), nil
@@ -870,7 +856,7 @@ func TestTracingInterceptor_ExtractsTraceContext(t *testing.T) {
 func TestTracingInterceptor_RecordsRequestID(t *testing.T) {
 	t.Parallel()
 
-	req := connect.NewRequest[*emptyMessage](nil)
+	req := newTestRequest()
 	req.Header().Set(textXRequestID, "gw-abc123")
 
 	// Use a spy tracer to capture span attributes
@@ -885,8 +871,9 @@ func TestTracingInterceptor_RecordsRequestID(t *testing.T) {
 	})
 
 	interceptor := interceptors.TracingInterceptor(spyTracer)
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(_ context.Context, _ *testRequest) (any, error) {
 			return newTestResponse(), nil
 		},
 	)
@@ -964,8 +951,9 @@ func TestAuthInterceptor_SplitRoles_DoubleComma(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			claims, ok := interceptors.GetAuthClaims(ctx)
 			assert.True(t, ok, textExpectedClaimsInContext)
 
@@ -1000,8 +988,9 @@ func TestAuthInterceptor_SingleRole(t *testing.T) {
 	t.Parallel()
 
 	interceptor := interceptors.NewAuthInterceptor(false, new(testHeaders()))
-	handler := interceptor.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := wrapUnary(
+		interceptor,
+		func(ctx context.Context, _ *testRequest) (any, error) {
 			claims, ok := interceptors.GetAuthClaims(ctx)
 			assert.True(t, ok, "expected claims")
 
@@ -1030,12 +1019,12 @@ func TestAuthInterceptor_SingleRole(t *testing.T) {
 // extracts identity headers on the STREAMING path.
 //
 // Why this test is important:
-//   - Connect applies a unary interceptor only to unary calls; a unary-only auth
-//     interceptor would leave server-streaming handlers unauthenticated
+//   - A server-streaming handler must be authenticated like a unary one; an auth
+//     interceptor that skipped streams would leave them unauthenticated
 //
 // What it tests:
-//   - WrapStreamingHandler parses the request headers into AuthClaims the streaming
-//     handler observes
+//   - A server-streaming RPC's request headers become AuthClaims the streaming handler
+//     observes
 func TestAuthInterceptor_StreamingExtractsHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -1046,23 +1035,18 @@ func TestAuthInterceptor_StreamingExtractsHeaders(t *testing.T) {
 		found  bool
 	)
 
-	next := func(ctx context.Context, _ connect.StreamingHandlerConn) error {
+	next := func(ctx context.Context, _ *testRequest) error {
 		claims, found = interceptors.GetAuthClaims(ctx)
 
 		return nil
 	}
 
-	// The streaming auth path reads only RequestHeader (it enriches the context and
-	// hands the conn straight to next), so a generated StreamingHandlerConn mock that
-	// returns the request headers is all this test needs.
-	header := http.Header{}
-	header.Set(testHeaders().Sub, "stream-user")
-	header.Set(testHeaders().Tenant, "org-7")
+	stream := newTestStream(map[string]string{
+		testHeaders().Sub:    "stream-user",
+		testHeaders().Tenant: "org-7",
+	})
 
-	conn := mocks.NewMockStreamingHandlerConn(gomock.NewController(t))
-	conn.EXPECT().RequestHeader().Return(header).AnyTimes()
-
-	err := interceptor.WrapStreamingHandler(next)(context.Background(), conn)
+	err := wrapStream(interceptor, next)(context.Background(), stream)
 	require.NoError(t, err)
 
 	require.True(t, found, "streaming handler should see auth claims")
@@ -1074,14 +1058,15 @@ func TestAuthInterceptor_StreamingExtractsHeaders(t *testing.T) {
 // is.
 func assertErrorPassesThrough(
 	t *testing.T,
-	interceptor connect.Interceptor,
+	interceptor connect.ServerInterceptor,
 	code connect.Code,
 ) {
 	t.Helper()
 
-	inner := connect.NewError(code, apperr.Sentinel("handler failed"))
-	handler := interceptor.WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	inner := connect.NewError(code, "handler failed")
+	handler := wrapUnary(
+		interceptor,
+		func(_ context.Context, _ *testRequest) (any, error) {
 			return nil, inner
 		},
 	)
@@ -1095,9 +1080,9 @@ func assertErrorPassesThrough(
 // returns the spy that recorded it.
 func logFailedCall(code connect.Code) *fixtures.SpyLogger {
 	spy := fixtures.NewSpyLogger()
-	handler := interceptors.NewLoggingInterceptor(spy).WrapUnary(
-		func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, connect.NewError(code, apperr.Sentinel("handler failed"))
+	handler := wrapUnary(interceptors.NewLoggingInterceptor(spy),
+		func(_ context.Context, _ *testRequest) (any, error) {
+			return nil, connect.NewError(code, "handler failed")
 		},
 	)
 

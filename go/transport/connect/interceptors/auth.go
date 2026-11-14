@@ -7,10 +7,9 @@ package interceptors
 
 import (
 	"context"
-	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // HeaderMap names the gateway headers the auth interceptor reads claims from, so a
@@ -97,10 +96,9 @@ func newStubDevClaims() *AuthClaims {
 	}
 }
 
-// authInterceptor extracts identity headers into the request context for BOTH
-// unary and streaming RPCs. Streaming coverage is required: Connect applies a
-// connect.UnaryInterceptorFunc only to unary calls, so a unary-only auth
-// interceptor would leave server-streaming handlers unauthenticated.
+// authInterceptor extracts identity headers into the request context for every RPC
+// shape, streaming included, so a server-streaming handler is never left
+// unauthenticated.
 type authInterceptor struct {
 	// headers names the gateway headers claims are read from.
 	headers HeaderMap
@@ -108,9 +106,9 @@ type authInterceptor struct {
 	stub bool
 }
 
-// NewAuthInterceptor returns an interceptor that extracts the identity headers named
-// in headers into context for unary and streaming handlers. Token validation is NOT
-// performed here — it is the gateway's job.
+// NewAuthInterceptor returns a server interceptor that extracts the identity headers
+// named in headers into context for unary and streaming handlers. Token validation is
+// NOT performed here — it is the gateway's job.
 //
 // When stub is true (local dev only), synthetic dev claims are injected when the Sub
 // header is absent, so local development works without a gateway. When stub is false,
@@ -120,10 +118,18 @@ type authInterceptor struct {
 // It panics if headers.Sub is empty: no request could ever be authenticated, and in
 // stub mode every real caller would silently get the synthetic claims.
 // headers must not be nil.
-func NewAuthInterceptor(stub bool, headers *HeaderMap) connect.Interceptor {
+func NewAuthInterceptor(stub bool, headers *HeaderMap) connect.ServerInterceptor {
 	mustHaveSubHeader(headers)
 
-	return &authInterceptor{headers: *headers, stub: stub}
+	auth := authInterceptor{headers: *headers, stub: stub}
+
+	return contextInterceptor(
+		func(ctx context.Context, _ connect.Spec, header *connect.Header) (
+			context.Context, error,
+		) {
+			return auth.withClaims(ctx, header), nil
+		},
+	)
 }
 
 // mustHaveSubHeader panics when headers names no subject header, failing a wiring
@@ -134,36 +140,12 @@ func mustHaveSubHeader(headers *HeaderMap) {
 	}
 }
 
-// WrapUnary extracts identity headers from the unary request.
-func (a *authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return next(a.withClaims(ctx, req.Header()), req)
-	}
-}
-
-// WrapStreamingClient is a no-op — this is a server-side header-extraction interceptor.
-func (*authInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler extracts identity headers from the streaming request so
-// streaming handlers see the same AuthClaims as unary handlers.
-func (a *authInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return next(a.withClaims(ctx, conn.RequestHeader()), conn)
-	}
-}
-
 // withClaims parses the identity headers into AuthClaims and stores them on the
 // returned context. With no subject header it either injects stub dev claims (stub
 // mode) or leaves the context unauthenticated.
 func (a *authInterceptor) withClaims(
 	ctx context.Context,
-	header http.Header,
+	header *connect.Header,
 ) context.Context {
 	sub := header.Get(a.headers.Sub)
 

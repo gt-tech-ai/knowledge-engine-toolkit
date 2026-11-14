@@ -4,12 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
 )
@@ -55,9 +53,9 @@ func TestLoggingInterceptor_StatusCodeMapping(t *testing.T) {
 			t.Parallel()
 
 			spy := fixtures.NewSpyLogger()
-			handler := interceptors.NewLoggingInterceptor(spy).WrapUnary(
-				func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-					return nil, connect.NewError(testCase.code, apperr.Sentinel(textBoom))
+			handler := wrapUnary(interceptors.NewLoggingInterceptor(spy),
+				func(_ context.Context, _ *testRequest) (any, error) {
+					return nil, connect.NewError(testCase.code, textBoom)
 				},
 			)
 			_, err := handler(context.Background(), newTestRequest())
@@ -74,32 +72,6 @@ func TestLoggingInterceptor_StatusCodeMapping(t *testing.T) {
 	}
 }
 
-// TestAuthInterceptor_StreamingClientIsNoOp tests that the server-side auth
-// interceptor's streaming-client wrapper is an inert pass-through.
-//
-// Why this test is important:
-//   - This interceptor extracts identity on the server; wrapping an outbound
-//     streaming client must add nothing, or a service acting as a client would mangle
-//     its own outgoing streams.
-//
-// What it tests:
-//   - WrapStreamingClient returns a func that delegates straight to next.
-func TestAuthInterceptor_StreamingClientIsNoOp(t *testing.T) {
-	t.Parallel()
-
-	called := false
-	wrapped := interceptors.NewAuthInterceptor(false, new(testHeaders())).
-		WrapStreamingClient(
-			func(context.Context, connect.Spec) connect.StreamingClientConn {
-				called = true
-
-				return nil
-			},
-		)
-	wrapped(context.Background(), stdx.Zero[connect.Spec]())
-	assert.True(t, called, "the wrapped client func delegates to next unchanged")
-}
-
 // TestPrincipalInterceptor_StreamingFailsClosed tests that the streaming handler
 // wrapper aborts the call when principal resolution fails.
 //
@@ -109,15 +81,15 @@ func TestAuthInterceptor_StreamingClientIsNoOp(t *testing.T) {
 //     not fall through to the handler.
 //
 // What it tests:
-//   - A resolver error makes WrapStreamingHandler return the error with its own
-//     (non-default) Connect code and never invoke the wrapped handler.
+//   - On a server-streaming RPC, a resolver error is returned with its own
+//     (non-default) Connect code and the handler never runs.
 func TestPrincipalInterceptor_StreamingFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	failing := func(context.Context, *interceptors.AuthClaims) (string, error) {
 		return "", connect.NewError(
 			connect.CodePermissionDenied,
-			apperr.Sentinel("not a member"),
+			"not a member",
 		)
 	}
 	claims := fixtures.BuildRef(func(row *interceptors.AuthClaims) {
@@ -126,17 +98,18 @@ func TestPrincipalInterceptor_StreamingFailsClosed(t *testing.T) {
 	}) // non-synthetic
 
 	called := false
-	handler := interceptors.NewPrincipalInterceptor[string](
-		failing,
-		nil,
-	).WrapStreamingHandler(
-		func(context.Context, connect.StreamingHandlerConn) error {
+	handler := wrapStream(
+		interceptors.NewPrincipalInterceptor[string](failing, nil),
+		func(context.Context, *testRequest) error {
 			called = true
 
 			return nil
 		},
 	)
-	err := handler(interceptors.WithAuthClaims(context.Background(), claims), nil)
+	err := handler(
+		interceptors.WithAuthClaims(context.Background(), claims),
+		newTestStream(nil),
+	)
 	require.Error(t, err)
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 	assert.False(t, called, "the streaming handler must not run when resolution fails")
@@ -157,15 +130,21 @@ func TestConnectTracingInterceptors_RecordErrorOnFailure(t *testing.T) {
 	t.Parallel()
 
 	tracer := fixtures.NopTracer()
-	boom := connect.NewError(connect.CodeInternal, apperr.Sentinel("handler fault"))
-	failing := func(_ context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	boom := connect.NewError(connect.CodeInternal, "handler fault")
+	failing := func(_ context.Context, _ *testRequest) (any, error) {
 		return nil, boom
 	}
 
-	// newTestRequest carries an empty procedure, exercising parseConnectProcedure's
+	// A procedure with no method segment exercises parseConnectProcedure's
 	// no-separator fallback branch.
-	_, serverErr := interceptors.TracingInterceptor(tracer).
-		WrapUnary(failing)(context.Background(), newTestRequest())
+	req := newTestRequest()
+
+	req.spec.Procedure = "/Do"
+
+	_, serverErr := wrapUnary(interceptors.TracingInterceptor(tracer), failing)(
+		context.Background(),
+		req,
+	)
 	require.Error(t, serverErr)
 	assert.Equal(t, connect.CodeInternal, connect.CodeOf(serverErr))
 }

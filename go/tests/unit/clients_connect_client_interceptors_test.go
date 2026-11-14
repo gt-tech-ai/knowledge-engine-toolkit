@@ -7,7 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -25,8 +26,8 @@ import (
 // probeProcedure is the procedure the probe server serves.
 const probeProcedure = "/test.v1.Probe/Do"
 
-// probeServer serves probeProcedure, answering each call with the next of errs (then
-// success) and recording the traceparent it received; calls counts the calls.
+// probeServer serves probeProcedure over HTTP, answering each call with the next of errs
+// (then success) and recording the traceparent it received; calls counts the calls.
 func probeServer(
 	t *testing.T,
 	calls *atomic.Int32,
@@ -35,20 +36,31 @@ func probeServer(
 ) string {
 	t.Helper()
 
+	server := connect.NewServer()
+	server.Register(connect.Method{
+		Spec: probeSpec(connect.IdempotencyUnknown),
+		Handler: func(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+			call := int(calls.Add(1))
+
+			info, _ := connect.CallInfoForServerContext(ctx)
+			traceparent.Store(info.RequestHeader().Get("Traceparent"))
+
+			err := stream.Receive(new(emptypb.Empty))
+			if err != nil {
+				return connect.NewError(connect.CodeInternal, "receive the probe").
+					WithCause(err)
+			}
+
+			if call <= len(errs) {
+				return errs[call-1]
+			}
+
+			return stream.Send(new(emptypb.Empty))
+		},
+	})
+
 	mux := http.NewServeMux()
-	mux.Handle(probeProcedure, connect.NewUnaryHandler(probeProcedure, func(
-		_ context.Context, req *connect.Request[emptypb.Empty],
-	) (*connect.Response[emptypb.Empty], error) {
-		n := int(calls.Add(1))
-
-		traceparent.Store(req.Header().Get("Traceparent"))
-
-		if n <= len(errs) {
-			return nil, errs[n-1]
-		}
-
-		return connect.NewResponse(&emptypb.Empty{}), nil
-	}))
+	connecthttp.Mount(mux, server)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -56,32 +68,42 @@ func probeServer(
 	return srv.URL
 }
 
-// probeClient is a Connect client of probeProcedure decorated by base, whose schema
-// declares the procedure free of side effects (so the tier may replay it).
-func probeClient(
-	url string,
-	base *client.Base,
-) *connect.Client[emptypb.Empty, emptypb.Empty] {
-	return probeClientAt(url, base, connect.IdempotencyNoSideEffects)
+// probeSpec is probeProcedure's unary spec at the declared idempotency level.
+func probeSpec(level connect.IdempotencyLevel) connect.Spec {
+	return connect.Spec{
+		StreamType:       connect.StreamTypeUnary,
+		IdempotencyLevel: level,
+		Schema:           nil,
+		Procedure:        probeProcedure,
+	}
 }
 
-// probeClientAt is probeClient with the procedure's declared idempotency level.
-func probeClientAt(
+// probeCall calls probeProcedure at url through a Connect client decorated by base,
+// whose schema declares the procedure free of side effects (so the tier may replay it).
+func probeCall(ctx context.Context, url string, base *client.Base) error {
+	return probeCallAt(ctx, url, base, connect.IdempotencyNoSideEffects)
+}
+
+// probeCallAt is probeCall with the procedure's declared idempotency level.
+func probeCallAt(
+	ctx context.Context,
 	url string,
 	base *client.Base,
 	level connect.IdempotencyLevel,
-) *connect.Client[emptypb.Empty, emptypb.Empty] {
-	opts := append(
-		interceptors.ClientOptions(base),
-		connect.WithIdempotency(level),
+) error {
+	rpc := connect.NewClient(
+		connecthttp.NewTransport(http.DefaultClient, url),
+		interceptors.ClientInterceptors(base)...,
 	)
 
-	return connect.NewClient[emptypb.Empty, emptypb.Empty](
-		http.DefaultClient, url+probeProcedure, opts...,
+	return apperr.Wrap(
+		rpc.CallUnary(ctx, probeSpec(level), new(emptypb.Empty), new(emptypb.Empty)),
+		apperr.CodeUnknown,
+		"call the probe",
 	)
 }
 
-// TestConnectClientOptions_DecorateEveryCall tests a decorated Connect client.
+// TestConnectClientInterceptors_DecorateEveryCall tests a decorated Connect client.
 //
 // Why this test is important:
 //   - A Connect client must classify a failure by the shared retry policy — replaying
@@ -97,14 +119,14 @@ func probeClientAt(
 //   - InvalidArgument: one call, and the caller gets CodeInvalidArgument with the
 //     server's message.
 //   - An open breaker: no call, CodeUnavailable.
-func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
+func TestConnectClientInterceptors_DecorateEveryCall(t *testing.T) {
 	t.Parallel()
 
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 
 	spanContext := sampledSpanContext()
 	ctx := oteltrace.ContextWithSpanContext(context.Background(), spanContext)
-	down := connect.NewError(connect.CodeUnavailable, nil)
+	down := connect.NewError(connect.CodeUnavailable, "")
 
 	t.Run("transient", func(t *testing.T) {
 		t.Parallel()
@@ -115,8 +137,7 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		)
 
 		url := probeServer(t, &calls, &value, down, down)
-		_, err := probeClient(url, new(wireBase(textProbe, new(fastRetrier(t))))).
-			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
+		err := probeCall(ctx, url, new(wireBase(textProbe, new(fastRetrier(t)))))
 		require.NoError(t, err)
 		assert.EqualValues(t, 3, calls.Load())
 		assert.Contains(t, value.Load(), spanContext.TraceID().String())
@@ -131,21 +152,22 @@ func TestConnectClientOptions_DecorateEveryCall(t *testing.T) {
 		)
 
 		url := probeServer(t, &calls, &tp, down, down)
-		_, err := probeClientAt(
+		err := probeCallAt(
+			ctx,
 			url,
 			new(wireBase(textProbe, new(fastRetrier(t)))),
 			connect.IdempotencyUnknown,
-		).CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
+		)
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 		assert.EqualValues(t, 1, calls.Load())
 	})
 
-	testConnectClientOptionsDecorateEveryCallPermanentError(ctx, t)
+	testConnectClientInterceptorsPermanentError(ctx, t)
 }
 
-// testConnectClientOptionsDecorateEveryCallPermanentError continues
-// TestConnectClientOptions_DecorateEveryCall: permanent error.
-func testConnectClientOptionsDecorateEveryCallPermanentError(
+// testConnectClientInterceptorsPermanentError continues
+// TestConnectClientInterceptors_DecorateEveryCall: permanent error.
+func testConnectClientInterceptorsPermanentError(
 	ctx context.Context,
 	t *testing.T,
 ) {
@@ -159,10 +181,9 @@ func testConnectClientOptionsDecorateEveryCallPermanentError(
 			tp    atomic.Value
 		)
 
-		bad := connect.NewError(connect.CodeInvalidArgument, apperr.Sentinel("bad query"))
+		bad := connect.NewError(connect.CodeInvalidArgument, "bad query")
 		url := probeServer(t, &calls, &tp, bad, bad)
-		_, err := probeClient(url, new(wireBase(textProbe, new(fastRetrier(t))))).
-			CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
+		err := probeCall(ctx, url, new(wireBase(textProbe, new(fastRetrier(t)))))
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 		assert.Contains(t, err.Error(), "bad query")
 		assert.EqualValues(t, 1, calls.Load())
@@ -183,10 +204,7 @@ func testConnectClientOptionsDecorateEveryCallPermanentError(
 				row.Breaker = fixtures.OpenCircuitBreaker()
 			}),
 		)
-		_, err := probeClient(
-			url,
-			&base,
-		).CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
+		err := probeCall(ctx, url, &base)
 		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 		assert.Zero(t, calls.Load())
 	})

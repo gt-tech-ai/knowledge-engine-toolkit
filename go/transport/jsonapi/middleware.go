@@ -15,7 +15,7 @@ import (
 	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"

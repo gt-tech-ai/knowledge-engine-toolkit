@@ -2,21 +2,21 @@ package unit_test
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	entsql "entgo.io/ent/dialect/sql"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	coreprincipal "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/principal"
 	coretenant "github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/tenant"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/decorate"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
 )
 
@@ -47,7 +47,7 @@ func customHeaders() interceptors.HeaderMap {
 
 // serverPath invokes an interceptor on one server path (unary or streaming) and
 // returns the context the handler saw.
-type serverPath func(context.Context, connect.Interceptor) (context.Context, error)
+type serverPath func(context.Context, connect.ServerInterceptor) (context.Context, error)
 
 // serverPaths returns both server paths of an interceptor, so each seam test covers
 // unary and streaming RPCs alike.
@@ -335,7 +335,7 @@ func testPrincipalInterceptorStubAndErrorsErrorCases(t *testing.T) {
 		want connect.Code
 	}{
 		"connect code": {
-			connect.NewError(connect.CodeUnauthenticated, apperr.Sentinel(leakedDetail)),
+			connect.NewError(connect.CodeUnauthenticated, leakedDetail),
 			connect.CodeUnauthenticated,
 		},
 		"forbidden":     {apperr.Forbidden(leakedDetail), connect.CodePermissionDenied},
@@ -545,21 +545,21 @@ func testTenantScopeInterceptorStampsExtractedTenantCase(
 	}
 }
 
-// TestServerOptions_RunsAuthnInOrderBeforeInner tests where the server chain runs the
-// consumer's own interceptors.
+// TestServerInterceptors_RunsAuthnInOrderBeforeInner tests where the server chain runs
+// the consumer's own interceptors.
 //
 // Why this test is important:
 //   - A consumer's principal and tenant-scope interceptors need the authenticated claims;
 //     running before auth would authorize an anonymous request.
 //   - They must run in the order given (tenant scope reads the principal the principal
-//     interceptor stored) and before validation, as ServerOptions documents.
+//     interceptor stored) and before validation, as ServerInterceptors documents.
 //
 // What it tests:
-//   - Through a Connect handler built from the options (served in process), caller
-//     interceptors after the auth interceptor in Edge.Authn see the claims parsed from
-//     the consumer's header contract, run in the order given, and run before the
-//     validation interceptor in Edge.Inner rejects the request.
-func TestServerOptions_RunsAuthnInOrderBeforeInner(t *testing.T) {
+//   - Through a connect.Server built from the interceptors, caller interceptors after the
+//     auth interceptor in Edge.Authn see the claims parsed from the consumer's header
+//     contract, run in the order given, and run before the validation interceptor in
+//     Edge.Inner rejects the request.
+func TestServerInterceptors_RunsAuthnInOrderBeforeInner(t *testing.T) {
 	t.Parallel()
 
 	var (
@@ -567,45 +567,43 @@ func TestServerOptions_RunsAuthnInOrderBeforeInner(t *testing.T) {
 		seen  *interceptors.AuthClaims
 	)
 
-	probe := func(name string) connect.Interceptor {
-		return connect.UnaryInterceptorFunc(
-			func(next connect.UnaryFunc) connect.UnaryFunc {
-				return func(
-					ctx context.Context,
-					req connect.AnyRequest,
-				) (connect.AnyResponse, error) {
-					order = append(order, name)
+	probe := func(name string) connect.ServerInterceptor {
+		return func(next connect.ServerFunc) connect.ServerFunc {
+			return func(
+				ctx context.Context,
+				spec connect.Spec,
+				stream connect.ServerStream,
+			) error {
+				order = append(order, name)
 
-					if seen == nil {
-						seen, _ = interceptors.GetAuthClaims(ctx)
-					}
-
-					return next(ctx, req)
+				if seen == nil {
+					seen, _ = interceptors.GetAuthClaims(ctx)
 				}
-			},
-		)
-	}
-	opts := interceptors.ServerOptions(textProbe, new(decorate.Deps), interceptors.Edge{
-		Authn: []connect.Interceptor{
-			interceptors.NewAuthInterceptor(false, new(customHeaders())),
-			probe("first"),
-			probe("second"),
-			probe("third"),
-		},
-		Inner: []connect.Interceptor{interceptors.ValidateInterceptor()},
-	})
 
-	status := serveProbe(
-		t.Context(),
-		opts,
+				return next(ctx, spec, stream)
+			}
+		}
+	}
+	ics := interceptors.ServerInterceptors(
+		textProbe,
+		new(decorate.Deps),
+		interceptors.Edge{
+			Authn: []connect.ServerInterceptor{
+				interceptors.NewAuthInterceptor(false, new(customHeaders())),
+				probe("first"),
+				probe("second"),
+				probe("third"),
+			},
+			Inner: []connect.ServerInterceptor{interceptors.ValidateInterceptor()},
+		},
+	)
+
+	err := serveProbe(
+		t,
+		ics,
 		map[string]string{textXSub: "u1", textXTenant: "t1"},
 	)
-	assert.NotEqual(
-		t,
-		http.StatusOK,
-		status,
-		"validation must reject the non-proto probe message",
-	)
+	require.Error(t, err, "validation must reject the non-proto probe message")
 	assert.Equal(t, []string{"first", "second", "third"}, order,
 		"caller interceptors must run in the order given, before validation")
 	require.NotNil(t, seen, "the caller interceptors must run after auth")
@@ -613,72 +611,60 @@ func TestServerOptions_RunsAuthnInOrderBeforeInner(t *testing.T) {
 	assert.Equal(t, "t1", seen.TenantID)
 }
 
-// probeMsg is a non-proto message: with probeCodec a Connect handler accepts it, and the
-// validation interceptor rejects it (protovalidate validates proto messages only), so an
-// interceptor that runs before validation is observable.
+// probeMsg is a non-proto message: the validation interceptor rejects it (protovalidate
+// validates proto messages only), so an interceptor that runs before validation is
+// observable.
 type probeMsg struct{}
 
-// probeCodec replaces Connect's "proto" codec so a handler can carry probeMsg; it encodes
-// nothing, since the probe calls send no payload.
-type probeCodec struct{}
-
-// Name registers probeCodec under the proto codec's name (content type
-// application/proto).
-func (probeCodec) Name() string { return "proto" }
-
-// Marshal encodes any message as an empty payload.
-func (probeCodec) Marshal(any) ([]byte, error) { return nil, nil }
-
-// Unmarshal leaves the message zero-valued.
-func (probeCodec) Unmarshal([]byte, any) error { return nil }
-
-// serveProbe serves one unary Connect call to /test.v1.Probe/Do through a handler built
-// with opts, in process through an httptest recorder (no socket), and returns the HTTP
-// status.
+// serveProbe dispatches one unary call through a connect.Server built with ics, whose
+// handler receives a probeMsg from a mocked stream, and returns the call's error.
 func serveProbe(
-	ctx context.Context,
-	opts []connect.HandlerOption,
+	t *testing.T,
+	ics []connect.ServerInterceptor,
 	headers map[string]string,
-) int {
-	const procedure = "/test.v1.Probe/Do"
+) error {
+	t.Helper()
 
-	handler := connect.NewUnaryHandler(
-		procedure,
-		func(context.Context, *connect.Request[probeMsg]) (*connect.Response[probeMsg], error) {
-			return connect.NewResponse(&probeMsg{}), nil
+	stream := mocks.NewMockServerStream(gomock.NewController(t))
+	stream.EXPECT().Receive(gomock.Any()).Return(nil).AnyTimes()
+
+	req := newTestRequestWithHeaders(headers)
+	server := connect.NewServer(ics...)
+	server.Register(connect.Method{
+		Spec: req.spec,
+		Handler: func(_ context.Context, _ connect.Spec, s connect.ServerStream) error {
+			return s.Receive(new(probeMsg))
 		},
-		append(opts, connect.WithCodec(probeCodec{}))...)
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, procedure, http.NoBody)
-	req.Header.Set(textContentType, "application/proto")
+	})
 
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	return rec.Code
+	return apperr.Wrap(
+		server.Call(t.Context(), req.spec.Procedure, req.info, stream),
+		apperr.CodeUnknown,
+		"dispatch the probe RPC",
+	)
 }
 
 // invokeUnary runs ic's unary path on a minimal request against a pass-through handler
 // and returns the context the handler observed (nil when it never ran) plus the error.
-func invokeUnary(ctx context.Context, ic connect.Interceptor) (context.Context, error) {
+func invokeUnary(
+	ctx context.Context,
+	ic connect.ServerInterceptor,
+) (context.Context, error) {
 	return invokeUnaryWith(ctx, ic, newTestRequest())
 }
 
 // invokeUnaryWith runs ic's unary path on req against a pass-through handler and returns
 // the context the handler observed (nil when it never ran) plus the error.
 func invokeUnaryWith(
-	ctx context.Context, interceptor connect.Interceptor, req connect.AnyRequest,
+	ctx context.Context, interceptor connect.ServerInterceptor, req *testRequest,
 ) (context.Context, error) {
 	seen := make(chan context.Context, 1)
-	next := func(c context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	next := func(c context.Context, _ *testRequest) (any, error) {
 		seen <- c
 
 		return newTestResponse(), nil
 	}
-	_, err := interceptor.WrapUnary(next)(ctx, req)
+	_, err := wrapUnary(interceptor, next)(ctx, req)
 
 	return observed(seen), err
 }
@@ -694,23 +680,20 @@ func observed(seen <-chan context.Context) context.Context {
 	}
 }
 
-// invokeStreaming runs ic's streaming-handler path against a pass-through handler and
-// returns the context the handler observed (nil when it never ran) plus the error. The
-// seam interceptors never touch the conn, so none is passed.
+// invokeStreaming runs ic on a server-streaming RPC against a pass-through handler and
+// returns the context the handler observed (nil when it never ran) plus the error.
 func invokeStreaming(
-	ctx context.Context, ic connect.Interceptor,
+	ctx context.Context, ic connect.ServerInterceptor,
 ) (context.Context, error) {
 	seen := make(chan context.Context, 1)
-	err := ic.WrapStreamingHandler(
-		func(c context.Context, _ connect.StreamingHandlerConn) error {
+	err := wrapStream(
+		ic,
+		func(c context.Context, _ *testRequest) error {
 			seen <- c
 
 			return nil
 		},
-	)(
-		ctx,
-		nil,
-	)
+	)(ctx, newTestStream(nil))
 
 	return observed(seen), err
 }

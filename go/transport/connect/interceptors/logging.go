@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
@@ -81,21 +81,16 @@ func clientFaultStatus(code connect.Code) (int, bool) {
 	}
 }
 
-// loggingInterceptor emits the single per-request access log for Connect RPCs — unary and
-// server-streaming. It installs a request error sink (core/apperr.WithSink) so the
-// handler's error mapper can record the real domain error; on failure it logs exactly one
-// line carrying that real error (not the sanitized client message) plus the procedure,
-// duration, and HTTP status.
-//
-// It is a server-side interceptor (a client's calls are logged by the client tier, see
-// ClientOptions), so WrapStreamingClient is a no-op.
+// loggingInterceptor emits the single per-request access log for Connect RPCs of every
+// shape. It is server-side: a client's calls are logged by the client tier
+// (clients/rpc/connect/interceptors.ClientInterceptors).
 type loggingInterceptor struct {
 	// logger emits the per-request access log line.
 	logger interfaces.Logger
 }
 
-// NewLoggingInterceptor returns the single per-request access log for Connect RPCs (unary
-// and server-streaming). It installs a request error sink (core/apperr.WithSink) so the
+// NewLoggingInterceptor returns the single per-request access log for Connect RPCs
+// (unary and streaming). It installs a request error sink (core/apperr.WithSink) so the
 // handler's error mapper can record the real domain error; on failure this interceptor
 // logs exactly one line carrying that real error (not the sanitized client message) plus
 // the procedure, duration, and HTTP status.
@@ -105,47 +100,28 @@ type loggingInterceptor struct {
 // error_cause), so a server-error alert fires only on genuine faults.
 // Successful requests log once at Info. Health probes are not Connect RPCs, so
 // they are not logged here.
-func NewLoggingInterceptor(logger interfaces.Logger) connect.Interceptor {
-	return loggingInterceptor{logger: logger}
-}
+func NewLoggingInterceptor(logger interfaces.Logger) connect.ServerInterceptor {
+	access := loggingInterceptor{logger: logger}
 
-// WrapUnary emits one access line for a unary RPC.
-func (i loggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx = apperr.WithSink(ctx)
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(
+			ctx context.Context,
+			spec connect.Spec,
+			stream connect.ServerStream,
+		) error {
+			ctx = apperr.WithSink(ctx)
 
-		start := time.Now()
-		resp, err := next(ctx, req)
-		i.logAccess(ctx, req.Spec().Procedure, time.Since(start), err)
+			start := time.Now()
+			err := next(ctx, spec, stream)
+			access.logAccess(ctx, spec.Procedure, time.Since(start), err)
 
-		return resp, err
+			return err
+		}
 	}
 }
 
-// WrapStreamingClient is a no-op — this is a server-side interceptor.
-func (loggingInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler emits one access line for a whole server-streaming RPC.
-func (i loggingInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		ctx = apperr.WithSink(ctx)
-
-		start := time.Now()
-		err := next(ctx, conn)
-		i.logAccess(ctx, conn.Spec().Procedure, time.Since(start), err)
-
-		return err
-	}
-}
-
-// logAccess emits the one access line for a completed RPC (unary or stream). Shared by
-// both wrap paths; ctx must already carry the request error sink (core/apperr.WithSink).
+// logAccess emits the one access line for a completed RPC (unary or stream); ctx must
+// already carry the request error sink (core/apperr.WithSink).
 func (i loggingInterceptor) logAccess(
 	ctx context.Context, procedure string, duration time.Duration, err error,
 ) {

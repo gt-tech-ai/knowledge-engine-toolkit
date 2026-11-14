@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -352,7 +352,7 @@ func TestFromRPCError_ConnectCodes(t *testing.T) {
 
 			wire := connect.NewError(
 				testCase.connect,
-				apperr.Sentinel("peer: "+testCase.name),
+				"peer: "+testCase.name,
 			)
 			got := rpc.FromRPCError(wire)
 			assert.True(

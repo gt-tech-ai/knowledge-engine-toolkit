@@ -2,17 +2,14 @@ package unit_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/connect/interceptors"
 )
 
@@ -108,10 +105,10 @@ func TestStaticTokenValidator_EmptyMapRejectsAll(t *testing.T) {
 // interfaces.ServiceTokenValidator Strategy seam (another validator can replace it).
 var _ interfaces.ServiceTokenValidator = interceptors.NewStaticTokenValidator(nil)
 
-// bearerReq builds a unary AnyRequest carrying an "Authorization: Bearer <token>" header
+// bearerReq builds a unary RPC carrying an "Authorization: Bearer <token>" header
 // (empty token → no header), for exercising the service-auth interceptor.
-func bearerReq(token string) connect.AnyRequest {
-	req := connect.NewRequest[*emptyMessage](nil)
+func bearerReq(token string) *testRequest {
+	req := newTestRequest()
 	if token != "" {
 		req.Header().Set("Authorization", "Bearer "+token)
 	}
@@ -152,13 +149,14 @@ func TestServiceAuthInterceptor_Unary(t *testing.T) {
 			gotOK, ran bool
 		)
 
-		next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+		next := func(ctx context.Context, _ *testRequest) (any, error) {
 			ran = true
 			gotCaller, gotOK = interceptors.GetCallerIdentity(ctx)
 
 			return newTestResponse(), nil
 		}
-		resp, err := interceptor.WrapUnary(
+		resp, err := wrapUnary(
+			interceptor,
 			next,
 		)(
 			context.Background(),
@@ -178,7 +176,7 @@ func TestServiceAuthInterceptor_Unary(t *testing.T) {
 // reject cases.
 func testServiceAuthInterceptorUnaryRejectCases(
 	t *testing.T,
-	interceptor connect.Interceptor,
+	interceptor connect.ServerInterceptor,
 ) {
 	t.Helper()
 
@@ -193,12 +191,13 @@ func testServiceAuthInterceptorUnaryRejectCases(
 			t.Parallel()
 
 			ran := false
-			next := func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+			next := func(context.Context, *testRequest) (any, error) {
 				ran = true
 
 				return newTestResponse(), nil
 			}
-			resp, err := interceptor.WrapUnary(
+			resp, err := wrapUnary(
+				interceptor,
 				next,
 			)(
 				context.Background(),
@@ -238,7 +237,7 @@ func TestServiceAuthInterceptor_StubAndAudit(t *testing.T) {
 			found, ran bool
 		)
 
-		next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+		next := func(ctx context.Context, _ *testRequest) (any, error) {
 			ran = true
 			caller, found = interceptors.GetCallerIdentity(ctx)
 
@@ -250,7 +249,7 @@ func TestServiceAuthInterceptor_StubAndAudit(t *testing.T) {
 			false,
 			fixtures.NopLogger(),
 		)
-		_, err := interceptor.WrapUnary(next)(context.Background(), bearerReq(""))
+		_, err := wrapUnary(interceptor, next)(context.Background(), bearerReq(""))
 		require.NoError(t, err)
 		assert.True(t, ran)
 		assert.True(t, found)
@@ -261,7 +260,7 @@ func TestServiceAuthInterceptor_StubAndAudit(t *testing.T) {
 		t.Parallel()
 
 		ran := false
-		next := func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+		next := func(context.Context, *testRequest) (any, error) {
 			ran = true
 
 			return newTestResponse(), nil
@@ -272,7 +271,7 @@ func TestServiceAuthInterceptor_StubAndAudit(t *testing.T) {
 			true,
 			fixtures.NopLogger(),
 		)
-		_, err := interceptor.WrapUnary(next)(context.Background(), bearerReq(""))
+		_, err := wrapUnary(interceptor, next)(context.Background(), bearerReq(""))
 		require.NoError(t, err, "audit mode logs but does not reject")
 		assert.True(t, ran)
 	})
@@ -287,7 +286,8 @@ func TestServiceAuthInterceptor_StubAndAudit(t *testing.T) {
 //     stream before the handler runs, identically to a unary call
 //
 // What it tests:
-//   - no token → WrapStreamingHandler returns CodeUnauthenticated and never invokes next;
+//   - no token → a server-streaming RPC fails CodeUnauthenticated and never reaches the
+//     handler;
 //     a valid token admits the stream with the caller on the context
 func TestServiceAuthInterceptor_Streaming(t *testing.T) {
 	t.Parallel()
@@ -302,22 +302,12 @@ func TestServiceAuthInterceptor_Streaming(t *testing.T) {
 		fixtures.NopLogger(),
 	)
 
-	newConn := func(token string) *mocks.MockStreamingHandlerConn {
-		header := http.Header{}
-		if token != "" {
-			header.Set("Authorization", "Bearer "+token)
-		}
+	newConn := func(token string) *testRequest {
+		req := bearerReq(token)
 
-		conn := mocks.NewMockStreamingHandlerConn(gomock.NewController(t))
-		conn.EXPECT().RequestHeader().Return(header).AnyTimes()
-		conn.EXPECT().
-			Spec().
-			Return(fixtures.Build(func(row *connect.Spec) {
-				row.Procedure = "/test.v1.Probe/Do"
-			})).
-			AnyTimes()
+		req.spec.StreamType = connect.StreamTypeServer
 
-		return conn
+		return req
 	}
 
 	testServiceAuthInterceptorStreamingRejections(t, interceptor, newConn)
@@ -327,8 +317,8 @@ func TestServiceAuthInterceptor_Streaming(t *testing.T) {
 // TestServiceAuthInterceptor_Streaming: rejections.
 func testServiceAuthInterceptorStreamingRejections(
 	t *testing.T,
-	interceptor connect.Interceptor,
-	newConn func(token string) *mocks.MockStreamingHandlerConn,
+	interceptor connect.ServerInterceptor,
+	newConn func(token string) *testRequest,
 ) {
 	t.Helper()
 
@@ -336,12 +326,12 @@ func testServiceAuthInterceptorStreamingRejections(
 		t.Parallel()
 
 		ran := false
-		next := func(context.Context, connect.StreamingHandlerConn) error {
+		next := func(context.Context, *testRequest) error {
 			ran = true
 
 			return nil
 		}
-		err := interceptor.WrapStreamingHandler(next)(context.Background(), newConn(""))
+		err := wrapStream(interceptor, next)(context.Background(), newConn(""))
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 		assert.False(t, ran)
@@ -352,14 +342,12 @@ func testServiceAuthInterceptorStreamingRejections(
 
 		var caller string
 
-		next := func(ctx context.Context, _ connect.StreamingHandlerConn) error {
+		next := func(ctx context.Context, _ *testRequest) error {
 			caller, _ = interceptors.GetCallerIdentity(ctx)
 
 			return nil
 		}
-		err := interceptor.WrapStreamingHandler(
-			next,
-		)(
+		err := wrapStream(interceptor, next)(
 			context.Background(),
 			newConn(textTokOrders),
 		)

@@ -2,13 +2,13 @@ package interceptors
 
 import (
 	"context"
-	"net/http"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/rpc/wire"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 )
 
@@ -18,10 +18,10 @@ import (
 // (`00-<trace-id>-<span-id>-<flags>`).
 const TraceResponseHeader = "Traceresponse"
 
-// setTraceResponse stamps the active trace context (traceparent format) onto h under
-// TraceResponseHeader, or does nothing when ctx carries no valid span context — so the
-// header is never present with an empty/invalid value.
-func setTraceResponse(ctx context.Context, header http.Header) {
+// setTraceResponse stamps the active trace context (traceparent format) onto header
+// under TraceResponseHeader, or does nothing when ctx carries no valid span context — so
+// the header is never present with an empty/invalid value.
+func setTraceResponse(ctx context.Context, header *connect.Header) {
 	// Serialize the active span context to a W3C traceparent using the TraceContext
 	// propagator directly (not the global one) so the value is deterministic regardless
 	// of process-wide propagator setup — mirroring foundation/tracer.TraceParentFromContext.
@@ -34,43 +34,41 @@ func setTraceResponse(ctx context.Context, header http.Header) {
 	}
 }
 
-// tracingInterceptor traces Connect RPC calls — unary and server-streaming — with the
-// interfaces.Tracer abstraction. It extracts W3C Trace Context from incoming headers to
-// parent spans correctly and records X-Request-ID as a span attribute. Server-side only
-// (WrapStreamingClient is a no-op; the client path is ClientTracingInterceptor).
-type tracingInterceptor struct {
-	// tracer creates the per-RPC span (parented from incoming W3C trace context).
-	tracer interfaces.Tracer
-}
+// TracingInterceptor creates a server-side interceptor that traces every Connect RPC —
+// unary and streaming alike, one server span per RPC — using the interfaces.Tracer
+// abstraction. It extracts W3C Trace Context from the request header to parent the span,
+// records X-Request-ID as a span attribute, and stamps TraceResponseHeader on the
+// response header before the handler runs, since response headers flush with the first
+// Send (so a failed RPC carries it too). The client trace path is the client tier
+// (clients/rpc/connect/interceptors).
+func TracingInterceptor(tracer interfaces.Tracer) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(
+			ctx context.Context,
+			spec connect.Spec,
+			stream connect.ServerStream,
+		) error {
+			info := callInfo(ctx)
 
-// TracingInterceptor creates a server-side interceptor that traces Connect RPC calls
-// (unary and streaming) using the interfaces.Tracer abstraction. It extracts W3C Trace
-// Context from incoming headers to parent spans correctly and records X-Request-ID as a
-// span attribute.
-func TracingInterceptor(tracer interfaces.Tracer) connect.Interceptor {
-	return tracingInterceptor{tracer: tracer}
-}
+			ctx, span := startServerSpan(
+				ctx,
+				tracer,
+				info.RequestHeader(),
+				spec.Procedure,
+			)
+			defer span.End()
 
-// WrapUnary traces a unary RPC.
-func (i tracingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx, span := i.startServerSpan(ctx, req.Header(), req.Spec().Procedure)
-		defer span.End()
+			setTraceResponse(ctx, info.ResponseHeader())
 
-		resp, err := next(ctx, req)
-		finishSpan(span, err)
+			err := next(ctx, spec, stream)
+			finishSpan(span, err)
 
-		// Return the trace id to the caller. Only on success: the error path
-		// returns a nil response, which has no header map to stamp.
-		if err == nil && resp != nil {
-			setTraceResponse(ctx, resp.Header())
+			return err
 		}
-
-		return resp, err
 	}
 }
 
-// finishSpan records the terminal status/error on the span. Shared by both paths.
+// finishSpan records the terminal status/error on the span.
 func finishSpan(span interfaces.Span, err error) {
 	if err != nil {
 		span.RecordError(err)
@@ -80,44 +78,19 @@ func finishSpan(span interfaces.Span, err error) {
 	}
 }
 
-// WrapStreamingClient is a no-op — the client trace path is ClientTracingInterceptor.
-func (tracingInterceptor) WrapStreamingClient(
-	next connect.StreamingClientFunc,
-) connect.StreamingClientFunc {
-	return next
-}
-
-// WrapStreamingHandler opens one server span spanning the whole server-streaming RPC.
-func (i tracingInterceptor) WrapStreamingHandler(
-	next connect.StreamingHandlerFunc,
-) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		ctx, span := i.startServerSpan(ctx, conn.RequestHeader(), conn.Spec().Procedure)
-		defer span.End()
-
-		// Stamp the trace id on the response header BEFORE next(): streaming response
-		// headers flush with the first Send, so setting it afterwards would be too late
-		//
-		setTraceResponse(ctx, conn.ResponseHeader())
-
-		err := next(ctx, conn)
-		finishSpan(span, err)
-
-		return err
-	}
-}
-
 // startServerSpan extracts the incoming trace context, opens a server span for the
-// procedure, and sets the rpc.* + request-id attributes. Shared by the unary and
-// streaming paths. The caller must span.End().
-func (i tracingInterceptor) startServerSpan(
-	ctx context.Context, header http.Header, procedure string,
+// procedure, and sets the rpc.* + request-id attributes. The caller must span.End().
+func startServerSpan(
+	ctx context.Context,
+	tracer interfaces.Tracer,
+	header *connect.Header,
+	procedure string,
 ) (context.Context, interfaces.Span) {
-	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(header))
+	ctx = otel.GetTextMapPropagator().Extract(ctx, wire.HeaderCarrier{Header: header})
 
 	service, method := parseConnectProcedure(procedure)
 
-	ctx, span := i.tracer.Start(
+	ctx, span := tracer.Start(
 		ctx, procedure,
 		interfaces.WithSpanKind(interfaces.SpanKindServer),
 	)
