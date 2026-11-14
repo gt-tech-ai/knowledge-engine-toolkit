@@ -123,6 +123,12 @@ languages share one engine:
   safe for a read the caller knows is idempotent. It is a primitive the app composes around
   that call (`foundation/resilience/hedge`, `reswire.NewHedge` in Go;
   `foundation.resilience.hedge.hedger_from_config` in Python), never switched on per tier.
+- **Resilience metrics.** The retry, circuit-breaker, bulkhead, rate-limit and timeout layers,
+  and the resilience primitives, record `resilience_*` series through a `series.Recorder`
+  generated from `taxonomy/resilience-metrics.yaml` (`go generate
+  ./go/foundation/resilience/series/...`; edit the YAML, never the outputs). Layers record the
+  operation-labelled events, primitives their state; a nil provider records nothing
+  (ARCHITECTURE.md#resilience-metrics).
 
 | Tier | Order (outermost first) | Go base | Python base |
 | --- | --- | --- | --- |

@@ -1,40 +1,23 @@
 package unit_test
 
 import (
-	"maps"
-	"os"
-	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	fscodebase "github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/codebase/fs"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/codebase"
-	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/gen"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tools/errcodes"
 )
 
-// repoRoot is the repository root relative to this package.
-const repoRoot = "../../.."
-
-// committedTaxonomy returns the committed taxonomy source and both rendered outputs,
-// keyed by their repository-relative paths.
-func committedTaxonomy(t *testing.T) map[string]string {
-	t.Helper()
-
-	files := map[string]string{}
-
-	for _, p := range []string{errcodes.SourcePath, errcodes.GoPath, errcodes.PythonPath} {
-		b, err := os.ReadFile(filepath.FromSlash(repoRoot + textSlash + p))
-		require.NoError(t, err)
-
-		files[p] = string(b)
+// errcodesGenerator returns the error-code generator under the shared drift checks.
+func errcodesGenerator() taxonomyGenerator {
+	return taxonomyGenerator{
+		newGenerator: errcodes.New,
+		source:       errcodes.SourcePath,
+		goPath:       errcodes.GoPath,
+		pyPath:       errcodes.PythonPath,
+		regenerate:   "go generate ./go/core/apperr/...",
 	}
-
-	return files
 }
 
 // TestErrcodes_CommittedOutputsMatchTaxonomy tests that the committed Go and Python
@@ -51,24 +34,7 @@ func committedTaxonomy(t *testing.T) map[string]string {
 func TestErrcodes_CommittedOutputsMatchTaxonomy(t *testing.T) {
 	t.Parallel()
 
-	currentCodebase := codebase.New(
-		fscodebase.New(filepath.FromSlash(repoRoot)),
-		codebase.NewSnapshot("errcodes"),
-		nil,
-	)
-
-	out, err := errcodes.New().Render(t.Context(), currentCodebase)
-	require.NoError(t, err)
-	require.ElementsMatch(
-		t,
-		[]string{errcodes.GoPath, errcodes.PythonPath},
-		slices.Collect(maps.Keys(out)),
-	)
-
-	d, err := gen.Check(t.Context(), currentCodebase, errcodes.New())
-
-	require.NoError(t, err)
-	require.True(t, d.InSync, "run `go generate ./go/core/apperr/...`:\n%s", d.Diff)
+	errcodesGenerator().requireInSync(t)
 }
 
 // TestErrcodes_HandEditIsDrift tests that editing a generated output by hand is drift.
@@ -83,9 +49,7 @@ func TestErrcodes_CommittedOutputsMatchTaxonomy(t *testing.T) {
 func TestErrcodes_HandEditIsDrift(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name, path, from, to string
-	}{
+	errcodesGenerator().requireHandEditsDrift(t, []handEdit{
 		{
 			name: "go value", path: errcodes.GoPath,
 			from: `CodeNotFound ErrorCode = "NOT_FOUND"`,
@@ -96,28 +60,7 @@ func TestErrcodes_HandEditIsDrift(t *testing.T) {
 			from: `    NOT_FOUND = "NOT_FOUND"`,
 			to:   "    NOT_FOUND = \"NOT_FOUND\"\n    GONE = \"GONE\"",
 		},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			files := committedTaxonomy(t)
-			require.Contains(t, files[testCase.path], testCase.from)
-
-			files[testCase.path] = strings.Replace(
-				files[testCase.path],
-				testCase.from,
-				testCase.to,
-				1,
-			)
-
-			d, err := gen.Check(t.Context(), memoryCodebase(t, files), errcodes.New())
-
-			require.NoError(t, err)
-			require.False(t, d.InSync)
-			require.Equal(t, []string{testCase.path}, d.Paths)
-		})
-	}
+	})
 }
 
 // TestErrcodes_RejectsInvalidTaxonomy tests that a malformed taxonomy fails to render.

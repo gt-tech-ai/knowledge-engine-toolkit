@@ -361,6 +361,47 @@ tier's CRUD. Tests pin each tier's order in its `<tier>_test.go` (`clients_clien
 `transport_controllers_test.go`, …), `foundation_decorate_test.go` proves `Tier.Chain` applies an
 order, and `transport_server_options_test.go` drives the Connect and gRPC servers end to end.
 
+### Resilience metrics
+
+The resilience layers and primitives report what they did as `resilience_*` series, so an
+operator can tell whether retries fired, a breaker opened or a bulkhead shed load. Every
+series carries `tier` (the decorate tier, or `standalone` for a primitive used outside one)
+and `name` (the component or primitive) first, then its own labels.
+
+| Series | Type | Labels | Emitted by | Granularity |
+| --- | --- | --- | --- | --- |
+| `resilience_retries_total` | counter | `operation` | retry layer; a standalone retrier | per operation: its attempts after the first |
+| `resilience_retry_exhausted_total` | counter | `operation` | retry layer; a standalone retrier | per operation that still failed after a retry (a budget refusal is a rejection instead) |
+| `resilience_breaker_state` | gauge | — | the circuit breaker | state: 0 closed, 1 half-open, 2 open |
+| `resilience_breaker_transitions_total` | counter | `to` | the circuit breaker | per state change |
+| `resilience_rejections_total` | counter | `operation`, `reason` | circuit-breaker, shedding-bulkhead, rate-limit and retry layers; a standalone limiter, bulkhead, retrier or throttler | per refused call: `breaker_open`, `bulkhead_full`, `rate_limited`, `throttled`, `budget_exhausted` |
+| `resilience_timeouts_total` | counter | `operation` | timeout layer | per call its own deadline cut |
+| `resilience_bulkhead_limit` | gauge | — | the adaptive bulkhead | state: its current limit |
+| `resilience_throttle_rejection_ratio` | gauge | — | the adaptive throttler | state: its shed probability |
+| `resilience_hedges_total` | counter | `outcome` | the hedger | per backup: `fired`, `won` |
+| `resilience_dead_letters_total` | counter | `outcome` | the dead-letter queue | per letter: `sent`, `failed` |
+| `resilience_duplicates_total` | counter | — | the deduplicator | per dropped duplicate |
+
+- **One source.** `taxonomy/resilience-metrics.yaml` declares every series, label and enum
+  value; `go generate ./go/foundation/resilience/series/...` (`go/tools/resmetrics`) renders
+  the Go `series.Recorder` and the Python `foundation.resilience.series.Recorder`, and the Go
+  unit suite fails on drift or on a series missing from this table. An enum holds at most 8
+  values, which bounds every label but `operation` (a contract's method names, as on the RED
+  series).
+- **Who emits.** A layer knows the operation; a primitive does not (`Retrier.Retry`,
+  `RateLimiter.Allow` and `CircuitBreaker.Execute` take none). The decorate layers record the
+  operation-labelled series; the primitives record their own state. The decorate builder hands
+  a recorder only to the breaker and the adaptive bulkhead, so no event counts twice; a
+  standalone primitive records with `operation=""` when its caller hands it a recorder.
+- **Granularity.** Where the retry layer wraps the breaker and timeout layers (the client tier),
+  `timeouts` and `rejections{breaker_open}` count each attempt; where it sits inside them (the
+  repository tier), each operation. A breaker-rejected attempt is `UNAVAILABLE`, so the retrier
+  retries it. The RED series wrap outside retry in the repository tier and inside it in the
+  client tier, where `<tier>_operations_total` counts attempts too.
+- **Gating.** A component records these series only when its metrics layer is on, and writes
+  the two Warn logs (a breaker opening, a retrier giving up) only when its logging layer is on.
+  A nil (`None`) provider records nothing and changes no behavior.
+
 ### Conversation threading
 
 A multi-turn conversation is one trace per turn, grouped by id and linked turn to turn. The edge
