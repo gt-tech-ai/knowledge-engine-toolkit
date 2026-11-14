@@ -16,7 +16,7 @@
 #   go       the Go type name (the Python StrEnum takes the same name)
 #   doc      a sentence saying what the enum's values mean
 #   values   each value's wire `name`, its `doc`, and, for an enum a gauge reports, its
-#            `gauge` number
+#            `gauge` number (on every value or none)
 #
 # series: one row per metric.
 #   name     the metric name: resilience_*, a counter ends in _total and a gauge does not
@@ -25,7 +25,7 @@
 #   help     the metric's help text, one sentence
 #   labels   the series' own labels: operation, reason, outcome or to; `enum` names the
 #            enum that closes a label's values (operation alone is open: a contract's
-#            method names, the same set the RED series carry)
+#            method names, the same set the RED series carry); a gauge takes none
 #   value    for a gauge: the enum whose gauge numbers the method sets, or absent for a
 #            plain float value
 enums:

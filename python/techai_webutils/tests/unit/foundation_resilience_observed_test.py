@@ -227,8 +227,35 @@ _RETRY_CASES = {
     "refused after one retry": _RetryCase(
         [_unavailable()] * 3, retried=1, refused=1, refuse_at=2
     ),
+    "caller cancelled after a retry": _RetryCase(
+        [_unavailable(), asyncio.CancelledError()], retried=1
+    ),
 }
 """The retry layer's table (the Go ``retryCases`` twin)."""
+
+
+class TestObserverWarn:
+    """An Observer's Warning line always names its own tier and subject."""
+
+    @staticmethod
+    def test_warn_keeps_its_subject_over_caller_fields() -> None:
+        """Test that ``warn`` names its tier and name even when the fields reuse them.
+
+        Why this test is important:
+          - a caller passing ``name`` or ``tier`` among its fields made ``warn`` raise
+            ``TypeError`` from inside a breaker callback or a retry layer.
+
+        What it tests:
+          - ``warn`` with fields ``tier``, ``name`` and ``attempts`` writes one line
+            carrying the Observer's tier and name and the caller's ``attempts``.
+        """
+        harness = _harness()
+
+        harness.observer.warn("m", tier="other", name="other", attempts=2)
+
+        assert _warnings(harness.logger, "m") == [
+            {"tier": _TIER, "name": _NAME, "attempts": 2}
+        ]
 
 
 class TestRetryLayer:
@@ -246,14 +273,17 @@ class TestRetryLayer:
 
         What it tests:
           - each row's retries, exhaustion and budget rejections under the operation;
-            one "retries exhausted" Warning exactly when the row is exhausted.
+            one "retries exhausted" Warning exactly when the row is exhausted; a call
+            its caller cancelled after a retry counts the retry and no exhaustion.
         """
         harness = _harness()
         layer = new_retry(
             _scripted_retrier(case.results, case.refuse_at), harness.observer
         )
 
-        with contextlib.suppress(AppError, RetryBudgetExhaustedError):
+        with contextlib.suppress(
+            AppError, RetryBudgetExhaustedError, asyncio.CancelledError
+        ):
             _ = await exec_op(layer, _OP, _scripted_op(case.results))
 
         assert harness.value("resilience_retries_total", operation=_OP) == case.retried
@@ -319,6 +349,24 @@ async def _builtin_timeout() -> object:
     raise TimeoutError
 
 
+async def _builtin_timeout_late() -> object:
+    """Hold the loop past the deadline, then raise a builtin TimeoutError itself.
+
+    A CPU-bound spin (no await) keeps the layer's timer from firing, so the op's own
+    TimeoutError arrives first, after the deadline's clock time.
+
+    Raises:
+        TimeoutError: Always.
+
+    """
+    await asyncio.sleep(0)
+    loop = asyncio.get_running_loop()
+    end = loop.time() + _DEADLINE * 2
+    while loop.time() < end:
+        pass
+    raise TimeoutError
+
+
 async def _late_error() -> object:
     """Ignore the cancellation the deadline sends and raise an unrelated error.
 
@@ -349,9 +397,10 @@ class TestTimeoutLayer:
             (_fast, _DEADLINE, 0.0),
             (_inner_timeout, _SLOW, 0.0),
             (_builtin_timeout, _SLOW, 0.0),
+            (_builtin_timeout_late, _DEADLINE, 0.0),
             (_late_error, _DEADLINE, 0.0),
         ],
-        ids=["cut", "fast", "inner coded", "builtin early", "late error"],
+        ids=["cut", "fast", "inner coded", "builtin early", "builtin late", "late error"],
     )
     async def test_timeout_layer_records_its_own_deadline_only(
         op: Callable[[], Awaitable[object]], seconds: float, want: float
@@ -364,8 +413,9 @@ class TestTimeoutLayer:
 
         What it tests:
           - an op slower than the deadline counts 1; a fast op, a deeper layer's coded
-            timeout, a builtin TimeoutError raised before the deadline and an
-            unrelated error raised on cancellation count 0.
+            timeout, a builtin TimeoutError the op raised itself (before the deadline,
+            or after it but before the layer's timer fired) and an unrelated error
+            raised on cancellation count 0.
         """
         harness = _harness()
 
@@ -660,3 +710,49 @@ class TestBuildWiring:
         assert harness.value("resilience_bulkhead_limit") == pytest.approx(want)
         opened = _warnings(harness.logger, "circuit breaker opened")
         assert opened == ([{"tier": _TIER, "name": _NAME}] if switched else [])
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_build_gives_channel_bulkhead_no_recorder() -> None:
+        """Test that a built channel bulkhead does not count its own refusals.
+
+        Why this test is important:
+          - the bulkhead layer counts each refusal; a channel bulkhead that also had a
+            recorder would count it again, doubling the rate an operator alerts on.
+
+        What it tests:
+          - with metrics on, the built one-slot channel bulkhead refuses a try while its
+            slot is held and records no rejection itself.
+        """
+        harness = _harness()
+        layers = decoration.Layers(
+            metrics=True,
+            bulkhead=decoration.Bulkhead(
+                enabled=True,
+                kind="channel",
+                max_concurrent=1,
+                min_concurrent=1,
+                initial_concurrent=1,
+                backoff_ratio=0.9,
+            ),
+        )
+        collab = Collaborators(
+            observability=Observability(metrics=new_metrics(harness.registry))
+        )
+        bulkhead = build(_TIER, _NAME, layers, collab).bulkhead
+        assert bulkhead is not None
+        held, release = asyncio.Event(), asyncio.Event()
+
+        async def hold() -> object:
+            held.set()
+            return await release.wait()
+
+        holder = asyncio.create_task(bulkhead.execute(hold))
+        _ = await held.wait()
+        with pytest.raises(BulkheadFullError):
+            _ = await bulkhead.try_execute(hold)
+        release.set()
+        _ = await holder
+
+        rejections = "resilience_rejections_total"
+        assert harness.value(rejections, operation="", reason="bulkhead_full") == 0

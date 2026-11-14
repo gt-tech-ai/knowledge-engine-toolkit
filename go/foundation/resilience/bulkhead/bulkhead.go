@@ -65,9 +65,10 @@ func (k Kind) String() string {
 // Config is the superset configuration for all bulkhead kinds.
 // Kind-incompatible fields are silently ignored.
 type Config struct {
-	// Recorder receives the adaptive limit (KindAdaptive only; the channel bulkhead has
-	// no limit to report and its rejections are the decorate layer's); nil records
-	// nothing. It is wired in code (decorate's Build), never decoded from config.
+	// Recorder is what the bulkhead reports through: the channel kind counts each
+	// refused TryExecute as bulkhead_full, the adaptive kind reports its limit; nil
+	// records nothing. It is wired in code, never decoded from config. decorate's Build
+	// passes one to the adaptive kind only, since the bulkhead layer counts refusals.
 	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
 
 	// Kind specifies which bulkhead implementation to use.
@@ -122,6 +123,12 @@ func WithMaxConcurrent(n int) options.Option[Config] {
 	return func(c *Config) { c.MaxConcurrent = n }
 }
 
+// WithRecorder sets the recorder the bulkhead reports through: the channel kind counts
+// each refused TryExecute, the adaptive kind reports its limit.
+func WithRecorder(recorder *series.Recorder) options.Option[Config] {
+	return func(c *Config) { c.Recorder = recorder }
+}
+
 // New creates a Bulkhead of the specified kind with optional functional options.
 // Returns an error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.Bulkhead, error) {
@@ -139,8 +146,7 @@ func NewFromConfig(cfg Config) (interfaces.Bulkhead, error) {
 	switch cfg.Kind {
 	case KindChannel:
 		chCfg := channel.Config{
-			// The channel bulkhead's refusals are its decorate layer's to count.
-			Recorder:      nil,
+			Recorder:      cfg.Recorder,
 			MaxConcurrent: cfg.MaxConcurrent,
 		}
 

@@ -154,6 +154,9 @@ func TestResmetrics_HandEditIsDrift(t *testing.T) {
 	})
 }
 
+// rowEnd closes one flow-style series row in a test taxonomy.
+const rowEnd = "}\n"
+
 // TestResmetrics_RejectsInvalidTaxonomy tests that a malformed taxonomy fails to render.
 //
 // Why this test is important:
@@ -162,20 +165,21 @@ func TestResmetrics_HandEditIsDrift(t *testing.T) {
 //
 // What it tests:
 //   - each rule parse enforces (prefix, _total suffixes, unique names and methods, known
-//     labels and enums, gauge numbers, the 8-value enum bound, known fields) fails
-//     Render with CodeInvalidInput.
+//     labels and enums, gauge numbers on all of an enum's values or none, a gauge with
+//     no labels, the 8-value enum bound, known fields) fails Render with
+//     CodeInvalidInput.
 func TestResmetrics_RejectsInvalidTaxonomy(t *testing.T) {
 	t.Parallel()
 
 	enums := "enums:\n  - name: reason\n    go: Reason\n    doc: d.\n" +
 		"    values:\n      - {name: a, doc: d.}\n"
 	row := func(fields string) string {
-		return enums + "series:\n  - {" + fields + "}\n"
+		return enums + "series:\n  - {" + fields + rowEnd
 	}
 	counter := "name: resilience_x_total, kind: counter, method: X, help: h."
 	overBound := "enums:\n  - name: reason\n    go: Reason\n    doc: d.\n    values:\n" +
 		strings.Repeat("      - {name: a, doc: d.}\n", resmetricsOverBound) +
-		"series:\n  - {" + counter + "}\n"
+		"series:\n  - {" + counter + rowEnd
 
 	cases := map[string]string{
 		"prefix":  row("name: other_total, kind: counter, method: X, help: h."),
@@ -189,6 +193,13 @@ func TestResmetrics_RejectsInvalidTaxonomy(t *testing.T) {
 			"name: resilience_x, kind: gauge, method: X, help: h., value: reason",
 		),
 		"bound": overBound,
+		"gauge labels": row(
+			"name: resilience_x, kind: gauge, method: X, help: h., " +
+				"labels: [{name: operation}]",
+		),
+		"partial gauge": "enums:\n  - name: reason\n    go: Reason\n    doc: d.\n" +
+			"    values:\n      - {name: a, doc: d., gauge: 0}\n" +
+			"      - {name: b, doc: d.}\nseries:\n  - {" + counter + rowEnd,
 		"field": row(counter + ", colour: red"),
 		"twice": row(counter) +
 			"  - {name: resilience_x_total, kind: counter, method: Y, help: h.}\n",

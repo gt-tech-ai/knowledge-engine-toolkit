@@ -15,6 +15,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/metrics/prom"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/budget"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead/channel"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/bulkhead/keyed"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/deadletter"
@@ -22,6 +23,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/ratelimiter"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/reswire"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/mocks"
 )
@@ -189,33 +191,62 @@ func TestLimiter_RecordsStandaloneRefusals(t *testing.T) {
 }
 
 // TestChannelBulkhead_RecordsStandaloneRefusals tests that a channel bulkhead handed a
-// recorder counts each TryExecute it refuses for want of a slot.
+// recorder, directly or through the bulkhead family root, counts each TryExecute it
+// refuses for want of a slot.
 //
 // Why this test is important:
 //   - a standalone bulkhead that refuses work hides the overload behind its caller's
-//     error handling; the count makes the refusals visible.
+//     error handling; the count makes the refusals visible, and a root that dropped
+//     the recorder would hide them again.
 //
 // What it tests:
-//   - with its one slot held, TryExecute counts one bulkhead_full rejection; once the
-//     slot is free it runs and counts none.
+//   - built by channel.New or by bulkhead.New with bulkhead.WithRecorder: with its one
+//     slot held, TryExecute counts one bulkhead_full rejection; once the slot is free
+//     it runs and counts none.
 func TestChannelBulkhead_RecordsStandaloneRefusals(t *testing.T) {
 	t.Parallel()
 
-	harness := newStandalone(t)
-	bulkhead := channel.New(
-		channel.Config{Recorder: harness.obs.Recorder, MaxConcurrent: 1},
-	)
+	builds := map[string]func(*testing.T, *series.Recorder) interfaces.Bulkhead{
+		"leaf": func(_ *testing.T, recorder *series.Recorder) interfaces.Bulkhead {
+			return channel.New(channel.Config{Recorder: recorder, MaxConcurrent: 1})
+		},
+		"root": func(t *testing.T, recorder *series.Recorder) interfaces.Bulkhead {
+			t.Helper()
 
-	require.NoError(t, bulkhead.TryExecute(func() error {
-		require.ErrorIs(t, bulkhead.TryExecute(func() error { return nil }),
+			built, err := bulkhead.New(bulkhead.KindChannel,
+				bulkhead.WithMaxConcurrent(1), bulkhead.WithRecorder(recorder))
+			require.NoError(t, err)
+
+			return built
+		},
+	}
+
+	for name, build := range builds {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			harness := newStandalone(t)
+
+			refuseWhileHeld(t, build(t, harness.obs.Recorder))
+
+			require.InDelta(t, 1, harness.value(t,
+				observedRejections, observedReason, "bulkhead_full"), 0)
+		})
+	}
+}
+
+// refuseWhileHeld holds guard's one slot, asserts a TryExecute inside it is refused, then
+// asserts one after it runs.
+func refuseWhileHeld(t *testing.T, guard interfaces.Bulkhead) {
+	t.Helper()
+
+	require.NoError(t, guard.TryExecute(func() error {
+		require.ErrorIs(t, guard.TryExecute(func() error { return nil }),
 			channel.ErrBulkheadFull)
 
 		return nil
 	}))
-	require.NoError(t, bulkhead.TryExecute(func() error { return nil }))
-
-	require.InDelta(t, 1, harness.value(t,
-		observedRejections, observedReason, "bulkhead_full"), 0)
+	require.NoError(t, guard.TryExecute(func() error { return nil }))
 }
 
 // TestKeyedLimiter_RecordsStandaloneRefusals tests that a keyed limiter handed a
@@ -417,6 +448,30 @@ func delayHedger(t *testing.T, harness *layerHarness) interfaces.Hedger {
 	require.NoError(t, err)
 
 	return hedger
+}
+
+// TestHedger_DisabledAsksForNoSeries tests that a disabled hedger built with metrics
+// never asks the provider for a series.
+//
+// Why this test is important:
+//   - hedging is off by default on every path; a disabled hedger that registered the
+//     resilience families would add series that never move to every scrape.
+//
+// What it tests:
+//   - reswire.NewHedge over an absent hedge section (disabled) with WithMetrics on a
+//     strict mock that expects no call builds and runs one call.
+func TestHedger_DisabledAsksForNoSeries(t *testing.T) {
+	t.Parallel()
+
+	loader, err := config.New(config.KindViper, config.WithBaseDir(t.TempDir()))
+	require.NoError(t, err)
+
+	hedger, err := reswire.NewHedge(loader, reswire.WithMetrics(
+		mocks.NewMockMetrics(gomock.NewController(t)), observedName))
+	require.NoError(t, err)
+
+	require.NoError(t, hedger.Hedge(context.Background(),
+		func() error { return nil }))
 }
 
 // TestDeadLetterQueue_RecordsSentAndFailed tests that a dead-letter queue handed a

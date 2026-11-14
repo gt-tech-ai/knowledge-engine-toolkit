@@ -7,6 +7,7 @@ server's pushback; a permanent one is raised at once.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast, final, override
 
@@ -88,6 +89,10 @@ class ExponentialRetrier(Retrier):
         Returns:
             What ``op`` returns.
 
+        Raises:
+            CancelledError: The caller cancelled the call; re-raised once its retries are
+                counted (no exhaustion).
+
         """
         cfg = self._config
         stop = stop_after_attempt(cfg.max_retries + 1)
@@ -145,7 +150,7 @@ class ExponentialRetrier(Retrier):
 
         try:
             result: object = await retrying(attempt)
-        except Exception as exc:
+        except (Exception, asyncio.CancelledError) as exc:
             _ = retries_done(self._recorder, "", attempts, exc)
             raise
         _ = retries_done(self._recorder, "", attempts, None)

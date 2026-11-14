@@ -415,7 +415,10 @@ and `name` (the component or primitive) first, then its own labels.
   - retry layer: `retries_total` (attempts − 1), then `rejections{budget_exhausted}` when the
     retry budget refused, else `retry_exhausted_total` and a `retries exhausted` Warn (`tier`,
     `name`, `operation`, `attempts`) when it still failed after a retry; nothing inside a
-    transaction.
+    transaction. A call its caller cancelled (`context.Canceled` or `CodeCanceled`) counts its
+    retries and nothing more. A caller's deadline still counts as exhaustion in Go, where it
+    reads the same as an attempt's own timeout; in Python it reaches the retrier as
+    `asyncio.CancelledError`, so it counts as a cancellation (a documented difference).
   - timeout layer: `timeouts_total` when its own deadline cut the call, not the caller's
     earlier one and not an unrelated error returned late.
   - circuit-breaker layer: `rejections{breaker_open}` when `circuitbreaker.IsOpen(err)` (the
@@ -430,16 +433,19 @@ and `name` (the component or primitive) first, then its own labels.
     adjustment.
 - **Go standalone primitives.** A primitive used outside a decorate tier records only when
   its caller hands it a recorder, conventionally `series.NewRecorder(metrics,
-  series.TierStandalone, name)`, and labels its events `operation=""`:
+  series.TierStandalone, name)`, and labels its events `operation=""`. A standalone breaker
+  takes `series.NewObserver(metrics, logger, series.TierStandalone, name)`, so its Warn lines
+  carry `tier=standalone` too (Python: `Observer.of(metrics, logger, TIER_STANDALONE, name)`):
   - exponential retrier: `retry.WithRecorder` (`retry.Config.Recorder` →
     `exponential.Config.Recorder`); `Retry` and `RetryWithResult` count a finished call
     exactly as the retry layer does (`series.Recorder.RetriesDone`), without the Warn.
   - token limiter: `ratelimiter.WithRecorder` (→ `token.Config.Recorder`); each refused
     `Allow` is `rejections{rate_limited}`.
-  - channel bulkhead and keyed limiter: `channel.Config.Recorder`, `keyed.Config.Recorder`;
-    each refused `TryExecute` / `TryAcquire` is `rejections{bulkhead_full}` (a key is never a
-    label). `bulkhead.NewFromConfig` leaves the channel kind without one: its refusals are
-    the decorate layer's.
+  - channel bulkhead and keyed limiter: `channel.Config.Recorder` (or `bulkhead.WithRecorder`
+    / `bulkhead.Config.Recorder` through the family root), `keyed.Config.Recorder`; each
+    refused `TryExecute` / `TryAcquire` is `rejections{bulkhead_full}` (a key is never a
+    label). Under a tier, `decorate.Build` hands a recorder to the adaptive kind only: the
+    channel kind's refusals are the bulkhead layer's.
   - adaptive throttle and hedger: `reswire.NewAdaptiveThrottle(loader,
     reswire.WithMetrics(metrics, name))` and `reswire.NewHedge(loader, …)`, or
     `adaptivethrottle.Config.Recorder` / `hedge.WithRecorder` directly. The throttle sets
@@ -459,9 +465,10 @@ and `name` (the component or primitive) first, then its own labels.
   `new_timeout(seconds, observer)`, `new_circuit_breaker(cb, name, observer)`,
   `new_bulkhead(bulkhead, shed=…, observer=…)`, `new_rate_limit(limiter, observer)`; `None`
   reports nothing) and record what their Go twins do; `retries_done` is the one counting rule
-  for the retry layer and the standalone retriers. The timeout layer counts only once the loop
-  clock reaches its own deadline, so a builtin `TimeoutError` raised early inside the op is not
-  counted. `build(tier, name, layers, collab)` (`Decorations.deps` passes the tier's name)
+  for the retry layer and the standalone retriers (a call ended by
+  `asyncio.CancelledError` counts its retries and no exhaustion). The timeout layer runs the op under
+  `asyncio.timeout` and counts only when that deadline expired (`expired()`), so a builtin
+  `TimeoutError` the op raises itself is not counted, whenever it arrives. `build(tier, name, layers, collab)` (`Decorations.deps` passes the tier's name)
   builds the breaker in `decorate/primitives.py` with `CircuitBreaker(…).with_observer(observer)`
   (its state at once, each move, one `circuit breaker opened` Warning per opening) and an
   adaptive bulkhead with `bulkhead_from_config(config, recorder)` →
@@ -478,8 +485,9 @@ and `name` (the component or primitive) first, then its own labels.
     take `.with_recorder(r)` and count each refusal as `rejections{rate_limited}`;
     `per_key_rate_limiter_from_config(…, recorder=…)` threads it to either kind.
     `SemaphoreBulkhead(…).with_recorder(r)` counts each refused `try_execute` as
-    `rejections{bulkhead_full}`; `bulkhead_from_config` gives the semaphore kind none, as its
-    refusals are the decorate layer's.
+    `rejections{bulkhead_full}`, as does the semaphore `bulkhead_from_config(config, r)`
+    builds; under a tier, `build` hands a recorder to the adaptive kind only, as its
+    bulkhead layer counts the refusals.
   - `AdaptiveThrottler(…).with_recorder(r)` sets `throttle_rejection_ratio` after each `do`
     and counts a shed call as `rejections{throttled}`; `hedger_from_config(config, recorder)`
     gives the delay hedger the recorder (`fired` per backup, `won` when the backup's result is

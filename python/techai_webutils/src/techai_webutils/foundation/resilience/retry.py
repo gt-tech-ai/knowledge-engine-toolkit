@@ -6,6 +6,7 @@ Permanent errors are not retried.
 
 from __future__ import annotations
 
+import asyncio
 import functools
 from collections.abc import Callable
 from typing import TYPE_CHECKING, TypeVar, cast
@@ -49,6 +50,7 @@ def retry_transient(
     max_attempts: int = 3,
     base_delay: float = 0.1,
     max_delay: float = 10.0,
+    *,
     recorder: Recorder | None = None,
 ) -> Callable[[F], F]:
     """Retry the decorated function on transient errors.
@@ -97,6 +99,10 @@ def retry_transient(
             Returns:
                 What the function returns.
 
+            Raises:
+                CancelledError: The caller cancelled the call; re-raised once its
+                    retries are counted (no exhaustion).
+
             """
             attempts = 0
 
@@ -113,7 +119,7 @@ def retry_transient(
 
             try:
                 result: object = retrying.copy()(attempt)
-            except Exception as exc:
+            except (Exception, asyncio.CancelledError) as exc:
                 _ = retries_done(counted, "", attempts, exc)
                 raise
             _ = retries_done(counted, "", attempts, None)

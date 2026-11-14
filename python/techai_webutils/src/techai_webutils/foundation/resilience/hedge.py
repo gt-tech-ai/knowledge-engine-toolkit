@@ -129,7 +129,7 @@ class DelayHedger(Hedger):
 
 
 def hedger_from_config(config: HedgeConfig, recorder: Recorder | None = None) -> Hedger:
-    """Create a ``Hedger`` from config; raise ``ValueError`` on an unknown kind.
+    """Create a ``Hedger`` from config; raise ``AppValueError`` on an unknown kind.
 
     Args:
         config: Selects the backend and carries its settings.

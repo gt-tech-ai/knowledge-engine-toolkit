@@ -10,6 +10,7 @@ by the retry layer and the standalone retriers.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
@@ -33,7 +34,9 @@ class Observer:
     """Receives the component's Warning lines; ``None`` logs nothing."""
 
     tier: str = ""
-    """The decoration tier a Warning line names; empty for a standalone primitive."""
+    """The tier a Warning line names: the decoration tier, or ``TIER_STANDALONE`` for a
+    primitive outside one (``Observer.of`` binds the same tier to the recorder and the
+    lines); empty names no tier."""
 
     name: str = ""
     """The subject a Warning line names."""
@@ -63,6 +66,9 @@ class Observer:
     def warn(self, msg: str, **fields: object) -> None:
         """Write one Warning line naming the tier (when set) and the subject.
 
+        The tier and name are the Observer's own: a ``tier`` or ``name`` among
+        ``fields`` is dropped rather than raising.
+
         Args:
             msg: The message.
             **fields: The line's other fields, after the tier and name.
@@ -70,8 +76,10 @@ class Observer:
         """
         if self.logger is None:
             return
-        subject: dict[str, object] = {"tier": self.tier} if self.tier else {}
-        self.logger.warning(msg, **subject, name=self.name, **fields)
+        line: dict[str, object] = {"tier": self.tier} if self.tier else {}
+        line["name"] = self.name
+        line.update((k, v) for k, v in fields.items() if k not in _SUBJECT_KEYS)
+        self.logger.warning(msg, **line)
 
     def retries_done(
         self, operation: str, attempts: int, error: BaseException | None
@@ -88,6 +96,9 @@ class Observer:
             self.warn("retries exhausted", operation=operation, attempts=attempts)
 
 
+_SUBJECT_KEYS = frozenset({"tier", "name"})
+"""The fields ``Observer.warn`` sets itself."""
+
 UNOBSERVED = Observer(Recorder(None, "", ""))
 """The Observer that records and logs nothing."""
 
@@ -98,8 +109,10 @@ def retries_done(
     """Record one call a retrier finished with ``error`` after ``attempts`` attempts.
 
     One retry per attempt after the first; then, when ``error`` is the retry budget
-    refusing another attempt, a ``budget_exhausted`` rejection and nothing more; else,
-    when ``error`` is a failure after at least one retry, an exhaustion. Mirrors Go
+    refusing another attempt, a ``budget_exhausted`` rejection and nothing more; when
+    the caller cancelled the call (``asyncio.CancelledError``, which is also how a
+    caller's deadline reaches the retrier), nothing more; else, when ``error`` is a
+    failure after at least one retry, an exhaustion. Mirrors Go
     ``series.Recorder.RetriesDone``.
 
     Args:
@@ -119,7 +132,7 @@ def retries_done(
     if isinstance(error, RetryBudgetExhaustedError):
         recorder.rejected(operation, Reason.BUDGET_EXHAUSTED)
         return False
-    if attempts <= 1:
+    if attempts <= 1 or isinstance(error, asyncio.CancelledError):
         return False
     recorder.retry_exhausted(operation)
     return True

@@ -230,23 +230,23 @@ func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
 // Build returns the Deps of the component named name in tier from its resolved layers:
 // each layer that is on gets its collaborator from c, or its primitive built from its
 // tuning (the breaker is named name). The breaker and the adaptive bulkhead report
-// their own state through an Observer bound to tier and name, whose recorder follows
-// the metrics layer and whose logger follows the logging layer; the retrier, limiter
-// and channel bulkhead get none, since their layers record for them. An invalid tuning
-// is CodeInvalidInput.
+// their own state through an Observer bound to tier and name, built only when one of
+// them is on, whose recorder follows the metrics layer and whose logger follows the
+// logging layer; the retrier, limiter and channel bulkhead get none, since their layers
+// record for them. An invalid tuning is CodeInvalidInput.
 // l must not be nil.
 func Build(tier, name string, lRef *decoration.Layers, c Collaborators) (Deps, error) {
 	layers := *lRef
 
 	deps := observabilityDeps(&layers, c)
-	obs := newObserver(tier, name, &deps)
+	observe := func() Observer { return newObserver(tier, name, &deps) }
 
-	err := addCallGuards(&deps, name, &layers, &obs)
+	err := addCallGuards(&deps, name, &layers, observe)
 	if err != nil {
 		return Deps{}, err
 	}
 
-	err = addLoadGuards(&deps, name, &layers, obs.Recorder)
+	err = addLoadGuards(&deps, name, &layers, observe)
 	if err != nil {
 		return Deps{}, err
 	}
@@ -296,12 +296,12 @@ func observabilityDeps(layers *decoration.Layers, collaborators Collaborators) D
 }
 
 // addCallGuards builds the retrier and circuit breaker when enabled; the breaker
-// reports through obs.
+// reports through the Observer observe builds.
 func addCallGuards(
 	deps *Deps,
 	name string,
 	layers *decoration.Layers,
-	obs *series.Observer,
+	observe func() Observer,
 ) error {
 	var err error
 
@@ -313,7 +313,9 @@ func addCallGuards(
 	}
 
 	if decoration.On(layers.CircuitBreaker.Enabled) {
-		deps.Breaker, err = newBreaker(name, layers.CircuitBreaker, obs)
+		obs := observe()
+
+		deps.Breaker, err = newBreaker(name, layers.CircuitBreaker, &obs)
 		if err != nil {
 			return wrapLayer(err, name, "circuit_breaker")
 		}
@@ -323,17 +325,17 @@ func addCallGuards(
 }
 
 // addLoadGuards builds the bulkhead and rate limiter when enabled; an adaptive
-// bulkhead reports its limit through recorder.
+// bulkhead reports its limit through the recorder of the Observer observe builds.
 func addLoadGuards(
 	deps *Deps,
 	name string,
 	layers *decoration.Layers,
-	recorder *series.Recorder,
+	observe func() Observer,
 ) error {
 	var err error
 
 	if decoration.On(layers.Bulkhead.Enabled) {
-		deps.Bulkhead, err = bulkheadFromConfig(layers.Bulkhead, recorder)
+		deps.Bulkhead, err = bulkheadFromConfig(layers.Bulkhead, observe)
 		if err != nil {
 			return wrapLayer(err, name, "bulkhead")
 		}
@@ -394,23 +396,27 @@ func newBreaker(
 }
 
 // bulkheadFromConfig builds the bulkhead b tunes; its kind is "channel" (or empty) or
-// "adaptive", which reports its limit through recorder.
+// "adaptive". Only the adaptive kind gets a recorder (for its limit): the channel
+// kind's refusals are the bulkhead layer's to count, so it gets none.
 func bulkheadFromConfig(
 	currentBulkhead decoration.Bulkhead,
-	recorder *series.Recorder,
+	observe func() Observer,
 ) (interfaces.Bulkhead, error) {
 	err := currentBulkhead.BulkheadConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
-	var kind bulkhead.Kind
+	var (
+		kind     bulkhead.Kind
+		recorder *series.Recorder
+	)
 
 	switch currentBulkhead.BulkheadConfig.Kind {
 	case "", "channel":
 		kind = bulkhead.KindChannel
 	case "adaptive":
-		kind = bulkhead.KindAdaptive
+		kind, recorder = bulkhead.KindAdaptive, observe().Recorder
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"unknown bulkhead kind %q (want channel|adaptive)",

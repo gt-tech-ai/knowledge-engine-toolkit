@@ -53,7 +53,8 @@ func recorder(opts []Option) *series.Recorder {
 // idempotent path). An absent section keeps the default; the kind string
 // ("disabled"/"delay") is mapped to a hedge.Kind and fails loudly on an unknown value.
 // Brings the previously-inert resilience.hedge sub-tier into use. With WithMetrics the
-// delay hedger counts its fired and winning backups.
+// delay hedger counts its fired and winning backups; the disabled one, which never
+// hedges, asks the provider for no series.
 func NewHedge(loader interfaces.ConfigLoader, opts ...Option) (interfaces.Hedger, error) {
 	hedgeConfig := schemares.DefaultHedgeConfig()
 	if loader.Get("resilience.hedge") != nil {
@@ -77,8 +78,14 @@ func NewHedge(loader interfaces.ConfigLoader, opts ...Option) (interfaces.Hedger
 		return nil, err
 	}
 
+	var hedged *series.Recorder
+
+	if kind == hedge.KindDelay {
+		hedged = recorder(opts)
+	}
+
 	return hedge.NewFromConfig(hedge.Config{
-		Recorder: recorder(opts),
+		Recorder: hedged,
 		Kind:     kind,
 		Delay:    hedgeConfig.Delay,
 	})

@@ -181,6 +181,9 @@ _BULKHEAD_KINDS: dict[str, BulkheadKind] = {
 def bulkhead_for(b: decoration.Bulkhead, recorder: Recorder) -> Bulkhead:
     """Build the bulkhead ``b`` tunes; an adaptive one reports its limit to ``recorder``.
 
+    Only the adaptive kind gets the recorder: the channel kind's refusals are the
+    bulkhead layer's to count, so it gets none (no double count).
+
     Args:
         b: The bulkhead settings.
         recorder: Where an adaptive bulkhead reports its limit.
@@ -206,7 +209,7 @@ def bulkhead_for(b: decoration.Bulkhead, recorder: Recorder) -> Bulkhead:
             rtt_threshold_seconds=b.rtt_threshold,
             backoff_ratio=b.backoff_ratio,
         ),
-        recorder,
+        recorder if kind is BulkheadKind.ADAPTIVE else None,
     )
 
 

@@ -4,8 +4,9 @@ Two backends implement the ``Bulkhead`` ABC from core/interfaces: ``SemaphoreBul
 fixed-size ``asyncio.Semaphore``) and ``AdaptiveBulkhead`` (a self-tuning AIMD limit that
 shrinks under latency and recovers). ``bulkhead_from_config`` selects between them by
 ``BulkheadKind``, mirroring Go's ``bulkhead.NewFromConfig`` (KindChannel / KindAdaptive).
-A standalone ``SemaphoreBulkhead`` counts its refusals through ``with_recorder``; under a
-decorate tier the bulkhead layer counts them instead.
+A standalone ``SemaphoreBulkhead`` counts its refusals through ``with_recorder`` (or the
+recorder ``bulkhead_from_config`` threads to it); under a decorate tier the bulkhead layer
+counts them instead.
 """
 
 from __future__ import annotations
@@ -302,22 +303,25 @@ class AdaptiveBulkhead(Bulkhead):
 def bulkhead_from_config(
     config: BulkheadConfig, recorder: Recorder | None = None
 ) -> Bulkhead:
-    """Create a ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.
+    """Create a ``Bulkhead`` from config; raise ``AppValueError`` on an unknown kind.
 
     Args:
         config: Selects the backend and carries its settings.
-        recorder: Where an ADAPTIVE bulkhead reports its limit; the SEMAPHORE kind
-            has no limit to report and its refusals are its decorate layer's.
+        recorder: What the bulkhead reports through: the SEMAPHORE kind counts each
+            refused ``try_execute``, the ADAPTIVE kind reports its limit; ``None``
+            records nothing. The decorate builder passes one to the ADAPTIVE kind only,
+            since its bulkhead layer counts refusals.
 
     Returns:
-        A ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.
+        The ``Bulkhead`` ``config.kind`` selects.
 
     Raises:
         AppValueError: Unknown bulkhead kind: ``config.kind``.
 
     """
     if config.kind == BulkheadKind.SEMAPHORE:
-        return SemaphoreBulkhead(config.max_concurrent)
+        semaphore = SemaphoreBulkhead(config.max_concurrent)
+        return semaphore if recorder is None else semaphore.with_recorder(recorder)
     if config.kind == BulkheadKind.ADAPTIVE:
         adaptive = AdaptiveBulkhead(
             min_concurrent=config.min_concurrent,

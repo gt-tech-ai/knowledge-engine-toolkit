@@ -231,7 +231,9 @@ func enumProblem(current *enum, enums map[string]*enum) string {
 	}
 }
 
-// valuesProblem says which value is malformed or repeated, or "" when none.
+// valuesProblem says which value is malformed or repeated, or that only some values
+// carry a gauge number (the templates render every value's number or none), or ""
+// when none.
 func valuesProblem(values []enumValue) string {
 	seen := map[string]bool{}
 
@@ -242,6 +244,24 @@ func valuesProblem(values []enumValue) string {
 		}
 
 		seen[value.Name] = true
+	}
+
+	return gaugeProblem(values)
+}
+
+// gaugeProblem says that only some of values carry a gauge number, or "" when every
+// value or none does.
+func gaugeProblem(values []enumValue) string {
+	numbered := 0
+
+	for _, value := range values {
+		if value.Gauge != nil {
+			numbered++
+		}
+	}
+
+	if numbered != 0 && numbered != len(values) {
+		return "gauge numbers must be on every value or none"
 	}
 
 	return ""
@@ -276,6 +296,8 @@ func fieldProblem(row *series, seen map[string]bool) string {
 		return "the name or method is declared twice"
 	case row.Value != "" && row.Kind != kindGauge:
 		return "only a gauge takes a value enum"
+	case row.Kind == kindGauge && len(row.Labels) > 0:
+		return "a gauge takes no labels (it is set per tier and name)"
 	default:
 		return ""
 	}

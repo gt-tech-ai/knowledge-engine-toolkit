@@ -17,8 +17,9 @@ type Observer struct {
 	// Logger receives the component's Warn lines; nil logs nothing.
 	Logger interfaces.Logger
 
-	// Tier is the decoration tier a Warn line names; empty for a standalone primitive,
-	// whose lines then name only the subject.
+	// Tier is the tier a Warn line names: the decoration tier, or TierStandalone for a
+	// primitive outside one (NewObserver binds the same tier to the Recorder and the
+	// lines). Empty names no tier.
 	Tier string
 
 	// Name is the subject a Warn line names.

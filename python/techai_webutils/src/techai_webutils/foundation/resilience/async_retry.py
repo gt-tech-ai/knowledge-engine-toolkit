@@ -9,6 +9,7 @@ that long, capped at ``max_delay``.
 
 from __future__ import annotations
 
+import asyncio
 import functools
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, TypeVar, cast
@@ -76,6 +77,7 @@ def retry_transient_async(
     base_delay: float = 0.1,
     max_delay: float = 10.0,
     sleep: Callable[[float], Awaitable[None]] | None = None,
+    *,
     recorder: Recorder | None = None,
 ) -> Callable[[F], F]:
     """Return a decorator that retries a coroutine on transient ``AppError``s.
@@ -168,6 +170,10 @@ def retry_transient_async(
             Returns:
                 What the function returns.
 
+            Raises:
+                CancelledError: The caller cancelled the call; re-raised once its
+                    retries are counted (no exhaustion).
+
             """
             attempts = 0
 
@@ -184,7 +190,7 @@ def retry_transient_async(
 
             try:
                 result: object = await retrying.copy()(attempt)
-            except Exception as exc:
+            except (Exception, asyncio.CancelledError) as exc:
                 _ = retries_done(counted, "", attempts, exc)
                 raise
             _ = retries_done(counted, "", attempts, None)

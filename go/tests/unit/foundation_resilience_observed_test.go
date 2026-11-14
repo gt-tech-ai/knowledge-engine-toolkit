@@ -85,15 +85,11 @@ func newObserved(t *testing.T) layerHarness {
 }
 
 // newStandalone builds an Observer for a primitive named observedName used outside a
-// tier: its recorder binds tier "standalone" and its Warn lines name no tier.
+// tier: its recorder and its Warn lines name tier "standalone".
 func newStandalone(t *testing.T) layerHarness {
 	t.Helper()
 
-	harness := newHarness(t, series.TierStandalone)
-
-	harness.obs.Tier = ""
-
-	return harness
+	return newHarness(t, series.TierStandalone)
 }
 
 // newHarness builds an Observer for the subject observedName in tier over a fresh
@@ -238,6 +234,7 @@ func runScript(row *retryCase, operation func() error) error {
 func retryCases() map[string]retryCase {
 	transient := apperr.New(apperr.CodeUnavailable, observedDown)
 	permanent := apperr.New(apperr.CodeInvalidInput, "bad")
+	canceled := apperr.Wrap(context.Canceled, apperr.CodeCanceled, "caller left")
 
 	return map[string]retryCase{
 		"success": {
@@ -271,6 +268,10 @@ func retryCases() map[string]retryCase {
 			results: []error{transient}, refuseAt: observedNever, inTx: true,
 			want: retryWant{0, 0, 0, 0},
 		},
+		"caller cancelled after a retry": {
+			results: []error{transient, canceled}, refuseAt: observedNever, inTx: false,
+			want: retryWant{1, 0, 0, 0},
+		},
 	}
 }
 
@@ -286,7 +287,8 @@ func retryCases() map[string]retryCase {
 //   - one success records nothing; two failures then success record 2 retries and no
 //     exhaustion; always failing records retries, 1 exhausted and 1 Warn; a permanent
 //     first error records nothing; a budget refusal records 1 budget_exhausted
-//     rejection and no exhaustion; an in-transaction run records nothing.
+//     rejection and no exhaustion; an in-transaction run records nothing; a call its
+//     caller cancelled after a retry records the retry and no exhaustion or Warn.
 func TestRetryMW_RecordsRetriesAndExhaustion(t *testing.T) {
 	t.Parallel()
 
@@ -875,6 +877,108 @@ func resilienceTolerantMetrics(ctrl *gomock.Controller) *mocks.MockMetrics {
 		Return(gauge).AnyTimes()
 
 	return metrics
+}
+
+// TestObserved_NoResilienceLayerRegistersNothing tests that a component with the
+// metrics layer on but no resilience layer exports no resilience_* series.
+//
+// Why this test is important:
+//   - every decorated component builds its chains at boot; registering eleven
+//     resilience families for one that has no retry, breaker, bulkhead, rate limit or
+//     timeout inflates the scrape and breaks a consumer's strict metrics mock.
+//
+// What it tests:
+//   - with the timeout zero and the other resilience layers off, building the
+//     client-tier subject and running one operation never asks the provider for a
+//     resilience_* series (a strict mock fails on one).
+func TestObserved_NoResilienceLayerRegistersNothing(t *testing.T) {
+	t.Parallel()
+
+	cfg := decoration.DefaultConfig()
+
+	cfg.Clients.Overrides[observedName] = fixtures.Build(func(row *decoration.Layers) {
+		on, off := true, false
+
+		row.Metrics = &on
+		row.Timeout = new(time.Duration)
+		row.Retry.Enabled = &off
+		row.CircuitBreaker.Enabled = &off
+		row.RateLimit.Enabled = &off
+		row.Bulkhead.Enabled = &off
+	})
+
+	collaborators := fixtures.Build(func(row *decorate.Collaborators) {
+		row.Metrics = redOnlyMetrics(gomock.NewController(t))
+	})
+	subject := decorate.NewDecorations(&cfg, collaborators).
+		Subject(client.Tier(), observedName)
+
+	_, err := subject.Exec(context.Background(), observedOp,
+		func(context.Context) (any, error) { return struct{}{}, nil })
+	require.NoError(t, err)
+}
+
+// redOnlyMetrics returns a strict mock Metrics that accepts any series except a
+// resilience_* one: asking for one of those fails the test.
+func redOnlyMetrics(ctrl *gomock.Controller) *mocks.MockMetrics {
+	red := gomock.Cond(func(name any) bool {
+		text, ok := name.(string)
+
+		return ok && !strings.HasPrefix(text, "resilience_")
+	})
+
+	counter := mocks.NewMockCounter(ctrl)
+	counter.EXPECT().Inc(gomock.Any()).AnyTimes()
+
+	histogram := mocks.NewMockHistogram(ctrl)
+	histogram.EXPECT().Observe(gomock.Any(), gomock.Any()).AnyTimes()
+
+	gauge := mocks.NewMockGauge(ctrl)
+	gauge.EXPECT().Set(gomock.Any(), gomock.Any()).AnyTimes()
+
+	metrics := mocks.NewMockMetrics(ctrl)
+	metrics.EXPECT().Counter(red, gomock.Any(), gomock.Any()).Return(counter).AnyTimes()
+	metrics.EXPECT().Histogram(red, gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(histogram).AnyTimes()
+	metrics.EXPECT().Gauge(red, gomock.Any(), gomock.Any()).Return(gauge).AnyTimes()
+
+	return metrics
+}
+
+// TestObserved_ShedCountedOnceThroughDecorations tests that a call a full channel
+// bulkhead sheds is counted once when it runs through Decorations.
+//
+// Why this test is important:
+//   - the shedding layer counts the refusal; a channel bulkhead that also had a
+//     recorder would count it again, doubling the rate an operator alerts on.
+//
+// What it tests:
+//   - with a one-slot shedding channel bulkhead, a call made while the slot is held
+//     is refused and counts exactly one bulkhead_full rejection.
+func TestObserved_ShedCountedOnceThroughDecorations(t *testing.T) {
+	t.Parallel()
+
+	harness := newObserved(t)
+	subject := decoratedClient(t, &harness, func(row *decoration.Layers) {
+		on := true
+
+		row.Bulkhead.Enabled, row.Bulkhead.Shed = &on, &on
+		row.Bulkhead.BulkheadConfig = resilience.DefaultBulkheadConfig()
+		row.Bulkhead.BulkheadConfig.MaxConcurrent = 1
+	})
+
+	_, err := subject.Exec(context.Background(), observedOp,
+		func(ctx context.Context) (any, error) {
+			_, shed := subject.Exec(ctx, observedOp,
+				func(context.Context) (any, error) { return struct{}{}, nil })
+			require.Error(t, shed)
+
+			return struct{}{}, nil
+		})
+	require.NoError(t, err)
+
+	require.InDelta(t, 1, harness.value(t,
+		observedRejections, observedReason, "bulkhead_full"), 0)
 }
 
 // observedRetries is the end-to-end retry layer's MaxRetries: three attempts in all.

@@ -35,8 +35,9 @@ if TYPE_CHECKING:
 class _Timeout:
     """Bounds the op; expiry raises AppTimeoutError.
 
-    An expiry of the layer's own deadline counts ``resilience_timeouts_total``; a
-    TimeoutError raised before it (a socket timeout inside the op) does not.
+    An expiry of the layer's own deadline (``asyncio.timeout``, whose ``expired()`` says
+    the layer cut the op) counts ``resilience_timeouts_total``; a TimeoutError the op
+    raised itself (a socket timeout inside it) does not, whenever it arrives.
     """
 
     def __init__(self, seconds: float, observer: Observer) -> None:
@@ -64,12 +65,12 @@ class _Timeout:
             AppTimeoutError: ``op`` timed out after ``self._seconds``s.
 
         """
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + self._seconds
+        deadline = asyncio.timeout(self._seconds)
         try:
-            return await asyncio.wait_for(next_(), timeout=self._seconds)
+            async with deadline:
+                return await next_()
         except TimeoutError as exc:
-            if loop.time() >= deadline:
+            if deadline.expired():
                 self._observer.recorder.timed_out(op)
             msg = f"{op} timed out after {self._seconds}s"
             raise AppTimeoutError(msg) from exc
@@ -121,6 +122,10 @@ class _Retry:
         Returns:
             What the operation returns.
 
+        Raises:
+            CancelledError: The caller cancelled the call; re-raised once its retries are
+                counted (no exhaustion).
+
         """
         attempts = 0
 
@@ -131,7 +136,7 @@ class _Retry:
 
         try:
             result = await self._retrier.retry(attempt)
-        except Exception as exc:
+        except (Exception, asyncio.CancelledError) as exc:
             self._observer.retries_done(op, attempts, exc)
             raise
         self._observer.retries_done(op, attempts, None)

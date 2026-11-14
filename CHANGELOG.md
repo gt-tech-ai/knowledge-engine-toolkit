@@ -26,7 +26,8 @@ Python: `techai-webutils` 0.15.0.
   `series.Observer{Recorder, Logger, Tier, Name}` (`decorate.Observer` is an alias); Python through
   `foundation.resilience.observer.Observer`.
 - Standalone primitives record under tier `standalone` when handed a recorder. Go:
-  `retry.WithRecorder`, `ratelimiter.WithRecorder`, `channel.Config.Recorder`,
+  `retry.WithRecorder`, `ratelimiter.WithRecorder`, `bulkhead.WithRecorder`,
+  `channel.Config.Recorder`,
   `keyed.Config.Recorder`, `adaptivethrottle.Config.Recorder`, `hedge.WithRecorder`,
   `reswire.WithMetrics(metrics, name)` for `reswire.NewHedge` / `NewAdaptiveThrottle`,
   `deadletter.Queue.WithRecorder` and `dedup.Memory.WithRecorder`. Python: a `recorder` keyword on
@@ -41,10 +42,14 @@ Python: `techai-webutils` 0.15.0.
 
 - Go: **breaking.** `decorate.Build(tier, name, layers, collaborators)` takes the tier's name
   first. `NewRetry`, `NewTimeout`, `NewCircuitBreaker`, `NewBulkhead`, `NewSheddingBulkhead` and
-  `NewRateLimit` take an `Observer` as their last argument (pass `decorate.Observer{}` to report
-  nothing). `circuitbreaker.Config` and `gobreaker.Config` gain `Observer *series.Observer`; the
-  retrier, limiter, bulkhead, hedge and throttle `Config`s gain `Recorder *series.Recorder`. Every
-  new field is wired in code (`yaml:"-" mapstructure:"-" json:"-"`).
+  `NewRateLimit` take an `Observer` as their last argument (pass the zero value, `var obs
+  decorate.Observer`, to report nothing). `circuitbreaker.Config` and `gobreaker.Config` gain
+  `Observer *series.Observer`; the retrier, limiter, bulkhead, hedge and throttle `Config`s gain
+  `Recorder *series.Recorder`. Every new field is wired in code (`yaml:"-" mapstructure:"-"
+  json:"-"`).
+- A component whose metrics layer is on and that has a resilience layer now asks its metrics
+  provider for the `resilience_*` series (Go and Python). A consumer test with a strict metrics
+  mock on such a component must accept them; a component with no resilience layer asks for none.
 - Python: **breaking.** `foundation.decorate.decorations.build(tier, name, layers, collab)` takes
   the tier's name first. The resilience layers (`new_retry`, `new_timeout`,
   `new_circuit_breaker`, `new_bulkhead`, `new_rate_limit`) move from `decorate/middleware.py` to

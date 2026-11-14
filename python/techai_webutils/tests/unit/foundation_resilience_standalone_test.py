@@ -7,7 +7,8 @@ The tests cover:
     retries and exhaustion with no operation.
   - ``AsyncCircuitBreaker``: its state, its moves and one Warning when it opens.
   - The refusing primitives (``TokenBucketRateLimiter``, the per-key limiters built by
-    ``per_key_rate_limiter_from_config``, ``SemaphoreBulkhead``): one refusal, one
+    ``per_key_rate_limiter_from_config``, ``SemaphoreBulkhead`` built directly or by
+    ``bulkhead_from_config``): one refusal, one
     rejection with its reason.
   - ``AdaptiveThrottler``: its rejection-ratio gauge and each shed call; the
     ``DelayHedger`` from ``hedger_from_config``: each backup fired and each it won.
@@ -44,8 +45,11 @@ from techai_webutils.foundation.resilience.async_circuit_breaker import (
 )
 from techai_webutils.foundation.resilience.async_retry import retry_transient_async
 from techai_webutils.foundation.resilience.bulkhead import (
+    BulkheadConfig,
     BulkheadFullError,
+    BulkheadKind,
     SemaphoreBulkhead,
+    bulkhead_from_config,
 )
 from techai_webutils.foundation.resilience.dedup import MemoryDeduplicator
 from techai_webutils.foundation.resilience.dlq import DeadLetterQueue
@@ -73,9 +77,10 @@ from techai_webutils.foundation.resilience.series import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Sequence
 
     from techai_webutils.core.errors.errors import AppError
+    from techai_webutils.core.interfaces.bulkhead import Bulkhead
 
 _NAME = "x"
 _RETRIES = 3
@@ -124,7 +129,7 @@ async def _no_sleep(_: float) -> None:
 class _Script:
     """Raises each scripted error in turn, then succeeds; counts its calls."""
 
-    def __init__(self, failures: list[AppError]) -> None:
+    def __init__(self, failures: Sequence[BaseException]) -> None:
         """Bind the failures to raise, in order.
 
         Args:
@@ -165,6 +170,7 @@ _CASES = {
     "recovers": (_down(2), 2.0, 0.0),
     "exhausted": (_down(_RETRIES + 1), float(_RETRIES), 1.0),
     "permanent": ([InvalidInputError("bad")], 0.0, 0.0),
+    "cancelled after a retry": ([*_down(1), asyncio.CancelledError()], 1.0, 0.0),
 }
 """Each case's failures, then its expected retries and exhaustions."""
 
@@ -193,7 +199,7 @@ class TestRetriers:
         ("failures", "retried", "exhausted"), _CASES.values(), ids=_CASES.keys()
     )
     async def test_exponential_retrier_counts(
-        failures: list[AppError], retried: float, exhausted: float
+        failures: Sequence[BaseException], retried: float, exhausted: float
     ) -> None:
         """Test that ``ExponentialRetrier`` with a recorder counts each call it retried.
 
@@ -201,7 +207,8 @@ class TestRetriers:
           - a retrier used outside a decorate tier had no layer to count for it.
 
         What it tests:
-          - each case's retries and exhaustions under tier standalone, operation "".
+          - each case's retries and exhaustions under tier standalone, operation "";
+            a call its caller cancelled after a retry counts the retry, no exhaustion.
         """
         registry, recorder = _recorder()
         retrier = ExponentialRetrier(
@@ -215,7 +222,9 @@ class TestRetriers:
             await asyncio.sleep(0)
             return script()
 
-        with contextlib.suppress(UnavailableError, InvalidInputError):
+        with contextlib.suppress(
+            UnavailableError, InvalidInputError, asyncio.CancelledError
+        ):
             _ = await retrier.retry(op)
 
         _assert_counted(registry, retried, exhausted)
@@ -225,7 +234,7 @@ class TestRetriers:
         ("failures", "retried", "exhausted"), _CASES.values(), ids=_CASES.keys()
     )
     def test_retry_transient_counts(
-        failures: list[AppError], retried: float, exhausted: float
+        failures: Sequence[BaseException], retried: float, exhausted: float
     ) -> None:
         """Test that ``retry_transient`` with a recorder counts each call it retried.
 
@@ -233,7 +242,8 @@ class TestRetriers:
           - the sync decorator is the other way code retries outside a tier.
 
         What it tests:
-          - each case's retries and exhaustions under tier standalone, operation "".
+          - each case's retries and exhaustions under tier standalone, operation "";
+            a call its caller cancelled after a retry counts the retry, no exhaustion.
         """
         registry, recorder = _recorder()
         script = _Script(failures)
@@ -241,7 +251,9 @@ class TestRetriers:
             max_attempts=_RETRIES + 1, base_delay=0.0, max_delay=0.0, recorder=recorder
         )(script)
 
-        with contextlib.suppress(UnavailableError, InvalidInputError):
+        with contextlib.suppress(
+            UnavailableError, InvalidInputError, asyncio.CancelledError
+        ):
             _ = retried_fn()
 
         _assert_counted(registry, retried, exhausted)
@@ -252,7 +264,7 @@ class TestRetriers:
         ("failures", "retried", "exhausted"), _CASES.values(), ids=_CASES.keys()
     )
     async def test_retry_transient_async_counts(
-        failures: list[AppError], retried: float, exhausted: float
+        failures: Sequence[BaseException], retried: float, exhausted: float
     ) -> None:
         """Test that ``retry_transient_async`` with a recorder counts each retried call.
 
@@ -260,7 +272,8 @@ class TestRetriers:
           - the async decorator wraps coroutines that retry outside a tier.
 
         What it tests:
-          - each case's retries and exhaustions under tier standalone, operation "".
+          - each case's retries and exhaustions under tier standalone, operation "";
+            a call its caller cancelled after a retry counts the retry, no exhaustion.
         """
         registry, recorder = _recorder()
         script = _Script(failures)
@@ -273,7 +286,9 @@ class TestRetriers:
             max_attempts=_RETRIES + 1, base_delay=0.0, sleep=_no_sleep, recorder=recorder
         )(op)
 
-        with contextlib.suppress(UnavailableError, InvalidInputError):
+        with contextlib.suppress(
+            UnavailableError, InvalidInputError, asyncio.CancelledError
+        ):
             _ = await retried_fn()
 
         _assert_counted(registry, retried, exhausted)
@@ -293,14 +308,15 @@ class TestAsyncCircuitBreaker:
 
         What it tests:
           - a new breaker reads closed; one failure opens it (state 2, one move to open,
-            one Warning naming the breaker); after its recovery timeout a success moves
-            it to half_open then closed (state 0).
+            one Warning naming tier standalone and the breaker); after its recovery
+            timeout a success moves it to half_open then closed (state 0).
         """
-        registry, recorder = _recorder()
+        registry = CollectorRegistry()
         logger = MagicMock(spec=Logger)
+        observer = Observer.of(new_metrics(registry), logger, TIER_STANDALONE, _NAME)
         breaker = AsyncCircuitBreaker(
             failure_threshold=1, recovery_timeout=0.0
-        ).with_observer(Observer(recorder, logger, "", _NAME))
+        ).with_observer(observer)
         state = {"tier": TIER_STANDALONE, "name": _NAME}
         assert registry.get_sample_value("resilience_breaker_state", state) == 0
 
@@ -319,7 +335,7 @@ class TestAsyncCircuitBreaker:
         assert _value(registry, moves, to="closed") == 1
         assert _value(registry, "resilience_breaker_state") == 0
         cast("MagicMock", logger.warning).assert_called_once_with(
-            "circuit breaker opened", name=_NAME
+            "circuit breaker opened", tier=TIER_STANDALONE, name=_NAME
         )
 
 
@@ -402,7 +418,7 @@ async def _shared(recorder: Recorder) -> list[bool]:
 
 
 async def _semaphore(recorder: Recorder) -> list[bool]:
-    """Try a one-slot bulkhead while its slot is held.
+    """Try a one-slot ``SemaphoreBulkhead`` while its slot is held.
 
     Args:
         recorder: Where the bulkhead reports.
@@ -411,7 +427,33 @@ async def _semaphore(recorder: Recorder) -> list[bool]:
         Whether the try ran.
 
     """
-    bulkhead = SemaphoreBulkhead(1).with_recorder(recorder)
+    return await _try_held(SemaphoreBulkhead(1).with_recorder(recorder))
+
+
+async def _semaphore_from_config(recorder: Recorder) -> list[bool]:
+    """Try a one-slot semaphore bulkhead built by ``bulkhead_from_config``.
+
+    Args:
+        recorder: Where the bulkhead reports.
+
+    Returns:
+        Whether the try ran.
+
+    """
+    config = BulkheadConfig(kind=BulkheadKind.SEMAPHORE, max_concurrent=1)
+    return await _try_held(bulkhead_from_config(config, recorder))
+
+
+async def _try_held(bulkhead: Bulkhead) -> list[bool]:
+    """Try ``bulkhead`` once while another call holds its only slot.
+
+    Args:
+        bulkhead: A one-slot bulkhead.
+
+    Returns:
+        Whether the try ran.
+
+    """
     held = asyncio.Event()
     release = asyncio.Event()
 
@@ -441,6 +483,7 @@ _REFUSERS: dict[str, tuple[Callable[[Recorder], Awaitable[list[bool]]], Reason]]
     "memory per key": (_memory, Reason.RATE_LIMITED),
     "redis per key": (_shared, Reason.RATE_LIMITED),
     "semaphore bulkhead": (_semaphore, Reason.BULKHEAD_FULL),
+    "semaphore from config": (_semaphore_from_config, Reason.BULKHEAD_FULL),
 }
 """Each refusing primitive: a run that refuses once, and the reason it records."""
 
