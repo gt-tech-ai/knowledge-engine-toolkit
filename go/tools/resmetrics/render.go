@@ -95,15 +95,14 @@ func execute(name string, current taxonomy) ([]byte, error) {
 
 // camel turns a snake_case name into CamelCase: "half_open" → "HalfOpen".
 func camel(s string) string {
-	var out strings.Builder
-
-	for part := range strings.SplitSeq(s, "_") {
+	parts := strings.Split(s, "_")
+	for index, part := range parts {
 		if part != "" {
-			out.WriteString(strings.ToUpper(part[:1]) + part[1:])
+			parts[index] = strings.ToUpper(part[:1]) + part[1:]
 		}
 	}
 
-	return out.String()
+	return strings.Join(parts, "")
 }
 
 // field is a series' Recorder field name: its metric name without the resilience_
@@ -118,21 +117,21 @@ func field(name string) string {
 // snake turns a CamelCase Go method name into snake_case: "SetBreakerState" →
 // "set_breaker_state".
 func snake(s string) string {
-	var out strings.Builder
+	out := make([]rune, 0, len(s))
 
 	for index, char := range s {
 		if char >= 'A' && char <= 'Z' {
 			if index > 0 {
-				out.WriteByte('_')
+				out = append(out, '_')
 			}
 
 			char += 'a' - 'A'
 		}
 
-		out.WriteRune(char)
+		out = append(out, char)
 	}
 
-	return out.String()
+	return string(out)
 }
 
 // wrap fills text into lines of at most width columns, each starting with prefix
