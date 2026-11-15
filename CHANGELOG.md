@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Go: `clients/secrets/file` `Put` runs its `git check-ignore` write guard on the
+  symlink-resolved path, so a credential directory symlinked into another checkout (a git
+  worktree sharing the main checkout's `.secrets/`) is checked against the repository that
+  holds it instead of being refused as "outside repository".
+
 ## [0.0.59] - 2026-11-14
 
 Go only: the published Python package is unchanged.

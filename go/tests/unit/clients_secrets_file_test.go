@@ -89,6 +89,52 @@ func TestFileSource_PutRefusesNonIgnoredPath(t *testing.T) {
 	)
 }
 
+// TestFileSource_PutChecksSymlinkedDirAtItsTarget tests that Put asks git about a
+// credential whose directory is a symlink at the symlink's resolved target.
+//
+// Why this test is important:
+//   - A git worktree often symlinks its secrets directory to the main checkout's. Git
+//     resolves the repository from the physical directory, so checking the unresolved
+//     worktree path fails with "outside repository" and every write is refused.
+//
+// What it tests:
+//   - With the store directory reached through a symlink, git check-ignore runs in the
+//     resolved directory on the resolved file path, and the write lands in the target.
+func TestFileSource_PutChecksSymlinkedDirAtItsTarget(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	target := filepath.Join(root, "main", ".secrets")
+	require.NoError(t, os.MkdirAll(target, writableDirMode))
+
+	link := filepath.Join(root, "worktree-secrets")
+	require.NoError(t, os.Symlink(target, link))
+
+	resolved, err := filepath.EvalSymlinks(target)
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	runner := mocks.NewMockCommandRunner(ctrl)
+	runner.EXPECT().
+		Run(gomock.Any(), resolved, "git", "check-ignore", "-q",
+			filepath.Join(resolved, textSecretsEnv)).
+		Return(nil)
+
+	ref := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
+	src := file.New(
+		map[types.Ref]file.Location{ref: {
+			Path: filepath.Join(link, textSecretsEnv),
+			Key:  textClientSecretUpper,
+		}},
+		runner,
+	)
+
+	require.NoError(t, src.Put(context.Background(), ref, types.NewSecret("via-link")))
+
+	_, statErr := os.Stat(filepath.Join(target, textSecretsEnv))
+	assert.NoError(t, statErr, "the write must land in the symlink's target")
+}
+
 // TestFileSource_GetMissingKeyIsNotFound tests that Get for a key absent from the file
 // yields a coded not-found error.
 //
