@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.60] - 2026-11-14
+
+Go only: the published Python package is unchanged.
+
 ### Fixed
 
 - Go: `clients/secrets/file` `Put` runs its `git check-ignore` write guard on the
