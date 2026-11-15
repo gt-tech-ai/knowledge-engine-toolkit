@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.60] - 2026-11-14
+
+Go only: the published Python package is unchanged.
+
 ### Fixed
 
 - Go: `clients/secrets/file` `Put` runs its `git check-ignore` write guard on the
@@ -79,7 +83,6 @@ Python: `techai-webutils` 0.14.0. The Go module is unchanged.
 - Python: **breaking for implementers.** `ingest_documents` and `delete_documents` are abstract
   on `KnowledgeBaseIngestor`, so a consumer's own subclass or wrapper must implement them (a
   wrapper delegates them, as `PollingIngestor` does).
-||||||| parent of 4b4a653f (feat(transport)!: move to connect-go v2)
 
 ## [0.0.57] - 2026-11-13
 
@@ -176,7 +179,6 @@ Go only: the published Python package is unchanged.
   `~/.local/bin` on the process PATH and warns when the shell PATH lacks it. A writable prefix,
   and Windows, keep the plain command. A mocked `CommandRunner` must now expect `npm prefix -g`
   before an npm global install.
-||||||| parent of d02a1f28 (feat(source-reader): add the SourceReader tier with s3 and github kinds)
 
 ## [0.0.54] - 2026-11-13
 
