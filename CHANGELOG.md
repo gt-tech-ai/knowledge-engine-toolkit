@@ -6,6 +6,13 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `go/transport/connect/peek`: `Unary(spec, stream)` lets a connect-go v2 server interceptor read
+  a unary request before the handler does. It decodes the request as the method descriptor's
+  input type and returns a stream whose first `Receive` replays it, including any rewrite the
+  interceptor made. A procedure with no protobuf schema fails `CodeInternal`.
+
 ## [0.0.61] - 2026-11-14
 
 Python: `techai-webutils` 0.15.0.
