@@ -361,6 +361,146 @@ tier's CRUD. Tests pin each tier's order in its `<tier>_test.go` (`clients_clien
 `transport_controllers_test.go`, …), `foundation_decorate_test.go` proves `Tier.Chain` applies an
 order, and `transport_server_options_test.go` drives the Connect and gRPC servers end to end.
 
+### Resilience metrics
+
+The resilience layers and primitives report what they did as `resilience_*` series, so an
+operator can tell whether retries fired, a breaker opened or a bulkhead shed load. Every
+series carries `tier` (the decorate tier, or `standalone` for a primitive used outside one)
+and `name` (the component or primitive) first, then its own labels.
+
+| Series | Type | Labels | Emitted by | Granularity |
+| --- | --- | --- | --- | --- |
+| `resilience_retries_total` | counter | `operation` | retry layer; a standalone retrier | per operation: its attempts after the first |
+| `resilience_retry_exhausted_total` | counter | `operation` | retry layer; a standalone retrier | per operation that still failed after a retry (a budget refusal is a rejection instead) |
+| `resilience_breaker_state` | gauge | — | the circuit breaker | state: 0 closed, 1 half-open, 2 open |
+| `resilience_breaker_transitions_total` | counter | `to` | the circuit breaker | per state change |
+| `resilience_rejections_total` | counter | `operation`, `reason` | circuit-breaker, shedding-bulkhead, rate-limit and retry layers; a standalone limiter, bulkhead, retrier or throttler | per refused call: `breaker_open`, `bulkhead_full`, `rate_limited`, `throttled`, `budget_exhausted` |
+| `resilience_timeouts_total` | counter | `operation` | timeout layer | per call its own deadline cut |
+| `resilience_bulkhead_limit` | gauge | — | the adaptive bulkhead | state: its current limit |
+| `resilience_throttle_rejection_ratio` | gauge | — | the adaptive throttler | state: its shed probability |
+| `resilience_hedges_total` | counter | `outcome` | the hedger | per backup: `fired`, `won` |
+| `resilience_dead_letters_total` | counter | `outcome` | the dead-letter queue | per letter: `sent`, `failed` |
+| `resilience_duplicates_total` | counter | — | the deduplicator | per dropped duplicate |
+
+- **One source.** `taxonomy/resilience-metrics.yaml` declares every series, label and enum
+  value; `go generate ./go/foundation/resilience/series/...` (`go/tools/resmetrics`) renders
+  the Go `series.Recorder` and the Python `foundation.resilience.series.Recorder`, and the Go
+  unit suite fails on drift or on a series missing from this table. An enum holds at most 8
+  values, which bounds every label but `operation` (a contract's method names, as on the RED
+  series).
+- **Who emits.** A layer knows the operation; a primitive does not (`Retrier.Retry`,
+  `RateLimiter.Allow` and `CircuitBreaker.Execute` take none). The decorate layers record the
+  operation-labelled series; the primitives record their own state. The decorate builder hands
+  a recorder only to the breaker and the adaptive bulkhead, so no event counts twice; a
+  standalone primitive records with `operation=""` when its caller hands it a recorder.
+- **Granularity.** Where the retry layer wraps the breaker and timeout layers (the client tier),
+  `timeouts` and `rejections{breaker_open}` count each attempt; where it sits inside them (the
+  repository tier), each operation. A breaker-rejected attempt is `UNAVAILABLE`, so the retrier
+  retries it. The RED series wrap outside retry in the repository tier and inside it in the
+  client tier, where `<tier>_operations_total` counts attempts too.
+- **Gating.** A component records these series only when its metrics layer is on, and writes
+  the two Warn logs (a breaker opening, a retrier giving up) only when its logging layer is on.
+  A nil (`None`) provider records nothing and changes no behavior.
+- **Go wiring.** A component reports through a `series.Observer` (`Recorder`, `Logger`, and
+  the `Tier` and `Name` a Warn line names; built by `series.NewObserver(metrics, logger, tier,
+  name)`; the zero value and a nil `*Observer` report nothing). `decorate.Observer` is that
+  type. Each resilience layer takes one: `NewRetry(retrier, obs)`, `NewTimeout(d, obs)`,
+  `NewCircuitBreaker(cb, obs)`, `NewBulkhead(b, obs)`, `NewSheddingBulkhead(b, obs)` and
+  `NewRateLimit(l, obs)`; `Tier.Middleware` binds it to the tier and subject from `Deps.Metrics`
+  and `Deps.Logger`, which `Build` fills only when the metrics and logging layers are on.
+  `Build(tier, name, layers, collaborators)` (called by `Decorations.Deps` with the tier's name)
+  hands the same Observer to the breaker (`circuitbreaker.Config.Observer`, threaded into
+  `gobreaker.Config.Observer`, never decoded from config) and its recorder to an adaptive
+  bulkhead (`bulkhead.Config.Recorder` → `adaptive.Config.Recorder`). What each records:
+  - retry layer: `retries_total` (attempts − 1), then `rejections{budget_exhausted}` when the
+    retry budget refused, else `retry_exhausted_total` and a `retries exhausted` Warn (`tier`,
+    `name`, `operation`, `attempts`) when it still failed after a retry; nothing inside a
+    transaction. A call its caller cancelled (`context.Canceled` or `CodeCanceled`) counts its
+    retries and nothing more. A caller's deadline still counts as exhaustion in Go, where it
+    reads the same as an attempt's own timeout; in Python it reaches the retrier as
+    `asyncio.CancelledError`, so it counts as a cancellation (a documented difference).
+  - timeout layer: `timeouts_total` when its own deadline cut the call, not the caller's
+    earlier one and not an unrelated error returned late.
+  - circuit-breaker layer: `rejections{breaker_open}` when `circuitbreaker.IsOpen(err)` (the
+    breaker refused; the dependency's own `UNAVAILABLE` is not counted).
+  - shedding bulkhead layer: `rejections{bulkhead_full}`; the waiting bulkhead layer records
+    nothing (it never refuses).
+  - rate-limit layer: `rejections{rate_limited}`.
+  - gobreaker: `breaker_state` (closed when built, then each state it moves to),
+    `breaker_transitions_total{to}`, and one `circuit breaker opened` Warn (`tier` when set,
+    `name`) per opening, from its `OnStateChange` callback.
+  - adaptive bulkhead: `bulkhead_limit`, the whole limit it admits, when built and after each
+    adjustment.
+- **Go standalone primitives.** A primitive used outside a decorate tier records only when
+  its caller hands it a recorder, conventionally `series.NewRecorder(metrics,
+  series.TierStandalone, name)`, and labels its events `operation=""`. A standalone breaker
+  takes `series.NewObserver(metrics, logger, series.TierStandalone, name)`, so its Warn lines
+  carry `tier=standalone` too (Python: `Observer.of(metrics, logger, TIER_STANDALONE, name)`):
+  - exponential retrier: `retry.WithRecorder` (`retry.Config.Recorder` →
+    `exponential.Config.Recorder`); `Retry` and `RetryWithResult` count a finished call
+    exactly as the retry layer does (`series.Recorder.RetriesDone`), without the Warn.
+  - token limiter: `ratelimiter.WithRecorder` (→ `token.Config.Recorder`); each refused
+    `Allow` is `rejections{rate_limited}`.
+  - channel bulkhead and keyed limiter: `channel.Config.Recorder` (or `bulkhead.WithRecorder`
+    / `bulkhead.Config.Recorder` through the family root), `keyed.Config.Recorder`; each
+    refused `TryExecute` / `TryAcquire` is `rejections{bulkhead_full}` (a key is never a
+    label). Under a tier, `decorate.Build` hands a recorder to the adaptive kind only: the
+    channel kind's refusals are the bulkhead layer's.
+  - adaptive throttle and hedger: `reswire.NewAdaptiveThrottle(loader,
+    reswire.WithMetrics(metrics, name))` and `reswire.NewHedge(loader, …)`, or
+    `adaptivethrottle.Config.Recorder` / `hedge.WithRecorder` directly. The throttle sets
+    `throttle_rejection_ratio` after each `Do` and counts a shed call as
+    `rejections{throttled}`; the delay hedger counts `hedges_total{outcome="fired"}` per
+    backup and `won` when the backup's result is the one returned. The disabled kinds record
+    nothing.
+  - dead-letter queue and deduplicator: `deadletter.New(…).WithRecorder(r)` counts each
+    letter `dead_letters_total{outcome="sent"|"failed"}`; `dedup.NewMemory(…).WithRecorder(r)`
+    counts each duplicate it reports.
+  - Every recorder field is tagged `yaml:"-" mapstructure:"-" json:"-"`: wired in code, never
+    decoded from config.
+- **Python wiring.** The twin of `series.Observer` is
+  `foundation.resilience.observer.Observer(recorder, logger, tier, name)`
+  (`Observer.of(metrics, logger, tier, name)`; `UNOBSERVED` reports nothing). The layers in
+  `foundation/decorate/resilience_layers.py` take `observer=` (`new_retry(retrier, observer)`,
+  `new_timeout(seconds, observer)`, `new_circuit_breaker(cb, name, observer)`,
+  `new_bulkhead(bulkhead, shed=…, observer=…)`, `new_rate_limit(limiter, observer)`; `None`
+  reports nothing) and record what their Go twins do; `retries_done` is the one counting rule
+  for the retry layer and the standalone retriers, which run each call inside a `RetriedCall`
+  so it is counted however the call ends (a call stopped rather than failed, by
+  `asyncio.CancelledError` or an interrupt, counts its retries and no exhaustion). The timeout layer runs the op under
+  `asyncio.timeout` and counts only when that deadline expired (`expired()`), so a builtin
+  `TimeoutError` the op raises itself is not counted, whenever it arrives. `build(tier, name, layers, collab)` (`Decorations.deps` passes the tier's name)
+  builds the breaker in `decorate/primitives.py` with `CircuitBreaker(…).with_observer(observer)`
+  (its state at once, each move, one `circuit breaker opened` Warning per opening) and an
+  adaptive bulkhead with `bulkhead_from_config(config, recorder)` →
+  `AdaptiveBulkhead.with_recorder`.
+- **Python standalone primitives.** As in Go, a primitive outside a tier records only when
+  handed a recorder (`Recorder(metrics, TIER_STANDALONE, name)`), with `operation=""`:
+  - retriers: `ExponentialRetrier(config, sleep=…, recorder=…)`,
+    `retry_transient(…, recorder=…)` and `retry_transient_async(…, recorder=…)` count each
+    finished call through `retries_done`, without the Warning. They never consume a
+    `RetryBudget`, so they record no `budget_exhausted`.
+  - async breaker: `AsyncCircuitBreaker(…).with_observer(observer)` reports as the sync
+    breaker does (state, moves, one Warning per opening).
+  - refusals: `TokenBucketRateLimiter`, `InMemoryRateLimiter` and `RedisPerKeyRateLimiter`
+    take `.with_recorder(r)` and count each refusal as `rejections{rate_limited}`;
+    `per_key_rate_limiter_from_config(…, recorder=…)` threads it to either kind.
+    `SemaphoreBulkhead(…).with_recorder(r)` counts each refused `try_execute` as
+    `rejections{bulkhead_full}`, as does the semaphore `bulkhead_from_config(config, r)`
+    builds; under a tier, `build` hands a recorder to the adaptive kind only, as its
+    bulkhead layer counts the refusals.
+  - `AdaptiveThrottler(…).with_recorder(r)` sets `throttle_rejection_ratio` after each `do`
+    and counts a shed call as `rejections{throttled}`; `hedger_from_config(config, recorder)`
+    gives the delay hedger the recorder (`fired` per backup, `won` when the backup's result is
+    returned).
+  - `DeadLetterQueue(backend).with_recorder(r)` counts `dead_letters_total{outcome}`;
+    `MemoryDeduplicator(…).with_recorder(r)` counts each duplicate.
+- **Deprecated Python series.** With the metrics layer on, the Python breaker also exports
+  `circuit_breaker_state{dependency}` (0 closed, 1 half-open, 2 open) and
+  `circuit_breaker_transitions_total{dependency,to}` for one more release; they are removed in
+  the next one. Query `resilience_breaker_state` and `resilience_breaker_transitions_total`.
+  Like the new series, they now follow the component's metrics layer.
+
 ### Conversation threading
 
 A multi-turn conversation is one trace per turn, grouped by id and linked turn to turn. The edge

@@ -20,16 +20,19 @@ from techai_webutils.foundation.decorate.middleware import (
     chain,
     exec_op,
     new_auth,
-    new_bulkhead,
-    new_circuit_breaker,
     new_logging,
     new_metrics,
-    new_rate_limit,
     new_recovery,
-    new_retry,
-    new_timeout,
     new_tracing,
 )
+from techai_webutils.foundation.decorate.resilience_layers import (
+    new_bulkhead,
+    new_circuit_breaker,
+    new_rate_limit,
+    new_retry,
+    new_timeout,
+)
+from techai_webutils.foundation.resilience.observer import Observer
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -185,7 +188,9 @@ class Tier:
         ``None`` when the layer is absent.
 
         A protocol adapter (a server's interceptors) walks ``order`` with it, standing in
-        its own interceptor for a layer it implements natively.
+        its own interceptor for a layer it implements natively. The resilience layers
+        report through an ``Observer`` bound to the tier and ``name``, whose recorder
+        follows the metrics layer and whose logger follows the logging layer.
 
         Args:
             layer: The layer.
@@ -197,6 +202,10 @@ class Tier:
 
         """
         obs = deps.observability
+
+        def observer() -> Observer:
+            return Observer.of(obs.metrics, obs.logger, self.name, name)
+
         builders: dict[Layer, Callable[[], OpMiddleware | None]] = {
             Layer.RECOVERY: lambda: (
                 None
@@ -214,16 +223,19 @@ class Tier:
             ),
             Layer.AUTH: lambda: _when(deps.auth, lambda a: new_auth(name, a)),
             Layer.TIMEOUT: lambda: (
-                new_timeout(deps.timeout) if deps.timeout > 0 else None
+                new_timeout(deps.timeout, observer()) if deps.timeout > 0 else None
             ),
             Layer.CIRCUIT_BREAKER: lambda: _when(
-                deps.breaker, lambda cb: new_circuit_breaker(cb, name)
+                deps.breaker, lambda cb: new_circuit_breaker(cb, name, observer())
             ),
-            Layer.RETRY: lambda: _when(deps.retrier, new_retry),
+            Layer.RETRY: lambda: _when(deps.retrier, lambda r: new_retry(r, observer())),
             Layer.BULKHEAD: lambda: _when(
-                deps.bulkhead, lambda b: new_bulkhead(b, shed=deps.shed_load)
+                deps.bulkhead,
+                lambda b: new_bulkhead(b, shed=deps.shed_load, observer=observer()),
             ),
-            Layer.RATE_LIMIT: lambda: _when(deps.rate_limiter, new_rate_limit),
+            Layer.RATE_LIMIT: lambda: _when(
+                deps.rate_limiter, lambda lim: new_rate_limit(lim, observer())
+            ),
         }
         return builders[layer]()
 

@@ -11,6 +11,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/circuitbreaker"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/ratelimiter"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/retry"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
 )
 
@@ -136,7 +137,7 @@ func (d Decorations) Deps(tier Tier, name string) (Deps, error) {
 		return Deps{}, err
 	}
 
-	return Build(name, new(testCase.For(name)), d.collaborators())
+	return Build(tier.Name, name, new(testCase.For(name)), d.collaborators())
 }
 
 // Inventory returns every component and operation d resolved, ordered by tier then name:
@@ -226,21 +227,26 @@ func (d Decorations) ownOverride(tier Tier, name string) decoration.Layers {
 	return tc.Overrides[name]
 }
 
-// Build returns the Deps of the component named name from its resolved layers: each
-// layer that is on gets its collaborator from c, or its primitive built from its tuning
-// (the breaker is named name). An invalid tuning is CodeInvalidInput.
+// Build returns the Deps of the component named name in tier from its resolved layers:
+// each layer that is on gets its collaborator from c, or its primitive built from its
+// tuning (the breaker is named name). The breaker and the adaptive bulkhead report
+// their own state through an Observer bound to tier and name, built only when one of
+// them is on, whose recorder follows the metrics layer and whose logger follows the
+// logging layer; the retrier, limiter and channel bulkhead get none, since their layers
+// record for them. An invalid tuning is CodeInvalidInput.
 // l must not be nil.
-func Build(name string, lRef *decoration.Layers, c Collaborators) (Deps, error) {
+func Build(tier, name string, lRef *decoration.Layers, c Collaborators) (Deps, error) {
 	layers := *lRef
 
 	deps := observabilityDeps(&layers, c)
+	observe := func() Observer { return newObserver(tier, name, &deps) }
 
-	err := addCallGuards(&deps, name, &layers)
+	err := addCallGuards(&deps, name, &layers, observe)
 	if err != nil {
 		return Deps{}, err
 	}
 
-	err = addLoadGuards(&deps, name, &layers)
+	err = addLoadGuards(&deps, name, &layers, observe)
 	if err != nil {
 		return Deps{}, err
 	}
@@ -289,8 +295,14 @@ func observabilityDeps(layers *decoration.Layers, collaborators Collaborators) D
 	return deps
 }
 
-// addCallGuards builds the retrier and circuit breaker when enabled.
-func addCallGuards(deps *Deps, name string, layers *decoration.Layers) error {
+// addCallGuards builds the retrier and circuit breaker when enabled; the breaker
+// reports through the Observer observe builds.
+func addCallGuards(
+	deps *Deps,
+	name string,
+	layers *decoration.Layers,
+	observe func() Observer,
+) error {
 	var err error
 
 	if decoration.On(layers.Retry.Enabled) {
@@ -301,7 +313,9 @@ func addCallGuards(deps *Deps, name string, layers *decoration.Layers) error {
 	}
 
 	if decoration.On(layers.CircuitBreaker.Enabled) {
-		deps.Breaker, err = newBreaker(name, layers.CircuitBreaker)
+		obs := observe()
+
+		deps.Breaker, err = newBreaker(name, layers.CircuitBreaker, &obs)
 		if err != nil {
 			return wrapLayer(err, name, "circuit_breaker")
 		}
@@ -310,12 +324,18 @@ func addCallGuards(deps *Deps, name string, layers *decoration.Layers) error {
 	return nil
 }
 
-// addLoadGuards builds the bulkhead and rate limiter when enabled.
-func addLoadGuards(deps *Deps, name string, layers *decoration.Layers) error {
+// addLoadGuards builds the bulkhead and rate limiter when enabled; an adaptive
+// bulkhead reports its limit through the recorder of the Observer observe builds.
+func addLoadGuards(
+	deps *Deps,
+	name string,
+	layers *decoration.Layers,
+	observe func() Observer,
+) error {
 	var err error
 
 	if decoration.On(layers.Bulkhead.Enabled) {
-		deps.Bulkhead, err = bulkheadFromConfig(layers.Bulkhead)
+		deps.Bulkhead, err = bulkheadFromConfig(layers.Bulkhead, observe)
 		if err != nil {
 			return wrapLayer(err, name, "bulkhead")
 		}
@@ -341,6 +361,7 @@ func newRetrier(retrier decoration.Retry) (interfaces.Retrier, error) {
 	}
 
 	return retry.NewFromConfig(retry.Config{
+		Recorder:        nil,
 		Kind:            retry.KindExponential,
 		MaxRetries:      retrier.RetryConfig.MaxRetries,
 		InitialInterval: retrier.RetryConfig.InitialInterval,
@@ -350,10 +371,11 @@ func newRetrier(retrier decoration.Retry) (interfaces.Retrier, error) {
 	})
 }
 
-// newBreaker builds the breaker named name that b tunes.
+// newBreaker builds the breaker named name that b tunes, reporting through obs.
 func newBreaker(
 	name string,
 	circuitBreaker decoration.CircuitBreaker,
+	obs *series.Observer,
 ) (interfaces.CircuitBreaker, error) {
 	err := circuitBreaker.BreakerConfig.Validate()
 	if err != nil {
@@ -361,6 +383,7 @@ func newBreaker(
 	}
 
 	return circuitbreaker.NewFromConfig(circuitbreaker.Config{
+		Observer:            obs,
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                name,
 		MaxRequests:         circuitBreaker.BreakerConfig.MaxRequests,
@@ -373,22 +396,27 @@ func newBreaker(
 }
 
 // bulkheadFromConfig builds the bulkhead b tunes; its kind is "channel" (or empty) or
-// "adaptive".
+// "adaptive". Only the adaptive kind gets a recorder (for its limit): the channel
+// kind's refusals are the bulkhead layer's to count, so it gets none.
 func bulkheadFromConfig(
 	currentBulkhead decoration.Bulkhead,
+	observe func() Observer,
 ) (interfaces.Bulkhead, error) {
 	err := currentBulkhead.BulkheadConfig.Validate()
 	if err != nil {
 		return nil, err
 	}
 
-	var kind bulkhead.Kind
+	var (
+		kind     bulkhead.Kind
+		recorder *series.Recorder
+	)
 
 	switch currentBulkhead.BulkheadConfig.Kind {
 	case "", "channel":
 		kind = bulkhead.KindChannel
 	case "adaptive":
-		kind = bulkhead.KindAdaptive
+		kind, recorder = bulkhead.KindAdaptive, observe().Recorder
 	default:
 		return nil, apperr.New(apperr.CodeInvalidInput, fmt.Sprintf(
 			"unknown bulkhead kind %q (want channel|adaptive)",
@@ -397,6 +425,7 @@ func bulkheadFromConfig(
 	}
 
 	return bulkhead.NewFromConfig(bulkhead.Config{
+		Recorder:          recorder,
 		Kind:              kind,
 		MaxConcurrent:     currentBulkhead.BulkheadConfig.MaxConcurrent,
 		MinConcurrent:     currentBulkhead.BulkheadConfig.MinConcurrent,

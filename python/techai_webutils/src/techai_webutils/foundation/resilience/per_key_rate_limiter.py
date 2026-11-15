@@ -7,19 +7,24 @@ its meaning, so ``0`` there allows nothing. Process-local (per replica); the sha
 limiter is ``redis_rate_limiter.RedisPerKeyRateLimiter`` (``per_key_builder`` selects one
 by kind). An injected ``clock`` (default ``time.monotonic``) keeps the window behaviour
 unit-testable. Distinct from the peer ``TokenBucketRateLimiter``, which is a single global
-bucket (no per-key keying).
+bucket (no per-key keying). ``with_recorder`` counts each refusal as a ``rate_limited``
+rejection.
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Self, override
 
 from techai_webutils.core.interfaces.rate_limiter import PerKeyRateLimiter
+from techai_webutils.foundation.resilience.observer import UNOBSERVED
+from techai_webutils.foundation.resilience.series import Reason
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from techai_webutils.foundation.resilience.series import Recorder
 
 
 # Purge fully-expired keys once the map grows past this many entries. Without this the map
@@ -68,6 +73,20 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
         # key -> (window_start, count in the current window).
         self._counts: dict[str, tuple[float, int]] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
+        self._recorder: Recorder = UNOBSERVED.recorder
+
+    def with_recorder(self, recorder: Recorder) -> Self:
+        """Count each refusal as a ``rate_limited`` rejection (operation "").
+
+        Args:
+            recorder: Where the refusals are counted.
+
+        Returns:
+            This limiter.
+
+        """
+        self._recorder = recorder
+        return self
 
     @override
     async def allow_key(self, key: str) -> bool:
@@ -109,6 +128,7 @@ class InMemoryRateLimiter(PerKeyRateLimiter):
                 window_start, count = now, 0
             if count >= self._max:
                 self._counts[key] = (window_start, count)
+                self._recorder.rejected("", Reason.RATE_LIMITED)
                 return False
             self._counts[key] = (window_start, count + 1)
             return True

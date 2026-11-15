@@ -212,7 +212,7 @@ func TestDecorations_BuildEachComponentsLayersFromConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	collab := decorate.Collaborators{
 		Logger:  mocks.NewMockLogger(ctrl),
-		Metrics: mocks.NewMockMetrics(ctrl),
+		Metrics: resilienceTolerantMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
 		Auth:    nil,
 	}
@@ -386,6 +386,7 @@ func TestDecorations_RecoveryLogsAPanicWithLoggingOff(t *testing.T) {
 
 	off := false
 	unrecovered, err := decorate.Build(
+		"service",
 		textUsers,
 		fixtures.BuildRef(func(row *decoration.Layers) {
 			row.Recovery = &off
@@ -413,7 +414,7 @@ func TestLoadDecorations_ReadsTheSectionWithTheCollaborators(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	collab := decorate.Collaborators{
 		Logger:  mocks.NewMockLogger(ctrl),
-		Metrics: mocks.NewMockMetrics(ctrl),
+		Metrics: resilienceTolerantMetrics(ctrl),
 		Tracer:  mocks.NewMockTracer(ctrl),
 		Auth:    nil,
 	}

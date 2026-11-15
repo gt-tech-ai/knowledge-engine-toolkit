@@ -26,6 +26,7 @@ func TestAdaptiveBulkhead_LimitShrinksUnderLatencyAndRecovers(t *testing.T) {
 	t.Parallel()
 
 	currentBulkhead := adaptive.New(adaptive.Config{
+		Recorder:          nil,
 		MinConcurrent:     1,
 		MaxConcurrent:     20,
 		InitialConcurrent: 10,
@@ -82,6 +83,7 @@ func TestAdaptiveBulkhead_TryExecuteRejectsWhenFull(t *testing.T) {
 	t.Parallel()
 
 	currentBulkhead := adaptive.New(adaptive.Config{
+		Recorder:          nil,
 		MinConcurrent:     1,
 		MaxConcurrent:     1,
 		InitialConcurrent: 1,
@@ -170,6 +172,7 @@ func TestAdaptiveBulkhead_ExecuteRespectsContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	currentBulkhead := adaptive.New(adaptive.Config{
+		Recorder:          nil,
 		MinConcurrent:     1,
 		MaxConcurrent:     1,
 		InitialConcurrent: 1,

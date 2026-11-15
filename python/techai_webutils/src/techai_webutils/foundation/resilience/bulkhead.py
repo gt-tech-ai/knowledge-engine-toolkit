@@ -4,6 +4,9 @@ Two backends implement the ``Bulkhead`` ABC from core/interfaces: ``SemaphoreBul
 fixed-size ``asyncio.Semaphore``) and ``AdaptiveBulkhead`` (a self-tuning AIMD limit that
 shrinks under latency and recovers). ``bulkhead_from_config`` selects between them by
 ``BulkheadKind``, mirroring Go's ``bulkhead.NewFromConfig`` (KindChannel / KindAdaptive).
+A standalone ``SemaphoreBulkhead`` counts its refusals through ``with_recorder`` (or the
+recorder ``bulkhead_from_config`` threads to it); under a decorate tier the bulkhead layer
+counts them instead.
 """
 
 from __future__ import annotations
@@ -12,13 +15,17 @@ import asyncio
 import time
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, final, override
+from typing import TYPE_CHECKING, Self, final, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.bulkhead import Bulkhead
+from techai_webutils.foundation.resilience.observer import UNOBSERVED
+from techai_webutils.foundation.resilience.series import Reason
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from techai_webutils.foundation.resilience.series import Recorder
 
 
 class BulkheadFullError(Exception):
@@ -46,6 +53,20 @@ class SemaphoreBulkhead(Bulkhead):
 
         """
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._recorder: Recorder = UNOBSERVED.recorder
+
+    def with_recorder(self, recorder: Recorder) -> Self:
+        """Count each refusal as a ``bulkhead_full`` rejection (operation "").
+
+        Args:
+            recorder: Where the refusals are counted.
+
+        Returns:
+            This bulkhead.
+
+        """
+        self._recorder = recorder
+        return self
 
     @override
     async def execute(self, fn: Callable[[], Awaitable[object]]) -> object:
@@ -80,6 +101,7 @@ class SemaphoreBulkhead(Bulkhead):
 
         """
         if self._semaphore.locked():
+            self._recorder.rejected("", Reason.BULKHEAD_FULL)
             raise BulkheadFullError
         async with self._semaphore:
             return await fn()
@@ -166,6 +188,21 @@ class AdaptiveBulkhead(Bulkhead):
         self._backoff: float = backoff_ratio if 0 < backoff_ratio < 1 else 0.9
         self._in_flight: int = 0
         self._cond: asyncio.Condition = asyncio.Condition()
+        self._recorder: Recorder | None = None
+
+    def with_recorder(self, recorder: Recorder) -> Self:
+        """Report the limit the bulkhead admits now and after each adjustment.
+
+        Args:
+            recorder: Where ``resilience_bulkhead_limit`` is set.
+
+        Returns:
+            This bulkhead.
+
+        """
+        self._recorder = recorder
+        recorder.set_bulkhead_limit(float(self.limit))
+        return self
 
     @property
     def limit(self) -> int:
@@ -246,7 +283,7 @@ class AdaptiveBulkhead(Bulkhead):
             self._cond.notify_all()
 
     def _adjust(self, rtt: float, *, op_err: bool) -> None:
-        """Apply AIMD to the limit.
+        """Apply AIMD to the limit, then report the limit it admits.
 
         A slow or failed sample shrinks it; a fast, successful one grows it.
 
@@ -259,30 +296,40 @@ class AdaptiveBulkhead(Bulkhead):
             self._limit = max(self._min, self._limit * self._backoff)
         else:
             self._limit = min(self._max, self._limit + 1)
+        if self._recorder is not None:
+            self._recorder.set_bulkhead_limit(float(self.limit))
 
 
-def bulkhead_from_config(config: BulkheadConfig) -> Bulkhead:
-    """Create a ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.
+def bulkhead_from_config(
+    config: BulkheadConfig, recorder: Recorder | None = None
+) -> Bulkhead:
+    """Create a ``Bulkhead`` from config; raise ``AppValueError`` on an unknown kind.
 
     Args:
         config: Selects the backend and carries its settings.
+        recorder: What the bulkhead reports through: the SEMAPHORE kind counts each
+            refused ``try_execute``, the ADAPTIVE kind reports its limit; ``None``
+            records nothing. The decorate builder passes one to the ADAPTIVE kind only,
+            since its bulkhead layer counts refusals.
 
     Returns:
-        A ``Bulkhead`` from config; raise ``ValueError`` on an unknown kind.
+        The ``Bulkhead`` ``config.kind`` selects.
 
     Raises:
         AppValueError: Unknown bulkhead kind: ``config.kind``.
 
     """
     if config.kind == BulkheadKind.SEMAPHORE:
-        return SemaphoreBulkhead(config.max_concurrent)
+        semaphore = SemaphoreBulkhead(config.max_concurrent)
+        return semaphore if recorder is None else semaphore.with_recorder(recorder)
     if config.kind == BulkheadKind.ADAPTIVE:
-        return AdaptiveBulkhead(
+        adaptive = AdaptiveBulkhead(
             min_concurrent=config.min_concurrent,
             max_concurrent=config.max_concurrent,
             initial_concurrent=config.initial_concurrent,
             rtt_threshold_seconds=config.rtt_threshold_seconds,
             backoff_ratio=config.backoff_ratio,
         )
+        return adaptive if recorder is None else adaptive.with_recorder(recorder)
     msg = f"unknown bulkhead kind: {config.kind}"
     raise AppValueError(msg)

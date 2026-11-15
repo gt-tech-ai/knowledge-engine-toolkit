@@ -78,6 +78,7 @@ func TestCircuitBreaker_OpensAfterConsecutiveFailures(t *testing.T) {
 	)
 
 	circuitBreaker, err = circuitbreaker.NewFromConfig(circuitbreaker.Config{
+		Observer:            nil,
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                "test-cb",
 		MaxRequests:         1,
@@ -125,6 +126,7 @@ func TestCircuitBreaker_DomainErrorsDoNotTrip(t *testing.T) {
 	t.Parallel()
 
 	circuitBreaker, err := circuitbreaker.NewFromConfig(circuitbreaker.Config{
+		Observer:            nil,
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                "cb-domain",
 		MaxRequests:         1,
@@ -170,6 +172,7 @@ func TestCircuitBreaker_FailureRatioTrips(t *testing.T) {
 	t.Parallel()
 
 	circuitBreaker, err := circuitbreaker.NewFromConfig(circuitbreaker.Config{
+		Observer:            nil,
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                "cb-ratio",
 		MaxRequests:         1,
@@ -227,6 +230,7 @@ func TestCircuitBreaker_CallerCancellationDoesNotTrip(t *testing.T) {
 	t.Parallel()
 
 	circuitBreaker, err := circuitbreaker.NewFromConfig(circuitbreaker.Config{
+		Observer:            nil,
 		Kind:                circuitbreaker.KindGoBreaker,
 		Name:                "cb-cancel",
 		MaxRequests:         1,
@@ -444,6 +448,7 @@ func TestRetryBudget_ChargesRetriesNotFirstAttempts(t *testing.T) {
 	t.Parallel()
 
 	retrier := exponential.New(exponential.Config{
+		Recorder:        nil,
 		MaxRetries:      10,
 		InitialInterval: time.Millisecond,
 		MaxInterval:     5 * time.Millisecond,
@@ -541,6 +546,7 @@ func TestRetry_SucceedsOnFirstAttempt(t *testing.T) {
 	)
 
 	retrier, err = retry.NewFromConfig(retry.Config{
+		Recorder:        nil,
 		Kind:            retry.KindExponential,
 		MaxRetries:      3,
 		InitialInterval: 10 * time.Millisecond,
@@ -584,6 +590,7 @@ func TestRetry_RetriesOnTransientError(t *testing.T) {
 	)
 
 	retrier, err = retry.NewFromConfig(retry.Config{
+		Recorder:        nil,
 		Kind:            retry.KindExponential,
 		MaxRetries:      3,
 		InitialInterval: 10 * time.Millisecond,
@@ -624,6 +631,7 @@ func TestRetry_DoesNotRetryPermanentError(t *testing.T) {
 	t.Parallel()
 
 	retrier, err := retry.NewFromConfig(retry.Config{
+		Recorder:        nil,
 		Kind:            retry.KindExponential,
 		MaxRetries:      3,
 		InitialInterval: 10 * time.Millisecond,
@@ -959,9 +967,10 @@ func TestRateLimiter_AllowsWithinRate(t *testing.T) {
 	)
 
 	lim, err = ratelimiter.NewFromConfig(ratelimiter.Config{
-		Kind:  ratelimiter.KindToken,
-		Rate:  1000,
-		Burst: 10,
+		Recorder: nil,
+		Kind:     ratelimiter.KindToken,
+		Rate:     1000,
+		Burst:    10,
 	})
 	require.NoError(t, err, textUnexpectedError)
 
@@ -995,9 +1004,10 @@ func TestRateLimiter_RejectsOverBurst(t *testing.T) {
 	)
 
 	lim, err = ratelimiter.NewFromConfig(ratelimiter.Config{
-		Kind:  ratelimiter.KindToken,
-		Rate:  1,
-		Burst: 2,
+		Recorder: nil,
+		Kind:     ratelimiter.KindToken,
+		Rate:     1,
+		Burst:    2,
 	})
 	require.NoError(t, err, textUnexpectedError)
 
@@ -1026,9 +1036,10 @@ func TestRateLimiter_WaitRespectsContext(t *testing.T) {
 	)
 
 	lim, err = ratelimiter.NewFromConfig(ratelimiter.Config{
-		Kind:  ratelimiter.KindToken,
-		Rate:  1,
-		Burst: 1,
+		Recorder: nil,
+		Kind:     ratelimiter.KindToken,
+		Rate:     1,
+		Burst:    1,
 	})
 	require.NoError(t, err, textUnexpectedError)
 

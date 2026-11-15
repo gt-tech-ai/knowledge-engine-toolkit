@@ -429,7 +429,12 @@ func TestLLM_Decorated_RetriesOnlyTransientCodes(t *testing.T) {
 	layers.Retry.RetryConfig.InitialInterval = time.Millisecond
 	layers.Retry.RetryConfig.MaxInterval = time.Millisecond
 
-	deps, err := decorate.Build("llm", &layers, stdx.Zero[decorate.Collaborators]())
+	deps, err := decorate.Build(
+		"client",
+		"llm",
+		&layers,
+		stdx.Zero[decorate.Collaborators](),
+	)
 	require.NoError(t, err)
 
 	build := func(doer *mocks.MockHTTPDoer) interfaces.LLMClient {

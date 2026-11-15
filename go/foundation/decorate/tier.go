@@ -137,23 +137,33 @@ func (t Tier) Chain(name string, d *Deps) OpMiddleware {
 // Middleware returns the middleware for one of the tier's layers over the subject named
 // name, or nil when d lacks its collaborator. A protocol adapter (a server's
 // interceptors) walks Order with it, standing in its own interceptor for a layer it
-// implements natively.
+// implements natively. The resilience layers (timeout, circuit breaker, retry, bulkhead,
+// rate limit) report through an Observer bound to the tier and name, built only once the
+// layer's collaborator is known to be set, so an absent layer registers no series.
 // d must not be nil.
 func (t Tier) Middleware(layer Layer, name string, deps *Deps) OpMiddleware {
+	observe := func() Observer { return newObserver(t.Name, name, deps) }
+
 	switch layer {
 	case LayerRecovery, LayerTracing, LayerMetrics, LayerLogging:
 		return t.observabilityMiddleware(layer, name, deps)
 	case LayerAuth, LayerTimeout, LayerCircuitBreaker:
-		return callMiddleware(layer, name, deps)
+		return callMiddleware(layer, name, deps, observe)
 	case LayerRetry, LayerBulkhead, LayerRateLimit:
-		return loadMiddleware(layer, deps)
+		return loadMiddleware(layer, deps, observe)
 	default:
 		return nil
 	}
 }
 
-// callMiddleware builds the auth, timeout or circuit breaker layer.
-func callMiddleware(layer Layer, name string, dRef *Deps) OpMiddleware {
+// callMiddleware builds the auth, timeout or circuit breaker layer; the timeout and
+// breaker layers report through the Observer observe builds.
+func callMiddleware(
+	layer Layer,
+	name string,
+	dRef *Deps,
+	observe func() Observer,
+) OpMiddleware {
 	deps := *dRef
 
 	if layer == LayerAuth {
@@ -169,46 +179,47 @@ func callMiddleware(layer Layer, name string, dRef *Deps) OpMiddleware {
 			return nil
 		}
 
-		return NewTimeout(deps.Timeout)
+		return NewTimeout(deps.Timeout, observe())
 	}
 
 	return when(
 		deps.Breaker,
-		func() OpMiddleware { return NewCircuitBreaker(deps.Breaker) },
+		func() OpMiddleware { return NewCircuitBreaker(deps.Breaker, observe()) },
 	)
 }
 
-// loadMiddleware builds the retry, bulkhead or rate limit layer.
-func loadMiddleware(layer Layer, dRef *Deps) OpMiddleware {
+// loadMiddleware builds the retry, bulkhead or rate limit layer, each reporting through
+// the Observer observe builds.
+func loadMiddleware(layer Layer, dRef *Deps, observe func() Observer) OpMiddleware {
 	deps := *dRef
 
 	if layer == LayerRetry {
 		return when(
 			deps.Retrier,
-			func() OpMiddleware { return NewRetry(deps.Retrier) },
+			func() OpMiddleware { return NewRetry(deps.Retrier, observe()) },
 		)
 	}
 
 	if layer == LayerBulkhead {
 		return when(
 			deps.Bulkhead,
-			func() OpMiddleware { return bulkheadLayer(&deps) },
+			func() OpMiddleware { return bulkheadLayer(&deps, observe()) },
 		)
 	}
 
 	return when(
 		deps.RateLimiter,
-		func() OpMiddleware { return NewRateLimit(deps.RateLimiter) },
+		func() OpMiddleware { return NewRateLimit(deps.RateLimiter, observe()) },
 	)
 }
 
 // bulkheadLayer builds the bulkhead layer, shedding load when the config asks for it.
-func bulkheadLayer(deps *Deps) OpMiddleware {
+func bulkheadLayer(deps *Deps, obs Observer) OpMiddleware {
 	if deps.ShedLoad {
-		return NewSheddingBulkhead(deps.Bulkhead)
+		return NewSheddingBulkhead(deps.Bulkhead, obs)
 	}
 
-	return NewBulkhead(deps.Bulkhead)
+	return NewBulkhead(deps.Bulkhead, obs)
 }
 
 // when builds the middleware only when its collaborator is set.

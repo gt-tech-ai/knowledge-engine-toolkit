@@ -6,37 +6,29 @@ chain. Each ``new_*`` builds one layer for the subject ``name`` in the tier ``ti
 every tier labels its spans, series and log lines the same way: span ``<name>.<op>`` with
 ``<tier>.name`` / ``<tier>.operation`` attributes, series ``<tier>_operations_total`` /
 ``<tier>_errors_total`` / ``<tier>_throttled_total`` /
-``<tier>_operation_duration_seconds`` labelled by ``(<tier>, operation)``.
+``<tier>_operation_duration_seconds`` labelled by ``(<tier>, operation)``. The
+resilience layers (timeout, retry, circuit breaker, bulkhead, rate limit) live in
+``resilience_layers``.
 """
 
 from __future__ import annotations
 
-import asyncio
 import time
 from typing import TYPE_CHECKING, Protocol, cast, final
 
 from techai_webutils.core.errors.errors import (
     AppError,
-    AppTimeoutError,
-    ErrorCode,
     ForbiddenError,
     InternalError,
-    UnavailableError,
 )
 from techai_webutils.foundation.errors import OnFailure
-from techai_webutils.foundation.resilience.bulkhead import BulkheadFullError
-from techai_webutils.foundation.resilience.circuit_breaker import CircuitOpenError
 from techai_webutils.foundation.resilience.classify import is_throttled
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from techai_webutils.core.interfaces.bulkhead import Bulkhead
-    from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
     from techai_webutils.core.interfaces.logger import Logger
     from techai_webutils.core.interfaces.metrics import MetricsProvider
-    from techai_webutils.core.interfaces.rate_limiter import RateLimiter
-    from techai_webutils.core.interfaces.retrier import Retrier
     from techai_webutils.core.interfaces.tracer import SpanKind, TracerProvider
 
 type OpThunk = Callable[[], Awaitable[object]]
@@ -502,248 +494,3 @@ def new_auth(name: str, auth: Authorizer) -> OpMiddleware:
 
     """
     return _Auth(name, auth)
-
-
-@final
-class _Timeout:
-    """Bounds the op; expiry raises AppTimeoutError."""
-
-    def __init__(self, seconds: float) -> None:
-        """Bind the deadline.
-
-        Args:
-            seconds: The deadline.
-
-        """
-        self._seconds = seconds
-
-    async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op under the deadline.
-
-        Args:
-            op: The operation.
-            next_: Runs the rest of the chain.
-
-        Returns:
-            What the operation returns.
-
-        Raises:
-            AppTimeoutError: ``op`` timed out after ``self._seconds``s.
-
-        """
-        try:
-            return await asyncio.wait_for(next_(), timeout=self._seconds)
-        except TimeoutError as exc:
-            msg = f"{op} timed out after {self._seconds}s"
-            raise AppTimeoutError(msg) from exc
-
-
-def new_timeout(seconds: float) -> OpMiddleware:
-    """Return the timeout layer: each operation gets ``seconds``.
-
-    Under retry, each attempt does.
-
-    Args:
-        seconds: The deadline.
-
-    Returns:
-        The timeout layer: each operation.
-
-    """
-    return _Timeout(seconds)
-
-
-@final
-class _Retry:
-    """Runs the op through the injected Retrier."""
-
-    def __init__(self, retrier: Retrier) -> None:
-        """Bind the retrier.
-
-        Args:
-            retrier: The retry policy.
-
-        """
-        self._retrier = retrier
-
-    async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op with the retrier's policy.
-
-        Args:
-            op: The operation.
-            next_: Runs the rest of the chain.
-
-        Returns:
-            What the operation returns.
-
-        """
-        del op
-        return await self._retrier.retry(next_)
-
-
-def new_retry(retrier: Retrier) -> OpMiddleware:
-    """Return the retry layer.
-
-    Args:
-        retrier: The retry policy.
-
-    Returns:
-        The retry layer.
-
-    """
-    return _Retry(retrier)
-
-
-@final
-class _CircuitBreaker:
-    """Runs the op inside the breaker.
-
-    An open-breaker rejection becomes UnavailableError.
-    """
-
-    def __init__(self, cb: CircuitBreakerInterface, name: str) -> None:
-        """Bind the breaker and the subject it guards.
-
-        Args:
-            cb: The breaker.
-            name: The subject it guards.
-
-        """
-        self._cb = cb
-        self._name = name
-
-    async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op through the breaker.
-
-        Args:
-            op: The operation.
-            next_: Runs the rest of the chain.
-
-        Returns:
-            What the operation returns.
-
-        Raises:
-            UnavailableError: Circuit breaker ``self._name`` open.
-
-        """
-        del op
-        try:
-            with self._cb:
-                return await next_()
-        except CircuitOpenError as exc:
-            msg = f"circuit breaker {self._name} open"
-            raise UnavailableError(msg) from exc
-
-
-def new_circuit_breaker(cb: CircuitBreakerInterface, name: str) -> OpMiddleware:
-    """Return the circuit-breaker layer for the subject ``name``.
-
-    Args:
-        cb: The breaker.
-        name: The subject it guards.
-
-    Returns:
-        The circuit-breaker layer for the subject ``name``.
-
-    """
-    return _CircuitBreaker(cb, name)
-
-
-@final
-class _Bulkhead:
-    """Bounds the ops in flight: waits for a slot, or sheds when full."""
-
-    def __init__(self, bulkhead: Bulkhead, *, shed: bool) -> None:
-        """Bind the bulkhead and whether a full one sheds.
-
-        Args:
-            bulkhead: Bounds the concurrent calls.
-            shed: Whether a full bulkhead rejects instead of waiting.
-
-        """
-        self._bulkhead = bulkhead
-        self._shed = shed
-
-    async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op inside the bulkhead.
-
-        Args:
-            op: The operation.
-            next_: Runs the rest of the chain.
-
-        Returns:
-            What the operation returns.
-
-        Raises:
-            AppError: ``op``: concurrency limit reached.
-
-        """
-        if not self._shed:
-            return await self._bulkhead.execute(next_)
-        try:
-            return await self._bulkhead.try_execute(next_)
-        except BulkheadFullError as exc:
-            raise AppError(
-                ErrorCode.RESOURCE_EXHAUSTED, f"{op}: concurrency limit reached"
-            ) from exc
-
-
-def new_bulkhead(bulkhead: Bulkhead, *, shed: bool) -> OpMiddleware:
-    """Return the bulkhead layer.
-
-    With ``shed``, a full bulkhead rejects (RESOURCE_EXHAUSTED).
-
-    Args:
-        bulkhead: Bounds the concurrent calls.
-        shed: Whether a full bulkhead rejects instead of waiting.
-
-    Returns:
-        The bulkhead layer.
-
-    """
-    return _Bulkhead(bulkhead, shed=shed)
-
-
-@final
-class _RateLimit:
-    """Rejects an op over the limiter's rate."""
-
-    def __init__(self, limiter: RateLimiter) -> None:
-        """Bind the limiter.
-
-        Args:
-            limiter: The token bucket.
-
-        """
-        self._limiter = limiter
-
-    async def wrap_op(self, op: str, next_: OpThunk) -> object:
-        """Run the op when the limiter allows it.
-
-        Args:
-            op: The operation.
-            next_: Runs the rest of the chain.
-
-        Returns:
-            What the operation returns.
-
-        Raises:
-            AppError: ``op``: rate limit exceeded.
-
-        """
-        if not self._limiter.allow():
-            raise AppError(ErrorCode.RESOURCE_EXHAUSTED, f"{op}: rate limit exceeded")
-        return await next_()
-
-
-def new_rate_limit(limiter: RateLimiter) -> OpMiddleware:
-    """Return the rate-limit layer: an op over the rate fails RESOURCE_EXHAUSTED at once.
-
-    Args:
-        limiter: The token bucket.
-
-    Returns:
-        The rate-limit layer.
-
-    """
-    return _RateLimit(limiter)

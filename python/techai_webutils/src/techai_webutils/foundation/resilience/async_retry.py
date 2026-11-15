@@ -11,17 +11,26 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Awaitable, Callable
-from typing import TypeVar, cast
+from functools import partial
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from tenacity import (
+    AsyncRetrying,
     RetryCallState,
-    retry,
     retry_if_exception,
     stop_after_attempt,
 )
 
 from techai_webutils.core.errors.errors import AppError
 from techai_webutils.foundation.resilience.backoff import exponential_jitter_wait
+from techai_webutils.foundation.resilience.observer import (
+    UNOBSERVED,
+    RetriedCall,
+    retries_done,
+)
+
+if TYPE_CHECKING:
+    from techai_webutils.foundation.resilience.series import Recorder
 
 F = TypeVar("F", bound=Callable[..., Awaitable[object]])
 
@@ -72,6 +81,8 @@ def retry_transient_async(
     base_delay: float = 0.1,
     max_delay: float = 10.0,
     sleep: Callable[[float], Awaitable[None]] | None = None,
+    *,
+    recorder: Recorder | None = None,
 ) -> Callable[[F], F]:
     """Return a decorator that retries a coroutine on transient ``AppError``s.
 
@@ -82,18 +93,23 @@ def retry_transient_async(
     overrides the coroutine used to wait between attempts — inject a deterministic
     recorder in tests / callers (e.g. a supervisor retrying a job stop) that need to
     control or record the backoff schedule; the default is tenacity's normal async sleep,
-    so the behavior is unchanged when it is omitted.
+    so the behavior is unchanged when it is omitted. Each finished call is recorded
+    through ``retries_done``: one retry per attempt after the first, and an exhaustion
+    when it still failed after a retry.
 
     Args:
         max_attempts: The most attempts.
         base_delay: The first backoff in seconds.
         max_delay: The longest backoff in seconds.
         sleep: Waits between attempts; ``None`` uses ``asyncio.sleep``.
+        recorder: Counts the retries and exhaustion (operation ""); ``None``
+            records nothing.
 
     Returns:
         A decorator that retries a coroutine on transient ``AppError``s.
 
     """
+    counted = recorder or UNOBSERVED.recorder
 
     def decorator(func: F) -> F:
         """Attach the tenacity async retry policy to *func*, preserving its metadata.
@@ -134,7 +150,7 @@ def retry_transient_async(
         # sleep is valid for a coroutine function (AsyncRetrying awaits it) — hence the
         # cast on that one branch.
         retrying = (
-            retry(
+            AsyncRetrying(
                 retry=retry_cond,
                 stop=stop_cond,
                 wait=wait_pol,
@@ -142,7 +158,9 @@ def retry_transient_async(
                 sleep=cast("Callable[[float], None]", sleep),
             )
             if sleep is not None
-            else retry(retry=retry_cond, stop=stop_cond, wait=wait_pol, reraise=True)
+            else AsyncRetrying(
+                retry=retry_cond, stop=stop_cond, wait=wait_pol, reraise=True
+            )
         )
 
         @functools.wraps(func)
@@ -157,8 +175,20 @@ def retry_transient_async(
                 What the function returns.
 
             """
-            return await func(*args, **kwargs)
+            with RetriedCall(partial(retries_done, counted), "") as call:
 
-        return cast("F", retrying(wrapper))
+                async def attempt() -> object:
+                    """Await the coroutine once, counting the attempt.
+
+                    Returns:
+                        What the function returns.
+
+                    """
+                    call.attempted()
+                    return await func(*args, **kwargs)
+
+                return await retrying.copy()(attempt)
+
+        return cast("F", wrapper)
 
     return decorator

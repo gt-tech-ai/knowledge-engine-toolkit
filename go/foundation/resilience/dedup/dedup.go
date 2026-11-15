@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // Memory is an in-memory Deduplicator with an optional TTL. A zero TTL means keys never
@@ -17,6 +18,8 @@ import (
 type Memory struct {
 	// seen maps a processed key to the time it was first recorded.
 	seen map[string]time.Time
+	// recorder counts each duplicate; nil records nothing.
+	recorder *series.Recorder
 	// ttl is the expiry after which a key may be re-processed (0 = never expires).
 	ttl time.Duration
 	// mu guards seen.
@@ -25,20 +28,36 @@ type Memory struct {
 
 // NewMemory builds an in-memory Deduplicator. ttl of zero remembers keys forever.
 func NewMemory(ttl time.Duration) *Memory {
-	return &Memory{seen: make(map[string]time.Time), ttl: ttl, mu: sync.Mutex{}}
+	return &Memory{
+		seen:     make(map[string]time.Time),
+		ttl:      ttl,
+		mu:       sync.Mutex{},
+		recorder: nil,
+	}
+}
+
+// WithRecorder makes the Memory count each duplicate it reports through recorder, bound
+// to series.TierStandalone and the deduplicator's name by its caller, and returns it.
+func (m *Memory) WithRecorder(recorder *series.Recorder) *Memory {
+	m.recorder = recorder
+
+	return m
 }
 
 // compile-time check: Memory satisfies the Deduplicator contract.
 var _ interfaces.Deduplicator = (*Memory)(nil)
 
 // Seen reports whether key was already processed (a duplicate to skip) and, if not,
-// records it as processed. A key older than the TTL is treated as first-seen again.
+// records it as processed. A key older than the TTL is treated as first-seen again. A
+// duplicate is counted.
 func (m *Memory) Seen(_ context.Context, key string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := time.Now()
 	if seenAt, ok := m.seen[key]; ok && (m.ttl == 0 || now.Sub(seenAt) < m.ttl) {
+		m.recorder.Deduplicated()
+
 		return true, nil
 	}
 

@@ -23,7 +23,7 @@ import (
 func TestKeyedLimiter_CapsEachKeyIndependently(t *testing.T) {
 	t.Parallel()
 
-	limiter, err := keyed.New(keyed.Config{MaxPerKey: 2})
+	limiter, err := keyed.New(keyed.Config{Recorder: nil, MaxPerKey: 2})
 	require.NoError(t, err)
 
 	callback, found := limiter.TryAcquire(textOrgA)

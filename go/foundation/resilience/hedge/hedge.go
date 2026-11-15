@@ -17,6 +17,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // hedgeAttempts is the attempts one hedged call can race.
@@ -53,6 +54,11 @@ func (k Kind) String() string {
 // Config is the superset configuration for all hedger kinds. Kind-incompatible fields are
 // silently ignored.
 type Config struct {
+	// Recorder counts each backup the delay hedger fires and each one whose result it
+	// returns; nil records nothing. It is wired in code (WithRecorder,
+	// reswire.WithMetrics), never decoded from config.
+	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
+
 	// Kind specifies which hedger implementation to use.
 	Kind Kind
 
@@ -64,14 +70,21 @@ type Config struct {
 // opt-in.
 func DefaultConfig() Config {
 	return Config{
-		Kind:  KindDisabled,
-		Delay: defaultConfigDelay,
+		Recorder: nil,
+		Kind:     KindDisabled,
+		Delay:    defaultConfigDelay,
 	}
 }
 
 // WithDelay sets how long to wait before firing the backup attempt.
 func WithDelay(d time.Duration) options.Option[Config] {
 	return func(c *Config) { c.Delay = d }
+}
+
+// WithRecorder counts the hedger's fired and winning backups through recorder, bound to
+// series.TierStandalone and the hedger's name by its caller.
+func WithRecorder(recorder *series.Recorder) options.Option[Config] {
+	return func(c *Config) { c.Recorder = recorder }
 }
 
 // New creates a Hedger of the specified kind with optional functional options. Returns an
@@ -92,7 +105,7 @@ func NewFromConfig(cfg Config) (interfaces.Hedger, error) {
 	case KindDisabled:
 		return disabledHedger{}, nil
 	case KindDelay:
-		return &delayHedger{delay: cfg.Delay}, nil
+		return &delayHedger{delay: cfg.Delay, recorder: cfg.Recorder}, nil
 	default:
 		return nil, apperr.New(
 			apperr.CodeInvalidInput,
@@ -116,8 +129,20 @@ func (disabledHedger) Hedge(_ context.Context, op func() error) error {
 // delayHedger is the delay-then-race Hedger: it fires a backup attempt after delay and
 // returns the first attempt to complete.
 type delayHedger struct {
+	// recorder counts fired and winning backups; nil records nothing.
+	recorder *series.Recorder
+
 	// delay is how long to wait before firing the backup attempt.
 	delay time.Duration
+}
+
+// attempt is one attempt's result and whether it was the backup.
+type attempt struct {
+	// err is the attempt's result.
+	err error
+
+	// backup marks the attempt fired after the delay.
+	backup bool
 }
 
 // compile-time check: *delayHedger satisfies the Hedger contract.
@@ -126,20 +151,23 @@ var _ interfaces.Hedger = (*delayHedger)(nil)
 // Hedge runs op, firing a second concurrent attempt after the configured delay and
 // returning the first responder's result. The slower attempt's result is discarded; a
 // buffered result channel avoids a leaked goroutine. To actually cancel the loser's work,
-// op must observe ctx.
+// op must observe ctx. A fired backup is counted as fired, and as won when its result is
+// the one returned.
 func (h *delayHedger) Hedge(ctx context.Context, op func() error) error {
 	// Buffered for both attempts so the loser's goroutine never blocks on its send.
-	results := make(chan error, hedgeAttempts)
-	run := func() { go func() { results <- op() }() }
+	results := make(chan attempt, hedgeAttempts)
+	run := func(backup bool) {
+		go func() { results <- attempt{err: op(), backup: backup} }()
+	}
 
-	run() // first attempt
+	run(false) // first attempt
 
 	timer := time.NewTimer(h.delay)
 	defer timer.Stop()
 
 	select {
-	case err := <-results:
-		return err // first attempt beat the delay — no backup needed
+	case first := <-results:
+		return first.err // first attempt beat the delay — no backup needed
 	case <-ctx.Done():
 		return apperr.Wrap(
 			ctx.Err(),
@@ -147,12 +175,17 @@ func (h *delayHedger) Hedge(ctx context.Context, op func() error) error {
 			"hedged call canceled",
 		)
 	case <-timer.C:
-		run() // delay elapsed — fire the backup and race the two attempts
+		run(true) // delay elapsed — fire the backup and race the two attempts
+		h.recorder.Hedged(series.HedgeOutcomeFired)
 	}
 
 	select {
-	case err := <-results:
-		return err
+	case winner := <-results:
+		if winner.backup {
+			h.recorder.Hedged(series.HedgeOutcomeWon)
+		}
+
+		return winner.err
 	case <-ctx.Done():
 		return apperr.Wrap(
 			ctx.Err(),

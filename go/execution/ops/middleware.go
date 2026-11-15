@@ -18,9 +18,12 @@ func decorators(
 	operationDescriptor *types.OperationDescriptor,
 	log interfaces.Logger,
 ) decorate.OpMiddleware {
+	// unobserved reports nothing: an operation's timeout is not a resilience series.
+	var unobserved decorate.Observer
+
 	mws := []decorate.OpMiddleware{
 		decorate.NewRecovery(log, "operation", operationDescriptor.Name),
-		decorate.NewTimeout(operationDescriptor.Timeout),
+		decorate.NewTimeout(operationDescriptor.Timeout, unobserved),
 	}
 	if log != nil {
 		mws = append(mws, decorate.NewLogging(log, "operation", operationDescriptor.Name))

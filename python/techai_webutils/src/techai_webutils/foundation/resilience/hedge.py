@@ -5,7 +5,8 @@ duplicates load and is only safe for idempotent/read-only operations, so it is D
 default and opted into per read path via configuration (``HedgeKind.DELAY``).
 
 Unlike the Go primitive (whose ``func() error`` op cannot be cancelled), the asyncio
-backend genuinely cancels the loser attempt once the first responder returns.
+backend genuinely cancels the loser attempt once the first responder returns. Given a
+recorder, the delay hedger counts each backup it fires and each one that wins.
 """
 
 from __future__ import annotations
@@ -17,9 +18,13 @@ from typing import TYPE_CHECKING, override
 
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.hedger import Hedger
+from techai_webutils.foundation.resilience.observer import UNOBSERVED
+from techai_webutils.foundation.resilience.series import HedgeOutcome
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from techai_webutils.foundation.resilience.series import Recorder
 
 
 class HedgeKind(StrEnum):
@@ -73,14 +78,17 @@ class DelayHedger(Hedger):
     It fires a backup after a delay and takes the first responder.
     """
 
-    def __init__(self, delay_seconds: float) -> None:
+    def __init__(self, delay_seconds: float, recorder: Recorder | None = None) -> None:
         """Fire the backup attempt after ``delay_seconds`` without a first response.
 
         Args:
             delay_seconds: How long the first attempt runs alone.
+            recorder: Counts each backup fired and each backup that won; ``None``
+                records nothing.
 
         """
         self._delay: float = delay_seconds
+        self._recorder: Recorder = recorder or UNOBSERVED.recorder
 
     @override
     async def hedge[T](self, op: Callable[[], Awaitable[T]]) -> T:
@@ -104,23 +112,28 @@ class DelayHedger(Hedger):
             return first.result()  # first attempt beat the delay -- no backup needed
 
         backup = asyncio.ensure_future(op())
+        self._recorder.hedged(HedgeOutcome.FIRED)
         try:
             done, _pending = await asyncio.wait(
                 {first, backup},
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            return next(iter(done)).result()
+            winner = first if first in done else backup
+            if winner is backup:
+                self._recorder.hedged(HedgeOutcome.WON)
+            return winner.result()
         finally:
             for task in (first, backup):
                 if not task.done():
                     _ = task.cancel()
 
 
-def hedger_from_config(config: HedgeConfig) -> Hedger:
-    """Create a ``Hedger`` from config; raise ``ValueError`` on an unknown kind.
+def hedger_from_config(config: HedgeConfig, recorder: Recorder | None = None) -> Hedger:
+    """Create a ``Hedger`` from config; raise ``AppValueError`` on an unknown kind.
 
     Args:
         config: Selects the backend and carries its settings.
+        recorder: Where the DELAY hedger counts its backups; DISABLED fires none.
 
     Returns:
         The ``Hedger`` ``config.kind`` selects.
@@ -132,6 +145,6 @@ def hedger_from_config(config: HedgeConfig) -> Hedger:
     if config.kind == HedgeKind.DISABLED:
         return DisabledHedger()
     if config.kind == HedgeKind.DELAY:
-        return DelayHedger(config.delay_seconds)
+        return DelayHedger(config.delay_seconds, recorder)
     msg = f"unknown hedger kind: {config.kind}"
     raise AppValueError(msg)

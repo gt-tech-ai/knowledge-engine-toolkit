@@ -33,6 +33,7 @@ func fastRetrier(t *testing.T) decorate.Deps {
 	t.Helper()
 
 	retrier, err := retry.NewFromConfig(retry.Config{
+		Recorder:        nil,
 		Kind:            retry.KindExponential,
 		MaxRetries:      2,
 		InitialInterval: time.Millisecond,

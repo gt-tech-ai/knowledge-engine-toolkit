@@ -7,6 +7,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // Compile-time check: a Limiter is a KeyedLimiter.
@@ -14,6 +15,11 @@ var _ interfaces.KeyedLimiter = (*Limiter)(nil)
 
 // Config sizes a Limiter.
 type Config struct {
+	// Recorder counts each TryAcquire refused because its key holds its cap as
+	// bulkhead_full with no operation (keys are unbounded, so they are not a label);
+	// nil records nothing. It is wired in code, never decoded from config.
+	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
+
 	// MaxPerKey is the most slots one key may hold at once; it must be positive.
 	MaxPerKey int `yaml:"max_per_key" mapstructure:"max_per_key"`
 }
@@ -30,6 +36,8 @@ func (c Config) Validate() error {
 // Limiter counts each key's held slots; a key with none has no entry, so the map holds
 // only keys with work in flight.
 type Limiter struct {
+	// recorder counts refused TryAcquire calls; nil records nothing.
+	recorder *series.Recorder
 	// held counts each key's slots in use.
 	held map[string]int
 	// limit is Config.MaxPerKey.
@@ -45,16 +53,23 @@ func New(cfg Config) (*Limiter, error) {
 		return nil, err
 	}
 
-	return &Limiter{held: map[string]int{}, limit: cfg.MaxPerKey, mu: sync.Mutex{}}, nil
+	return &Limiter{
+		recorder: cfg.Recorder,
+		held:     map[string]int{},
+		limit:    cfg.MaxPerKey,
+		mu:       sync.Mutex{},
+	}, nil
 }
 
-// TryAcquire takes one of key's slots, or reports false when key holds its cap. The
-// returned release is idempotent.
+// TryAcquire takes one of key's slots, or reports false when key holds its cap (counted
+// through Config.Recorder). The returned release is idempotent.
 func (l *Limiter) TryAcquire(key string) (release func(), ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if l.held[key] >= l.limit {
+		l.recorder.Rejected("", series.ReasonBulkheadFull)
+
 		return nil, false
 	}
 

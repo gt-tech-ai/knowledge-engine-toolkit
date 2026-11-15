@@ -588,6 +588,7 @@ func TestDecorateDoer_RetriesTransportErrorsAndBuffersBody(t *testing.T) {
 
 	reg := promclient.NewRegistry()
 	deps, err := decorate.Build(
+		"client",
 		textPrometheus,
 		&layers,
 		fixtures.Build(func(row *decorate.Collaborators) {

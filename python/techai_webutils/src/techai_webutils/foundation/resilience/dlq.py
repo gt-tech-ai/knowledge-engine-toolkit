@@ -7,15 +7,21 @@ redrive instead of deleting it (avoiding silent data loss on a DLQ outage).
 
 The real SQS backend lives in ``sqs_dlq.py`` (thin aiobotocore wrapper,
 integration-tested); ``StubDeadLetterBackend`` here is the in-memory backend for
-tests/local.
+tests/local. ``with_recorder`` counts each letter ``sent`` or ``failed``, as Go's
+``deadletter.Queue.WithRecorder`` does.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import final, override
+from typing import TYPE_CHECKING, Self, final, override
 
 from techai_webutils.core.interfaces.dlq import DeadLetter, DeadLetterBackend
+from techai_webutils.foundation.resilience.observer import UNOBSERVED
+from techai_webutils.foundation.resilience.series import DeadLetterOutcome
+
+if TYPE_CHECKING:
+    from techai_webutils.foundation.resilience.series import Recorder
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +43,20 @@ class DeadLetterQueue:
 
         """
         self._backend = backend
+        self._recorder: Recorder = UNOBSERVED.recorder
+
+    def with_recorder(self, recorder: Recorder) -> Self:
+        """Count each letter ``sent`` or ``failed``.
+
+        Args:
+            recorder: Where the outcomes are counted.
+
+        Returns:
+            This queue.
+
+        """
+        self._recorder = recorder
+        return self
 
     async def send(self, letter: DeadLetter) -> bool:
         """Send a dead letter; return True on success, False if the backend failed.
@@ -56,7 +76,9 @@ class DeadLetterQueue:
                 letter.id,
                 extra={"dead_letter_id": letter.id, "reason": letter.reason},
             )
+            self._recorder.dead_lettered(DeadLetterOutcome.FAILED)
             return False
+        self._recorder.dead_lettered(DeadLetterOutcome.SENT)
         return True
 
 

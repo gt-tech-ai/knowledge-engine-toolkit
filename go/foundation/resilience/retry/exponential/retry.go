@@ -10,6 +10,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/budget"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // defaultConfigMaxRetries is the default MaxRetries of Config.
@@ -32,6 +33,12 @@ var _ interfaces.Retrier = (*Retrier)(nil)
 
 // Config holds exponential backoff settings.
 type Config struct {
+	// Recorder counts the retrier's retries, exhaustion and budget refusals with no
+	// operation (a standalone retrier; inside a decorate tier the retry layer counts
+	// instead and the retrier gets none); nil records nothing. It is wired in code,
+	// never decoded from config.
+	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
+
 	// IsRetryable classifies whether a failed operation's error is worth
 	// retrying. When nil, defaultIsRetryable is used. Return false for
 	// permanent failures so they are surfaced immediately instead of retried.
@@ -114,6 +121,7 @@ func DefaultConfig() Config {
 		Multiplier:      defaultConfigMultiplier,
 		MaxElapsedTime:  defaultConfigMaxElapsedTime,
 		IsRetryable:     nil,
+		Recorder:        nil,
 	}
 }
 
@@ -130,16 +138,17 @@ func New(cfg Config) *Retrier {
 
 // Retry executes the operation with exponential backoff and jitter.
 // Each attempt after the first consumes one retry from the context's retry budget (if
-// present); the first attempt is free, so a budget of N allows N retries.
+// present); the first attempt is free, so a budget of N allows N retries. The call is
+// counted through Config.Recorder (series.Recorder.RetriesDone) once it finishes.
 func (r *Retrier) Retry(ctx context.Context, operation func() error) error {
 	isRetryable := r.classify()
-	retrying := false
+	attempts := 0
 	_, err := backoff.Retry(ctx, func() (struct{}, error) {
-		if retrying && !budget.ConsumeRetry(ctx) {
+		if attempts > 0 && !budget.ConsumeRetry(ctx) {
 			return struct{}{}, backoff.Permanent(budget.ErrRetryBudgetExhausted)
 		}
 
-		retrying = true
+		attempts++
 
 		e := operation()
 		if e != nil && !isRetryable(e) {
@@ -148,6 +157,8 @@ func (r *Retrier) Retry(ctx context.Context, operation func() error) error {
 
 		return struct{}{}, e
 	}, r.retryOpts()...)
+
+	r.cfg.Recorder.RetriesDone("", attempts, err)
 
 	return err
 }
@@ -163,23 +174,24 @@ func (r *Retrier) classify() func(error) bool {
 }
 
 // RetryWithResult executes an operation that returns a value with exponential backoff.
-// Same retry semantics as Retry, but preserves the operation's return value on success.
+// Same retry semantics, and the same counting, as Retry, but preserves the operation's
+// return value on success.
 func RetryWithResult[T any](
 	ctx context.Context,
 	retrier *Retrier,
 	operation func() (T, error),
 ) (T, error) {
 	isRetryable := retrier.classify()
-	retrying := false
+	attempts := 0
 
-	return backoff.Retry(ctx, func() (T, error) {
-		if retrying && !budget.ConsumeRetry(ctx) {
+	value, err := backoff.Retry(ctx, func() (T, error) {
+		if attempts > 0 && !budget.ConsumeRetry(ctx) {
 			var zero T
 
 			return zero, backoff.Permanent(budget.ErrRetryBudgetExhausted)
 		}
 
-		retrying = true
+		attempts++
 
 		value, cause := operation()
 
@@ -189,6 +201,10 @@ func RetryWithResult[T any](
 
 		return value, cause
 	}, retrier.retryOpts()...)
+
+	retrier.cfg.Recorder.RetriesDone("", attempts, err)
+
+	return value, err
 }
 
 // retryOpts builds backoff v5 retry options from the stored config.

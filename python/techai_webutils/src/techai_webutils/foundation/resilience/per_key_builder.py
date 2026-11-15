@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from techai_webutils.foundation.resilience.redis_rate_limiter import (
         RedisPerKeyRateLimiter as _LazyRedisPerKeyRateLimiter,
     )
+    from techai_webutils.foundation.resilience.series import Recorder
 
 
 class PerKeyRateLimiterKind(StrEnum):
@@ -50,6 +51,7 @@ def per_key_rate_limiter_from_config(
     *,
     redis: Redis | None = None,
     clock: Callable[[], float] = time.time,
+    recorder: Recorder | None = None,
 ) -> PerKeyRateLimiter:
     """Build the per-key limiter ``config.kind`` selects.
 
@@ -58,6 +60,8 @@ def per_key_rate_limiter_from_config(
         redis: The async Redis client (required by ``redis``).
         clock: Epoch seconds the ``redis`` window index is computed from (injected for
             tests).
+        recorder: Counts each refusal as a ``rate_limited`` rejection; ``None``
+            records nothing.
 
     Returns:
         The per-key limiter ``config.kind`` selects.
@@ -68,9 +72,10 @@ def per_key_rate_limiter_from_config(
 
     """
     if config.kind == PerKeyRateLimiterKind.MEMORY:
-        return InMemoryRateLimiter(
+        memory = InMemoryRateLimiter(
             config.max_per_window, window_seconds=config.window_seconds
         )
+        return memory if recorder is None else memory.with_recorder(recorder)
     if config.kind == PerKeyRateLimiterKind.REDIS:
         if redis is None:
             raise AppError(
@@ -83,12 +88,13 @@ def per_key_rate_limiter_from_config(
             ).RedisPerKeyRateLimiter,
         )
 
-        return redis_per_key_rate_limiter_cls(
+        shared = redis_per_key_rate_limiter_cls(
             redis,
             max_per_window=config.max_per_window,
             window_seconds=config.window_seconds,
             prefix=config.prefix,
             clock=clock,
         )
+        return shared if recorder is None else shared.with_recorder(recorder)
     msg = f"unknown per-key rate limiter kind: {config.kind!r}"
     raise AppValueError(msg)

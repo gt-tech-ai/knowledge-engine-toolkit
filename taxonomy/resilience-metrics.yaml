@@ -1,0 +1,139 @@
+# The resilience metric taxonomy: the one source of every resilience_* series and its labels.
+#
+# `go generate ./go/foundation/resilience/series/...` renders it (go/tools/resmetrics) into
+# go/foundation/resilience/series/series.go and
+# python/techai_webutils/src/techai_webutils/foundation/resilience/series.py; the Go unit
+# suite fails when either committed file differs from a fresh render. Edit this file, never
+# the outputs.
+#
+# Every series carries two bound labels first, `tier` (the decorate tier, or `standalone`
+# for a primitive used outside one) and `name` (the component or primitive name), set when
+# a Recorder is built. Its own labels follow, in the order listed.
+#
+# enums: the closed label values. Each enum has at most 8 values, so no label can grow the
+# series count without bound.
+#   name     the enum's snake_case name, which a label's `enum` refers to
+#   go       the Go type name (the Python StrEnum takes the same name)
+#   doc      a sentence saying what the enum's values mean
+#   values   each value's wire `name`, its `doc`, and, for an enum a gauge reports, its
+#            `gauge` number (on every value or none)
+#
+# series: one row per metric.
+#   name     the metric name: resilience_*, a counter ends in _total and a gauge does not
+#   kind     counter or gauge
+#   method   the Go Recorder method (Python takes its snake_case form)
+#   help     the metric's help text, one sentence
+#   labels   the series' own labels: operation, reason, outcome or to; `enum` names the
+#            enum that closes a label's values (operation alone is open: a contract's
+#            method names, the same set the RED series carry); a gauge takes none
+#   value    for a gauge: the enum whose gauge numbers the method sets, or absent for a
+#            plain float value
+enums:
+  - name: reason
+    go: Reason
+    doc: Why a call was refused before it ran.
+    values:
+      - name: breaker_open
+        doc: The circuit breaker was open or its half-open trial calls were taken.
+      - name: bulkhead_full
+        doc: The bulkhead had no free slot and sheds rather than queues.
+      - name: rate_limited
+        doc: The rate limiter had no token.
+      - name: throttled
+        doc: The adaptive throttler shed the call locally.
+      - name: budget_exhausted
+        doc: The request's retry budget refused another attempt.
+  - name: breaker_state
+    go: BreakerState
+    doc: A circuit breaker's state.
+    values:
+      - name: closed
+        gauge: 0
+        doc: Calls pass and failures are counted.
+      - name: half_open
+        gauge: 1
+        doc: Trial calls probe whether the dependency recovered.
+      - name: open
+        gauge: 2
+        doc: Calls fail fast without running.
+  - name: hedge_outcome
+    go: HedgeOutcome
+    doc: What happened to a hedge's backup attempt.
+    values:
+      - name: fired
+        doc: The first attempt outlived the delay, so the backup was sent.
+      - name: won
+        doc: The backup attempt finished first and its result was returned.
+  - name: dead_letter_outcome
+    go: DeadLetterOutcome
+    doc: Whether a dead letter reached its backend.
+    values:
+      - name: sent
+        doc: The backend stored the letter.
+      - name: failed
+        doc: The backend refused the letter, which was logged and dropped.
+series:
+  - name: resilience_retries_total
+    kind: counter
+    method: Retried
+    help: Attempts retried after a transient failure.
+    labels:
+      - name: operation
+  - name: resilience_retry_exhausted_total
+    kind: counter
+    method: RetryExhausted
+    help: Operations that still failed after at least one retry.
+    labels:
+      - name: operation
+  - name: resilience_breaker_state
+    kind: gauge
+    method: SetBreakerState
+    help: A circuit breaker's state (0 closed, 1 half-open, 2 open).
+    value: breaker_state
+  - name: resilience_breaker_transitions_total
+    kind: counter
+    method: BreakerMoved
+    help: A circuit breaker's state changes, by the state entered.
+    labels:
+      - name: to
+        enum: breaker_state
+  - name: resilience_rejections_total
+    kind: counter
+    method: Rejected
+    help: Calls refused before they ran, by reason.
+    labels:
+      - name: operation
+      - name: reason
+        enum: reason
+  - name: resilience_timeouts_total
+    kind: counter
+    method: TimedOut
+    help: Attempts the timeout layer's own deadline cut.
+    labels:
+      - name: operation
+  - name: resilience_bulkhead_limit
+    kind: gauge
+    method: SetBulkheadLimit
+    help: An adaptive bulkhead's current concurrency limit.
+  - name: resilience_throttle_rejection_ratio
+    kind: gauge
+    method: SetThrottleRejectionRatio
+    help: An adaptive throttler's probability of shedding the next call.
+  - name: resilience_hedges_total
+    kind: counter
+    method: Hedged
+    help: Hedge backup attempts, by what happened to them.
+    labels:
+      - name: outcome
+        enum: hedge_outcome
+  - name: resilience_dead_letters_total
+    kind: counter
+    method: DeadLettered
+    help: Dead letters, by whether the backend stored them.
+    labels:
+      - name: outcome
+        enum: dead_letter_outcome
+  - name: resilience_duplicates_total
+    kind: counter
+    method: Deduplicated
+    help: Messages dropped because their key was already processed.

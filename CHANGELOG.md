@@ -6,6 +6,66 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.61] - 2026-11-14
+
+Python: `techai-webutils` 0.15.0.
+
+### Added
+
+- Resilience metrics in both languages (`ARCHITECTURE.md#resilience-metrics`). Eleven
+  `resilience_*` series labelled `{tier, name, …}`: `retries_total`, `retry_exhausted_total`,
+  `breaker_state`, `breaker_transitions_total`, `rejections_total{reason}`, `timeouts_total`,
+  `bulkhead_limit`, `throttle_rejection_ratio`, `hedges_total{outcome}`,
+  `dead_letters_total{outcome}` and `duplicates_total`. `taxonomy/resilience-metrics.yaml` is the
+  one source: `go generate ./go/foundation/resilience/series/...` (`go/tools/resmetrics`) renders
+  the Go `series.Recorder` and the Python `foundation/resilience/series.py`, and the Go unit suite
+  fails on drift or on a series missing from `ARCHITECTURE.md`.
+- The retry, circuit-breaker, bulkhead, rate-limit and timeout layers record their events per
+  operation when the component's metrics layer is on, and write one Warn when a breaker opens and
+  when retries are exhausted when its logging layer is on. Go reports through
+  `series.Observer{Recorder, Logger, Tier, Name}` (`decorate.Observer` is an alias); Python through
+  `foundation.resilience.observer.Observer`.
+- Standalone primitives record under tier `standalone` when handed a recorder. Go:
+  `retry.WithRecorder`, `ratelimiter.WithRecorder`, `bulkhead.WithRecorder`,
+  `channel.Config.Recorder`,
+  `keyed.Config.Recorder`, `adaptivethrottle.Config.Recorder`, `hedge.WithRecorder`,
+  `reswire.WithMetrics(metrics, name)` for `reswire.NewHedge` / `NewAdaptiveThrottle`,
+  `deadletter.Queue.WithRecorder` and `dedup.Memory.WithRecorder`. Python: a `recorder` keyword on
+  `ExponentialRetrier`, `retry_transient`, `retry_transient_async`,
+  `per_key_rate_limiter_from_config` and `hedger_from_config`; `with_recorder` on
+  `TokenBucketRateLimiter`, `InMemoryRateLimiter`, `RedisPerKeyRateLimiter`, `SemaphoreBulkhead`,
+  `AdaptiveBulkhead`, `AdaptiveThrottler`, `DeadLetterQueue` and `MemoryDeduplicator`; and
+  `with_observer` on `CircuitBreaker` and `AsyncCircuitBreaker`.
+- Go `circuitbreaker.IsOpen(err)` (and `gobreaker.IsOpen`) reports a breaker rejection.
+
+### Changed
+
+- Go: **breaking.** `decorate.Build(tier, name, layers, collaborators)` takes the tier's name
+  first. `NewRetry`, `NewTimeout`, `NewCircuitBreaker`, `NewBulkhead`, `NewSheddingBulkhead` and
+  `NewRateLimit` take an `Observer` as their last argument (pass the zero value, `var obs
+  decorate.Observer`, to report nothing). `circuitbreaker.Config` and `gobreaker.Config` gain
+  `Observer *series.Observer`; the retrier, limiter, bulkhead, hedge and throttle `Config`s gain
+  `Recorder *series.Recorder`. Every new field is wired in code (`yaml:"-" mapstructure:"-"
+  json:"-"`).
+- A component whose metrics layer is on and that has a resilience layer now asks its metrics
+  provider for the `resilience_*` series (Go and Python). A consumer test with a strict metrics
+  mock on such a component must accept them; a component with no resilience layer asks for none.
+- Python: **breaking.** `foundation.decorate.decorations.build(tier, name, layers, collab)` takes
+  the tier's name first. The resilience layers (`new_retry`, `new_timeout`,
+  `new_circuit_breaker`, `new_bulkhead`, `new_rate_limit`) move from `decorate/middleware.py` to
+  `decorate/resilience_layers.py` (still exported from `foundation.decorate`) and take
+  `observer=`.
+- Python: the delay hedger names its winner by task identity, so a backup that wins is counted
+  even when both attempts finish in the same loop step.
+- Resilience series follow the component's metrics layer, in both languages. The Python breaker's
+  `circuit_breaker_*` export, which was ungated before, now follows it too.
+
+### Deprecated
+
+- Python `circuit_breaker_state{dependency}` and `circuit_breaker_transitions_total{dependency,to}`
+  are emitted beside `resilience_breaker_state` and `resilience_breaker_transitions_total` for this
+  release and removed in the next one.
+
 ## [0.0.60] - 2026-11-14
 
 Go only: the published Python package is unchanged.

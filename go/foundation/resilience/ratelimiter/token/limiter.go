@@ -8,6 +8,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // defaultConfigRate is the default Rate of Config.
@@ -21,6 +22,10 @@ var _ interfaces.RateLimiter = (*Limiter)(nil)
 
 // Config holds token bucket rate limiter settings.
 type Config struct {
+	// Recorder counts each refused Allow as rate_limited with no operation; nil records
+	// nothing. It is wired in code, never decoded from config.
+	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
+
 	// Rate is the sustained events per second allowed.
 	Rate float64
 
@@ -31,8 +36,9 @@ type Config struct {
 // DefaultConfig returns sensible defaults for token bucket rate limiting.
 func DefaultConfig() Config {
 	return Config{
-		Rate:  defaultConfigRate,
-		Burst: defaultConfigBurst,
+		Recorder: nil,
+		Rate:     defaultConfigRate,
+		Burst:    defaultConfigBurst,
 	}
 }
 
@@ -40,18 +46,29 @@ func DefaultConfig() Config {
 type Limiter struct {
 	// inner is the underlying token bucket rate limiter.
 	inner *rate.Limiter
+
+	// recorder counts refused Allow calls; nil records nothing.
+	recorder *series.Recorder
 }
 
 // New creates a token bucket rate limiter from the given config.
 func New(cfg Config) *Limiter {
 	return &Limiter{
-		inner: rate.NewLimiter(rate.Limit(cfg.Rate), cfg.Burst),
+		inner:    rate.NewLimiter(rate.Limit(cfg.Rate), cfg.Burst),
+		recorder: cfg.Recorder,
 	}
 }
 
-// Allow reports whether an event may happen now (non-blocking).
+// Allow reports whether an event may happen now (non-blocking); a refusal is counted
+// through Config.Recorder.
 func (l *Limiter) Allow() bool {
-	return l.inner.Allow()
+	if l.inner.Allow() {
+		return true
+	}
+
+	l.recorder.Rejected("", series.ReasonRateLimited)
+
+	return false
 }
 
 // Wait blocks until the limiter permits an event or ctx is cancelled.

@@ -20,6 +20,7 @@ import (
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/ratelimiter/token"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/resilience/series"
 )
 
 // defaultConfigRate is the default Rate of Config.
@@ -53,6 +54,11 @@ func (k Kind) String() string {
 // Config is the superset configuration for all rate limiter kinds.
 // Kind-incompatible fields are silently ignored.
 type Config struct {
+	// Recorder counts a standalone limiter's refusals as rate_limited with no
+	// operation; nil records nothing. It is wired in code (WithRecorder), never decoded
+	// from config.
+	Recorder *series.Recorder `yaml:"-" mapstructure:"-" json:"-"`
+
 	// Kind specifies which rate limiter implementation to use.
 	Kind Kind
 
@@ -66,9 +72,10 @@ type Config struct {
 // DefaultConfig returns the default rate limiter configuration with KindToken.
 func DefaultConfig() Config {
 	return Config{
-		Kind:  KindToken,
-		Rate:  defaultConfigRate,
-		Burst: defaultConfigBurst,
+		Recorder: nil,
+		Kind:     KindToken,
+		Rate:     defaultConfigRate,
+		Burst:    defaultConfigBurst,
 	}
 }
 
@@ -82,6 +89,12 @@ func (c Config) ToOptions() []options.Option[Config] {
 // WithRate sets the sustained events per second.
 func WithRate(r float64) options.Option[Config] {
 	return func(c *Config) { c.Rate = r }
+}
+
+// WithRecorder counts the limiter's refusals through recorder, bound to
+// series.TierStandalone and the limiter's name by its caller.
+func WithRecorder(recorder *series.Recorder) options.Option[Config] {
+	return func(c *Config) { c.Recorder = recorder }
 }
 
 // WithBurst sets the maximum burst size.
@@ -106,8 +119,9 @@ func NewFromConfig(cfg Config) (interfaces.RateLimiter, error) {
 	switch cfg.Kind {
 	case KindToken:
 		tokenCfg := token.Config{
-			Rate:  cfg.Rate,
-			Burst: cfg.Burst,
+			Recorder: cfg.Recorder,
+			Rate:     cfg.Rate,
+			Burst:    cfg.Burst,
 		}
 
 		return token.New(tokenCfg), nil
