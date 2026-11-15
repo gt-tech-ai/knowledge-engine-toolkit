@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.62] - 2026-11-14
+
 ### Added
 
 - `go/transport/connect/peek`: `Unary(spec, stream)` lets a connect-go v2 server interceptor read
