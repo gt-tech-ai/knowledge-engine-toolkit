@@ -47,8 +47,14 @@ import (
 func TestStdlibLogger_AllLevels(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: textDebug, AddSource: false}
-	currentLogger := stdlib.New(cfg)
+	cfg := stdlib.Config{
+		Schema:    "",
+		Service:   "",
+		Env:       "",
+		Level:     textDebug,
+		AddSource: false,
+	}
+	currentLogger := stdlib.New(&cfg)
 
 	// Should not panic
 	currentLogger.Debug("debug message", textKey, textValue)
@@ -71,8 +77,14 @@ func TestStdlibLogger_AllLevels(t *testing.T) {
 func TestStdlibLogger_With(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: textInfo, AddSource: false}
-	l := stdlib.New(cfg)
+	cfg := stdlib.Config{
+		Schema:    "",
+		Service:   "",
+		Env:       "",
+		Level:     textInfo,
+		AddSource: false,
+	}
+	l := stdlib.New(&cfg)
 
 	child := l.With(textService, textAPI)
 	require.NotNil(t, child, "expected non-nil child logger")
@@ -97,8 +109,14 @@ func TestStdlibLogger_With(t *testing.T) {
 func TestStdlibLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: textInfo, AddSource: false}
-	currentLogger := stdlib.New(cfg)
+	cfg := stdlib.Config{
+		Schema:    "",
+		Service:   "",
+		Env:       "",
+		Level:     textInfo,
+		AddSource: false,
+	}
+	currentLogger := stdlib.New(&cfg)
 
 	// Without correlation ID, should return same logger
 	ctx := context.Background()
@@ -146,8 +164,14 @@ func TestStdlibLogger_ParseLevels(t *testing.T) {
 
 	levels := []string{textDebug, textInfo, textWarn, "warning", textError, textUnknown}
 	for _, level := range levels {
-		cfg := stdlib.Config{Level: level, AddSource: false}
-		l := stdlib.New(cfg)
+		cfg := stdlib.Config{
+			Schema:    "",
+			Service:   "",
+			Env:       "",
+			Level:     level,
+			AddSource: false,
+		}
+		l := stdlib.New(&cfg)
 		assert.NotNil(t, l, "expected non-nil logger for level %q", level)
 		l.Info("test at level " + level)
 	}
@@ -165,8 +189,14 @@ func TestStdlibLogger_ParseLevels(t *testing.T) {
 func TestStdlibLogger_NewSlog(t *testing.T) {
 	t.Parallel()
 
-	cfg := stdlib.Config{Level: textInfo, AddSource: false}
-	slogger := stdlib.NewSlog(cfg)
+	cfg := stdlib.Config{
+		Schema:    "",
+		Service:   "",
+		Env:       "",
+		Level:     textInfo,
+		AddSource: false,
+	}
+	slogger := stdlib.NewSlog(&cfg)
 	require.NotNil(t, slogger, "expected non-nil slog.Logger")
 }
 
@@ -187,11 +217,12 @@ func TestZapLogger_AllLevels(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textDebug,
 		Format:    textStructuredFormat,
 		RedactPII: false,
 	}
-	l := zaplogger.New(cfg)
+	l := zaplogger.New(&cfg)
 
 	l.Debug("debug message", textKey, textValue)
 	l.Info("info message", textKey, textValue)
@@ -212,11 +243,12 @@ func TestZapLogger_With(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textInfo,
 		Format:    textStructuredFormat,
 		RedactPII: false,
 	}
-	l := zaplogger.New(cfg)
+	l := zaplogger.New(&cfg)
 
 	child := l.With(textService, textAPI)
 	require.NotNil(t, child, "expected non-nil child logger")
@@ -239,11 +271,12 @@ func TestZapLogger_WithContext(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textInfo,
 		Format:    textStructuredFormat,
 		RedactPII: false,
 	}
-	currentLogger := zaplogger.New(cfg)
+	currentLogger := zaplogger.New(&cfg)
 
 	ctx := context.Background()
 	same := currentLogger.WithContext(ctx)
@@ -288,8 +321,15 @@ func TestZapLogger_DefaultConfig(t *testing.T) {
 func TestZapLogger_TextFormat(t *testing.T) {
 	t.Parallel()
 
-	cfg := zaplogger.Config{Level: textDebug, Format: textText, RedactPII: false}
-	l := zaplogger.New(cfg)
+	cfg := zaplogger.Config{
+		Schema:    "",
+		Service:   "",
+		Env:       "",
+		Level:     textDebug,
+		Format:    textText,
+		RedactPII: false,
+	}
+	l := zaplogger.New(&cfg)
 	require.NotNil(t, l, textExpectedNonNilLogger)
 	l.Debug("text format debug")
 }
@@ -310,11 +350,12 @@ func TestZapLogger_ParseLevels(t *testing.T) {
 	levels := []string{textDebug, textInfo, textWarn, "warning", textError, textUnknown}
 	for _, level := range levels {
 		cfg := zaplogger.Config{
+			Schema: "", Service: "", Env: "",
 			Level:     level,
 			Format:    textStructuredFormat,
 			RedactPII: false,
 		}
-		l := zaplogger.New(cfg)
+		l := zaplogger.New(&cfg)
 		assert.NotNil(t, l, "expected non-nil logger for level %q", level)
 	}
 }
@@ -332,11 +373,12 @@ func TestZapLogger_PII_Redaction(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textDebug,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	l := zaplogger.New(cfg)
+	l := zaplogger.New(&cfg)
 
 	// Should not panic; PII redaction happens internally
 	l.Info("user email is test@example.com", textEmail, "user@example.com")
@@ -355,11 +397,12 @@ func TestZapLogger_NewSlog(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textInfo,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	slogger := zaplogger.NewSlog(cfg)
+	slogger := zaplogger.NewSlog(&cfg)
 	require.NotNil(t, slogger, "expected non-nil slog.Logger")
 }
 

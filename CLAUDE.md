@@ -54,7 +54,8 @@ selected backend and fails loudly on an unknown kind.
   `decorate.Decorations`), a `client.Kinds[Config, Deps, T]` table and `NewFromConfig(ctx, cfg,
   deps)`. `Kinds.Build` also runs the backend through the client tier. Reference:
   `clients/storage/` (`storage.go`, `decorated.go`, `memory/`, `s3/`).
-- **Go foundation.** `NewFromConfig(cfg)` / `New(kind, opts...)`, as in `foundation/logger`.
+- **Go foundation.** `NewFromConfig(cfg)` / `New(kind, opts...)`, as in `foundation/logger`
+  (whose `NewFromConfig` takes `*Config`).
 - **Python.** `new_<type>_from_config(config)` with a `StrEnum` kind. Newer factories raise a coded
   `AppError(INVALID_INPUT)`. Heavy optional dependencies are imported lazily inside the selected
   branch.

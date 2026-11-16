@@ -136,6 +136,9 @@ class LoggingSettings(BaseAppSettings):
     """Log format (json/console)."""
     logging_redact_pii: bool = True
     """Redact PII fields from logs."""
+    logging_schema: str = "v1"
+    """Log schema: "v1" (the default) or "v2", the unified field set; build a
+    ``foundation.logger.schema.LogSchema`` from it for ``start_observability``."""
 
 
 class S3Settings(BaseAppSettings):

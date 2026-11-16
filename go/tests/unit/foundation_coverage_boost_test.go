@@ -183,11 +183,12 @@ func TestZapLogger_WithAttrs_Redaction(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textDebug,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	slogger := zaplogger.NewSlog(cfg)
+	slogger := zaplogger.NewSlog(&cfg)
 
 	child := slogger.With(textEmail, "user@example.com")
 	require.NotNil(t, child, "expected non-nil child logger")
@@ -210,11 +211,12 @@ func TestZapLogger_WithGroup(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textDebug,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	slogger := zaplogger.NewSlog(cfg)
+	slogger := zaplogger.NewSlog(&cfg)
 
 	grouped := slogger.WithGroup("request")
 	require.NotNil(t, grouped, "expected non-nil grouped logger")
@@ -242,11 +244,12 @@ func TestZapLogger_RedactAttr_NonString(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textDebug,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	slogger := zaplogger.NewSlog(cfg)
+	slogger := zaplogger.NewSlog(&cfg)
 
 	slogger.InfoContext(
 		t.Context(),
@@ -275,11 +278,12 @@ func TestZapLogger_RedactAttr_SensitiveValues(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textDebug,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	slogger := zaplogger.NewSlog(cfg)
+	slogger := zaplogger.NewSlog(&cfg)
 
 	slogger.InfoContext(t.Context(),
 		"user lookup",
@@ -305,11 +309,12 @@ func TestZapLogger_WithAttrs_MultipleAttrs(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textDebug,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	slogger := zaplogger.NewSlog(cfg)
+	slogger := zaplogger.NewSlog(&cfg)
 
 	child := slogger.With(
 		textService, textAPI,
@@ -333,11 +338,12 @@ func TestZapLogger_WithGroupThenAttrs(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textDebug,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	slogger := zaplogger.NewSlog(cfg)
+	slogger := zaplogger.NewSlog(&cfg)
 
 	child := slogger.WithGroup("http").With(textMethod, textPost)
 	child.InfoContext(t.Context(), "grouped with attrs")
@@ -1172,11 +1178,12 @@ func TestZapLogger_RedactingHandler_Enabled(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textWarn,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	slogger := zaplogger.NewSlog(cfg)
+	slogger := zaplogger.NewSlog(&cfg)
 
 	slogger.DebugContext(t.Context(), "this should be filtered out")
 	slogger.WarnContext(t.Context(), "this should pass through")
@@ -1198,11 +1205,12 @@ func TestZapLogger_RedactingHandler_Handle_WithCorrelation(t *testing.T) {
 	t.Parallel()
 
 	cfg := zaplogger.Config{
+		Schema: "", Service: "", Env: "",
 		Level:     textDebug,
 		Format:    textStructuredFormat,
 		RedactPII: true,
 	}
-	slogger := zaplogger.NewSlog(cfg)
+	slogger := zaplogger.NewSlog(&cfg)
 
 	ctx := context.Background()
 	slogger.InfoContext(ctx, "without correlation")

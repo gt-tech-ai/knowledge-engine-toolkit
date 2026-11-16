@@ -6,10 +6,20 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
-Python: `techai-webutils` 0.16.0.
+Python: `techai-webutils` 0.17.0 (0.16.0 published `run_eval` alone).
 
 ### Added
 
+- Log schema v2, opt-in in both languages (ARCHITECTURE.md#logging): an RFC 3339 UTC
+  millisecond `timestamp`, a `dir/file:line` `caller`, `service` and `env` on every line, a
+  logged error flattened to its message string beside its `error_code` (`UNKNOWN` when
+  uncoded), and a `stacktrace` at error level. Go: `logger.SchemaV2` with `WithSchema`,
+  `WithService`, `WithEnv` and the `logging.schema` config key; both `zap` and `stdlib` emit
+  it. Python: `foundation.logger.schema.LogSchema`, passed to `configure_logging(schema=...)`
+  or `start_observability(schema=...)`, and the `logging_schema` setting; under v2 a warning
+  is `warn`, an `exc_info` exception folds into `error`/`error_code`/`stacktrace`, and stdlib
+  library lines share the schema. v1 stays the default; an unknown schema fails boot with
+  `INVALID_INPUT`.
 - Python `services/eval_runner.run_eval(dataset, system, graders, evaluator, *, baseline=None)`
   runs every case of a `Dataset` through the system under test, grades it with the `Evaluator`,
   and returns the `EvalReport`: pass rate, mean score, each grader's mean score, and the cases
@@ -17,6 +27,12 @@ Python: `techai-webutils` 0.16.0.
   from another dataset version fails `INVALID_INPUT` before any case runs.
 - `EvalReport.results`: every case's `EvalResult` in dataset order (defaults to `()`), so a report
   can serve as the next run's baseline.
+
+### Changed
+
+- **Breaking (Go):** `logger.NewFromConfig`, `zap.New` / `zap.NewSlog` and `stdlib.New` /
+  `stdlib.NewSlog` take `*Config`, and `logger.Config.ToOptions` has a pointer receiver.
+  Pass `&cfg` where a value was passed.
 
 ### Fixed
 
@@ -28,6 +44,13 @@ Python: `techai-webutils` 0.16.0.
   parallel injects its own environment, so it no longer races another test reading PATH.
   `AddToPathIfMissing` keeps its signature and still extends the process PATH; the
   `PathResolver` still reads the process PATH. The generated mocks gain `MockEnvironment`.
+- Go `foundation/logger/stdlib`: the `caller` source now points at the code that called the
+  logger, not the logger's own wrapper.
+- Python `clients/kb_ingestion/bedrock`: `get_ingestion_job` codes its failures. A
+  `ResourceNotFoundException` (Bedrock no longer knows the job) raises `NotFoundError`, so a
+  caller can end its record of the job; any other failure goes through
+  `botocore_error_to_app_error` instead of escaping as a raw `ClientError`. The
+  `KnowledgeBaseIngestor.get_ingestion_job` contract documents the `NotFoundError`.
 
 ## [0.0.62] - 2026-11-14
 

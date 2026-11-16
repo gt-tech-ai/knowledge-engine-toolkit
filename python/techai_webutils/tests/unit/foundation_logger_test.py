@@ -26,17 +26,21 @@ Run with: pytest tests/python/test_foundation/test_logger.py
 
 import json
 import logging
+import re
 from io import StringIO
 from typing import NoReturn, cast
 
 import pytest
 
 import techai_webutils.foundation.logger.logger as mod
+from techai_webutils.core.errors.codes import ErrorCode
+from techai_webutils.core.errors.errors import AppError
 from techai_webutils.foundation.logger.logger import (
     StructlogLogger,
     configure_logging,
     get_logger,
 )
+from techai_webutils.foundation.logger.schema import LogSchema
 
 _EXPECTED_LINES = 2
 
@@ -286,3 +290,186 @@ class TestStructlogLoggerDelegation:
             "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
         )
         assert data["git_sha"] == "abc123"
+
+
+class TestLogSchemaV2:
+    """The v2 log schema: the field set every service and language shares."""
+
+    @staticmethod
+    def _error_line() -> dict[str, object]:
+        """Log one coded error through a v2 logger and return the parsed line.
+
+        Returns:
+            The emitted JSON line.
+
+        """
+        output = StringIO()
+        _ = configure_logging(
+            level="INFO",
+            stream=output,
+            schema=LogSchema(name="v2", service="svc-a", env="env-a"),
+        )
+        err = AppError(
+            ErrorCode.UNAVAILABLE, "store call", cause=ValueError("upstream refused")
+        )
+        get_logger("test").error("call failed", error=err)
+        return cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
+
+    @staticmethod
+    def test_configure_logging_v2_error_line_carries_field_set() -> None:
+        """A v2 error line carries the unified field set the Go loggers emit.
+
+        **Why this test is important:**
+          - Dashboards, alerts and log queries key on one field set across services
+            and languages; a Python line that drifts (a nested error, a microsecond
+            timestamp, no service) breaks every query that filters on it.
+
+        **What it tests:**
+          - service and env carry the configured values; level is "error".
+          - timestamp is RFC 3339 UTC with exactly millisecond precision.
+          - error is the message with its cause as a string; error_code is the code.
+          - caller is a "dir/file.py:line" string naming this test file; stacktrace is
+            a non-empty string.
+
+        """
+        line = TestLogSchemaV2._error_line()
+
+        assert line["service"] == "svc-a"
+        assert line["env"] == "env-a"
+        assert line["level"] == "error"
+        assert line["message"] == "call failed"
+        assert re.fullmatch(
+            r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", str(line["timestamp"])
+        )
+        assert line["error"] == "store call: upstream refused"
+        assert line["error_code"] == "UNAVAILABLE"
+        assert re.fullmatch(r"unit/foundation_logger_test\.py:\d+", str(line["caller"]))
+        assert isinstance(line["stacktrace"], str)
+        assert line["stacktrace"]
+
+    @staticmethod
+    def test_configure_logging_v2_uncoded_error_is_unknown() -> None:
+        """A v2 line codes an uncoded exception as UNKNOWN, as Go's apperr.Code does.
+
+        **Why this test is important:**
+          - error_code must be present on every error line so a query can group by it;
+            a plain exception must not leave the field out.
+
+        **What it tests:**
+          - error is the exception's message and error_code is "UNKNOWN".
+          - a warning's level is "warn", Go's name, not structlog's "warning".
+
+        """
+        output = StringIO()
+        _ = configure_logging(level="INFO", stream=output, schema=LogSchema(name="v2"))
+        get_logger("test").warning("odd", error=ValueError("bad value"))
+        line = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
+
+        assert line["level"] == "warn"
+        assert line["error"] == "bad value"
+        assert line["error_code"] == "UNKNOWN"
+        assert "stacktrace" not in line
+        assert "service" not in line
+
+    @staticmethod
+    def test_configure_logging_v2_exc_info_flattens_to_error() -> None:
+        """A v2 ``logger.exception`` line carries the error fields, not a nested dict.
+
+        **Why this test is important:**
+          - Python services log caught exceptions with ``exc_info``; under v1 that
+            renders a nested "exception" object no Go query can read.
+
+        **What it tests:**
+          - error is the exception's message, error_code its code, stacktrace its
+            traceback naming the raise; no "exception" key remains.
+
+        """
+
+        def call_bedrock() -> None:
+            raise AppError(ErrorCode.TIMEOUT, "bedrock call")
+
+        output = StringIO()
+        _ = configure_logging(level="INFO", stream=output, schema=LogSchema(name="v2"))
+        try:
+            call_bedrock()
+        except AppError:
+            get_logger("test").exception("ingest failed")
+        line = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
+
+        assert line["level"] == "error"
+        assert line["error"] == "bedrock call"
+        assert line["error_code"] == "TIMEOUT"
+        assert "bedrock call" in str(line["stacktrace"])
+        assert "exception" not in line
+
+    @staticmethod
+    def test_configure_logging_v2_stdlib_line_shares_schema() -> None:
+        """A v2 stdlib ``logging`` line from a library renders in the same schema.
+
+        **Why this test is important:**
+          - Library lines (botocore, httpx, a framework) printed as bare text are
+            unparseable by the log pipeline and carry no service to filter on.
+
+        **What it tests:**
+          - A stdlib warning is one JSON line with level "warn", the message, the
+            service and a millisecond timestamp.
+
+        """
+        output = StringIO()
+        _ = configure_logging(
+            level="INFO", stream=output, schema=LogSchema(name="v2", service="svc-b")
+        )
+        logging.getLogger("some.library").warning("pool %s exhausted", "db")
+        line = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
+
+        assert line["level"] == "warn"
+        assert line["message"] == "pool db exhausted"
+        assert line["service"] == "svc-b"
+        assert re.fullmatch(
+            r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", str(line["timestamp"])
+        )
+
+    @staticmethod
+    def test_configure_logging_v1_default_keeps_shape() -> None:
+        """The default schema keeps the v1 shape: no caller, no flattening, no service.
+
+        **Why this test is important:**
+          - v2 is opt-in; a consumer that has not switched must see no change.
+
+        **What it tests:**
+          - With no schema, the line has no caller, service or error_code field.
+
+        """
+        output = StringIO()
+        _ = configure_logging(level="INFO", stream=output)
+        get_logger("test").info("plain")
+        line = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
+
+        assert "caller" not in line
+        assert "service" not in line
+        assert "error_code" not in line
+
+    @staticmethod
+    def test_log_schema_unknown_name_fails_invalid_input() -> None:
+        """An unknown schema name fails INVALID_INPUT rather than logging v1 silently.
+
+        **Why this test is important:**
+          - A typo in ``logging_schema`` must fail boot, as the Go logger does.
+
+        **What it tests:**
+          - LogSchema(name="v3") raises AppError with code INVALID_INPUT.
+
+        """
+        with pytest.raises(AppError) as info:
+            _ = LogSchema(name="v3")
+        assert info.value.code is ErrorCode.INVALID_INPUT

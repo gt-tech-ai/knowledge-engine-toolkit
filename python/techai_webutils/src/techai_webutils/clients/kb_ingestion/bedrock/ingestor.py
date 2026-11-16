@@ -25,7 +25,7 @@ from techai_webutils.clients.kb_ingestion.mapping import (
     start_client_token,
     start_error,
 )
-from techai_webutils.core.errors import AppError, ConflictError
+from techai_webutils.core.errors import AppError, ConflictError, NotFoundError
 from techai_webutils.core.interfaces.kb_ingestion import (
     DocumentIngestResult,
     IngestionJob,
@@ -386,6 +386,10 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
     ) -> IngestionJob:
         """Fetch the current state of a Bedrock ingestion job.
 
+        A ``ResourceNotFoundException`` — Bedrock no longer knows ``job_id`` — is mapped
+        to ``core/errors.NotFoundError`` so the caller can end its record of the job;
+        any other failure is coded by the shared botocore boundary.
+
         Args:
             knowledge_base_id: The knowledge base.
             data_source_id: The data source within it.
@@ -394,13 +398,23 @@ class BedrockKnowledgeBaseIngestor(KnowledgeBaseIngestor):
         Returns:
             The current state of a Bedrock ingestion job.
 
+        Raises:
+            botocore_error_to_app_error: The coded error for any other failure.
+            NotFoundError: Bedrock ingestion job ``job_id`` not found.
+
         """
         client = await self._agent_client()
-        resp = await client.get_ingestion_job(
-            knowledgeBaseId=knowledge_base_id,
-            dataSourceId=data_source_id,
-            ingestionJobId=job_id,
-        )
+        try:
+            resp = await client.get_ingestion_job(
+                knowledgeBaseId=knowledge_base_id,
+                dataSourceId=data_source_id,
+                ingestionJobId=job_id,
+            )
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ResourceNotFoundException":
+                msg = f"bedrock ingestion job {job_id} not found"
+                raise NotFoundError(msg) from exc
+            raise botocore_error_to_app_error(exc, "bedrock get ingestion job") from exc
         return job_from_payload(cast("dict[str, object]", resp["ingestionJob"]))
 
     @override
