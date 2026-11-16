@@ -81,7 +81,8 @@ func TestZapLogger_CallerIsCallSite(t *testing.T) {
 	}
 
 	out := zapCaptureStdout(t, func() {
-		zaplogger.New(zaplogger.Config{
+		zaplogger.New(&zaplogger.Config{
+			Schema: "", Service: "", Env: "",
 			Level: textInfo, Format: textStructuredFormat,
 			RedactPII: false,
 		}).
@@ -123,7 +124,8 @@ func TestZapLogger_AppErrorSurfacesCauseAndStack(t *testing.T) {
 			`ERROR: column "deleted_at" does not exist (SQLSTATE 42703)`,
 		)
 		err := apperr.Wrap(underlying, apperr.CodeInternal, "failed to query database")
-		zaplogger.New(zaplogger.Config{
+		zaplogger.New(&zaplogger.Config{
+			Schema: "", Service: "", Env: "",
 			Level: textInfo, Format: textStructuredFormat,
 			RedactPII: false,
 		}).
@@ -177,7 +179,8 @@ func TestZapLogger_LevelAndMessage(t *testing.T) {
 	}
 
 	out := zapCaptureStdout(t, func() {
-		zaplogger.New(zaplogger.Config{
+		zaplogger.New(&zaplogger.Config{
+			Schema: "", Service: "", Env: "",
 			Level: textInfo, Format: textStructuredFormat,
 			RedactPII: false,
 		}).

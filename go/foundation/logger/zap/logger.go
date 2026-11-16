@@ -31,6 +31,16 @@ type Config struct {
 	// Format selects the output encoding: "json" for structured or "text" for console.
 	Format string
 
+	// Schema selects the field set: logctx.SchemaV1 (default, "" too) or
+	// logctx.SchemaV2 (ARCHITECTURE.md#logging).
+	Schema string
+
+	// Service names the emitting service, bound to every SchemaV2 line.
+	Service string
+
+	// Env names the deploy environment, bound to every SchemaV2 line.
+	Env string
+
 	// RedactPII enables automatic scrubbing of emails, phone numbers, SSNs, IPs, and tokens.
 	RedactPII bool
 }
@@ -40,6 +50,9 @@ func DefaultConfig() Config {
 	return Config{
 		Level:     "info",
 		Format:    "json",
+		Schema:    logctx.SchemaV1,
+		Service:   "",
+		Env:       "",
 		RedactPII: true,
 	}
 }
@@ -51,7 +64,7 @@ type Logger struct {
 }
 
 // New creates a zap-backed logger from the given config.
-func New(cfg Config) *Logger {
+func New(cfg *Config) *Logger {
 	logger := slogBridge(cfg)
 	// Bind the deployed commit (GIT_SHA env = image tag) so every log line carries
 	// git_sha, letting Grafana deep-link errors to GitHub source at that revision.
@@ -67,7 +80,7 @@ func New(cfg Config) *Logger {
 }
 
 // NewSlog returns a raw *slog.Logger backed by zap for stdlib compatibility.
-func NewSlog(cfg Config) *slog.Logger {
+func NewSlog(cfg *Config) *slog.Logger {
 	return slogBridge(cfg)
 }
 
@@ -163,26 +176,10 @@ func (l *Logger) log(level slog.Level, msg string, keysAndValues []any) {
 }
 
 // slogBridge creates the underlying *slog.Logger from config.
-func slogBridge(cfg Config) *slog.Logger {
-	level := parseLevel(cfg.Level)
+func slogBridge(cfg *Config) *slog.Logger {
+	encoderCfg := encoderConfig(cfg)
 
 	var encoder zapcore.Encoder
-
-	encoderCfg := zap.NewProductionEncoderConfig()
-	// Canonical cross-service log schema: timestamp / level (lowercase) /
-	// message / caller. Kept identical in the stdlib logger and the Python
-	// structlog config so every service emits the same JSON shape.
-	encoderCfg.TimeKey = "timestamp"
-	encoderCfg.MessageKey = "message"
-	encoderCfg.LevelKey = "level"
-	encoderCfg.CallerKey = "caller"
-	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	encoderCfg.EncodeLevel = zapcore.LowercaseLevelEncoder
-	// The origin-aware stacktrace handler (below) owns the "stacktrace" field:
-	// for an AppError it emits the stack where the error was created, not this
-	// logging call site. Suppress zapcore's own Entry.Stack so it does not emit a
-	// second, call-site "stacktrace" under the same key.
-	encoderCfg.StacktraceKey = zapcore.OmitKey
 
 	if cfg.Format == "text" {
 		encoder = zapcore.NewConsoleEncoder(encoderCfg)
@@ -190,10 +187,14 @@ func slogBridge(cfg Config) *slog.Logger {
 		encoder = zapcore.NewJSONEncoder(encoderCfg)
 	}
 
-	core := zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), level)
-	zapLogger := zap.New(core)
+	core := zapcore.NewCore(encoder, zapcore.AddSync(os.Stdout), parseLevel(cfg.Level))
 
-	var handler slog.Handler = zapslog.NewHandler(zapLogger.Core(), zapslog.WithCaller(true))
+	var handler slog.Handler = zapslog.NewHandler(core, zapslog.WithCaller(true))
+
+	if cfg.Schema == logctx.SchemaV2 {
+		return slog.New(schemaV2Chain(handler, cfg)).
+			With(logctx.SchemaV2Attrs(cfg.Service, cfg.Env)...)
+	}
 
 	// Attach a full stack trace to every Error-level (and above) record. The
 	// zapslog bridge bypasses zap.AddStacktrace, so do it at the slog layer.
@@ -204,6 +205,45 @@ func slogBridge(cfg Config) *slog.Logger {
 	}
 
 	return slog.New(handler)
+}
+
+// schemaV2Chain wraps base for SchemaV2: the stacktrace handler, which also
+// flattens a logged error to strings, sits outside the redacting handler, so the
+// flattened error message is scrubbed like any other string field.
+func schemaV2Chain(base slog.Handler, cfg *Config) slog.Handler {
+	if cfg.RedactPII {
+		base = &redactingHandler{inner: base}
+	}
+
+	return logctx.NewSchemaV2StacktraceHandler(base, slog.LevelError)
+}
+
+// encoderConfig returns the JSON encoder settings for the canonical
+// cross-service log schema: timestamp / level (lowercase) / message / caller,
+// kept identical in the stdlib logger and the Python structlog config. Under
+// SchemaV2 the timestamp is RFC 3339 UTC with milliseconds.
+func encoderConfig(cfg *Config) zapcore.EncoderConfig {
+	encoderCfg := zap.NewProductionEncoderConfig()
+
+	encoderCfg.TimeKey = "timestamp"
+	encoderCfg.MessageKey = "message"
+	encoderCfg.LevelKey = "level"
+	encoderCfg.CallerKey = "caller"
+	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.EncodeLevel = zapcore.LowercaseLevelEncoder
+	// The origin-aware stacktrace handler owns the "stacktrace" field: for an
+	// AppError it emits the stack where the error was created, not this logging
+	// call site. Suppress zapcore's own Entry.Stack so it does not emit a second,
+	// call-site "stacktrace" under the same key.
+	encoderCfg.StacktraceKey = zapcore.OmitKey
+
+	if cfg.Schema == logctx.SchemaV2 {
+		encoderCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+			enc.AppendString(logctx.FormatTimeV2(t))
+		}
+	}
+
+	return encoderCfg
 }
 
 // parseLevel maps a textual level name to its zapcore.Level, defaulting to

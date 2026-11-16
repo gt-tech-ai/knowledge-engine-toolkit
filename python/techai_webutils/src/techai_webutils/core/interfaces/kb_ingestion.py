@@ -207,6 +207,10 @@ class KnowledgeBaseIngestor(ManagedResource, ABC):
         Returns:
             The job's current state and statistics.
 
+        Raises:
+            NotFoundError: The backend no longer knows ``job_id``, so the caller can
+                end its record of the job instead of polling it forever.
+
         """
         ...
 

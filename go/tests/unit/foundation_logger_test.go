@@ -222,7 +222,7 @@ func TestNewLogger_CreatesValidLogger(t *testing.T) {
 	t.Parallel()
 
 	cfg := logger.DefaultConfig()
-	currentLogger, err := logger.NewFromConfig(cfg)
+	currentLogger, err := logger.NewFromConfig(&cfg)
 	require.NoError(t, err, "unexpected error from NewFromConfig")
 	require.NotNil(t, currentLogger, "logger must not be nil")
 
@@ -248,13 +248,14 @@ func TestNewLogger_TextFormat(t *testing.T) {
 	t.Parallel()
 
 	cfg := logger.Config{
+		Schema: "", Service: "", Env: "",
 		Kind:      logger.KindZap,
 		Level:     textDebug,
 		Format:    textText,
 		RedactPII: false,
 		AddSource: false,
 	}
-	l, err := logger.NewFromConfig(cfg)
+	l, err := logger.NewFromConfig(&cfg)
 	require.NoError(t, err, "unexpected error from NewFromConfig with text format")
 	require.NotNil(t, l, "logger must not be nil")
 	l.Debug("debug message")
@@ -346,7 +347,7 @@ func TestWithContext_IncludesTraceFields(t *testing.T) {
 	t.Parallel()
 
 	cfg := logger.DefaultConfig()
-	currentLogger, err := logger.NewFromConfig(cfg)
+	currentLogger, err := logger.NewFromConfig(&cfg)
 	require.NoError(t, err, "unexpected error from NewFromConfig")
 
 	// Test case 1: Context with span but NO correlation ID should still add trace fields

@@ -22,9 +22,14 @@ from structlog.tracebacks import ExceptionDictTransformer
 
 from techai_webutils.core.interfaces.logger import Logger
 from techai_webutils.foundation.logger.redact import redact_pii
+from techai_webutils.foundation.logger.schema import (
+    SCHEMA_V2_KEYS,
+    LogSchema,
+    schema_processors,
+)
 
 if TYPE_CHECKING:
-    from structlog.typing import EventDict
+    from structlog.typing import EventDict, Processor
 
 # Guards the single-configure invariant: new_logger() self-configures logging exactly once
 # instead of re-running structlog.configure + logging.basicConfig(force=True) — which tore
@@ -105,7 +110,8 @@ def _add_git_sha(
 
 _STRUCTURAL_KEYS = frozenset({"timestamp", "level", "trace_id", "span_id", "git_sha"})
 """Fields the pipeline itself stamps; never redacted (a hex trace id can look like a phone
-number)."""
+number). Under log schema v2 the v2 keys join them, as the Go redacting handler skips
+them; under v1 a caller's own field of the same name is still redacted."""
 
 
 def _redact_value(value: object) -> object:
@@ -134,32 +140,42 @@ def _redact_value(value: object) -> object:
     return value
 
 
-def _redact_pii_fields(
-    _logger: object,
-    _method_name: str,
-    event_dict: EventDict,
-) -> EventDict:
-    """Structlog processor that redacts PII in the message and every field.
+def _pii_redactor(skip: frozenset[str]) -> Processor:
+    """Return a structlog processor that redacts PII in the message and every field.
 
-    It uses ``redact_pii``.
-
-    Installed only when ``configure_logging(redact_pii=True)`` (the ``logging_redact_pii``
-    setting). Pipeline-stamped structural fields are skipped; strings nested in dicts,
-    lists and tuples are redacted too; other values pass through.
+    It uses ``redact_pii``. Installed only when ``configure_logging(redact_pii=True)``
+    (the ``logging_redact_pii`` setting). Fields in ``skip`` are left as they are;
+    strings nested in dicts, lists and tuples are redacted too; other values pass
+    through.
 
     Args:
-        _logger: Ignored (structlog's logger).
-        _method_name: Ignored (the log method's name).
-        event_dict: The event being logged.
+        skip: The pipeline-stamped fields never redacted.
 
     Returns:
-        The event dict.
+        The processor.
 
     """
-    for key, value in cast("dict[str, object]", event_dict).items():
-        if key not in _STRUCTURAL_KEYS:
-            event_dict[key] = _redact_value(value)
-    return event_dict
+
+    def redact_fields(
+        _logger: object, _method_name: str, event_dict: EventDict
+    ) -> EventDict:
+        """Redact every field not in ``skip``.
+
+        Args:
+            _logger: Ignored (structlog's logger).
+            _method_name: Ignored (the log method's name).
+            event_dict: The event being logged.
+
+        Returns:
+            The event dict.
+
+        """
+        for key, value in cast("dict[str, object]", event_dict).items():
+            if key not in skip:
+                event_dict[key] = _redact_value(value)
+        return event_dict
+
+    return redact_fields
 
 
 @final
@@ -307,6 +323,7 @@ def configure_logging(
     stream: IO[str] | None = None,
     *,
     redact_pii: bool = False,
+    schema: LogSchema | None = None,
 ) -> structlog.typing.FilteringBoundLogger:
     """Configure structlog for JSON output.
 
@@ -319,6 +336,9 @@ def configure_logging(
         redact_pii: When True (the ``logging_redact_pii`` setting), redact PII in the
             message and every string field before rendering
             (``foundation.logger.redact.redact_pii``).
+        schema: The log schema and its identity fields (``logging_schema``); None is
+            v1. "v2" is the unified field set the Go loggers emit
+            (``foundation.logger.schema``, ARCHITECTURE.md#logging).
 
     Returns:
         A configured structlog bound logger.
@@ -327,29 +347,32 @@ def configure_logging(
     target_stream: TextIO = cast("TextIO", stream or sys.stdout)
     numeric_level = _parse_level(level)
 
-    redaction = [_redact_pii_fields] if redact_pii else []
+    schema = schema or LogSchema()
+    skip = _STRUCTURAL_KEYS | SCHEMA_V2_KEYS if schema.is_v2 else _STRUCTURAL_KEYS
+    redaction = [_pii_redactor(skip)] if redact_pii else []
+    shape = schema_processors(schema)
+    pre_render: list[structlog.typing.Processor] = [
+        structlog.contextvars.merge_contextvars,
+        _add_trace_context,
+        _add_git_sha,
+        structlog.stdlib.add_log_level,
+        *shape,
+        structlog.processors.StackInfoRenderer(),
+        # Structured tracebacks WITHOUT frame locals (show_locals=False) under
+        # "exception" whenever exc_info is set. dict_tracebacks defaults to dumping
+        # every frame's locals, which turned a single Bedrock ClientError into a
+        # multi-KB wall of botocore internals (and risks leaking sensitive values);
+        # the frames are kept for analysis, locals dropped.
+        structlog.processors.ExceptionRenderer(
+            ExceptionDictTransformer(show_locals=False)
+        ),
+        # Canonical cross-service schema: the message lives under "message"
+        # (matching the Go zap/stdlib loggers), not structlog's default "event".
+        structlog.processors.EventRenamer("message"),
+        *redaction,
+    ]
     structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            _add_trace_context,
-            _add_git_sha,
-            structlog.stdlib.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso", key="timestamp"),
-            structlog.processors.StackInfoRenderer(),
-            # Structured tracebacks WITHOUT frame locals (show_locals=False) under
-            # "exception" whenever exc_info is set. dict_tracebacks defaults to dumping
-            # every frame's locals, which turned a single Bedrock ClientError into a
-            # multi-KB wall of botocore internals (and risks leaking sensitive values);
-            # the frames are kept for analysis, locals dropped.
-            structlog.processors.ExceptionRenderer(
-                ExceptionDictTransformer(show_locals=False)
-            ),
-            # Canonical cross-service schema: the message lives under "message"
-            # (matching the Go zap/stdlib loggers), not structlog's default "event".
-            structlog.processors.EventRenamer("message"),
-            *redaction,
-            structlog.processors.JSONRenderer(),
-        ],
+        processors=[*pre_render, structlog.processors.JSONRenderer()],
         # make_filtering_bound_logger gates the app's own structlog output at the numeric
         # level (dropping below-threshold events before rendering).
         # structlog.stdlib.BoundLogger does NOT filter with a PrintLogger factory, so the
@@ -368,9 +391,8 @@ def configure_logging(
     )
 
     logging.basicConfig(
-        format="%(message)s",
-        stream=target_stream,
         level=numeric_level,
+        handlers=[_stdlib_handler(target_stream, schema, pre_render)],
         force=True,
     )
 
@@ -403,6 +425,42 @@ def configure_logging(
     # an explicit stream.
     _STATE.configured = True
     return cast("structlog.typing.FilteringBoundLogger", structlog.get_logger())
+
+
+def _stdlib_handler(
+    stream: TextIO,
+    schema: LogSchema,
+    pre_render: list[structlog.typing.Processor],
+) -> logging.Handler:
+    """Return the handler stdlib ``logging`` records (library lines) write through.
+
+    Under v1 a record is its bare message, the original output. Under v2 it runs
+    through the same processors as a structlog event, so a library's line carries
+    the v2 field set too (ADR-0141).
+
+    Args:
+        stream: Where the lines go.
+        schema: The configured log schema.
+        pre_render: The structlog processors before the JSON renderer.
+
+    Returns:
+        A stream handler with the schema's formatter.
+
+    """
+    handler = logging.StreamHandler(stream)
+    if schema.is_v2:
+        handler.setFormatter(
+            structlog.stdlib.ProcessorFormatter(
+                foreign_pre_chain=pre_render,
+                processors=[
+                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                    structlog.processors.JSONRenderer(),
+                ],
+            )
+        )
+    else:
+        handler.setFormatter(logging.Formatter("%(message)s"))
+    return handler
 
 
 def get_logger(name: str, **initial_values: object) -> structlog.stdlib.BoundLogger:

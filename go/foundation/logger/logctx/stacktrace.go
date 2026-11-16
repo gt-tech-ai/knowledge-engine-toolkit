@@ -29,13 +29,26 @@ type stacktraceHandler struct {
 	// level is the threshold at or above which a stack trace is attached;
 	// records below it pass through to inner unchanged.
 	level slog.Level
+
+	// flatten, set under SchemaV2, rewrites a logged error into its message and
+	// error_code after the origin stack has been read from it.
+	flatten bool
 }
 
 // NewStacktraceHandler returns a handler that appends a captured stack trace to
 // records logged at or above minLevel. Records below the threshold pass through
 // unchanged.
 func NewStacktraceHandler(inner slog.Handler, minLevel slog.Level) slog.Handler {
-	return &stacktraceHandler{inner: inner, level: minLevel}
+	return &stacktraceHandler{inner: inner, level: minLevel, flatten: false}
+}
+
+// NewSchemaV2StacktraceHandler returns NewStacktraceHandler's handler that also
+// flattens an error logged under ErrorKey, on every record and every WithAttrs,
+// to its message string beside its ErrorCodeKey (ARCHITECTURE.md#logging). The
+// stack is read from the error before it is flattened, so an AppError still
+// logs its origin stack.
+func NewSchemaV2StacktraceHandler(inner slog.Handler, minLevel slog.Level) slog.Handler {
+	return &stacktraceHandler{inner: inner, level: minLevel, flatten: true}
 }
 
 // Enabled reports whether the handler processes records at the given level by
@@ -49,7 +62,7 @@ func (h *stacktraceHandler) Enabled(ctx context.Context, level slog.Level) bool 
 // carried by a logged error and falls back to capturing the current stack.
 func (h *stacktraceHandler) Handle(ctx context.Context, record slog.Record) error {
 	if record.Level < h.level {
-		return h.inner.Handle(ctx, record)
+		return h.inner.Handle(ctx, h.shape(&record))
 	}
 
 	// Prefer an origin stack carried by a logged error (e.g. an AppError) so the
@@ -60,7 +73,7 @@ func (h *stacktraceHandler) Handle(ctx context.Context, record slog.Record) erro
 		stack = captureStack()
 	}
 
-	secondR := record.Clone()
+	secondR := h.shape(&record)
 	secondR.AddAttrs(slog.String(StacktraceKey, stack))
 
 	return h.inner.Handle(ctx, secondR)
@@ -98,15 +111,28 @@ func originStack(r *slog.Record) string {
 }
 
 // WithAttrs returns a new handler whose wrapped handler has the given
-// attributes added, preserving the stack-trace threshold.
+// attributes added (each logged error flattened under flatten), preserving the
+// stack-trace threshold.
 func (h *stacktraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &stacktraceHandler{inner: h.inner.WithAttrs(attrs), level: h.level}
+	if h.flatten {
+		attrs = flattenErrors(attrs)
+	}
+
+	return &stacktraceHandler{
+		inner:   h.inner.WithAttrs(attrs),
+		level:   h.level,
+		flatten: h.flatten,
+	}
 }
 
 // WithGroup returns a new handler whose wrapped handler opens the named group,
 // preserving the stack-trace threshold.
 func (h *stacktraceHandler) WithGroup(name string) slog.Handler {
-	return &stacktraceHandler{inner: h.inner.WithGroup(name), level: h.level}
+	return &stacktraceHandler{
+		inner:   h.inner.WithGroup(name),
+		level:   h.level,
+		flatten: h.flatten,
+	}
 }
 
 // captureStack walks the call stack and returns a newline-separated
@@ -148,4 +174,22 @@ func isInternalFrame(fn, file string) bool {
 		strings.Contains(fn, "log/slog") ||
 		strings.Contains(file, "foundation/logger/") ||
 		strings.Contains(fn, "go.uber.org/zap")
+}
+
+// shape returns a copy of record the wrapped handler may extend: a clone, or under
+// flatten a rebuild with every logged error flattened.
+func (h *stacktraceHandler) shape(record *slog.Record) slog.Record {
+	if !h.flatten {
+		return record.Clone()
+	}
+
+	out := slog.NewRecord(record.Time, record.Level, record.Message, record.PC)
+
+	record.Attrs(func(attr slog.Attr) bool {
+		out.AddAttrs(flattenError(attr)...)
+
+		return true
+	})
+
+	return out
 }

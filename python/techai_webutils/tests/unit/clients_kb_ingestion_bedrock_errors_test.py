@@ -1,4 +1,4 @@
-"""Tests for the Bedrock ingestor's start: error codes and the idempotent ``clientToken``.
+"""Tests for the Bedrock ingestor's start and job read: error codes, idempotent tokens.
 
 The aiobotocore session is mocked where the ingestor imports it; errors are real botocore
 ``ClientError`` shapes.
@@ -16,7 +16,12 @@ from techai_webutils.clients.kb_ingestion.bedrock.ingestor import (
     BedrockKnowledgeBaseIngestor,
 )
 from techai_webutils.clients.kb_ingestion.mapping import start_client_token
-from techai_webutils.core.errors import AppError, ConflictError, ErrorCode
+from techai_webutils.core.errors import (
+    AppError,
+    ConflictError,
+    ErrorCode,
+    NotFoundError,
+)
 from tests.json_path import dig
 
 _EXPECTED_FIRST_COUNT = 64
@@ -45,17 +50,18 @@ def _ingestor(client: AsyncMock) -> BedrockKnowledgeBaseIngestor:
         return BedrockKnowledgeBaseIngestor(region="us-east-1")
 
 
-def _client_error(code: str) -> ClientError:
-    """Return the ``ClientError`` botocore raises for ``code`` on ``StartIngestionJob``.
+def _client_error(code: str, operation: str = "StartIngestionJob") -> ClientError:
+    """Return the ``ClientError`` botocore raises for ``code`` on ``operation``.
 
     Args:
         code: The AWS error code.
+        operation: The AWS operation that failed.
 
     Returns:
         The ``ClientError`` botocore raises for ``code``.
 
     """
-    return ClientError({"Error": {"Code": code, "Message": "m"}}, "StartIngestionJob")
+    return ClientError({"Error": {"Code": code, "Message": "m"}}, operation)
 
 
 @pytest.mark.asyncio
@@ -165,3 +171,47 @@ async def test_start_retry_reuses_client_token() -> None:
     assert len(str(dig(first, "clientToken"))) == _EXPECTED_FIRST_COUNT
     assert "clientToken" not in cast("dict[str, object]", third)
     assert start_client_token("kb", "ds", "r2") != dig(first, "clientToken")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("ResourceNotFoundException", ErrorCode.NOT_FOUND),
+        ("ThrottlingException", ErrorCode.UNAVAILABLE),
+        ("AccessDeniedException", ErrorCode.INTERNAL),
+    ],
+)
+async def test_get_codes_an_unknown_job_as_not_found(
+    code: str, expected: ErrorCode
+) -> None:
+    """Test that a failed job read raises a coded error, not-found apart from the rest.
+
+    **Why this test is important:**
+      - A caller holding a job id Bedrock no longer knows (expired, or from another data
+        source) must be able to end its record; a raw SDK error, or one coded like every
+        other failure, leaves it polling a job that will never finish.
+
+    **What it tests:**
+      - ``ResourceNotFoundException`` → ``NotFoundError``; throttling → transient
+        ``UNAVAILABLE``; any other code → permanent ``INTERNAL`` — each caused by the
+        SDK's ``ClientError``
+
+    Args:
+        code: The AWS error code.
+        expected: The code it maps to.
+
+    """
+    client = AsyncMock()
+    cast("MagicMock", client.get_ingestion_job).side_effect = _client_error(
+        code, "GetIngestionJob"
+    )
+
+    with pytest.raises(AppError) as info:
+        _ = await _ingestor(client).get_ingestion_job(
+            knowledge_base_id="kb", data_source_id="ds", job_id="j1"
+        )
+
+    assert info.value.code is expected
+    assert isinstance(info.value.__cause__, ClientError)
+    assert isinstance(info.value, NotFoundError) is (expected is ErrorCode.NOT_FOUND)

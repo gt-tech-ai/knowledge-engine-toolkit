@@ -5,11 +5,16 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger/logctx"
 )
+
+// logCallerSkip is the frames between runtime.Callers and the real log caller.
+const logCallerSkip = 3
 
 // Compile-time interface assertion.
 var _ interfaces.Logger = (*Logger)(nil)
@@ -19,7 +24,17 @@ type Config struct {
 	// Level sets the minimum log severity (debug, info, warn, error).
 	Level string
 
-	// AddSource enables source code location in log records.
+	// Schema selects the field set: logctx.SchemaV1 (default, "" too) or
+	// logctx.SchemaV2 (ARCHITECTURE.md#logging).
+	Schema string
+
+	// Service names the emitting service, bound to every SchemaV2 line.
+	Service string
+
+	// Env names the deploy environment, bound to every SchemaV2 line.
+	Env string
+
+	// AddSource enables source code location in log records; SchemaV2 forces it on.
 	AddSource bool
 }
 
@@ -27,6 +42,9 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Level:     "info",
+		Schema:    logctx.SchemaV1,
+		Service:   "",
+		Env:       "",
 		AddSource: true,
 	}
 }
@@ -38,33 +56,33 @@ type Logger struct {
 }
 
 // New creates a stdlib slog-backed logger from the given config.
-func New(cfg Config) *Logger {
+func New(cfg *Config) *Logger {
 	return &Logger{inner: slogBridge(cfg)}
 }
 
 // NewSlog returns a raw *slog.Logger for stdlib compatibility.
-func NewSlog(cfg Config) *slog.Logger {
+func NewSlog(cfg *Config) *slog.Logger {
 	return slogBridge(cfg)
 }
 
 // Debug logs a message at debug level with the given key/value attribute pairs.
 func (l *Logger) Debug(msg string, keysAndValues ...any) {
-	l.inner.Log(context.Background(), slog.LevelDebug, msg, keysAndValues...)
+	l.log(slog.LevelDebug, msg, keysAndValues)
 }
 
 // Info logs a message at info level with the given key/value attribute pairs.
 func (l *Logger) Info(msg string, keysAndValues ...any) {
-	l.inner.Log(context.Background(), slog.LevelInfo, msg, keysAndValues...)
+	l.log(slog.LevelInfo, msg, keysAndValues)
 }
 
 // Warn logs a message at warn level with the given key/value attribute pairs.
 func (l *Logger) Warn(msg string, keysAndValues ...any) {
-	l.inner.Log(context.Background(), slog.LevelWarn, msg, keysAndValues...)
+	l.log(slog.LevelWarn, msg, keysAndValues)
 }
 
 // Error logs a message at error level with the given key/value attribute pairs.
 func (l *Logger) Error(msg string, keysAndValues ...any) {
-	l.inner.Log(context.Background(), slog.LevelError, msg, keysAndValues...)
+	l.log(slog.LevelError, msg, keysAndValues)
 }
 
 // With returns a child logger that includes the given key/value pairs on every
@@ -105,12 +123,41 @@ func (l *Logger) WithContext(ctx context.Context) interfaces.Logger {
 	return &Logger{inner: l.inner.With(fields...)}
 }
 
+// log builds the record with the real caller's PC, so the caller field names the
+// line that called Debug/Info/Warn/Error rather than this wrapper.
+func (l *Logger) log(level slog.Level, msg string, keysAndValues []any) {
+	ctx := context.Background()
+	if !l.inner.Enabled(ctx, level) {
+		return
+	}
+
+	var pcs [1]uintptr
+
+	// Skip [runtime.Callers, log, the exported Debug/Info/Warn/Error] -> real caller.
+	runtime.Callers(logCallerSkip, pcs[:])
+
+	r := slog.NewRecord(time.Now(), level, msg, pcs[0])
+	r.Add(keysAndValues...)
+
+	_ = l.inner.Handler().Handle(ctx, r)
+}
+
 // slogBridge creates the underlying *slog.Logger from config.
-func slogBridge(cfg Config) *slog.Logger {
-	level := parseLevel(cfg.Level)
+func slogBridge(cfg *Config) *slog.Logger {
+	if cfg.Schema == logctx.SchemaV2 {
+		opts := &slog.HandlerOptions{
+			Level:       parseLevel(cfg.Level),
+			AddSource:   true,
+			ReplaceAttr: canonicalAttrV2,
+		}
+		handler := logctx.NewSchemaV2StacktraceHandler(
+			slog.NewJSONHandler(os.Stdout, opts), slog.LevelError)
+
+		return slog.New(handler).With(logctx.SchemaV2Attrs(cfg.Service, cfg.Env)...)
+	}
 
 	opts := &slog.HandlerOptions{
-		Level:       level,
+		Level:       parseLevel(cfg.Level),
 		AddSource:   cfg.AddSource,
 		ReplaceAttr: canonicalAttr,
 	}
@@ -121,6 +168,30 @@ func slogBridge(cfg Config) *slog.Logger {
 	handler = logctx.NewStacktraceHandler(handler, slog.LevelError)
 
 	return slog.New(handler)
+}
+
+// canonicalAttrV2 applies canonicalAttr, then the SchemaV2 shapes: a millisecond
+// UTC timestamp and a "dir/file.go:line" caller string, the zap backend's form.
+func canonicalAttrV2(groups []string, attr slog.Attr) slog.Attr {
+	attr = canonicalAttr(groups, attr)
+	if len(groups) != 0 {
+		return attr
+	}
+
+	switch attr.Key {
+	case "timestamp":
+		if t, ok := attr.Value.Any().(time.Time); ok {
+			attr.Value = slog.StringValue(logctx.FormatTimeV2(t))
+		}
+	case "caller":
+		if src, ok := attr.Value.Any().(*slog.Source); ok {
+			attr.Value = slog.StringValue(logctx.ShortCaller(src.File, src.Line))
+		}
+	default:
+		// No other key changes under v2.
+	}
+
+	return attr
 }
 
 // canonicalAttr rewrites slog's built-in keys to the cross-service schema

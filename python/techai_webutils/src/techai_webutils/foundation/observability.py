@@ -5,11 +5,13 @@ correlation and structured tracebacks) and OpenTelemetry tracing (OTLP gRPC
 export to a collector). Combine with the HTTP middleware in
 foundation.middleware.http_observability and the /metrics endpoint for full
 metrics + logs + traces coverage. start_observability() is the same bootstrap driven by a
-service's settings (a log level and the ``TelemetrySettings`` slice).
+service's settings (a log level, the ``TelemetrySettings`` slice and, optionally, a
+``LogSchema``).
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from techai_webutils.foundation.logger.logger import configure_logging
@@ -17,6 +19,7 @@ from techai_webutils.foundation.tracer.tracer import configure_tracer
 
 if TYPE_CHECKING:
     from techai_webutils.foundation.config.settings import TelemetrySettings
+    from techai_webutils.foundation.logger.schema import LogSchema
 
 
 def parse_sample_rate(raw: str | None) -> float:
@@ -52,12 +55,13 @@ def setup_observability(
     trace_sample_rate: float = 1.0,
     redact_pii: bool = False,
 ) -> None:
-    """Initialize logging + tracing for a service.
+    """Initialize logging (log schema v1) + tracing for a service.
 
     The OTLP endpoint and trace sample rate are INJECTED by the caller (the
     composition-root entrypoint reads OTEL_EXPORTER_OTLP_ENDPOINT / TRACE_SAMPLE_RATE from
     the environment once and passes them down) — this foundation function does not read
-    the environment itself (ARCHITECTURE.md#configuration).
+    the environment itself (ARCHITECTURE.md#configuration). For log schema v2, use
+    ``start_observability``.
 
     Args:
         service_name: Service name used for trace resource attribution + logs.
@@ -71,7 +75,18 @@ def setup_observability(
 
     """
     _ = configure_logging(level=level, redact_pii=redact_pii)
+    _start_tracing(service_name, otlp_endpoint, trace_sample_rate)
 
+
+def _start_tracing(service_name: str, otlp_endpoint: str, sample_rate: float) -> None:
+    """Install the global tracer provider exporting to the OTLP collector.
+
+    Args:
+        service_name: Service name used for trace resource attribution.
+        otlp_endpoint: OTLP collector endpoint (host:port or URL).
+        sample_rate: Span sampling fraction 0.0-1.0.
+
+    """
     endpoint = otlp_endpoint
     # The gRPC exporter wants a bare host:port; strip any URL scheme so the
     # OTEL_EXPORTER_OTLP_ENDPOINT convention ("http://host:4317") also works.
@@ -80,7 +95,7 @@ def setup_observability(
     # configure_tracer installs the global tracer provider; spans created by the
     # HTTP/gRPC middleware are exported to the OTLP collector and correlated into logs.
     _ = configure_tracer(
-        service_name, otlp_endpoint=endpoint, insecure=True, sample_rate=trace_sample_rate
+        service_name, otlp_endpoint=endpoint, insecure=True, sample_rate=sample_rate
     )
 
 
@@ -90,6 +105,7 @@ def start_observability(
     level: str,
     telemetry: TelemetrySettings,
     redact_pii: bool = False,
+    schema: LogSchema | None = None,
 ) -> None:
     """Configure logging and the OTel trace export for ``service`` from its settings.
 
@@ -100,12 +116,15 @@ def start_observability(
             ``parse_sample_rate``).
         redact_pii: Redact PII in every log line (pass the ``logging_redact_pii``
             setting).
+        schema: The log schema (build it from the ``logging_schema`` setting); None is
+            v1. A v2 schema with no service carries ``service``.
 
     """
-    setup_observability(
+    if schema is not None and not schema.service:
+        schema = replace(schema, service=service)
+    _ = configure_logging(level=level.upper(), redact_pii=redact_pii, schema=schema)
+    _start_tracing(
         service,
-        level=level.upper(),
-        otlp_endpoint=telemetry.otel_exporter_otlp_endpoint,
-        trace_sample_rate=parse_sample_rate(telemetry.trace_sample_rate),
-        redact_pii=redact_pii,
+        telemetry.otel_exporter_otlp_endpoint,
+        parse_sample_rate(telemetry.trace_sample_rate),
     )
