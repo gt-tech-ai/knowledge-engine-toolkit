@@ -87,7 +87,7 @@ func TestLoggerBuilder_NewFromConfig(t *testing.T) {
 		row.Level = textInfo
 	})
 
-	l, err := logger.NewFromConfig(cfg)
+	l, err := logger.NewFromConfig(&cfg)
 	require.NoError(t, err, "NewFromConfig must not return error")
 	require.NotNil(t, l, textExpectedNonNilLogger)
 }

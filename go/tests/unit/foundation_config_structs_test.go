@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/config/schema/infra"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
 
@@ -673,6 +675,32 @@ func TestLoggingConfig_Validate_InvalidKind(t *testing.T) {
 		row.Kind = "logrus"
 	})
 	require.Error(t, cfg.Validate(), "Validate() must return error for unknown kind")
+}
+
+// TestLoggingConfig_Validate_UnknownSchema tests that Validate rejects an unknown
+// log schema and accepts the known ones.
+//
+// Why this test is important:
+//   - A typo in logging.schema must stop boot in the config tier, not reach the
+//     logger factory or silently keep v1 while dashboards expect v2.
+//
+// What it tests:
+//   - Schema "v3" fails with CodeInvalidInput; "v1", "v2" and "" pass.
+func TestLoggingConfig_Validate_UnknownSchema(t *testing.T) {
+	t.Parallel()
+
+	bad := fixtures.Build(func(row *infra.LoggingConfig) {
+		row.Kind = infra.DefaultLoggingConfig().Kind
+		row.Schema = "v3"
+	})
+	require.True(t, apperr.Is(bad.Validate(), apperr.CodeInvalidInput))
+
+	for _, schema := range []string{"", logger.SchemaV1, logger.SchemaV2} {
+		good := infra.DefaultLoggingConfig()
+
+		good.Schema = schema
+		require.NoErrorf(t, good.Validate(), "schema %q", schema)
+	}
 }
 
 // TestLoggingConfig_GetKind tests that GetKind maps known logger kinds and

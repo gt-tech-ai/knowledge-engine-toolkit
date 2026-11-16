@@ -6,8 +6,31 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+Python: `techai-webutils` 0.16.0.
+
+### Added
+
+- Log schema v2, opt-in in both languages (ARCHITECTURE.md#logging): an RFC 3339 UTC
+  millisecond `timestamp`, a `dir/file:line` `caller`, `service` and `env` on every line, a
+  logged error flattened to its message string beside its `error_code` (`UNKNOWN` when
+  uncoded), and a `stacktrace` at error level. Go: `logger.SchemaV2` with `WithSchema`,
+  `WithService`, `WithEnv` and the `logging.schema` config key; both `zap` and `stdlib` emit
+  it. Python: `foundation.logger.schema.LogSchema`, passed to `configure_logging(schema=...)`
+  or `start_observability(schema=...)`, and the `logging_schema` setting; under v2 a warning
+  is `warn`, an `exc_info` exception folds into `error`/`error_code`/`stacktrace`, and stdlib
+  library lines share the schema. v1 stays the default; an unknown schema fails boot with
+  `INVALID_INPUT`.
+
+### Changed
+
+- **Breaking (Go):** `logger.NewFromConfig`, `zap.New` / `zap.NewSlog` and `stdlib.New` /
+  `stdlib.NewSlog` take `*Config`, and `logger.Config.ToOptions` has a pointer receiver.
+  Pass `&cfg` where a value was passed.
+
 ### Fixed
 
+- Go `foundation/logger/stdlib`: the `caller` source now points at the code that called the
+  logger, not the logger's own wrapper.
 - Python `clients/kb_ingestion/bedrock`: `get_ingestion_job` codes its failures. A
   `ResourceNotFoundException` (Bedrock no longer knows the job) raises `NotFoundError`, so a
   caller can end its record of the job; any other failure goes through

@@ -52,6 +52,17 @@ func (k Kind) String() string {
 	}
 }
 
+// The log schemas a Config can select (ARCHITECTURE.md#logging).
+const (
+	// SchemaV1 is the original output and the default.
+	SchemaV1 = logctx.SchemaV1
+
+	// SchemaV2 is the unified field set: millisecond UTC timestamp, short caller,
+	// service and env on every line, and a logged error flattened to its message
+	// beside its error_code.
+	SchemaV2 = logctx.SchemaV2
+)
+
 // New creates a Logger of the specified kind with optional functional options.
 // Returns an error if the kind is unknown.
 func New(kind Kind, opts ...options.Option[Config]) (interfaces.Logger, error) {
@@ -60,29 +71,42 @@ func New(kind Kind, opts ...options.Option[Config]) (interfaces.Logger, error) {
 	cfg.Kind = kind
 	options.ApplyOptions(&cfg, opts...)
 
-	return NewFromConfig(cfg)
+	return NewFromConfig(&cfg)
 }
 
 // NewFromConfig creates a Logger from a Config struct.
-// Returns an error if the kind is unknown.
-func NewFromConfig(cfg Config) (interfaces.Logger, error) {
+// Returns a CodeInvalidInput error if the kind or the schema is unknown.
+func NewFromConfig(cfg *Config) (interfaces.Logger, error) {
+	if !logctx.IsSchema(cfg.Schema) {
+		return nil, apperr.New(
+			apperr.CodeInvalidInput,
+			fmt.Sprintf("unknown logger schema: %q", cfg.Schema),
+		)
+	}
+
 	switch cfg.Kind {
 	case KindZap:
 		zapCfg := zap.Config{
 			Level:     cfg.Level,
 			Format:    cfg.Format,
+			Schema:    cfg.Schema,
+			Service:   cfg.Service,
+			Env:       cfg.Env,
 			RedactPII: cfg.RedactPII,
 		}
 
-		return zap.New(zapCfg), nil
+		return zap.New(&zapCfg), nil
 
 	case KindStdlib:
 		stdlibCfg := stdlib.Config{
 			Level:     cfg.Level,
+			Schema:    cfg.Schema,
+			Service:   cfg.Service,
+			Env:       cfg.Env,
 			AddSource: cfg.AddSource,
 		}
 
-		return stdlib.New(stdlibCfg), nil
+		return stdlib.New(&stdlibCfg), nil
 
 	default:
 		return nil, apperr.New(

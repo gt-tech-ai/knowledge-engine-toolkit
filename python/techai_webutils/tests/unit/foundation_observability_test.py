@@ -23,6 +23,7 @@ from starlette.responses import PlainTextResponse, Response
 from techai_webutils.foundation import observability
 from techai_webutils.foundation.config.settings import TelemetrySettings
 from techai_webutils.foundation.logger.logger import configure_logging
+from techai_webutils.foundation.logger.schema import LogSchema
 from techai_webutils.foundation.middleware import http_observability
 from techai_webutils.foundation.observability import parse_sample_rate
 
@@ -438,24 +439,36 @@ def test_start_observability_passes_the_telemetry_settings_through() -> None:
     **Why this test is important:**
       - The endpoint and rate are deployment config; an entrypoint that read them from the
         environment itself would bypass the config layer.
+      - A v2 schema built from settings carries no service; the bootstrap must stamp
+        the service name, or every v2 line would lose its ``service`` field.
 
     **What it tests:**
-      - ``setup_observability`` receives the service name, the upper-cased level, the
-        endpoint, the rate parsed to a float and the redaction flag
+      - Logging is configured with the upper-cased level, the redaction flag and the
+        schema with the service name filled in.
+      - The tracer gets the service name, the endpoint with its URL scheme stripped,
+        and the rate parsed to a float.
     """
     telemetry = TelemetrySettings.model_validate({
-        "OTEL_EXPORTER_OTLP_ENDPOINT": "collector:4317",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4317",
         "TRACE_SAMPLE_RATE": "0.5",
     })
-    with patch.object(observability, "setup_observability") as setup:
+    with (
+        patch.object(observability, "configure_logging") as logging_setup,
+        patch.object(observability, "configure_tracer") as tracer_setup,
+    ):
         observability.start_observability(
-            "probe", level="debug", telemetry=telemetry, redact_pii=True
+            "probe",
+            level="debug",
+            telemetry=telemetry,
+            redact_pii=True,
+            schema=LogSchema(name="v2", env="staging"),
         )
 
-    setup.assert_called_once_with(
-        "probe",
+    logging_setup.assert_called_once_with(
         level="DEBUG",
-        otlp_endpoint="collector:4317",
-        trace_sample_rate=0.5,
         redact_pii=True,
+        schema=LogSchema(name="v2", service="probe", env="staging"),
+    )
+    tracer_setup.assert_called_once_with(
+        "probe", otlp_endpoint="collector:4317", insecure=True, sample_rate=0.5
     )

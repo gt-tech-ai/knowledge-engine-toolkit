@@ -54,7 +54,8 @@ backend settings, and **a factory** that fails loudly on an unknown kind:
   backend an empty kind defaults to or `CodeInvalidInput` naming the known kinds; `Kinds.Build`
   also runs it through the client tier (`Decorate` in the family's `decorated.go`).
 - Go foundation: `New(kind, opts...)` / `NewFromConfig(cfg)` (`foundation/logger`,
-  `foundation/metrics`, …); an unknown kind is a `CodeInvalidInput` error.
+  `foundation/metrics`, …; the logger's takes `*Config`); an unknown kind is a
+  `CodeInvalidInput` error.
 - Python: `new_<type>_from_config(config)` (or `<type>_from_config`, e.g. `executor_from_config`);
   an unknown kind raises a coded `AppError(INVALID_INPUT)` (`AppValueError`). The `App*Error` classes
   named after a builtin are coded only, not subclasses of that builtin; catch them by their coded
@@ -745,6 +746,44 @@ helpers translate SDK errors (`foundation/resilience/grpc_boundary.py`,
 neither transient nor permanent, so no retry layer in either language retries it. Policies that
 are not facts of a code stay hand-written beside their use: the retry policy, the principal
 interceptor's status for an unresolvable caller, and the command-line exit codes.
+
+## Logging
+
+A logger emits one of two schemas. **v1**, the original output, is the default, so a consumer
+that has not moved its dashboards and queries sees no change. **v2** is the unified field set
+every Go and Python service emits once it opts in:
+
+| Field | When | Value |
+| --- | --- | --- |
+| `timestamp` | every line | RFC 3339, UTC, millisecond precision (`2026-01-02T15:04:05.000Z`) |
+| `level`, `message` | every line | `debug`, `info`, `warn` or `error`, and the message |
+| `caller` | every line | the call site as `dir/file:line` |
+| `service`, `env` | every line, when set | the emitting service and the deploy environment |
+| `git_sha` | every line, when `GIT_SHA` is set | the deployed commit |
+| `trace_id`, `span_id` | inside a span | the OTel trace correlation |
+| `error` | a logged error | the error's message as a string (`"<message>: <cause>"`), never a nested object |
+| `error_code` | a logged error | the `AppError`'s code; an uncoded error is `UNKNOWN` |
+| `stacktrace` | error level | the logged error's origin stack, else the call site's stack |
+
+PII redaction skips the v2 fields as it skips the structural ones. A duration is a call site's
+own `duration_seconds` field; the schema adds none.
+
+- **Go.** `logger.Config.Schema` (`logger.SchemaV1` / `logger.SchemaV2`, `""` counts as v1) with
+  `Service` and `Env`, set through `WithSchema`, `WithService` and `WithEnv` or the
+  `logging.schema` config key (`config/schema/infra.LoggingConfig`). An unknown schema fails
+  `NewFromConfig` and `Validate` with `CodeInvalidInput`. Both the `zap` and `stdlib` kinds emit
+  v2; `stdlib` forces `AddSource` on under it. `NewFromConfig` and the backends' `New` / `NewSlog`
+  take `*Config`.
+- **Python.** `foundation.logger.schema.LogSchema(name, service, env)`, a frozen value object
+  that fails construction with `INVALID_INPUT` on an unknown name, passed to
+  `configure_logging(schema=...)` or `start_observability(schema=...)`; the latter fills an
+  empty `service` from its own argument. The `logging_schema` setting (`LoggingSettings`,
+  default `"v1"`) is the name to build it from. `setup_observability` stays v1. Under v2,
+  structlog's `warning` is `warn` and `critical` is `error`; an exception logged through
+  `exc_info` (`logger.exception`) folds into `error`, `error_code` and `stacktrace` rather than
+  a nested `exception` object; and stdlib `logging` records (library lines) render through a
+  `ProcessorFormatter` with the same processors, so they carry the v2 fields too.
+- **Parity gap.** The Go `stdlib` kind does not emit `git_sha`; the `zap` kind and Python do.
 
 ## Stub-first backends
 

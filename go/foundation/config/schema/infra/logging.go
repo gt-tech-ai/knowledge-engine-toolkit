@@ -5,6 +5,7 @@ import (
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/logger/logctx"
 )
 
 // LoggingConfig holds logging configuration.
@@ -17,6 +18,11 @@ type LoggingConfig struct {
 
 	// Format controls the output encoding ("json" or "text").
 	Format string `mapstructure:"format"`
+
+	// Schema selects the field set every line carries: "v1" (the default; "" too)
+	// or "v2", the unified set (ARCHITECTURE.md#logging). Passed to the logger as
+	// logger.WithSchema; an unknown schema fails Validate.
+	Schema string `mapstructure:"schema"`
 
 	// RedactPII enables automatic redaction of personally identifiable information in log
 	// output.
@@ -37,6 +43,7 @@ func DefaultLoggingConfig() LoggingConfig {
 		Kind:      loggerKindZap,
 		Level:     "info",
 		Format:    "json",
+		Schema:    logger.SchemaV1,
 		RedactPII: true,
 	}
 }
@@ -49,6 +56,10 @@ func (c LoggingConfig) Validate() error {
 			apperr.CodeInvalidInput,
 			"unknown logger kind: "+c.Kind,
 		)
+	}
+
+	if !logctx.IsSchema(c.Schema) {
+		return apperr.New(apperr.CodeInvalidInput, "unknown logger schema: "+c.Schema)
 	}
 
 	return nil
