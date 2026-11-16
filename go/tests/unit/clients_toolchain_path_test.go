@@ -156,3 +156,44 @@ func TestClientsToolchainProvision_MovesGoBinToTheFront(t *testing.T) {
 		return strings.Contains(msg, "shadow")
 	}), "want a shadowing warning, got %q", spy.WarnCalls)
 }
+
+// TestClientsToolchainProvision_WithEnvironmentLeavesProcessPathAlone tests that an
+// Installer given its own Environment extends that environment's PATH, not the
+// process's.
+//
+// Why this test is important:
+//   - Provision moves the go-install bin dir to the front of PATH. Through the process
+//     environment that is a write every concurrently running test (or run sharing the
+//     process) sees, so a caller that must keep its PATH stable needs the write to land
+//     in an environment it owns.
+//
+// What it tests:
+//   - A check-only Provision reads GOBIN and PATH from the injected Environment, writes
+//     the reordered PATH and GOTOOLCHAIN=local to it, and leaves the process PATH as
+//     it was.
+func TestClientsToolchainProvision_WithEnvironmentLeavesProcessPathAlone(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	runner := mocks.NewMockCommandRunner(ctrl)
+	registerToolScanMock(runner)
+
+	vars := map[string]string{textPath: textUsrBin, textGobin: textOptToolBin}
+	env := mocks.NewMockEnvironment(ctrl)
+	env.EXPECT().Getenv(gomock.Any()).
+		DoAndReturn(func(key string) string { return vars[key] }).AnyTimes()
+	env.EXPECT().Setenv(textPath,
+		textOptToolBin+string(os.PathListSeparator)+textUsrBin).Return(nil)
+	env.EXPECT().Setenv("GOTOOLCHAIN", "local").Return(nil)
+
+	before := os.Getenv(textPath)
+	inst := toolchain.NewInstaller(runner, fixtures.NopLogger(), textLinuxApt,
+		denyPrompter(t), toolchain.WithEnvironment(env))
+
+	_ = inst.Provision(context.Background(), textRoot, provisionCatalog(t),
+		fixtures.BuildRef(func(row *types.InstallToolsOptions) {
+			row.CheckOnly = true
+		}))
+
+	assert.Equal(t, before, os.Getenv(textPath), "process PATH must be unchanged")
+}

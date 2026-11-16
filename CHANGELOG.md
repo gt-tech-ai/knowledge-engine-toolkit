@@ -18,6 +18,17 @@ Python: `techai-webutils` 0.16.0.
 - `EvalReport.results`: every case's `EvalResult` in dataset order (defaults to `()`), so a report
   can serve as the next run's baseline.
 
+### Fixed
+
+- `clients/toolchain`: an Installer can now leave its caller's process environment alone.
+  Its PATH, GOBIN/GOPATH, LOCALAPPDATA and GOTOOLCHAIN reads and writes go
+  through an injected `toolchain.Environment` (`Getenv`/`Setenv`), set with the new
+  `WithEnvironment` option; the default is still the process environment, so behaviour is
+  unchanged for a caller that sets nothing. A test that runs `Provision` or `InstallSet` in
+  parallel injects its own environment, so it no longer races another test reading PATH.
+  `AddToPathIfMissing` keeps its signature and still extends the process PATH; the
+  `PathResolver` still reads the process PATH. The generated mocks gain `MockEnvironment`.
+
 ## [0.0.62] - 2026-11-14
 
 ### Added

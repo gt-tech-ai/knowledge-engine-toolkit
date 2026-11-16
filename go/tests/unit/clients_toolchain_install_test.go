@@ -88,7 +88,7 @@ func TestClientsToolchainInstaller_Install_RoutesExactCommand(t *testing.T) {
 		commandRunner,
 		fixtures.NopLogger(),
 		textLinuxApt,
-		denyPrompter(t),
+		denyPrompter(t), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 }
@@ -152,7 +152,7 @@ func TestClientsToolchainInstaller_InstallSet_SkipsInstalled(t *testing.T) {
 		commandRunner,
 		fixtures.NopLogger(),
 		textLinuxApt,
-		denyPrompter(t),
+		denyPrompter(t), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	err := inst.InstallSet(
 		context.Background(),
@@ -182,7 +182,13 @@ func TestClientsToolchainInstaller_Provision_CheckOnly(t *testing.T) {
 	r.EXPECT().Exists(textGoLower).Return(true) // prerequisite present
 	r.EXPECT().Exists(textWire).Return(false)   // required tool missing
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		r,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+		toolchain.WithEnvironment(isolatedEnvironment(t)),
+	)
 	err := inst.Provision(
 		context.Background(),
 		textRoot,
@@ -231,7 +237,7 @@ func TestClientsToolchainInstaller_Provision_InstallsMissing(t *testing.T) {
 		commandRunner,
 		fixtures.NopLogger(),
 		textLinuxApt,
-		denyPrompter(t),
+		denyPrompter(t), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	err := inst.Provision(
 		context.Background(),
@@ -281,7 +287,7 @@ func TestClientsToolchainInstaller_InstallSet_ForceReinstalls(t *testing.T) {
 		commandRunner,
 		fixtures.NopLogger(),
 		textLinuxApt,
-		denyPrompter(t),
+		denyPrompter(t), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	err := inst.InstallSet(
 		context.Background(),
@@ -332,7 +338,7 @@ func TestClientsToolchainInstaller_Provision_ForceReinstallsPresent(t *testing.T
 		fixtures.NopLogger(),
 		textLinuxApt,
 		denyPrompter(t),
-		toolchain.WithForce(true),
+		toolchain.WithForce(true), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	err := inst.Provision(
 		context.Background(),
@@ -359,7 +365,13 @@ func TestClientsToolchainInstaller_Install_NoMethod(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl) // strict: no runner calls
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "darwin", denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		r,
+		fixtures.NopLogger(),
+		"darwin",
+		denyPrompter(t),
+		toolchain.WithEnvironment(isolatedEnvironment(t)),
+	)
 	err := inst.Install(
 		context.Background(),
 		textRoot,
@@ -398,7 +410,13 @@ func TestClientsToolchainInstaller_InstallSet_UnknownName(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	r := mocks.NewMockCommandRunner(ctrl)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), "darwin", denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		r,
+		fixtures.NopLogger(),
+		"darwin",
+		denyPrompter(t),
+		toolchain.WithEnvironment(isolatedEnvironment(t)),
+	)
 	err := inst.InstallSet(
 		context.Background(),
 		textRoot,
@@ -480,7 +498,7 @@ func TestClientsToolchainInstallTools_CIInstallsExactlyTheCISet(t *testing.T) {
 		commandRunner,
 		fixtures.NopLogger(),
 		textLinuxApt,
-		denyPrompter(t),
+		denyPrompter(t), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	require.NoError(
 		t,
@@ -566,7 +584,6 @@ func testClientsToolchainInstallToolsCIInstallsExactlyTheCISetRefusesAndRuns(
 // What it tests:
 //   - Provision asks the injected Prompter once, naming the missing tool; a "no"
 //     installs nothing and fails with CodeUnavailable.
-//   - InstallSet with AutoYes installs without calling the Prompter.
 func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 	t.Parallel()
 
@@ -584,7 +601,11 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 			Return(false, nil)
 
 		inst := toolchain.NewInstaller(
-			commandRunner, fixtures.NopLogger(), textLinuxApt, prompter,
+			commandRunner,
+			fixtures.NopLogger(),
+			textLinuxApt,
+			prompter,
+			toolchain.WithEnvironment(isolatedEnvironment(t)),
 		)
 		err := inst.Provision(
 			context.Background(),
@@ -595,6 +616,19 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 		require.Error(t, err)
 		assert.True(t, apperr.Is(err, apperr.CodeUnavailable), err.Error())
 	})
+}
+
+// TestClientsToolchainInstaller_AutoYesSkipsPrompter tests that a caller's AutoYes
+// replaces the confirmation.
+//
+// Why this test is important:
+//   - A caller that already said yes (CI, --yes) must not be asked again: a front-end
+//     with no operator would block or fail on the prompt.
+//
+// What it tests:
+//   - InstallSet with AutoYes installs without calling the Prompter.
+func TestClientsToolchainInstaller_AutoYesSkipsPrompter(t *testing.T) {
+	t.Parallel()
 
 	t.Run("auto-yes skips the prompter", func(t *testing.T) {
 		t.Parallel()
@@ -607,10 +641,14 @@ func TestClientsToolchainInstaller_UsesInjectedPrompter(t *testing.T) {
 				textGrpcurlV1).
 			Return(nil)
 
-		p := mocks.NewMockPrompter(ctrl) // no EXPECT: any Confirm call fails the test
+		silentPrompter := mocks.NewMockPrompter(ctrl) // no EXPECT: any Confirm call fails
 
 		inst := toolchain.NewInstaller(
-			currentCommandRunner, fixtures.NopLogger(), textLinuxApt, p,
+			currentCommandRunner,
+			fixtures.NopLogger(),
+			textLinuxApt,
+			silentPrompter,
+			toolchain.WithEnvironment(isolatedEnvironment(t)),
 		)
 		require.NoError(t, inst.InstallSet(
 			context.Background(), textRoot,
@@ -650,7 +688,13 @@ func TestClientsToolchainInstaller_DenyPrompterRefuses(t *testing.T) {
 	r.EXPECT().Exists(textGoLower).Return(true)
 	r.EXPECT().Exists(textWire).Return(false)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		r,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+		toolchain.WithEnvironment(isolatedEnvironment(t)),
+	)
 	err := inst.Provision(
 		context.Background(),
 		textRoot,
@@ -682,7 +726,13 @@ func TestClientsToolchainInstaller_NilPrompterFailsLoudly(t *testing.T) {
 	r.EXPECT().Exists(textGoLower).Return(true)
 	r.EXPECT().Exists(textWire).Return(false)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, nil)
+	inst := toolchain.NewInstaller(
+		r,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		nil,
+		toolchain.WithEnvironment(isolatedEnvironment(t)),
+	)
 	err := inst.Provision(
 		context.Background(),
 		textRoot,

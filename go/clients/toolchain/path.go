@@ -6,14 +6,58 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 )
 
+// Environment reads and writes the environment variables the Installer resolves and
+// extends: PATH, GOBIN, GOPATH, LOCALAPPDATA and GOTOOLCHAIN. Setup extends PATH so a
+// later step in the same process finds a fresh install, so the default is the process
+// environment; a caller that must not change its own (a test running beside others,
+// or a front-end serving several runs) injects its own with WithEnvironment. The
+// PathResolver keeps reading the process PATH.
+//
+// SDK seam — wraps os.Getenv/os.Setenv; unit tests inject a generated mock.
+type Environment interface {
+	// Getenv returns the variable's value, or "" when it is unset.
+	Getenv(key string) string
+
+	// Setenv sets the variable to value.
+	Setenv(key, value string) error
+}
+
+// WithEnvironment overrides the environment the Installer reads GOBIN, GOPATH and
+// LOCALAPPDATA from and writes PATH and GOTOOLCHAIN to (default: the process
+// environment).
+func WithEnvironment(env Environment) Option {
+	return func(i *Installer) { i.env = env }
+}
+
+// processEnvironment is the production Environment: the process's own variables.
+type processEnvironment struct{}
+
+// Getenv returns the process variable's value.
+func (processEnvironment) Getenv(key string) string {
+	return os.Getenv(key)
+}
+
+// Setenv sets the process variable.
+func (processEnvironment) Setenv(key, value string) error {
+	return apperr.Wrap(os.Setenv(key, value), apperr.CodeInternal, "set "+key)
+}
+
 // AddToPathIfMissing prepends dir to the process PATH when it is not already
-// present (case-insensitive). Idempotent: a dir already on PATH is a no-op.
+// present (case-insensitive). Idempotent: a dir already on PATH is a no-op. An
+// Installer extends its own Environment instead (WithEnvironment).
 func AddToPathIfMissing(dir string, log interfaces.Logger) {
-	if onPath(dir) {
+	prependIfMissing(processEnvironment{}, dir, log)
+}
+
+// prependIfMissing prepends dir to env's PATH when it is not already present
+// (case-insensitive).
+func prependIfMissing(env Environment, dir string, log interfaces.Logger) {
+	if onPath(env, dir) {
 		log.Debug("PATH entry already present", logKeyDir, dir)
 
 		return
@@ -21,25 +65,34 @@ func AddToPathIfMissing(dir string, log interfaces.Logger) {
 
 	log.Info("Adding to PATH", logKeyDir, dir)
 
-	_ = os.Setenv(envPath, dir+string(os.PathListSeparator)+os.Getenv(envPath))
+	setPath(env, dir+string(os.PathListSeparator)+env.Getenv(envPath), log)
 }
 
-// onPath reports whether dir is an entry of the process PATH (case-insensitive).
-func onPath(dir string) bool {
+// setPath writes value to env's PATH, warning when the write fails: the install it
+// follows has succeeded, and the post-install verify reports a tool it cannot find.
+func setPath(env Environment, value string, log interfaces.Logger) {
+	err := env.Setenv(envPath, value)
+	if err != nil {
+		log.Warn("Could not update PATH", "error", err)
+	}
+}
+
+// onPath reports whether dir is an entry of env's PATH (case-insensitive).
+func onPath(env Environment, dir string) bool {
 	return slices.ContainsFunc(
-		filepath.SplitList(os.Getenv(envPath)),
+		filepath.SplitList(env.Getenv(envPath)),
 		func(p string) bool {
 			return strings.EqualFold(p, dir)
 		},
 	)
 }
 
-// moveToPathFront puts dir first on the process PATH, dropping any later copy, so
+// moveToPathFront puts dir first on env's PATH, dropping any later copy, so
 // the binaries in it win every lookup. When dir was not already first, it warns about
 // each binary in dir an earlier PATH directory also holds: setup fixes only its own
 // process, and the user's shell profile keeps the shadowing order.
-func moveToPathFront(dir string, log interfaces.Logger) {
-	entries := filepath.SplitList(os.Getenv(envPath))
+func moveToPathFront(env Environment, dir string, log interfaces.Logger) {
+	entries := filepath.SplitList(env.Getenv(envPath))
 	if len(entries) > 0 && strings.EqualFold(entries[0], dir) {
 		return
 	}
@@ -65,7 +118,7 @@ func moveToPathFront(dir string, log interfaces.Logger) {
 
 	log.Info("Moving to the front of PATH", logKeyDir, dir)
 
-	_ = os.Setenv(envPath, strings.Join(kept, string(os.PathListSeparator)))
+	setPath(env, strings.Join(kept, string(os.PathListSeparator)), log)
 }
 
 // shadowedBinaries lists each file in dir that one of the earlier directories also
@@ -111,14 +164,14 @@ func regularFiles(dir string) []string {
 	return names
 }
 
-// resolveGoBin returns the directory where `go install` places binaries: GOBIN
+// resolveGoBin returns the directory where `go install` places binaries: env's GOBIN
 // if set, else GOPATH/bin, else ~/go/bin. Empty when the home dir can't resolve.
-func resolveGoBin() string {
-	if gobin := os.Getenv("GOBIN"); gobin != "" {
+func resolveGoBin(env Environment) string {
+	if gobin := env.Getenv("GOBIN"); gobin != "" {
 		return gobin
 	}
 
-	gopath := os.Getenv("GOPATH")
+	gopath := env.Getenv("GOPATH")
 	if gopath == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -131,19 +184,19 @@ func resolveGoBin() string {
 	return filepath.Join(gopath, "bin")
 }
 
-// ensureGoBinInPath puts the go-install bin dir first on the process PATH, so a
+// ensureGoBinInPath puts the go-install bin dir first on the Installer's PATH, so a
 // pinned tool there wins over another build earlier on PATH, and adds (on
 // Windows-ARM64) its cross-compiled windows_amd64 subdir.
 func (i *Installer) ensureGoBinInPath() {
-	gobin := resolveGoBin()
+	gobin := resolveGoBin(i.env)
 	if gobin == "" {
 		return
 	}
 
-	moveToPathFront(gobin, i.log)
+	moveToPathFront(i.env, gobin, i.log)
 
 	if i.platform == osWindows && i.arch == archARM64 {
-		AddToPathIfMissing(filepath.Join(gobin, "windows_amd64"), i.log)
+		prependIfMissing(i.env, filepath.Join(gobin, "windows_amd64"), i.log)
 	}
 }
 
@@ -154,12 +207,12 @@ func (i *Installer) ensureMsys2InPath() {
 	info, err := os.Stat(msys2Bin)
 
 	if err == nil && info.IsDir() {
-		AddToPathIfMissing(msys2Bin, i.log)
+		prependIfMissing(i.env, msys2Bin, i.log)
 	}
 }
 
 // addInstallDirToPath adds the directory a just-installed tool's binary lands in
-// to the process PATH, so the post-install verify can find it. go-install and
+// to the Installer's PATH, so the post-install verify can find it. go-install and
 // pinned downloads both land in the go-install bin dir (GOBIN).
 func (i *Installer) addInstallDirToPath(tool *types.ToolDef) {
 	method, ok := i.resolveMethod(tool)
@@ -185,7 +238,8 @@ func (i *Installer) addPowershellToolDir(tool *types.ToolDef) {
 		return
 	}
 
-	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
-		AddToPathIfMissing(filepath.Join(localAppData, "Programs", tool.Binary), i.log)
+	if localAppData := i.env.Getenv("LOCALAPPDATA"); localAppData != "" {
+		prependIfMissing(i.env, filepath.Join(localAppData, "Programs", tool.Binary),
+			i.log)
 	}
 }

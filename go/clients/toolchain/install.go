@@ -89,6 +89,11 @@ type Installer struct {
 	// os/exec.LookPath; overridden by WithPathResolver).
 	paths PathResolver
 
+	// env is the environment GOBIN/GOPATH/LOCALAPPDATA are read from and PATH and
+	// GOTOOLCHAIN are written to (default: the process environment; overridden by
+	// WithEnvironment).
+	env Environment
+
 	// log receives install progress and failure output.
 	log interfaces.Logger
 
@@ -131,8 +136,10 @@ func WithForce(force bool) Option {
 // os-arch artifact and for the Windows-ARM64 cross-compile rewrite) and can be
 // overridden via WithArch; the artifact downloader defaults to HTTPS and can be
 // overridden via WithDownloader; the PATH lookup defaults to os/exec.LookPath and can
-// be overridden via WithPathResolver. The prompter confirms an install when AutoYes is
-// off; it is required — a nil prompter fails such an install with a coded error.
+// be overridden via WithPathResolver; the environment whose PATH it extends defaults
+// to the process's and can be overridden via WithEnvironment. The prompter confirms an
+// install when AutoYes is off; it is required — a nil prompter fails such an install
+// with a coded error.
 func NewInstaller(
 	runner interfaces.CommandRunner,
 	log interfaces.Logger,
@@ -144,6 +151,7 @@ func NewInstaller(
 		runner:        runner,
 		downloader:    newHTTPDownloader(),
 		paths:         execPathResolver{},
+		env:           processEnvironment{},
 		log:           log,
 		platform:      platform,
 		arch:          runtime.GOARCH,
@@ -331,7 +339,10 @@ func (i *Installer) InstallSet(
 
 // preparePlatform pins the Go toolchain and puts the platform's tool dirs on PATH.
 func (i *Installer) preparePlatform() {
-	_ = os.Setenv("GOTOOLCHAIN", "local")
+	err := i.env.Setenv("GOTOOLCHAIN", "local")
+	if err != nil {
+		i.log.Warn("Could not pin GOTOOLCHAIN=local", "error", err)
+	}
 
 	i.log.Debug("platform detected", "key", i.platform)
 	i.ensureGoBinInPath()

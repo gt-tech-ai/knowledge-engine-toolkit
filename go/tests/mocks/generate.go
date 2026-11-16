@@ -80,7 +80,7 @@
 //go:generate mockgen -destination=mock_stream.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Stream
 //go:generate mockgen -destination=mock_server_stream.go -package=mocks connectrpc.com/connect/v2 ServerStream
 //go:generate mockgen -destination=mock_terraform.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces TerraformClient
-//go:generate mockgen -destination=mock_toolchain.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain Downloader,PathResolver
+//go:generate mockgen -destination=mock_toolchain.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain Downloader,Environment,PathResolver
 //go:generate mockgen -destination=mock_toolrun.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces StepCache,ToolRunner,TargetSelector,Parser
 //go:generate mockgen -destination=mock_tracer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Tracer,Span
 //go:generate mockgen -destination=mock_workflow.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Workflow
