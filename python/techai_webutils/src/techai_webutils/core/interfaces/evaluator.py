@@ -1,9 +1,10 @@
 """``Evaluator`` — aggregates grader verdicts into one result per case.
 
 An eval run feeds each ``EvalCase`` through the system under test, captures an
-``EvalOutput`` and asks the evaluator to grade it with a set of ``Grader``s; the run folds
-the ``EvalResult``s into an ``EvalReport`` keyed on the dataset version. ``EvalOutput``
-lives with the ``Grader`` contract, which consumes it.
+``EvalOutput`` and asks the evaluator to grade it with a set of ``Grader``s; the run
+(``services.eval_runner.run_eval``) folds the ``EvalResult``s into an ``EvalReport``
+keyed on the dataset version. ``EvalOutput`` lives with the ``Grader`` contract, which
+consumes it.
 """
 
 from __future__ import annotations
@@ -47,6 +48,8 @@ class EvalReport:
     """The mean score per grader name."""
     regressions: tuple[str, ...]
     """Ids of cases that passed in the baseline and fail now."""
+    results: tuple[EvalResult, ...] = ()
+    """Every case's result, in dataset order; what a baseline is compared on."""
 
 
 class Evaluator(ABC):

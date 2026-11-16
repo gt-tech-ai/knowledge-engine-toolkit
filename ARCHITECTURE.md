@@ -1473,8 +1473,9 @@ service, so no Go consumer exists yet. Each is recorded here until a Go consumer
 
 - **Evals:** `core/interfaces/{dataset,evaluator,grader}.py`, `clients/dataset`
   (`stub`, `jsonl`, a supplied `aiops`), `clients/grader` (`stub`; `parse`, parse quality
-  against golden blocks; `ranking`, recall@k, nDCG@k and reciprocal rank) and `services/evaluator.py`
-  (`ThresholdEvaluator`). Go's `foundation/dataset` (the YAML data loader) is unrelated.
+  against golden blocks; `ranking`, recall@k, nDCG@k and reciprocal rank), `services/evaluator.py`
+  (`ThresholdEvaluator`) and `services/eval_runner.py` (`run_eval`, a dataset to an `EvalReport`
+  with per-case results and baseline regressions). Go's `foundation/dataset` (the YAML data loader) is unrelated.
 - **Safety:** `core/interfaces/safety.py` (`SafetyCheck`, `SafetyResult`, `blocked_error` →
   `FORBIDDEN`) and `clients/safety` (`noop`, `regex`, and the lazily loaded `comprehend` and
   `bedrock_guardrails`, whose aiobotocore client opens on the first scan).

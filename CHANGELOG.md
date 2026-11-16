@@ -20,6 +20,13 @@ Python: `techai-webutils` 0.16.0.
   is `warn`, an `exc_info` exception folds into `error`/`error_code`/`stacktrace`, and stdlib
   library lines share the schema. v1 stays the default; an unknown schema fails boot with
   `INVALID_INPUT`.
+- Python `services/eval_runner.run_eval(dataset, system, graders, evaluator, *, baseline=None)`
+  runs every case of a `Dataset` through the system under test, grades it with the `Evaluator`,
+  and returns the `EvalReport`: pass rate, mean score, each grader's mean score, and the cases
+  that passed in the baseline and fail now. Cases run one at a time in dataset order. A baseline
+  from another dataset version fails `INVALID_INPUT` before any case runs.
+- `EvalReport.results`: every case's `EvalResult` in dataset order (defaults to `()`), so a report
+  can serve as the next run's baseline.
 
 ### Changed
 
