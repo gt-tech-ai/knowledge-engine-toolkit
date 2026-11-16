@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Python `clients/kb_ingestion/bedrock`: `get_ingestion_job` codes its failures. A
+  `ResourceNotFoundException` (Bedrock no longer knows the job) raises `NotFoundError`, so a
+  caller can end its record of the job; any other failure goes through
+  `botocore_error_to_app_error` instead of escaping as a raw `ClientError`. The
+  `KnowledgeBaseIngestor.get_ingestion_job` contract documents the `NotFoundError`.
+
 ## [0.0.62] - 2026-11-14
 
 ### Added
