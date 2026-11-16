@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -97,7 +98,7 @@ func TestNewTestMinIO_WithImageOverridesTheDefault(t *testing.T) {
 	require.NoError(t, err, "the overriding reference starts")
 
 	readyRequest, err := http.NewRequestWithContext(
-		ctx, http.MethodGet, started.Endpoint()+"/minio/health/ready", http.NoBody,
+		ctx, http.MethodGet, started.Endpoint()+miniodb.WriteQuorumPath, http.NoBody,
 	)
 	require.NoError(t, err)
 
@@ -114,6 +115,58 @@ func TestNewTestMinIO_WithImageOverridesTheDefault(t *testing.T) {
 	t.Cleanup(func() { m.Close(ctx) })
 	require.Error(t, err)
 	require.ErrorContains(t, err, missing)
+}
+
+// writeReadyStarts is how many MinIO containers the write-quorum test starts at once.
+const writeReadyStarts = 3
+
+// TestNewTestMinIO_AcceptsWritesOnReturn tests that a MinIO the fixture returns accepts
+// a write on its first attempt.
+//
+// Why this test is important:
+//   - The fixture used to wait on /minio/health/ready, which answers 200 before MinIO's
+//     object layer initializes; on a loaded host a CreateBucket sent right after the
+//     fixture returned failed with 503 XMinioServerNotInitialized, and consumers grew
+//     their own retry loops around it.
+//
+// What it tests:
+//   - writeReadyStarts containers started at once (the load that exposed the race):
+//     one CreateBucket on each, sent as soon as NewTestMinIO returns and never retried,
+//     succeeds.
+//   - It needs a Docker daemon, so it skips without one.
+func TestNewTestMinIO_AcceptsWritesOnReturn(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() || (os.Getenv("INTEGRATION") == "" && os.Getenv("CI") == "") {
+		t.Skip("set INTEGRATION=1 or CI=1 to run integration tests")
+	}
+
+	testcontainers.SkipIfProviderIsNotHealthy(t)
+
+	for i := range writeReadyStarts {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			t.Parallel()
+			firstWriteSucceeds(t)
+		})
+	}
+}
+
+// firstWriteSucceeds starts one MinIO and sends a single CreateBucket, without retry, as
+// soon as NewTestMinIO returns; the write must succeed.
+func firstWriteSucceeds(t *testing.T) {
+	t.Helper()
+
+	ctx := context.Background()
+	started, err := miniodb.NewTestMinIO(ctx)
+
+	t.Cleanup(func() { started.Close(ctx) })
+	require.NoError(t, err)
+
+	_, err = rawS3Client(t, started.Endpoint()).CreateBucket(ctx,
+		fixtures.BuildRef(func(row *awss3.CreateBucketInput) {
+			row.Bucket = aws.String(testBucket)
+		}))
+	require.NoError(t, err, "the first write to a returned MinIO")
 }
 
 func (s *StorageMinIOSuite) SetupSuite() {
@@ -378,6 +431,14 @@ func (s *StorageMinIOSuite) TestDelete_DeleteBatch_Exists() {
 func (s *StorageMinIOSuite) rawClient() *awss3.Client {
 	s.T().Helper()
 
+	return rawS3Client(s.T(), s.MinIOEndpoint)
+}
+
+// rawS3Client builds a path-style S3 client for the MinIO at endpoint, signed with the
+// fixture's root credentials.
+func rawS3Client(t *testing.T, endpoint string) *awss3.Client {
+	t.Helper()
+
 	awsCfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
 		awsconfig.WithRegion(textUsEast1),
@@ -389,11 +450,11 @@ func (s *StorageMinIOSuite) rawClient() *awss3.Client {
 			),
 		),
 	)
-	s.Require().NoError(err)
+	require.NoError(t, err)
 
 	return awss3.NewFromConfig(awsCfg, func(o *awss3.Options) {
 		o.UsePathStyle = true
-		o.BaseEndpoint = aws.String(s.MinIOEndpoint)
+		o.BaseEndpoint = aws.String(endpoint)
 	})
 }
 
