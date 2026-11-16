@@ -169,17 +169,19 @@ def test_server_settings_defaults() -> None:
 
 
 def test_logging_settings_defaults() -> None:
-    """Test that LoggingSettings defaults to info-level JSON logs with PII redaction on.
+    """Test that LoggingSettings defaults to info-level JSON v1 logs, PII redaction on.
 
     **Why this test is important:**
       - JSON format is what the log pipeline (Loki/Alloy) parses; defaulting to a
         non-structured format would break log ingestion in every environment
       - redact_pii defaulting to True is a privacy safeguard — a default of False
         would risk leaking PII into logs whenever the setting is left unspecified
+      - log schema v2 is opt-in: a v2 default would rename the fields under every
+        dashboard and alert of a service that never asked for it
 
     **What it tests:**
-      - logging_level defaults to "info", logging_format to "json", and
-        logging_redact_pii to True
+      - logging_level defaults to "info", logging_format to "json",
+        logging_redact_pii to True and logging_schema to "v1"
     """
     # Act
     settings = LoggingSettings()
@@ -188,6 +190,7 @@ def test_logging_settings_defaults() -> None:
     assert settings.logging_level == "info"
     assert settings.logging_format == "json"
     assert settings.logging_redact_pii is True
+    assert settings.logging_schema == "v1"
 
 
 def test_mixin_composition_no_mro_errors() -> None:

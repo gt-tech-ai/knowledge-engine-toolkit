@@ -472,3 +472,34 @@ def test_start_observability_passes_the_telemetry_settings_through() -> None:
     tracer_setup.assert_called_once_with(
         "probe", otlp_endpoint="collector:4317", insecure=True, sample_rate=0.5
     )
+
+
+def test_setup_observability_configures_v1_logging_and_the_tracer() -> None:
+    """Test that the keyword bootstrap wires v1 logging and the trace export as passed.
+
+    **Why this test is important:**
+      - Product entrypoints still call ``setup_observability`` directly; it must keep
+        emitting the v1 field set so an upgrade does not rename their log fields.
+
+    **What it tests:**
+      - Logging is configured with the level and redaction flag as given and no schema
+        (v1).
+      - The tracer gets the service name, the endpoint with its URL scheme stripped,
+        and the sample rate.
+    """
+    with (
+        patch.object(observability, "configure_logging") as logging_setup,
+        patch.object(observability, "configure_tracer") as tracer_setup,
+    ):
+        observability.setup_observability(
+            "probe",
+            level="WARNING",
+            otlp_endpoint="http://collector:4317",
+            trace_sample_rate=0.25,
+            redact_pii=True,
+        )
+
+    logging_setup.assert_called_once_with(level="WARNING", redact_pii=True)
+    tracer_setup.assert_called_once_with(
+        "probe", otlp_endpoint="collector:4317", insecure=True, sample_rate=0.25
+    )
