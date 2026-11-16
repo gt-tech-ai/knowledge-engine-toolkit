@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `tests/fixtures/dbtest/minio`: `NewTestMinIO` now returns only once MinIO accepts
+  writes. It waited on `/minio/health/ready`, which answers 200 before the object layer
+  initializes, so on a loaded host the first CreateBucket could fail with 503
+  `XMinioServerNotInitialized`. It now waits on the new exported `WriteQuorumPath`
+  (`/minio/health/cluster`), which answers 503 until write quorum. A consumer that retried
+  its first write around the fixture can drop the retry. An image passed to `WithImage`
+  must serve that path.
+
 ## [0.0.64] - 2026-11-15
 
 ### Fixed

@@ -28,6 +28,13 @@ const (
 	// minioAPIPort is the container's S3 API port.
 	minioAPIPort = "9000/tcp"
 
+	// WriteQuorumPath is MinIO's cluster-writeable probe: 503 until the server has
+	// write quorum, 200 once it accepts writes such as CreateBucket. Its liveness and
+	// readiness probes (/minio/health/live, /minio/health/ready) answer 200 as soon as
+	// the HTTP listener is up, before the object layer initializes, so a request sent
+	// then fails with 503 XMinioServerNotInitialized.
+	WriteQuorumPath = "/minio/health/cluster"
+
 	// RootUser is the static access key the container is started with.
 	RootUser = "minioadmin"
 	// RootPassword is the static secret key the container is started with.
@@ -54,13 +61,14 @@ type Option func(*options)
 
 // WithImage starts image instead of DefaultImage, so a consumer can repin MinIO
 // (a newer digest, a mirror) without waiting for an engine release. The image
-// must accept `server /data` and serve /minio/health/ready on port 9000.
+// must accept `server /data` and serve WriteQuorumPath on port 9000.
 func WithImage(image string) Option {
 	return func(o *options) { o.image = image }
 }
 
 // NewTestMinIO starts a MinIO container (DefaultImage unless WithImage overrides
-// it) and waits up to 60 seconds for its readiness endpoint to report healthy.
+// it) and waits up to 60 seconds for WriteQuorumPath to answer 200, so the first S3
+// request a caller sends is not refused while MinIO initializes.
 func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 	currentOptions := options{image: DefaultImage}
 	for _, opt := range opts {
@@ -76,7 +84,7 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 		"MINIO_ROOT_PASSWORD": RootPassword,
 	}
 	containerRequest.Cmd = []string{"server", "/data"}
-	containerRequest.WaitingFor = wait.ForHTTP("/minio/health/ready").
+	containerRequest.WaitingFor = wait.ForHTTP(WriteQuorumPath).
 		WithPort(minioAPIPort).
 		WithStartupTimeout(startupTimeout)
 
@@ -93,8 +101,8 @@ func NewTestMinIO(ctx context.Context, opts ...Option) (*TestMinIO, error) {
 		},
 	)
 	if err != nil {
-		// A failed start (e.g. a readiness timeout) can still leave a container behind;
-		// TerminateContainer is nil-safe.
+		// A failed start (e.g. a write-quorum wait timeout) can still leave a
+		// container behind; TerminateContainer is nil-safe.
 		_ = testcontainers.TerminateContainer(container)
 
 		return nil, apperr.Wrap(
