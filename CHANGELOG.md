@@ -38,6 +38,14 @@ Python: `techai-webutils` 0.17.0 (0.16.0 published `run_eval` alone).
 
 ### Fixed
 
+- `clients/toolchain`: an Installer can now leave its caller's process environment alone.
+  Its PATH, GOBIN/GOPATH, LOCALAPPDATA and GOTOOLCHAIN reads and writes go
+  through an injected `toolchain.Environment` (`Getenv`/`Setenv`), set with the new
+  `WithEnvironment` option; the default is still the process environment, so behaviour is
+  unchanged for a caller that sets nothing. A test that runs `Provision` or `InstallSet` in
+  parallel injects its own environment, so it no longer races another test reading PATH.
+  `AddToPathIfMissing` keeps its signature and still extends the process PATH; the
+  `PathResolver` still reads the process PATH. The generated mocks gain `MockEnvironment`.
 - Go `foundation/logger/stdlib`: the `caller` source now points at the code that called the
   logger, not the logger's own wrapper.
 - Python `clients/kb_ingestion/bedrock`: `get_ingestion_job` codes its failures. A

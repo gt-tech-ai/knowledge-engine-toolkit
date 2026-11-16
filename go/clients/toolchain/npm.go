@@ -21,9 +21,9 @@ func isNpmGlobalInstall(m types.InstallMethod) bool {
 
 // npmMethod returns method unchanged unless it is an `npm install -g` whose global
 // prefix this user cannot write (the nodejs.org installer leaves /usr/local root-owned,
-// so npm fails with EACCES). Then it installs under ~/.local instead, puts ~/.local/bin
-// on the process PATH, and warns when the shell PATH lacks it. Windows is unchanged: its
-// default prefix is per-user.
+// so npm fails with EACCES). Then it installs under ~/.local instead, puts
+// ~/.local/bin on the Installer's PATH, and warns when the shell PATH lacks it. Windows
+// is unchanged: its default prefix is per-user.
 func (i *Installer) npmMethod(
 	ctx context.Context,
 	root string,
@@ -49,13 +49,13 @@ func (i *Installer) npmMethod(
 	userPrefix := filepath.Join(home, ".local")
 	userBin := filepath.Join(userPrefix, "bin")
 
-	if !onPath(userBin) {
+	if !onPath(i.env, userBin) {
 		i.log.Warn("npm's global prefix is not writable; installing under the user "+
 			"prefix. Add its bin dir to PATH in your shell profile",
 			"prefix", prefix, logKeyDir, userBin)
 	}
 
-	AddToPathIfMissing(userBin, i.log)
+	prependIfMissing(i.env, userBin, i.log)
 
 	method.Args = append(slices.Clone(method.Args), "--prefix", userPrefix)
 

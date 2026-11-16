@@ -9,6 +9,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.yaml.in/yaml/v3"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/toolchain"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/stdx"
@@ -67,3 +68,16 @@ const (
 	// iterationsScanMock is the amount added to i in registerToolScanMock.
 	iterationsScanMock = 3
 )
+
+// isolatedEnvironment is an Installer Environment for a parallel test: it reads the
+// process's variables and drops every write, so the PATH and GOTOOLCHAIN updates
+// Provision and InstallSet make never reach the process another test is reading.
+func isolatedEnvironment(t *testing.T) toolchain.Environment {
+	t.Helper()
+
+	env := mocks.NewMockEnvironment(gomock.NewController(t))
+	env.EXPECT().Getenv(gomock.Any()).DoAndReturn(os.Getenv).AnyTimes()
+	env.EXPECT().Setenv(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	return env
+}

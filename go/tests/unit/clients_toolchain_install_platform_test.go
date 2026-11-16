@@ -51,7 +51,7 @@ func TestClientsToolchainInstaller_Install_WingetAddsNonInteractiveFlags(t *test
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),
-		toolchain.WithArch("amd64"),
+		toolchain.WithArch("amd64"), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 }
@@ -105,7 +105,7 @@ func TestClientsToolchainInstaller_Install_WindowsArm64CrossCompiles(t *testing.
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),
-		toolchain.WithArch("arm64"),
+		toolchain.WithArch("arm64"), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 
@@ -165,7 +165,7 @@ func TestClientsToolchainInstaller_Install_WindowsPrefersGoInstall(t *testing.T)
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),
-		toolchain.WithArch("amd64"),
+		toolchain.WithArch("amd64"), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	require.NoError(t, inst.Install(context.Background(), textRoot, tool))
 }

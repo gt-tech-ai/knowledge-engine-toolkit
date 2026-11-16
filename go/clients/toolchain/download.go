@@ -133,7 +133,7 @@ func (i *Installer) installDownload(
 		return err
 	}
 
-	binDir, err := ensureInstallDir()
+	binDir, err := ensureInstallDir(i.env)
 	if err != nil {
 		return err
 	}
@@ -197,9 +197,9 @@ func (i *Installer) pinnedArtifact(
 	return artifact, nil
 }
 
-// ensureInstallDir resolves GOBIN and creates it.
-func ensureInstallDir() (string, error) {
-	binDir := resolveGoBin()
+// ensureInstallDir resolves env's GOBIN and creates it.
+func ensureInstallDir(env Environment) (string, error) {
+	binDir := resolveGoBin(env)
 	if binDir == "" {
 		return "", apperr.New(
 			apperr.CodeUnavailable,

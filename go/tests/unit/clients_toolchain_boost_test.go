@@ -256,7 +256,7 @@ func TestClientsToolchainInstaller_Install_WingetGenericError(t *testing.T) {
 		fixtures.NopLogger(),
 		textWindows,
 		denyPrompter(t),
-		toolchain.WithArch("amd64"),
+		toolchain.WithArch("amd64"), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	require.Error(t, inst.Install(context.Background(), textRoot, tool))
 }
@@ -572,7 +572,13 @@ func TestClientsToolchainInstallSet_AllAlreadyInstalled(t *testing.T) {
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists(textPgcli).Return(true)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		r,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+		toolchain.WithEnvironment(isolatedEnvironment(t)),
+	)
 	require.NoError(t, inst.InstallSet(
 		context.Background(),
 		textRoot,
@@ -605,7 +611,13 @@ func TestClientsToolchainInstallSet_DryRun(t *testing.T) {
 	r := mocks.NewMockCommandRunner(ctrl)
 	r.EXPECT().Exists(textPgcli).Return(false)
 
-	inst := toolchain.NewInstaller(r, fixtures.NopLogger(), textLinuxApt, denyPrompter(t))
+	inst := toolchain.NewInstaller(
+		r,
+		fixtures.NopLogger(),
+		textLinuxApt,
+		denyPrompter(t),
+		toolchain.WithEnvironment(isolatedEnvironment(t)),
+	)
 	require.NoError(t, inst.InstallSet(
 		context.Background(),
 		textRoot,
@@ -815,7 +827,7 @@ func TestClientsToolchainInstallSet_NamedSubsetFailure(t *testing.T) {
 		commandRunner,
 		fixtures.NopLogger(),
 		textLinuxApt,
-		denyPrompter(t),
+		denyPrompter(t), toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	err := inst.InstallSet(
 		context.Background(),
@@ -867,7 +879,7 @@ func TestClientsToolchainInstallSet_UserDeclines(t *testing.T) {
 		commandRunner,
 		fixtures.NopLogger(),
 		textLinuxApt,
-		prompter,
+		prompter, toolchain.WithEnvironment(isolatedEnvironment(t)),
 	)
 	require.NoError(t, inst.InstallSet(
 		context.Background(),
