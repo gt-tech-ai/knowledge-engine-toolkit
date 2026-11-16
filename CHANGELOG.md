@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.63] - 2026-11-15
+
 Python: `techai-webutils` 0.17.0 (0.16.0 published `run_eval` alone).
 
 ### Added
