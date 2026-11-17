@@ -35,6 +35,7 @@
   "techai_webutils.clients.near_duplicate.builder.NearDuplicateConfig": {},
   "techai_webutils.clients.nlp.builder.AnnotatorConfig": {},
   "techai_webutils.clients.parsing.factory.ParserConfig": {},
+  "techai_webutils.clients.parsing.isolated.ocr.OcrConfig": {},
   "techai_webutils.clients.prometheus.builder.PrometheusConfig": {},
   "techai_webutils.clients.reranking.builder.RerankerConfig": {},
   "techai_webutils.clients.retrieval.builder.RetrievalConfig": {},
