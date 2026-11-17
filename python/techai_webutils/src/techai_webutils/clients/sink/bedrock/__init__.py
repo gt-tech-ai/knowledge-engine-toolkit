@@ -4,7 +4,7 @@ They feed a KB data source.
 """
 
 from techai_webutils.clients.sink.bedrock.config import BedrockSinkConfig
-from techai_webutils.clients.sink.bedrock.layout import BedrockLayout
+from techai_webutils.clients.sink.bedrock.layout import BedrockLayout, unit_prefix
 from techai_webutils.clients.sink.bedrock.sink import BedrockSink
 
-__all__ = ["BedrockLayout", "BedrockSink", "BedrockSinkConfig"]
+__all__ = ["BedrockLayout", "BedrockSink", "BedrockSinkConfig", "unit_prefix"]

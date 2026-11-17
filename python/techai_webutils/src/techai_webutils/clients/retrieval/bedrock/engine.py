@@ -384,12 +384,33 @@ def _to_result(
         if isinstance(content, dict)
         else ""
     )
-    page = metadata.get("page_number")
     return RetrievalResult(
         document_id=resolve_document_id(metadata, filters),
         document_name=metadata.get("document_name", ""),
         chunk_content=str(text),
         score=_to_float(item.get("score", 0.0)),
-        page_number=int(page) if page is not None and page.isdigit() else None,
+        page_number=_page(metadata),
         metadata=metadata,
     )
+
+
+def _page(metadata: Mapping[str, str]) -> int | None:
+    """Return the passage's page: ``page_number``, else a unit's ``page_start``.
+
+    A page-range unit's sidecar stores its pages as numbers, which Bedrock may hand back
+    as ``"7.0"``, so a whole-number float is accepted.
+
+    Args:
+        metadata: The passage's metadata, every value a string.
+
+    Returns:
+        The page, or ``None`` when neither key holds a whole number.
+
+    """
+    raw = metadata.get("page_number") or metadata.get("page_start")
+    if raw is None:
+        return None
+    whole, _, fraction = raw.partition(".")
+    if not whole.isdigit() or fraction.strip("0"):
+        return None
+    return int(whole)

@@ -1145,6 +1145,31 @@ class TestBedrockRetrieveContract:
         assert result.metadata["tenant"] == "t1"
 
     @pytest.mark.asyncio
+    async def test_page_falls_back_to_the_unit_page_start(self) -> None:
+        """A unit's ``page_start`` gives the page when ``page_number`` is absent.
+
+        **Why this test is important:**
+          - A page-range unit's sidecar carries ``page_start`` / ``page_end`` (as
+            numbers, which Bedrock may return as ``7.0``), not ``page_number``; without
+            the fallback every citation from such a unit loses its page.
+
+        **What it tests:**
+          - Only ``page_start`` (``"7"`` or ``7.0``) gives page 7.
+          - With both keys, ``page_number`` wins.
+          - With neither, or a non-numeric value, the page is ``None``.
+        """
+        [start] = await self._retrieve({"page_start": "7"})
+        [floated] = await self._retrieve({"page_start": 7.0, "page_end": 9.0})
+        [both] = await self._retrieve({"page_number": "7", "page_start": "2"})
+        [neither] = await self._retrieve({})
+        [garbled] = await self._retrieve({"page_start": "seven"})
+        assert start.page_number == _EXPECTED_PAGE_NUMBER
+        assert floated.page_number == _EXPECTED_PAGE_NUMBER
+        assert both.page_number == _EXPECTED_PAGE_NUMBER
+        assert neither.page_number is None
+        assert garbled.page_number is None
+
+    @pytest.mark.asyncio
     async def test_default_resolver_falls_back_to_the_source_uri(self) -> None:
         """Without a document_id the default id is the chunk's source URI.
 

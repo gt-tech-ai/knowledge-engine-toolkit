@@ -16,6 +16,24 @@ All notable changes to this project are recorded here. The format follows
   (`clients.parsing.isolated.ocr`), and the `VisionClient` contract (`core.interfaces.vision`).
   One call per blank page, in page order; a failed page fails the document naming it. Without
   `ocr`, parsing is unchanged.
+- Python chunking: `ChunkerKind.page_range` (`clients.chunking.page_range.PageRangeChunker`)
+  cuts a paged document into runs of up to `ChunkerConfig.unit_pages` pages, at a heading, else a
+  paragraph break, else the page end, repeating `overlap_pages` pages into the next chunk.
+  `StructuredChunk` gains `page_start` / `page_end`; `core.domain.page_spans(document)` gives the
+  page offsets it reads. The factory refuses `unit_pages < 1` and an out-of-range overlap.
+- Python Bedrock sink: under `kb_units` each unit's sidecar carries `chunk_index` and the chunk's
+  `page_start` / `page_end` as integers, and the write uploads `manifest.json` (content hash and
+  unit count) into the version directory last. `unit_prefix(prefix, org, document_id,
+  content_hash)` names that directory.
+- Python Bedrock retrieval: a passage with no `page_number` takes its page from `page_start`
+  (`"7"` or `"7.0"`).
+
+### Breaking
+
+- Python Bedrock sink: `layout: kb_units` writes one unit per chunk instead of packing contiguous
+  chunks up to `max_unit_bytes`; a chunk over `max_unit_bytes` now fails the write with
+  `INVALID_INPUT` before anything is uploaded. A consumer relying on packed units re-chunks to
+  sizes under the limit (the `page_range` chunker is built for this).
 
 ## [0.0.66] - 2026-11-17
 

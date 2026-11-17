@@ -10,7 +10,8 @@ dataclasses of scalars/lists so a boundary DTO is "a queue message waiting to ha
 ``parsed_to_json`` / ``parsed_from_json`` give a ``ParsedDocument``'s JSON form (the parse
 stage's checkpoint artifact and hand-off), tagged with ``PARSED_FORMAT_VERSION``; a reader
 accepts its own version and the one before (N/N-1). ``join_parsed`` joins the parts of a
-document parsed in page ranges (``PagedParser``) back into one.
+document parsed in page ranges (``PagedParser``) back into one, and ``page_spans`` says
+where each page's text sits in that document's markdown.
 """
 
 from __future__ import annotations
@@ -164,6 +165,49 @@ def join_parsed(parts: Sequence[ParsedDocument]) -> ParsedDocument:
         error=next((p.error for p in ordered if p.error), ""),
         blocks=blocks,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class PageSpan:
+    """Where one page's text sits in a parsed document's markdown."""
+
+    page_number: int
+    """The page's 1-based number in the source document."""
+
+    start: int
+    """Offset in ``markdown_content`` where the page's text starts."""
+
+    end: int
+    """Offset in ``markdown_content`` just past the page's text."""
+
+
+def page_spans(document: ParsedDocument) -> tuple[PageSpan, ...]:
+    """Locate each page's text in ``document.markdown_content``.
+
+    Pages are found in order, each searched from the end of the previous one, so a joined
+    document (``join_parsed``) yields absolute offsets however its parts were split. A
+    page with no text, or whose text is not in the markdown, is left out, and a document
+    without pages (every format but PDF) has no spans.
+
+    Args:
+        document: A parsed document, whole or joined.
+
+    Returns:
+        The located pages, in page order.
+
+    """
+    spans: list[PageSpan] = []
+    cursor = 0
+    for page in document.pages:
+        text = page.text.strip()
+        if not text:
+            continue
+        start = document.markdown_content.find(text, cursor)
+        if start < 0:
+            continue
+        cursor = start + len(text)
+        spans.append(PageSpan(page.page_number, start, cursor))
+    return tuple(spans)
 
 
 def _first_page(part: ParsedDocument) -> int:

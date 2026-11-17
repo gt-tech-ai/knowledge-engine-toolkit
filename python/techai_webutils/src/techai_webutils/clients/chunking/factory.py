@@ -3,7 +3,9 @@
 Selects the embedding-granularity chunk backend from ``ChunkerConfig.kind``: ``fixed``
 (the default; deterministic paragraph-pack to a character budget) or ``sentence``
 (token-sized chunks at sentence boundaries, tables and code kept whole; a
-``StructuredChunker``). Unknown kinds fail loudly, matching the Go ``NewFromConfig``
+``StructuredChunker``) or ``page_range`` (a run of ``unit_pages`` pages per chunk, cut at
+a heading or paragraph, with ``overlap_pages`` repeated; each chunk reports its pages).
+Unknown kinds fail loudly, matching the Go ``NewFromConfig``
 contract.
 """
 
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from techai_webutils.clients.chunking.fixed import FixedChunker as _LazyFixedChunker
+    from techai_webutils.clients.chunking.page_range import PageRangeChunker
     from techai_webutils.clients.chunking.sentence.chunker import SentenceChunker
     from techai_webutils.core.interfaces.chunker import Chunker
     from techai_webutils.core.interfaces.sentence_splitter import SentenceSplitter
@@ -40,6 +43,9 @@ class ChunkerKind(StrEnum):
     SENTENCE = "sentence"
     """Token-sized chunks at sentence boundaries, tables and code kept whole
     (``SentenceChunker``)."""
+    PAGE_RANGE = "page_range"
+    """A run of ``unit_pages`` pages per chunk, cut at a heading or paragraph, each chunk
+    reporting its pages (``PageRangeChunker``)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +64,12 @@ class ChunkerConfig:
     chunk's start (below ``max_tokens``; 0, the default, repeats nothing)."""
     window_chars: int = 100_000
     """``sentence``: the most characters passed to the sentence splitter in one call."""
+    unit_pages: int = 0
+    """``page_range``: the most pages one chunk covers; must be at least 1 for that kind
+    (0, the default, is unset)."""
+    overlap_pages: int = 0
+    """``page_range``: pages repeated at the start of the next chunk, from 0 to
+    ``unit_pages - 1``."""
 
 
 def chunker_from_config(
@@ -81,7 +93,8 @@ def chunker_from_config(
 
     Raises:
         AppValueError: An unknown kind, ``sentence`` without a splitter or tokenizer, or
-            bad ``sentence`` limits (``INVALID_INPUT``).
+            bad ``sentence`` limits, or bad ``page_range`` ``unit_pages`` /
+            ``overlap_pages`` (``INVALID_INPUT``).
 
     """
     if config.kind is ChunkerKind.FIXED:
@@ -107,6 +120,12 @@ def chunker_from_config(
             max_tokens=config.max_tokens,
             overlap_tokens=config.overlap_tokens,
             window_chars=config.window_chars,
+        )
+    if config.kind is ChunkerKind.PAGE_RANGE:
+        module = importlib.import_module("techai_webutils.clients.chunking.page_range")
+        page_range = cast("type[PageRangeChunker]", module.PageRangeChunker)
+        return page_range(
+            unit_pages=config.unit_pages, overlap_pages=config.overlap_pages
         )
     msg = f"unknown chunker kind: {config.kind!r}"
     raise AppValueError(msg)

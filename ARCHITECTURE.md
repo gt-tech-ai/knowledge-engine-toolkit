@@ -1078,7 +1078,14 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   through the injected `StorageClient`, under `{prefix}/{org}/{hash2}/{document}/{version}/`
   (`hash2` from the document id, `version` the content hash's first 16 characters).
   `layout: chunk_files` (the default) writes one `{n}.txt` per chunk for a `NONE`-chunking data
-  source; `kb_units` packs contiguous chunks up to `max_unit_bytes` (25 MiB) for `FIXED_SIZE`.
+  source; `kb_units` writes one `{n}.txt` per chunk for a `FIXED_SIZE` source, and a chunk
+  over `max_unit_bytes` (25 MiB) fails the write (`INVALID_INPUT`) before anything is uploaded.
+  A unit's sidecar adds `chunk_index` and, from a `page_range` chunk, `page_start` / `page_end`
+  as integers; the Bedrock retrieval engine reads `page_number`, else `page_start`, as a
+  passage's page. Under `kb_units` the write uploads `manifest.json` (the content hash and unit
+  count) into the version directory last, so its presence means every unit landed;
+  `unit_prefix(prefix, org, document_id, content_hash)` names that directory. A data source
+  ingesting the whole prefix would index the manifest too: submit the unit URIs directly.
   A write lists the document once, skips present keys (a redelivery writes nothing) and deletes
   other versions; `delete` removes every object; `update_metadata` rewrites only the sidecars.
   `object_tags` (empty by default) tags every object written, so a bucket lifecycle rule can
@@ -1334,6 +1341,18 @@ default.
   deterministically; `llm` prepends one or two model-written sentences, one call per chunk at
   temperature 0 (bounded by `max_document_chars`, `max_context_tokens` and `concurrency`), a
   priced dial a consumer enables only with a budget.
+
+## Page-range chunks
+
+`ChunkerKind.page_range` (`clients.chunking.page_range`) builds a `PageRangeChunker` for paged
+documents. `chunk_spans(text, *, pages=(), …)` takes where each page sits in the markdown
+(`core.domain.page_spans(document)`, a `PageSpan` per non-blank page) and cuts runs of up to
+`unit_pages` pages: at the last heading in the run's second half, else the last paragraph break
+inside its last page, else where that page ends; a run reaching the last page takes the rest.
+`overlap_pages` (0 to `unit_pages - 1`) starts the next chunk that many pages back. Each
+`StructuredChunk` carries `page_start` / `page_end`; with no pages the stripped text is one chunk
+with no page range. The constructor (and so the factory) refuses `unit_pages < 1`, which is the
+config default, and an out-of-range `overlap_pages`.
 
 ## Structured parse and the layout parser
 

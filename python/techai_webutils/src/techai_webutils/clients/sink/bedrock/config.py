@@ -38,7 +38,8 @@ class BedrockSinkConfig:
     """``chunk_files`` for a ``NONE``-chunking data source, ``kb_units`` for
     ``FIXED_SIZE``."""
     max_unit_bytes: int = DEFAULT_MAX_UNIT_BYTES
-    """Largest ``kb_units`` file; a single bigger chunk is written alone."""
+    """Largest ``kb_units`` file; a chunk over it fails the write (``INVALID_INPUT``)
+    before anything is uploaded."""
     concurrency: int = 16
     """Most object-store calls one write, delete or update keeps in flight."""
     object_tags: Mapping[str, str] = field(default_factory=_no_tags)

@@ -16,6 +16,7 @@ from techai_webutils.clients.sink import (
     SinkKind,
     sink_from_config,
 )
+from techai_webutils.clients.sink.bedrock import unit_prefix
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.sink import ChunkPayload, Sink, SinkDocument
 from techai_webutils.core.interfaces.storage import StorageClient, StorageObject
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 _EXPECTED_AWAIT_ARGS_LIST_COUNT = 6
+_PAGELESS_INDEX = 2
 
 _HASH2 = hashlib.sha256(b"doc1").hexdigest()[:2]
 _PREFIX = f"kb/o1/{_HASH2}/doc1/"
@@ -217,31 +219,115 @@ async def test_a_new_version_replaces_the_old_files() -> None:
 
 
 @pytest.mark.asyncio
-async def test_kb_units_pack_contiguous_chunks() -> None:
-    """Test that the ``kb_units`` layout packs chunks into files under the size ceiling.
+async def test_kb_units_write_one_unit_per_chunk_with_page_sidecars() -> None:
+    """Test that ``kb_units`` writes each chunk as its own unit, with its page range.
 
     **Why this test is important:**
-      - A ``FIXED_SIZE`` data source chunks files itself; one file per tiny chunk would
-        exceed its file-count limits for no gain.
+      - Each unit is what Bedrock indexes and cites; packing chunks together lost the
+        page range a citation links to, and a page-less chunk must still be indexed.
 
     **What it tests:**
-      - with a 12-byte ceiling, ``alpha``, ``beta`` and ``gamma`` become one unit of
-        ``alpha`` and ``beta`` (joined by a blank line) and one of ``gamma``; each unit's
-        sidecar carries the document's attributes and its unit index
+      - three chunks become units ``0.txt``, ``1.txt`` and ``2.txt`` holding exactly
+        their text
+      - a chunk carrying ``page_start``/``page_end`` metadata has them in its sidecar as
+        numbers, beside the document's attributes and its ``chunk_index``
+      - a chunk without page metadata has a ``chunk_index`` and no page fields
+    """
+    storage = _storage()
+    chunks = [
+        ChunkPayload("alpha", metadata={"page_start": "1", "page_end": "4"}),
+        ChunkPayload("beta", metadata={"page_start": "4", "page_end": "7"}),
+        ChunkPayload("gamma"),
+    ]
+
+    await _sink(storage, BedrockLayout.KB_UNITS).write(_DOC, chunks, None)
+
+    written = _uploads(storage)
+    assert [written[f"{_PREFIX}{_VERSION}/{n}.txt"] for n in range(3)] == [
+        b"alpha",
+        b"beta",
+        b"gamma",
+    ]
+
+    def attributes(n: int) -> dict[str, object]:
+        body = cast(
+            "dict[str, object]",
+            json.loads(written[f"{_PREFIX}{_VERSION}/{n}.txt.metadata.json"]),
+        )
+        return cast("dict[str, object]", dig(body, "metadataAttributes"))
+
+    paged = attributes(1)
+    assert (paged["page_start"], paged["page_end"], paged["chunk_index"]) == (4, 7, 1)
+    assert paged["document_id"] == "doc1"
+    assert paged["classification"] == "internal"
+    pageless = attributes(2)
+    assert pageless["chunk_index"] == _PAGELESS_INDEX
+    assert "page_start" not in pageless
+    assert "page_end" not in pageless
+
+
+@pytest.mark.asyncio
+async def test_kb_units_refuse_a_chunk_over_the_size_limit() -> None:
+    """Test that a chunk bigger than ``max_unit_bytes`` fails the write.
+
+    **Why this test is important:**
+      - Bedrock rejects an over-size file only after ingestion, as a per-file failure
+        that is easy to miss; refusing it before any upload names the cause and leaves
+        the previous version intact.
+
+    **What it tests:**
+      - with a 12-byte ceiling, a 13-byte chunk raises ``AppValueError`` naming
+        ``max_unit_bytes``, and nothing is uploaded
+    """
+    storage = _storage()
+
+    with pytest.raises(AppValueError, match="max_unit_bytes"):
+        await _sink(storage, BedrockLayout.KB_UNITS).write(
+            _DOC, [ChunkPayload("x" * 13)], None
+        )
+
+    cast("AsyncMock", storage.upload).assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_kb_units_write_the_manifest_last_and_keep_it_on_a_rerun() -> None:
+    """Test that the version's manifest is written after every unit and survives a rerun.
+
+    **Why this test is important:**
+      - The indexer trusts a version only once its manifest exists; written last, a
+        crash mid-write leaves no manifest, so a partial set of units is never indexed.
+
+    **What it tests:**
+      - the last upload is ``{version}/manifest.json`` holding the content hash and the
+        unit count
+      - a rerun with the manifest already stored writes it again and never deletes it,
+        while an old version's manifest is deleted
+      - ``unit_prefix`` names the version directory the units and manifest live in
     """
     storage = _storage()
 
     await _sink(storage, BedrockLayout.KB_UNITS).write(_DOC, _CHUNKS, None)
 
-    written = _uploads(storage)
-    assert written[f"{_PREFIX}{_VERSION}/0.txt"] == b"alpha\n\nbeta"
-    assert written[f"{_PREFIX}{_VERSION}/1.txt"] == b"gamma"
-    sidecar = cast(
-        "dict[str, object]",
-        json.loads(written[f"{_PREFIX}{_VERSION}/1.txt.metadata.json"]),
-    )
-    assert dig(sidecar, "metadataAttributes", "chunk_index") == 1
-    assert "section_path" not in cast("dict[str, object]", sidecar["metadataAttributes"])
+    version = unit_prefix("kb", "o1", "doc1", _DOC.content_hash)
+    assert version == f"{_PREFIX}{_VERSION}/"
+    calls = cast("list[object]", cast("AsyncMock", storage.upload).await_args_list)
+    last = cast("tuple[object, ...]", cast("AsyncMock", calls[-1]).args)
+    assert last[1] == f"{version}manifest.json"
+    assert json.loads(cast("bytes", last[2])) == {
+        "content_hash": _DOC.content_hash,
+        "unit_count": len(_CHUNKS),
+    }
+
+    old_manifest = f"{_PREFIX}{'a' * 16}/manifest.json"
+    rerun = _storage([*_uploads(storage), old_manifest])
+    await _sink(rerun, BedrockLayout.KB_UNITS).write(_DOC, _CHUNKS, None)
+
+    assert list(_uploads(rerun)) == [f"{version}manifest.json"]
+    deleted = [
+        cast("tuple[object, ...]", c.args)[1]
+        for c in cast("list[object]", cast("AsyncMock", rerun.delete).await_args_list)
+    ]
+    assert deleted == [old_manifest]
 
 
 @pytest.mark.asyncio
