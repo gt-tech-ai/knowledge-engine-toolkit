@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.66] - 2026-11-17
+
 ### Changed
 
 - Logging, schema v2 only: the legacy keys are renamed to the unified ones, in Go
@@ -2987,7 +2989,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.65...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.66...HEAD
+[0.0.66]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.65...v0.0.66
 [0.0.65]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.64...v0.0.65
 [0.0.64]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.63...v0.0.64
 [0.0.63]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.62...v0.0.63
