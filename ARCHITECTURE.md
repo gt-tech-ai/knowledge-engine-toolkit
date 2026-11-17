@@ -1378,6 +1378,19 @@ as one 4x2 block with its header, the scanned page OCR'd, and a peak child RSS o
 so `layout` needs a `memory_bytes` of several GiB. `parser_from_config` refuses `layout` when
 Docling is not installed unless a `convert` function is injected.
 
+`ParserKind.isolated` is a `PagedParser` too: `page_count` and `parse_pages` run pymupdf in the
+bounded child, so a large PDF parses in parts whatever the parser kind, and an out-of-range
+request fails the document, never raises. A scanned page has no text layer, so `IsolatedParser(ocr=…)`
+reads it: `PageOcr` (`clients.parsing.isolated.ocr`, built by `ocr_from_config(OcrConfig(kind=…),
+client=…)`; `kind=none`, the default, builds nothing and leaves parsing as it was) finds the
+pages of a parsed PDF whose text is blank, has the child render each at `OcrConfig.dpi` to a PNG,
+and sends it to the injected `VisionClient` (`core.interfaces.vision`, one method:
+`describe_page(png, *, model_id) -> str`). Pages are read one at a time in page order, one call
+each, so a part's OCR cost is bounded by its page range. A page the model cannot read fails the
+document, with the page number in `error` (`ocr_failed: page N: <code>`). The vision backend is the
+consumer's: the toolkit ships the contract, not a model client. Python only; Go has no page-range
+parser, so there is no Go counterpart yet. The `layout` kind keeps its own Docling OCR.
+
 A child that raises `MemoryError` under its address-space cap now fails its document with
 `parse_isolation_failed: memory_exceeded` (`MEMORY_EXCEEDED`, raised as `IsolationMemoryError`),
 for both kinds.

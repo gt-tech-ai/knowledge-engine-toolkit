@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, BinaryIO, Protocol, cast
 
 from techai_webutils.clients.parsing.isolated.detect import detect_format
 from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
+from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
@@ -80,6 +81,22 @@ class _Converter(Protocol):
         ...
 
 
+class _PdfPixmap(Protocol):
+    """The slice of a pymupdf ``Pixmap`` the parser reads."""
+
+    def tobytes(self, output: str) -> bytes:
+        """Encode the bitmap as ``output`` (``"png"``).
+
+        Args:
+            output: The image format.
+
+        Returns:
+            The encoded image.
+
+        """
+        ...
+
+
 class _PdfPage(Protocol):
     """The slice of a pymupdf ``Page`` the parser reads."""
 
@@ -88,6 +105,18 @@ class _PdfPage(Protocol):
 
         Returns:
             The page's text.
+
+        """
+        ...
+
+    def get_pixmap(self, *, dpi: int) -> _PdfPixmap:
+        """Render the page to a bitmap at ``dpi``.
+
+        Args:
+            dpi: The render resolution.
+
+        Returns:
+            The rendered bitmap.
 
         """
         ...
@@ -270,6 +299,100 @@ class MarkItDownParser:
         except Exception:  # PDF page extraction is best-effort supplementary data
             logger.exception("pdf_pages failed")
             return []
+
+    @staticmethod
+    def page_count(path: str) -> int:
+        """Count the pages of the PDF at ``path``; 0 when it is not a readable PDF.
+
+        It never raises: 0 tells the caller to parse the document whole. Only pymupdf's
+        open errors are caught (a truncated or non-PDF file).
+
+        Args:
+            path: The PDF file.
+
+        Returns:
+            The page count, or 0 for a non-PDF, a truncated PDF or a missing file.
+
+        """
+        try:
+            with _open_pdf(path, filetype="pdf") as doc:
+                return cast("_PdfDocument", doc).page_count
+        except (RuntimeError, ValueError):
+            return 0
+
+    @staticmethod
+    def parse_pages(
+        path: str, *, first_page: int, last_page: int, filename: str = ""
+    ) -> ParsedDocument:
+        """Parse only pages ``first_page``..``last_page`` (1-based, inclusive) of a PDF.
+
+        Pages keep their real position in the document (a range 2-3 yields pages numbered
+        2 and 3), ``total_pages`` is the whole document's count, and
+        ``markdown_content`` holds only the range's text, one block per page.
+
+        Args:
+            path: The PDF file.
+            first_page: The first page of the range, from 1.
+            last_page: The last page of the range, at most the document's page count.
+            filename: The original file name, kept for the caller's records.
+
+        Returns:
+            The range as a parsed document.
+
+        Raises:
+            AppValueError: The range is empty, starts before page 1 or ends past the
+                document's last page (``INVALID_INPUT``).
+
+        """
+        del filename
+        with _open_pdf(path, filetype="pdf") as doc:
+            pdf = cast("_PdfDocument", doc)
+            total = pdf.page_count
+            if first_page < 1 or last_page < first_page or last_page > total:
+                msg = (
+                    f"page range {first_page}-{last_page} is outside the document's "
+                    f"{total} pages"
+                )
+                raise AppValueError(msg)
+            pages = [
+                Page(page_number=n, text=str(pdf.load_page(n - 1).get_text()))
+                for n in range(first_page, last_page + 1)
+            ]
+        markdown = "\n\n".join(page.text.strip() for page in pages)
+        return ParsedDocument(
+            markdown_content=markdown,
+            document_format=DocumentFormat.PDF,
+            total_pages=total,
+            word_count=len(_WORD_RE.findall(markdown)),
+            pages=pages,
+        )
+
+    @staticmethod
+    def render_page(path: str, *, page_number: int, dpi: int) -> bytes:
+        """Render one page of the PDF at ``path`` to PNG bytes.
+
+        It feeds OCR of a page that has no text layer.
+
+        Args:
+            path: The PDF file.
+            page_number: The page, from 1.
+            dpi: The render resolution.
+
+        Returns:
+            The page as a PNG image.
+
+        Raises:
+            AppValueError: The page is outside the document (`INVALID_INPUT`).
+
+        """
+        with _open_pdf(path, filetype="pdf") as doc:
+            pdf = cast("_PdfDocument", doc)
+            if not 1 <= page_number <= pdf.page_count:
+                msg = (
+                    f"page {page_number} is outside the document's {pdf.page_count} pages"
+                )
+                raise AppValueError(msg)
+            return pdf.load_page(page_number - 1).get_pixmap(dpi=dpi).tobytes("png")
 
     def parse_path(
         self, path: str, *, declared: str = "", filename: str = ""

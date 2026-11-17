@@ -13,7 +13,7 @@ Why these tests are important:
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import pytest
@@ -23,6 +23,9 @@ from techai_webutils.clients.parsing.isolated import IsolatedParser
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.core.interfaces.parser import DocumentParser
 from tests.child_python import run_python
+
+if TYPE_CHECKING:
+    from techai_webutils.clients.parsing.isolated.ocr import PageOcr
 
 
 def test_factory_selects_isolated_backend() -> None:
@@ -43,7 +46,7 @@ def test_factory_selects_isolated_backend() -> None:
     with patch("techai_webutils.clients.parsing.isolated.IsolatedParser") as parser_cls:
         _ = parser_from_config(config)
     parser_cls.assert_called_once_with(
-        memory_bytes=123, timeout_seconds=7.0, executor=None
+        memory_bytes=123, timeout_seconds=7.0, executor=None, ocr=None
     )
 
 
@@ -105,3 +108,20 @@ def test_parsing_package_imports_without_heavy_deps() -> None:
     result = run_python(script)
     assert result.returncode == 0, result.stderr
     assert "LAZY_OK" in result.stdout
+
+
+def test_factory_hands_the_page_ocr_to_the_isolated_backend() -> None:
+    """An injected ``PageOcr`` reaches the isolated parser; the default has none.
+
+    Why this test is important:
+      - OCR is opt-in: the composition root builds it with ``ocr_from_config`` and the
+        factory must carry it into the parser, while leaving the default parse
+        byte-identical.
+    What it tests:
+      - ``parser_from_config(config, ocr=…)`` constructs ``IsolatedParser`` with that
+        ``ocr``.
+    """
+    ocr = cast("PageOcr", object())
+    with patch("techai_webutils.clients.parsing.isolated.IsolatedParser") as parser_cls:
+        _ = parser_from_config(ParserConfig(), ocr=ocr)
+    assert cast("dict[str, object]", parser_cls.call_args.kwargs)["ocr"] is ocr

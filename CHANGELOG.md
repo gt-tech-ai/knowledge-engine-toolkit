@@ -6,6 +6,17 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Python parsing: `IsolatedParser` is a `PagedParser` (`page_count`, `parse_pages`; pymupdf in the
+  bounded child), so large PDFs parse in page ranges with the default `isolated` kind too.
+- Python parsing: page OCR for scans. `IsolatedParser(ocr=…)` and `parser_from_config(config,
+  ocr=…)` read the pages of a PDF that have no text layer through a vision model: `PageOcr`,
+  `OcrConfig`, `OcrKind` (`none`, the default, and `bedrock`) and `ocr_from_config`
+  (`clients.parsing.isolated.ocr`), and the `VisionClient` contract (`core.interfaces.vision`).
+  One call per blank page, in page order; a failed page fails the document naming it. Without
+  `ocr`, parsing is unchanged.
+
 ## [0.0.66] - 2026-11-17
 
 ### Changed
