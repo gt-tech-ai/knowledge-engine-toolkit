@@ -24,6 +24,7 @@ from opentelemetry.propagate import extract
 from opentelemetry.trace import SpanKind, Status, StatusCode
 from prometheus_client import Counter, Histogram
 
+from techai_webutils.core.types.histogram_buckets import DEFAULT_DURATION_BUCKETS
 from techai_webutils.foundation.errors import OnError
 from techai_webutils.foundation.logger.logger import get_logger
 
@@ -36,9 +37,6 @@ if TYPE_CHECKING:
 
 _log = get_logger("http")
 
-_DURATION_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
-"""Latency histogram bucket upper bounds, in seconds (5ms to 10s)."""
-
 _REQUESTS = Counter(
     "http_server_requests_total",
     "Total number of HTTP server requests",
@@ -49,7 +47,7 @@ _DURATION = Histogram(
     "http_server_request_duration_seconds",
     "HTTP server request duration in seconds",
     ["method", "route", "status"],
-    buckets=_DURATION_BUCKETS,
+    buckets=DEFAULT_DURATION_BUCKETS,
 )
 """RED request-duration histogram labelled by method/route/status (module singleton)."""
 

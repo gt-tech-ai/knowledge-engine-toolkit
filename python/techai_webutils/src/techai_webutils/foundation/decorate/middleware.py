@@ -21,6 +21,7 @@ from techai_webutils.core.errors.errors import (
     ForbiddenError,
     InternalError,
 )
+from techai_webutils.core.types.histogram_buckets import DEFAULT_DURATION_BUCKETS
 from techai_webutils.foundation.errors import OnFailure
 from techai_webutils.foundation.resilience.classify import is_throttled
 
@@ -36,9 +37,6 @@ type OpThunk = Callable[[], Awaitable[object]]
 
 type Authorizer = Callable[[str], Awaitable[bool]]
 """Authorizes an action (``<name>.<op>``); False refuses it."""
-
-_DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
-"""The operation-duration histogram buckets, in seconds (Prometheus' defaults)."""
 
 
 class OpMiddleware(Protocol):
@@ -292,7 +290,7 @@ class _Metrics:
             f"{tier}_operation_duration_seconds",
             f"{tier} operation duration",
             labels,
-            _DURATION_BUCKETS,
+            list(DEFAULT_DURATION_BUCKETS),
         )
         self._tier = tier
         self._name = name

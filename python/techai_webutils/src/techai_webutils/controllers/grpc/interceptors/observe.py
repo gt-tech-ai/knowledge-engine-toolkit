@@ -20,6 +20,7 @@ from opentelemetry.trace import SpanKind, Status, StatusCode
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 from techai_webutils.controllers.grpc.interceptors.behavior import rebuild
+from techai_webutils.core.types.histogram_buckets import DEFAULT_DURATION_BUCKETS
 from techai_webutils.foundation.errors import OnFailure
 
 if TYPE_CHECKING:
@@ -34,9 +35,6 @@ if TYPE_CHECKING:
 _RESPONSE_PROPAGATOR = TraceContextTextMapPropagator()
 """W3C TraceContext propagator used directly, so the ``traceresponse`` value is
 deterministic."""
-
-_DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
-"""The request-duration histogram buckets, in seconds (Prometheus' defaults)."""
 
 
 def parse_method(method: str) -> tuple[str, str]:
@@ -248,7 +246,7 @@ class MetricsServerInterceptor(grpc.aio.ServerInterceptor):
             "grpc_server_duration_seconds",
             "gRPC server request duration in seconds",
             ["service", "method"],
-            _DURATION_BUCKETS,
+            list(DEFAULT_DURATION_BUCKETS),
         )
 
     @override

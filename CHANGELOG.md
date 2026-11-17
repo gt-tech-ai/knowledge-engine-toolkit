@@ -6,6 +6,25 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.66] - 2026-11-17
+
+### Changed
+
+- Logging, schema v2 only: the legacy keys are renamed to the unified ones, in Go
+  (`logctx` handler, both `zap` and `stdlib`) and Python (`configure_logging`'s v2 chain).
+  `duration` and `elapsed_seconds` become `duration_seconds` (a Go `time.Duration`
+  becomes float seconds, so the stdlib backend no longer logs nanoseconds), and
+  `grpc_port` becomes `port`. Keys bound with `With` / `bind` are renamed too. v1 output
+  is unchanged. A v2 consumer's query on the old keys moves to the new ones.
+- Metrics: the shared duration histogram buckets now reach 5 min, adding 30, 60, 120 and
+  300 s above 10 s (Go `core/types.DefaultDurationBuckets`; Python's new
+  `core.types.histogram_buckets.DEFAULT_DURATION_BUCKETS`, which replaces the three
+  private copies in `foundation/decorate`, `controllers/grpc/interceptors/observe` and
+  `foundation/middleware/http_observability`). Operations slower than 10 s no longer all
+  land in `+Inf`. Each `*_duration_seconds` series gains four `le` buckets; quantiles
+  over those histograms shift for observations above 10 s.
+- `techai-webutils` 0.18.0.
+
 ## [0.0.65] - 2026-11-16
 
 ### Fixed
@@ -2970,7 +2989,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.65...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.66...HEAD
+[0.0.66]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.65...v0.0.66
 [0.0.65]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.64...v0.0.65
 [0.0.64]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.63...v0.0.64
 [0.0.63]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.62...v0.0.63

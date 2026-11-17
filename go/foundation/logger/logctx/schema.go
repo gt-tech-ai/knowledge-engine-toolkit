@@ -72,6 +72,48 @@ func SchemaV2Attrs(service, env string) []any {
 	return attrs
 }
 
+// DurationKey is the SchemaV2 key for a length of time, in seconds.
+const DurationKey = "duration_seconds"
+
+// PortKey is the SchemaV2 key for a listener's port.
+const PortKey = "port"
+
+// unifiedKeyV2 returns the SchemaV2 key a v1 key is renamed to
+// (ARCHITECTURE.md#logging), so one query finds every service's value, and false
+// for a key SchemaV2 keeps.
+func unifiedKeyV2(key string) (string, bool) {
+	switch key {
+	case "duration", "elapsed_seconds":
+		return DurationKey, true
+	case "grpc_port":
+		return PortKey, true
+	default:
+		return "", false
+	}
+}
+
+// renameLegacyKey returns attr under its SchemaV2 key when unifiedKeyV2 names
+// one; a time.Duration value becomes float seconds, as DurationKey promises.
+func renameLegacyKey(attr slog.Attr) slog.Attr {
+	key, ok := unifiedKeyV2(attr.Key)
+	if !ok {
+		return attr
+	}
+
+	value := attr.Value.Resolve()
+	if value.Kind() == slog.KindDuration {
+		return slog.Float64(key, value.Duration().Seconds())
+	}
+
+	return slog.Attr{Key: key, Value: value}
+}
+
+// shapeAttrV2 returns attr in its SchemaV2 shape: a legacy key renamed, then a
+// logged error flattened.
+func shapeAttrV2(attr slog.Attr) []slog.Attr {
+	return flattenError(renameLegacyKey(attr))
+}
+
 // flattenError returns attr unchanged unless it is an error under ErrorKey, which
 // becomes its message string followed by its ErrorCodeKey attribute (CodeUnknown
 // for an uncoded error).
@@ -91,12 +133,13 @@ func flattenError(attr slog.Attr) []slog.Attr {
 	}
 }
 
-// flattenErrors returns attrs with every logged error flattened by flattenError.
-func flattenErrors(attrs []slog.Attr) []slog.Attr {
-	flat := make([]slog.Attr, 0, len(attrs))
+// shapeAttrsV2 returns attrs with each one put in its SchemaV2 shape by
+// shapeAttrV2.
+func shapeAttrsV2(attrs []slog.Attr) []slog.Attr {
+	shaped := make([]slog.Attr, 0, len(attrs))
 	for _, attr := range attrs {
-		flat = append(flat, flattenError(attr)...)
+		shaped = append(shaped, shapeAttrV2(attr)...)
 	}
 
-	return flat
+	return shaped
 }

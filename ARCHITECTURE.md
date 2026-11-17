@@ -203,7 +203,9 @@ collaborator or zero timeout skips its layer; recovery needs none.
     driver's errors to coded ones (`postgres/`).
 
   Every tier's series are `<tier>_operations_total`, `<tier>_errors_total` and
-  `<tier>_operation_duration_seconds` labelled `{<tier>, operation}`. Python's metrics layer also
+  `<tier>_operation_duration_seconds` labelled `{<tier>, operation}`, its buckets 5 ms to 5 min
+  (Go `core/types.DefaultDurationBuckets`, Python `core.types.histogram_buckets`, the same
+  boundaries the transports' request histograms use). Python's metrics layer also
   counts `<tier>_throttled_total`, an error the provider refused for rate or quota
   (`foundation/resilience/classify.is_throttled`: an AWS throttle code such as S3 `SlowDown`, gRPC
   `RESOURCE_EXHAUSTED`, HTTP 429, found through the cause chain); the Go layer does not yet. Its spans are
@@ -766,7 +768,10 @@ every Go and Python service emits once it opts in:
 | `stacktrace` | error level | the logged error's origin stack, else the call site's stack |
 
 PII redaction skips the v2 fields as it skips the structural ones. A duration is a call site's
-own `duration_seconds` field; the schema adds none.
+own `duration_seconds` field; the schema adds none, but v2 renames the legacy keys so one query
+finds every service's value: `duration` and `elapsed_seconds` become `duration_seconds` (a Go
+`time.Duration` becomes float seconds), and `grpc_port` becomes `port`. The rename covers keys
+bound with `With` / `bind` too; v1 keeps the legacy keys.
 
 - **Go.** `logger.Config.Schema` (`logger.SchemaV1` / `logger.SchemaV2`, `""` counts as v1) with
   `Service` and `Env`, set through `WithSchema`, `WithService` and `WithEnv` or the

@@ -152,3 +152,98 @@ func TestLoggerNewFromConfig_UnknownSchema(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, apperr.Is(err, apperr.CodeInvalidInput))
 }
+
+// schemaV2InfoLine logs one info line through a logger of kind under schema,
+// binding bound with With first, and returns the parsed JSON line.
+func schemaV2InfoLine(
+	t *testing.T, kind logger.Kind, schema string, bound, fields []any,
+) map[string]any {
+	t.Helper()
+
+	out := zapCaptureStdout(t, func() {
+		currentLogger, err := logger.New(kind,
+			logger.WithSchema(schema),
+			logger.WithRedactPII(false),
+		)
+		require.NoError(t, err)
+
+		currentLogger.With(bound...).Info("request", fields...)
+	})
+
+	return zapLastJSONLine(t, out)
+}
+
+// TestLoggerSchemaV2_RenamesLegacyKeys tests that the v2 schema emits the unified
+// duration and port keys in place of the legacy ones.
+//
+// Why this test is important:
+//   - Go logs a call's length as "duration", Python as "duration" or
+//     "elapsed_seconds", and a listener as "grpc_port"; a query over one key
+//     misses the rest. v2 is the one field set, so it names each once.
+//
+// What it tests:
+//   - A time.Duration under "duration" becomes "duration_seconds" in seconds.
+//   - "elapsed_seconds" becomes "duration_seconds" unchanged.
+//   - "grpc_port" bound with With becomes "port".
+//   - None of the legacy keys remains on the line.
+func TestLoggerSchemaV2_RenamesLegacyKeys(t *testing.T) {
+	t.Parallel()
+
+	for name, kind := range schemaLogKinds() {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if !fixtures.InReexec() {
+				fixtures.ReexecTest(t, "TestLoggerSchemaV2_RenamesLegacyKeys/"+name)
+
+				return
+			}
+
+			durationRec := schemaV2InfoLine(t, kind, logger.SchemaV2,
+				[]any{"grpc_port", 9000},
+				[]any{"duration", 1500 * time.Millisecond})
+			assert.InDelta(t, 1.5, durationRec["duration_seconds"], 1e-9)
+			assert.InDelta(t, 9000, durationRec["port"], 0)
+			assert.NotContains(t, durationRec, "duration")
+			assert.NotContains(t, durationRec, "grpc_port")
+
+			elapsedRec := schemaV2InfoLine(t, kind, logger.SchemaV2,
+				nil, []any{"elapsed_seconds", 0.25})
+			assert.InDelta(t, 0.25, elapsedRec["duration_seconds"], 1e-9)
+			assert.NotContains(t, elapsedRec, "elapsed_seconds")
+		})
+	}
+}
+
+// TestLoggerSchemaV1_KeepsLegacyKeys tests that v1 leaves the legacy keys alone.
+//
+// Why this test is important:
+//   - v1 consumers' dashboards query "duration" and "grpc_port"; the rename must
+//     reach only loggers that opted into v2.
+//
+// What it tests:
+//   - Under v1, "duration" and "grpc_port" are emitted under their own names and
+//     no "duration_seconds" or "port" appears.
+func TestLoggerSchemaV1_KeepsLegacyKeys(t *testing.T) {
+	t.Parallel()
+
+	for name, kind := range schemaLogKinds() {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if !fixtures.InReexec() {
+				fixtures.ReexecTest(t, "TestLoggerSchemaV1_KeepsLegacyKeys/"+name)
+
+				return
+			}
+
+			rec := schemaV2InfoLine(t, kind, logger.SchemaV1,
+				[]any{"grpc_port", 9000},
+				[]any{"duration", 1500 * time.Millisecond})
+			assert.Contains(t, rec, "duration")
+			assert.Contains(t, rec, "grpc_port")
+			assert.NotContains(t, rec, "duration_seconds")
+			assert.NotContains(t, rec, "port")
+		})
+	}
+}
