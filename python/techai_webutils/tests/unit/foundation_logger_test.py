@@ -292,6 +292,16 @@ class TestStructlogLoggerDelegation:
         assert data["git_sha"] == "abc123"
 
 
+_SERVED_SECONDS = 1.5
+"""A logged call's length, in seconds, for the legacy-key tests."""
+
+_BATCH_SECONDS = 0.25
+"""A logged batch's length, in seconds, for the legacy-key tests."""
+
+_GRPC_PORT = 9000
+"""A logged listener port for the legacy-key tests."""
+
+
 class TestLogSchemaV2:
     """The v2 log schema: the field set every service and language shares."""
 
@@ -436,6 +446,65 @@ class TestLogSchemaV2:
         assert re.fullmatch(
             r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", str(line["timestamp"])
         )
+
+    @staticmethod
+    def test_configure_logging_v2_renames_legacy_keys() -> None:
+        """A v2 line names a duration and a port once, as the Go loggers do.
+
+        **Why this test is important:**
+          - Services log a call's length as "duration" or "elapsed_seconds" and a
+            listener as "grpc_port"; a query over one key misses the others.
+
+        **What it tests:**
+          - "duration" and "elapsed_seconds" become "duration_seconds" with the
+            value unchanged, "grpc_port" becomes "port", and no legacy key remains.
+
+        """
+        output = StringIO()
+        _ = configure_logging(level="INFO", stream=output, schema=LogSchema(name="v2"))
+        log = get_logger("test")
+        log.info("served", duration=_SERVED_SECONDS, grpc_port=_GRPC_PORT)
+        log.info("batch", elapsed_seconds=_BATCH_SECONDS)
+        served, batch = (
+            cast("dict[str, object]", json.loads(raw))
+            for raw in output.getvalue().strip().split("\n")[-2:]
+        )
+
+        assert (
+            served["duration_seconds"],
+            served["port"],
+            batch["duration_seconds"],
+        ) == (
+            _SERVED_SECONDS,
+            _GRPC_PORT,
+            _BATCH_SECONDS,
+        )
+        for key in ("duration", "grpc_port"):
+            assert key not in served
+        assert "elapsed_seconds" not in batch
+
+    @staticmethod
+    def test_configure_logging_v1_keeps_legacy_keys() -> None:
+        """The default schema keeps the legacy duration and port keys.
+
+        **Why this test is important:**
+          - v1 dashboards query "duration" and "grpc_port"; only v2 renames them.
+
+        **What it tests:**
+          - Under v1 the line keeps "duration" and "grpc_port" and has no
+            "duration_seconds" or "port".
+
+        """
+        output = StringIO()
+        _ = configure_logging(level="INFO", stream=output)
+        get_logger("test").info("served", duration=_SERVED_SECONDS, grpc_port=_GRPC_PORT)
+        line = cast(
+            "dict[str, object]", json.loads(output.getvalue().strip().split("\n")[-1])
+        )
+
+        assert (line["duration"], line["grpc_port"]) == (_SERVED_SECONDS, _GRPC_PORT)
+        assert "duration_seconds" not in line
+        assert "port" not in line
 
     @staticmethod
     def test_configure_logging_v1_default_keeps_shape() -> None:

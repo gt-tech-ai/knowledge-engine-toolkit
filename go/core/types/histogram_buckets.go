@@ -22,10 +22,20 @@ const (
 	bucket5s = 5
 	// bucket10s is the 10 second boundary.
 	bucket10s = 10
+	// bucket30s is the 30 second boundary.
+	bucket30s = 30
+	// bucket60s is the 1 minute boundary.
+	bucket60s = 60
+	// bucket120s is the 2 minute boundary.
+	bucket120s = 120
+	// bucket300s is the 5 minute boundary.
+	bucket300s = 300
 )
 
 // DefaultDurationBuckets returns the histogram bucket boundaries, in seconds, that every
-// tier and transport records an operation's duration under.
+// tier and transport records an operation's duration under: 5 ms to 5 min, so slow
+// operations (document parses, model calls, index rounds) resolve above 10 s instead
+// of all landing in +Inf.
 func DefaultDurationBuckets() []float64 {
 	return []float64{
 		bucket5ms,
@@ -39,5 +49,9 @@ func DefaultDurationBuckets() []float64 {
 		bucket2500ms,
 		bucket5s,
 		bucket10s,
+		bucket30s,
+		bucket60s,
+		bucket120s,
+		bucket300s,
 	}
 }

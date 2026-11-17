@@ -30,8 +30,9 @@ type stacktraceHandler struct {
 	// records below it pass through to inner unchanged.
 	level slog.Level
 
-	// flatten, set under SchemaV2, rewrites a logged error into its message and
-	// error_code after the origin stack has been read from it.
+	// flatten, set under SchemaV2, renames each legacy key to its SchemaV2 key
+	// and rewrites a logged error into its message and error_code after the
+	// origin stack has been read from it.
 	flatten bool
 }
 
@@ -43,8 +44,10 @@ func NewStacktraceHandler(inner slog.Handler, minLevel slog.Level) slog.Handler 
 }
 
 // NewSchemaV2StacktraceHandler returns NewStacktraceHandler's handler that also
-// flattens an error logged under ErrorKey, on every record and every WithAttrs,
-// to its message string beside its ErrorCodeKey (ARCHITECTURE.md#logging). The
+// shapes every record and every WithAttrs to SchemaV2: a legacy key ("duration",
+// "elapsed_seconds", "grpc_port") becomes DurationKey or PortKey, and an error
+// logged under ErrorKey becomes its message string beside its ErrorCodeKey
+// (ARCHITECTURE.md#logging). The
 // stack is read from the error before it is flattened, so an AppError still
 // logs its origin stack.
 func NewSchemaV2StacktraceHandler(inner slog.Handler, minLevel slog.Level) slog.Handler {
@@ -111,11 +114,11 @@ func originStack(r *slog.Record) string {
 }
 
 // WithAttrs returns a new handler whose wrapped handler has the given
-// attributes added (each logged error flattened under flatten), preserving the
+// attributes added (each in its SchemaV2 shape under flatten), preserving the
 // stack-trace threshold.
 func (h *stacktraceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	if h.flatten {
-		attrs = flattenErrors(attrs)
+		attrs = shapeAttrsV2(attrs)
 	}
 
 	return &stacktraceHandler{
@@ -177,7 +180,7 @@ func isInternalFrame(fn, file string) bool {
 }
 
 // shape returns a copy of record the wrapped handler may extend: a clone, or under
-// flatten a rebuild with every logged error flattened.
+// flatten a rebuild with every attribute in its SchemaV2 shape.
 func (h *stacktraceHandler) shape(record *slog.Record) slog.Record {
 	if !h.flatten {
 		return record.Clone()
@@ -186,7 +189,7 @@ func (h *stacktraceHandler) shape(record *slog.Record) slog.Record {
 	out := slog.NewRecord(record.Time, record.Level, record.Message, record.PC)
 
 	record.Attrs(func(attr slog.Attr) bool {
-		out.AddAttrs(flattenError(attr)...)
+		out.AddAttrs(shapeAttrV2(attr)...)
 
 		return true
 	})

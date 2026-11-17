@@ -3,8 +3,9 @@
 v1 is the original output and the default. v2 is the unified field set the Go zap and
 stdlib loggers emit under ``logger.SchemaV2`` (ARCHITECTURE.md#logging): a millisecond
 UTC timestamp, a ``dir/file.py:line`` caller, ``service`` and ``env`` on every line, a
-logged error flattened to its message beside its ``error_code``, and a ``stacktrace``
-string at error level.
+logged error flattened to its message beside its ``error_code``, a ``stacktrace``
+string at error level, and the legacy keys renamed (``duration`` and ``elapsed_seconds``
+to ``duration_seconds``, ``grpc_port`` to ``port``).
 """
 
 from __future__ import annotations
@@ -64,6 +65,19 @@ _IGNORED_FRAMES: Final = (
 
 _LEVEL_NAMES: Final = {"warning": "warn", "critical": "error"}
 """structlog level names v2 renames to the Go loggers' names."""
+
+DURATION_KEY: Final = "duration_seconds"
+"""The v2 field for a length of time, in seconds."""
+
+PORT_KEY: Final = "port"
+"""The v2 field for a listener's port."""
+
+_LEGACY_KEYS: Final = {
+    "duration": DURATION_KEY,
+    "elapsed_seconds": DURATION_KEY,
+    "grpc_port": PORT_KEY,
+}
+"""v1 field names v2 renames to the unified ones the Go loggers emit."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +168,7 @@ def schema_processors(schema: LogSchema) -> list[Processor]:
         _level_v2,
         _timestamp_v2,
         add_static,
+        _rename_legacy_keys,
         _flatten_error,
         _add_caller,
         _add_stacktrace,
@@ -175,6 +190,26 @@ def _level_v2(_logger: object, _method_name: str, event_dict: EventDict) -> Even
     level = cast("object", event_dict.get("level"))
     if isinstance(level, str) and level in _LEVEL_NAMES:
         event_dict["level"] = _LEVEL_NAMES[level]
+    return event_dict
+
+
+def _rename_legacy_keys(
+    _logger: object, _method_name: str, event_dict: EventDict
+) -> EventDict:
+    """Rename ``duration``, ``elapsed_seconds`` and ``grpc_port`` to their v2 fields.
+
+    Args:
+        _logger: Ignored (structlog's logger).
+        _method_name: Ignored (the log method's name).
+        event_dict: The event being logged.
+
+    Returns:
+        The event dict.
+
+    """
+    for legacy, key in _LEGACY_KEYS.items():
+        if legacy in event_dict:
+            event_dict[key] = event_dict.pop(legacy)
     return event_dict
 
 
