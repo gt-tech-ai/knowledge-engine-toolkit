@@ -196,6 +196,11 @@ def test_page_range_chunks_lose_and_repeat_no_text(
       - For arbitrary pages and any ``unit_pages``, the chunk texts joined equal the
         markdown with whitespace removed, and the chunks' page ranges never run
         backwards.
+
+    Args:
+        texts: The generated text of each page.
+        unit_pages: The generated pages per chunk.
+
     """
     document = _document(texts)
 
