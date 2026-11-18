@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.67] - 2026-11-17
+
 ### Added
 
 - Python parsing: `IsolatedParser` is a `PagedParser` (`page_count`, `parse_pages`; pymupdf in the
@@ -34,6 +36,10 @@ All notable changes to this project are recorded here. The format follows
   chunks up to `max_unit_bytes`; a chunk over `max_unit_bytes` now fails the write with
   `INVALID_INPUT` before anything is uploaded. A consumer relying on packed units re-chunks to
   sizes under the limit (the `page_range` chunker is built for this).
+
+### Changed
+
+- `techai-webutils` 0.19.0.
 
 ## [0.0.66] - 2026-11-17
 
@@ -3018,7 +3024,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.66...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.67...HEAD
+[0.0.67]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.66...v0.0.67
 [0.0.66]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.65...v0.0.66
 [0.0.65]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.64...v0.0.65
 [0.0.64]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.63...v0.0.64
