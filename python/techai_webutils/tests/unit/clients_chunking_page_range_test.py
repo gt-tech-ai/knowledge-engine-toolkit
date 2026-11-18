@@ -6,7 +6,7 @@ from itertools import starmap
 from typing import TYPE_CHECKING, cast
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from techai_webutils.clients.chunking import (
@@ -17,6 +17,7 @@ from techai_webutils.clients.chunking import (
 from techai_webutils.core.domain import (
     DocumentFormat,
     Page,
+    PageSpan,
     ParsedDocument,
     page_spans,
 )
@@ -70,6 +71,24 @@ def _chunks(
     )
     chunker = cast("PageRangeChunker", chunker_from_config(config))
     return chunker.chunk_spans(document.markdown_content, pages=page_spans(document))
+
+
+def _gapped(pages: list[tuple[str, str]]) -> tuple[str, tuple[PageSpan, ...]]:
+    """Return text whose page spans leave each page's following gap text unclaimed.
+
+    Args:
+        pages: Each page's text and the text that follows it outside any page span.
+
+    Returns:
+        The text and its page spans, page ``n`` the ``n``-th pair's first item.
+
+    """
+    text = ""
+    spans: list[PageSpan] = []
+    for number, (page, gap) in enumerate(pages, start=1):
+        spans.append(PageSpan(number, len(text), len(text) + len(page)))
+        text += page + gap
+    return text, tuple(spans)
 
 
 def _ranges(chunks: list[StructuredChunk]) -> list[tuple[int | None, int | None]]:
@@ -235,3 +254,57 @@ def test_page_range_overlap_repeats_trailing_pages() -> None:
     assert _ranges(chunks) == [(1, 4), (4, 7), (7, 10)]
     assert chunks[0].text.endswith("page 4")
     assert chunks[1].text.startswith("page 4")
+
+
+_page_text = (
+    st
+    .text(alphabet="ab #\n", min_size=1, max_size=_MAX_PAGE_CHARS)
+    .map(str.strip)
+    .filter(bool)
+)
+"""A page's text as ``page_spans`` locates it: non-blank, without edge whitespace."""
+
+
+@settings(max_examples=150)
+@example(pages=[("aaaaa", " xxxx "), ("bbbbb", " yyyy "), ("ccccc", "")], unit_pages=1)
+@given(
+    st.lists(
+        st.tuples(_page_text, st.text(alphabet="xy #\n", max_size=_MAX_PAGE_CHARS)),
+        min_size=1,
+        max_size=_MAX_PAGES,
+    ),
+    st.integers(min_value=1, max_value=3),
+)
+def test_page_range_advances_past_text_between_page_spans(
+    pages: list[tuple[str, str]], unit_pages: int
+) -> None:
+    """Test that text no page span claims is chunked once and the chunker moves past it.
+
+    **Why this test is important:**
+      - ``page_spans`` leaves out a page whose text it cannot find, so text can sit
+        between two spans; a cut that lands at or before such a gap's start never
+        advances, and the chunker loops forever on the document.
+
+    **What it tests:**
+      - For pages separated by arbitrary unclaimed text and 1 to 3 pages per chunk,
+        chunking ends, each chunk starts after the previous one, and the chunk texts
+        joined equal the text with whitespace removed (nothing lost or repeated).
+      - The example is the shape that looped: one page per chunk and words in each gap.
+
+    Args:
+        pages: The generated text of each page and of the gap after it.
+        unit_pages: The generated pages per chunk.
+
+    """
+    text, spans = _gapped(pages)
+    config = ChunkerConfig(kind=ChunkerKind.PAGE_RANGE, unit_pages=unit_pages)
+    chunker = cast("PageRangeChunker", chunker_from_config(config))
+
+    chunks = chunker.chunk_spans(text, pages=spans)
+
+    def squeezed(value: str) -> str:
+        return "".join(value.split())
+
+    starts = [c.start for c in chunks]
+    assert starts == sorted(set(starts))
+    assert squeezed("".join(c.text for c in chunks)) == squeezed(text)

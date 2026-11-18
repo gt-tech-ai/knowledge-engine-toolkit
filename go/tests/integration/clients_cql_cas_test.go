@@ -171,9 +171,12 @@ const outageReconnect = 2 * time.Second
 //     long after the node was back, and only a restart of the service would recover.
 //
 // What it tests:
-//   - With the node's CQL listener off until a write fails, then held off a few
-//     seconds more, a write through a fresh pinned session (2 s reconnect
-//     interval) succeeds within 20 seconds of the listener coming back.
+//   - With the node's CQL listener off until a write fails, then held off for
+//     outageHold more, a write through a fresh pinned session (2 s reconnect
+//     interval) succeeds within 20 seconds of the listener coming back. The hold
+//     is the guard, not a wait: it keeps the node down past several reconnect
+//     attempts, so a pass proves the driver did not give the host up, rather than
+//     that the outage ended before the driver noticed it.
 func (s *CQLCASSuite) TestSession_RecoversFromOutage() {
 	ctx := context.Background()
 	cfg := s.CQLConfig(casKeyspace)
@@ -195,6 +198,7 @@ func (s *CQLCASSuite) TestSession_RecoversFromOutage() {
 	s.T().Cleanup(func() { _ = s.Cassandra.EnableNativeTransport(ctx) })
 	s.Require().Eventually(func() bool { return !write() }, seconds*time.Second,
 		time.Second, "writes fail while the listener is off")
+	// The guard: the outage must outlast the driver's reconnect attempts.
 	time.Sleep(outageHold)
 	s.Require().NoError(s.Cassandra.EnableNativeTransport(ctx))
 	s.Eventually(write, seconds*time.Second, time.Second,

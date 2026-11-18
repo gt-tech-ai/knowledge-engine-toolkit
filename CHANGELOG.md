@@ -6,6 +6,26 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.71] - 2026-11-18
+
+### Fixed
+
+- Python chunking: the `page_range` chunker no longer loops forever when the page spans
+  leave a gap (text no page claims, such as a page `page_spans` could not locate); that text
+  becomes its own chunk and the chunker moves on.
+- Python page OCR: `PageOcr` always returns the page join as the markdown (each non-blank
+  page's text, separated by a blank line), so a whole-document parse and a page-range parse
+  come back in the same shape. `OcrConfig` rejects a `dpi` below 1 at construction, and the
+  render's temp file is made off the event loop.
+- Python vision and embedding: the lazy Bedrock runtime clients open their SDK client once,
+  under a lock, so concurrent first calls no longer open (and leak) one client each.
+- Python vision: `clients.vision.decorated.decorate` passes `async with` through to a managed
+  inner client, so the decorated Bedrock client closes its SDK client on exit.
+- Python parsing: `IsolatedParser.page_count` reads the file's first bytes, so a PDF saved
+  without a `.pdf` extension counts its pages instead of 0.
+- Tests: the isolated parser's paging and OCR tests fork the parse child, so they run in the
+  integration suite now. `techai-webutils` 0.20.2.
+
 ## [0.0.70] - 2026-11-18
 
 ### Added
@@ -3065,7 +3085,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.70...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.71...HEAD
+[0.0.71]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.70...v0.0.71
 [0.0.70]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.69...v0.0.70
 [0.0.69]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.68...v0.0.69
 [0.0.68]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.67...v0.0.68

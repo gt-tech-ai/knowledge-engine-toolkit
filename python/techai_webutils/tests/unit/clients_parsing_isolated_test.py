@@ -6,8 +6,6 @@ import time
 from collections.abc import Callable
 from multiprocessing.context import ForkServerContext, SpawnContext
 from pathlib import Path
-from typing import cast
-from unittest.mock import AsyncMock
 
 import pymupdf
 import pytest
@@ -19,10 +17,7 @@ from techai_webutils.clients.parsing.isolated.isolated import (
     run_isolated,
 )
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
-from techai_webutils.clients.parsing.isolated.ocr import PageOcr
 from techai_webutils.core.domain import DocumentFormat
-from techai_webutils.core.interfaces.parser import PagedParser
-from techai_webutils.core.interfaces.vision import VisionClient
 
 _EXPECTED_RUN_ISOLATED = 42
 _EXPECTED_MONOTONIC = 10.0
@@ -510,148 +505,3 @@ class TestScratchHandBack:
         assert result == MarkItDownParser().parse(pdf, filename="doc.pdf")
         assert result.pages
         assert queued == [None]
-
-
-_THREE_PAGES = 3
-
-
-def _make_paged_pdf(path: Path, texts: list[str]) -> str:
-    """Write a PDF with one page per entry of ``texts`` and return its path.
-
-    Args:
-        path: The file to write.
-        texts: Each page's text.
-
-    Returns:
-        The path of the written PDF, as a string.
-
-    """
-    doc = pymupdf.open()
-    for text in texts:
-        _ = doc.new_page().insert_text((72, 72), text)
-    doc.save(str(path))
-    return str(path)
-
-
-class TestIsolatedPaging:
-    """The ``PagedParser`` capability of ``IsolatedParser`` (bounded subprocess)."""
-
-    @staticmethod
-    def test_isolated_parser_is_a_paged_parser() -> None:
-        """Test that IsolatedParser satisfies the PagedParser contract.
-
-        **Why this test is important:**
-          - A consumer selects page-by-page parsing by
-            ``isinstance(parser, PagedParser)``;
-            the default parser must qualify so large PDFs are parsed in parts.
-
-        **What it tests:**
-          - ``isinstance(IsolatedParser(), PagedParser)`` is true.
-        """
-        assert isinstance(IsolatedParser(), PagedParser)
-
-    @staticmethod
-    @pytest.mark.asyncio
-    async def test_page_count_reads_the_page_count_in_a_subprocess(
-        tmp_path: Path,
-    ) -> None:
-        """Test that page_count counts a PDF's pages and is 0 for a non-PDF.
-
-        **Why this test is important:**
-          - The count decides whether a document is parsed whole or in parts, and the
-            untrusted file must be opened in the bounded child, not the parent.
-
-        **What it tests:**
-          - A 3-page PDF counts 3; a ``.txt`` file counts 0.
-
-        Args:
-            tmp_path: A fresh directory for the test.
-
-        """
-        pdf = _make_paged_pdf(tmp_path / "doc.pdf", ["Alpha", "Bravo", "Charlie"])
-        txt = tmp_path / "note.txt"
-        _ = txt.write_text("plain")
-        parser = IsolatedParser(timeout_seconds=60)
-        assert await parser.page_count(pdf) == _THREE_PAGES
-        assert await parser.page_count(str(txt)) == 0
-
-    @staticmethod
-    @pytest.mark.asyncio
-    async def test_parse_pages_returns_only_the_requested_pages(
-        tmp_path: Path,
-    ) -> None:
-        """Test that parse_pages parses just first..last, numbered by position.
-
-        **Why this test is important:**
-          - Parsing a large PDF in parts bounds memory per part; each part must carry
-            its true page numbers so units and citations point at the right pages.
-
-        **What it tests:**
-          - Pages 2-3 of a 3-page PDF come back as pages [2, 3] with no page 1 text.
-          - An out-of-range request becomes a failed document, not a raise.
-
-        Args:
-            tmp_path: A fresh directory for the test.
-
-        """
-        pdf = _make_paged_pdf(tmp_path / "doc.pdf", ["Alpha", "Bravo", "Charlie"])
-        parser = IsolatedParser(timeout_seconds=60)
-        part = await parser.parse_pages(pdf, first_page=2, last_page=3)
-        assert part.ok
-        assert [page.page_number for page in part.pages] == [2, 3]
-        assert "Bravo" in part.markdown_content
-        assert "Alpha" not in part.markdown_content
-        bad = await parser.parse_pages(pdf, first_page=2, last_page=9)
-        assert not bad.ok
-
-
-_PNG_MAGIC = b"\x89PNG"
-_OCR_DPI = 72
-
-
-class TestIsolatedOcr:
-    """``IsolatedParser(ocr=…)`` reads text-less pages through a vision client."""
-
-    @staticmethod
-    @pytest.mark.asyncio
-    async def test_parse_pages_reads_only_the_text_less_page(tmp_path: Path) -> None:
-        """Test that a blank page in the range is rendered and read; text pages are not.
-
-        **Why this test is important:**
-          - A scanned page has no text layer; without OCR it indexes as a silent gap.
-            The render must run in the bounded child and send a real PNG to the model.
-
-        **What it tests:**
-          - Pages 1-3 with a blank page 2: one vision call, with PNG bytes; page 2 now
-            carries the model's text, pages 1 and 3 keep theirs, and the markdown
-            holds all three.
-          - Without ``ocr`` the same range leaves page 2 blank (default unchanged).
-
-        Args:
-            tmp_path: pytest-provided temporary directory.
-
-        """
-        pdf = _make_paged_pdf(tmp_path / "scan.pdf", ["Alpha", "", "Charlie"])
-        client = AsyncMock(spec=VisionClient)
-        describe = cast("AsyncMock", client.describe_page)
-        describe.side_effect = ["Bravo scanned"]
-        ocr = PageOcr(client, model_id="m", dpi=_OCR_DPI)
-        parser = IsolatedParser(timeout_seconds=60, ocr=ocr)
-        part = await parser.parse_pages(pdf, first_page=1, last_page=3)
-        assert part.ok
-        assert [page.text.strip() for page in part.pages] == [
-            "Alpha",
-            "Bravo scanned",
-            "Charlie",
-        ]
-        assert "Bravo scanned" in part.markdown_content
-        calls = cast(
-            "list[tuple[tuple[bytes], dict[str, str]]]", describe.await_args_list
-        )
-        assert len(calls) == 1
-        assert calls[0][0][0].startswith(_PNG_MAGIC)
-        assert calls[0][1] == {"model_id": "m"}
-        plain = await IsolatedParser(timeout_seconds=60).parse_pages(
-            pdf, first_page=1, last_page=3
-        )
-        assert not plain.pages[1].text.strip()

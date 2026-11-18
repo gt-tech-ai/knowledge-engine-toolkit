@@ -50,6 +50,17 @@ class OcrConfig:
     model_id: str = ""
     """The vision model; required by ``bedrock``."""
 
+    def __post_init__(self) -> None:
+        """Refuse a render resolution below 1 at construction, not on the first page.
+
+        Raises:
+            AppValueError: ``dpi`` is below 1 (``INVALID_INPUT``).
+
+        """
+        if self.dpi < 1:
+            msg = f"ocr dpi must be at least 1, got {self.dpi}"
+            raise AppValueError(msg)
+
 
 class PageOcr:
     """Fills the blank pages of a parsed document by reading them with a vision model."""
@@ -79,22 +90,22 @@ class PageOcr:
 
         Pages are read sequentially in page order, one model call each. A page the model
         cannot read stops the run: the document comes back with ``error`` naming the page.
+        The markdown is always the page join (each non-blank page's stripped text,
+        separated by a blank line), so a whole-document parse and a page-range parse come
+        back in the same shape whether or not a page was blank.
 
         Args:
-            document: A parsed page range.
+            document: A parsed document or page range.
             render: Renders one page (by its number) to PNG bytes at ``dpi``.
 
         Returns:
             ``document`` with the blank pages' text, markdown and word count refreshed;
-            ``document`` itself when no page is blank.
+            ``document`` itself when no page is blank and its markdown is the page join.
 
         """
-        blank = {page.page_number for page in document.pages if not page.text.strip()}
-        if not blank:
-            return document
         pages: list[Page] = []
         for page in document.pages:
-            if page.page_number not in blank:
+            if page.text.strip():
                 pages.append(page)
                 continue
             try:
@@ -107,6 +118,8 @@ class PageOcr:
                 )
             pages.append(Page(page_number=page.page_number, text=text))
         markdown = "\n\n".join(p.text.strip() for p in pages if p.text.strip())
+        if pages == document.pages and markdown == document.markdown_content:
+            return document
         return dataclasses.replace(
             document,
             pages=pages,

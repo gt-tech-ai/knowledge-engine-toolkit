@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from pathlib import Path
 
 from techai_webutils.core.domain import DocumentFormat
 
@@ -152,3 +153,27 @@ def detect_format(declared: str, filename: str, content: bytes) -> DocumentForma
         if declared_fmt is not DocumentFormat.UNKNOWN:
             return declared_fmt
     return _detect_by_extension(filename)
+
+
+_HEAD_BYTES = 8
+"""How many leading bytes ``read_head`` returns: enough for every magic number here."""
+
+
+def read_head(path: str) -> bytes:
+    """Return the first bytes of the file at ``path`` for ``detect_format``.
+
+    An unreadable file returns ``b""``, which leaves detection to the name; whoever opens
+    the file next reports the failure.
+
+    Args:
+        path: The local file path.
+
+    Returns:
+        The file's leading ``_HEAD_BYTES``, or ``b""`` when it cannot be read.
+
+    """
+    try:
+        with Path(path).open("rb") as handle:
+            return handle.read(_HEAD_BYTES)
+    except OSError:
+        return b""

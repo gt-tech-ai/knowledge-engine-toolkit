@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -16,11 +17,14 @@ from techai_webutils.clients.vision.bedrock import (
 )
 from techai_webutils.clients.vision.decorated import decorate
 from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
+from techai_webutils.core.interfaces.lifecycle import ManagedResource
 from techai_webutils.core.interfaces.vision import VisionClient
 from techai_webutils.foundation.config import decoration
 from techai_webutils.foundation.decorate import Collaborators, Decorations
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from aiobotocore.config import AioConfig
 
 _MODEL = "vision-model"
@@ -236,3 +240,88 @@ async def test_lazy_converse_opens_one_timed_client_and_closes_it() -> None:
     cast("AsyncMock", opened.__aexit__).assert_awaited_once()
     await runtime.aclose()
     cast("AsyncMock", opened.__aexit__).assert_awaited_once()
+
+
+def _slow_open(sdk: object) -> Callable[..., Awaitable[object]]:
+    """Build an ``__aenter__`` that yields once before returning ``sdk``.
+
+    A real client open awaits the network, so concurrent first calls interleave there.
+
+    Args:
+        sdk: The client the open resolves to.
+
+    Returns:
+        The async ``__aenter__`` side effect.
+
+    """
+
+    async def enter(*_: object) -> object:
+        await asyncio.sleep(0)
+        return sdk
+
+    return enter
+
+
+@pytest.mark.asyncio
+async def test_lazy_converse_concurrent_first_pages_open_one_client() -> None:
+    """Test that pages read concurrently before the client exists open it once.
+
+    **Why this test is important:**
+      - OCR reads a document's pages concurrently; without a lock each first call saw
+        no client, opened its own, and every one but the last leaked unclosed.
+
+    **What it tests:**
+      - Five concurrent ``converse`` calls, with an open that yields, open
+        ``bedrock-runtime`` once; ``aclose`` closes that one client.
+    """
+    sdk = AsyncMock(spec=ConverseInvoker)
+    cast("AsyncMock", sdk.converse).return_value = _answer("text")
+    opened = MagicMock()
+    opened.__aenter__ = AsyncMock(side_effect=_slow_open(sdk))
+    opened.__aexit__ = AsyncMock(return_value=None)
+    session = MagicMock()
+    create_client = cast("MagicMock", session.create_client)
+    create_client.return_value = opened
+    with patch(
+        "techai_webutils.clients.vision.bedrock.runtime.aiobotocore.session.get_session",
+        return_value=session,
+    ):
+        runtime = LazyBedrockConverse(region=_REGION, timeout_seconds=_TIMEOUT)
+
+    _ = await asyncio.gather(*(runtime.converse(modelId=_MODEL) for _ in range(5)))
+    await runtime.aclose()
+
+    create_client.assert_called_once()
+    cast("AsyncMock", opened.__aexit__).assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_decorated_vision_enters_and_exits_a_managed_inner_client() -> None:
+    """Test that ``async with`` on the decorated client runs the inner client's lifecycle.
+
+    **Why this test is important:**
+      - The decorated wrapper is what a composition root holds; if it drops the inner
+        client's context, the Bedrock connection is never closed on shutdown.
+
+    **What it tests:**
+      - Entering the decorated Bedrock client enters the inner one, and leaving it
+        closes the inner one's runtime once.
+      - A stub inner client (no lifecycle) enters and exits as a no-op.
+    """
+    runtime = _runtime(_answer("text"))
+    runtime.aclose = AsyncMock(return_value=None)
+    decorations = Decorations(decoration.default_config(), Collaborators())
+    decorated = decorate(
+        BedrockVisionClient(runtime, max_tokens=_MAX_TOKENS), decorations, "vision"
+    )
+    stub = decorate(vision_from_config(VisionConfig()), decorations, "vision")
+    assert isinstance(decorated, ManagedResource)
+    assert isinstance(stub, ManagedResource)
+
+    async with decorated as entered:
+        assert entered is decorated
+        cast("AsyncMock", runtime.aclose).assert_not_awaited()
+    cast("AsyncMock", runtime.aclose).assert_awaited_once()
+
+    async with stub as entered_stub:
+        assert entered_stub is stub

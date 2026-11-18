@@ -6,6 +6,7 @@ with the configured timeout); the SDK calls themselves run against real Bedrock.
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, Unpack, cast, final
 
@@ -23,7 +24,8 @@ if TYPE_CHECKING:
 class LazyBedrockRuntime:
     """A ``BedrockRuntimeInvoker`` that opens one bedrock-runtime client.
 
-    The client opens on first use and is reused.
+    The client opens on first use and is reused; concurrent first calls share one client
+    (the open runs under a lock).
 
     Construction does no I/O, so the composition root can build the provider at startup.
     """
@@ -52,6 +54,7 @@ class LazyBedrockRuntime:
         self._session = aiobotocore.session.get_session()
         self._stack: AsyncExitStack | None = None
         self._client: BedrockRuntimeInvoker | None = None
+        self._opening = asyncio.Lock()
 
     async def invoke_model(
         self, **kwargs: Unpack[InvokeModelRequest]
@@ -67,20 +70,32 @@ class LazyBedrockRuntime:
             The decoded ``InvokeModel`` response.
 
         """
-        if self._client is None:
-            self._stack = stack = AsyncExitStack()
-            self._client = cast(
-                "BedrockRuntimeInvoker",
-                await stack.enter_async_context(
-                    self._session.create_client(
-                        "bedrock-runtime",
-                        region_name=self._region,
-                        endpoint_url=self._endpoint,
-                        config=self._config,
-                    )
-                ),
-            )
-        return await self._client.invoke_model(**kwargs)
+        client = await self._opened()
+        return await client.invoke_model(**kwargs)
+
+    async def _opened(self) -> BedrockRuntimeInvoker:
+        """Return the client, opening it once (concurrent first calls share one client).
+
+        Returns:
+            The open bedrock-runtime client.
+
+        """
+        async with self._opening:
+            if self._client is None:
+                stack = AsyncExitStack()
+                self._client = cast(
+                    "BedrockRuntimeInvoker",
+                    await stack.enter_async_context(
+                        self._session.create_client(
+                            "bedrock-runtime",
+                            region_name=self._region,
+                            endpoint_url=self._endpoint,
+                            config=self._config,
+                        )
+                    ),
+                )
+                self._stack = stack
+            return self._client
 
     async def aclose(self) -> None:
         """Close the shared client if one was opened (idempotent)."""
