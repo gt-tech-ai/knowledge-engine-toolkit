@@ -27,6 +27,22 @@ type API interface {
 		in *bedrockagent.GetDataSourceInput,
 		optFns ...func(*bedrockagent.Options),
 	) (*bedrockagent.GetDataSourceOutput, error)
+
+	// ListKnowledgeBaseDocuments returns one page of a data source's documents with
+	// their ingestion status; NextToken names the next page.
+	ListKnowledgeBaseDocuments(
+		ctx context.Context,
+		in *bedrockagent.ListKnowledgeBaseDocumentsInput,
+		optFns ...func(*bedrockagent.Options),
+	) (*bedrockagent.ListKnowledgeBaseDocumentsOutput, error)
+
+	// DeleteKnowledgeBaseDocuments deletes up to the service's batch limit of a data
+	// source's documents, reporting each one's status.
+	DeleteKnowledgeBaseDocuments(
+		ctx context.Context,
+		in *bedrockagent.DeleteKnowledgeBaseDocumentsInput,
+		optFns ...func(*bedrockagent.Options),
+	) (*bedrockagent.DeleteKnowledgeBaseDocumentsOutput, error)
 }
 
 const (
@@ -92,7 +108,8 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Deps) (API, error) {
 }
 
 // Decorate runs every call of base through the client tier as the client named
-// name. Every call is a read, so each retries.
+// name. Every call retries: the reads have no effect, and a replayed delete removes
+// nothing more.
 func Decorate(
 	base API,
 	decs decorate.Decorations,
@@ -133,6 +150,37 @@ func (d *decorator) GetDataSource(
 		optFns...)
 }
 
+// ListKnowledgeBaseDocuments runs the call; it is a read, so it retries.
+func (d *decorator) ListKnowledgeBaseDocuments(
+	ctx context.Context,
+	in *bedrockagent.ListKnowledgeBaseDocumentsInput,
+	optFns ...func(*bedrockagent.Options),
+) (*bedrockagent.ListKnowledgeBaseDocumentsOutput, error) {
+	return client.Call(
+		ctx,
+		&d.Base,
+		"list_knowledge_base_documents",
+		d.base.ListKnowledgeBaseDocuments,
+		in,
+		optFns...)
+}
+
+// DeleteKnowledgeBaseDocuments runs the call; a replay deletes nothing more, so it
+// retries.
+func (d *decorator) DeleteKnowledgeBaseDocuments(
+	ctx context.Context,
+	in *bedrockagent.DeleteKnowledgeBaseDocumentsInput,
+	optFns ...func(*bedrockagent.Options),
+) (*bedrockagent.DeleteKnowledgeBaseDocumentsOutput, error) {
+	return client.Call(
+		ctx,
+		&d.Base,
+		"delete_knowledge_base_documents",
+		d.base.DeleteKnowledgeBaseDocuments,
+		in,
+		optFns...)
+}
+
 // Stub is the client that makes no AWS call.
 type Stub struct{}
 
@@ -147,4 +195,23 @@ func (Stub) GetDataSource(
 	_ ...func(*bedrockagent.Options),
 ) (*bedrockagent.GetDataSourceOutput, error) {
 	return nil, apperr.New(apperr.CodeNotFound, "bedrockagent stub: no data source")
+}
+
+// ListKnowledgeBaseDocuments returns no documents and no next page: the stub holds
+// no data source, so a caller sweeping one finds nothing to act on.
+func (Stub) ListKnowledgeBaseDocuments(
+	_ context.Context,
+	_ *bedrockagent.ListKnowledgeBaseDocumentsInput,
+	_ ...func(*bedrockagent.Options),
+) (*bedrockagent.ListKnowledgeBaseDocumentsOutput, error) {
+	return new(bedrockagent.ListKnowledgeBaseDocumentsOutput), nil
+}
+
+// DeleteKnowledgeBaseDocuments deletes nothing and reports no document.
+func (Stub) DeleteKnowledgeBaseDocuments(
+	_ context.Context,
+	_ *bedrockagent.DeleteKnowledgeBaseDocumentsInput,
+	_ ...func(*bedrockagent.Options),
+) (*bedrockagent.DeleteKnowledgeBaseDocumentsOutput, error) {
+	return new(bedrockagent.DeleteKnowledgeBaseDocumentsOutput), nil
 }

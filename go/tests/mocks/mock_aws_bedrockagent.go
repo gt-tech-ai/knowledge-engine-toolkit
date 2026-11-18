@@ -41,6 +41,26 @@ func (m *MockAWSBedrockAgentAPI) EXPECT() *MockAWSBedrockAgentAPIMockRecorder {
 	return m.recorder
 }
 
+// DeleteKnowledgeBaseDocuments mocks base method.
+func (m *MockAWSBedrockAgentAPI) DeleteKnowledgeBaseDocuments(ctx context.Context, in *bedrockagent.DeleteKnowledgeBaseDocumentsInput, optFns ...func(*bedrockagent.Options)) (*bedrockagent.DeleteKnowledgeBaseDocumentsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteKnowledgeBaseDocuments", varargs...)
+	ret0, _ := ret[0].(*bedrockagent.DeleteKnowledgeBaseDocumentsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteKnowledgeBaseDocuments indicates an expected call of DeleteKnowledgeBaseDocuments.
+func (mr *MockAWSBedrockAgentAPIMockRecorder) DeleteKnowledgeBaseDocuments(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteKnowledgeBaseDocuments", reflect.TypeOf((*MockAWSBedrockAgentAPI)(nil).DeleteKnowledgeBaseDocuments), varargs...)
+}
+
 // GetDataSource mocks base method.
 func (m *MockAWSBedrockAgentAPI) GetDataSource(ctx context.Context, in *bedrockagent.GetDataSourceInput, optFns ...func(*bedrockagent.Options)) (*bedrockagent.GetDataSourceOutput, error) {
 	m.ctrl.T.Helper()
@@ -59,4 +79,24 @@ func (mr *MockAWSBedrockAgentAPIMockRecorder) GetDataSource(ctx, in any, optFns 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, optFns...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDataSource", reflect.TypeOf((*MockAWSBedrockAgentAPI)(nil).GetDataSource), varargs...)
+}
+
+// ListKnowledgeBaseDocuments mocks base method.
+func (m *MockAWSBedrockAgentAPI) ListKnowledgeBaseDocuments(ctx context.Context, in *bedrockagent.ListKnowledgeBaseDocumentsInput, optFns ...func(*bedrockagent.Options)) (*bedrockagent.ListKnowledgeBaseDocumentsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListKnowledgeBaseDocuments", varargs...)
+	ret0, _ := ret[0].(*bedrockagent.ListKnowledgeBaseDocumentsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListKnowledgeBaseDocuments indicates an expected call of ListKnowledgeBaseDocuments.
+func (mr *MockAWSBedrockAgentAPIMockRecorder) ListKnowledgeBaseDocuments(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListKnowledgeBaseDocuments", reflect.TypeOf((*MockAWSBedrockAgentAPI)(nil).ListKnowledgeBaseDocuments), varargs...)
 }

@@ -236,3 +236,64 @@ func TestClientsAws_SDKKindRunsThroughTheTier(t *testing.T) {
 	)
 	assert.Equal(t, apperr.CodeUnavailable, apperr.Code(err))
 }
+
+// TestClientsAws_BedrockAgentKnowledgeBaseDocuments tests the knowledge-base document
+// calls on both kinds.
+//
+// Why this test is important:
+//   - A consumer lists a data source's documents and deletes the ones it no longer
+//     wants; a stub that invented documents would make a dev run delete nothing real
+//     while reporting work, and an sdk call outside the tier would be unobserved.
+//
+// What it tests:
+//   - The stub lists no documents and deletes nothing without error; the sdk kind
+//     returns the injected client's output unchanged and counts each call as its
+//     snake_case operation.
+func TestClientsAws_BedrockAgentKnowledgeBaseDocuments(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	stub, err := awsbedrockagent.NewFromConfig(ctx,
+		stdx.Zero[awsbedrockagent.Config](),
+		awsbedrockagent.Deps{Decorations: fixtures.Decorations(), API: nil, AWS: nil})
+	require.NoError(t, err)
+
+	listed, err := stub.ListKnowledgeBaseDocuments(ctx,
+		new(bedrockagent.ListKnowledgeBaseDocumentsInput))
+	require.NoError(t, err)
+	assert.Empty(t, listed.DocumentDetails)
+
+	deleted, err := stub.DeleteKnowledgeBaseDocuments(ctx,
+		new(bedrockagent.DeleteKnowledgeBaseDocumentsInput))
+	require.NoError(t, err)
+	assert.Empty(t, deleted.DocumentDetails)
+
+	reg := promclient.NewRegistry()
+	decs := decorate.Fixed(fixtures.BuildRef(func(row *decorate.Deps) {
+		row.Metrics = prom.NewFromRegistry(reg)
+	}))
+	api := mocks.NewMockAWSBedrockAgentAPI(gomock.NewController(t))
+	agent, err := awsbedrockagent.NewFromConfig(ctx,
+		awsbedrockagent.Config{Kind: awsbedrockagent.KindSDK, Name: ""},
+		awsbedrockagent.Deps{Decorations: decs, API: api, AWS: nil})
+	require.NoError(t, err)
+	api.EXPECT().ListKnowledgeBaseDocuments(gomock.Any(), gomock.Any()).
+		Return(fixtures.BuildRef(func(row *bedrockagent.ListKnowledgeBaseDocumentsOutput) {
+			row.NextToken = aws.String(textS)
+		}), nil)
+	api.EXPECT().DeleteKnowledgeBaseDocuments(gomock.Any(), gomock.Any()).
+		Return(new(bedrockagent.DeleteKnowledgeBaseDocumentsOutput), nil)
+
+	listed, err = agent.ListKnowledgeBaseDocuments(ctx,
+		new(bedrockagent.ListKnowledgeBaseDocumentsInput))
+	require.NoError(t, err)
+	assert.Equal(t, textS, aws.ToString(listed.NextToken))
+
+	_, err = agent.DeleteKnowledgeBaseDocuments(ctx,
+		new(bedrockagent.DeleteKnowledgeBaseDocumentsInput))
+	require.NoError(t, err)
+	assert.InDelta(t, wantClientOpCounter,
+		clientOpCounter(t, reg, "list_knowledge_base_documents"), 0)
+	assert.InDelta(t, wantClientOpCounter,
+		clientOpCounter(t, reg, "delete_knowledge_base_documents"), 0)
+}
