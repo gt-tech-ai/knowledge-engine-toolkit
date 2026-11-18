@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.68] - 2026-11-17
+
 ### Added
 
 - Python vision: `clients.vision` builds the `VisionClient` that page OCR reads scans through.
@@ -3040,7 +3042,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.67...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.68...HEAD
+[0.0.68]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.67...v0.0.68
 [0.0.67]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.66...v0.0.67
 [0.0.66]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.65...v0.0.66
 [0.0.65]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.64...v0.0.65
