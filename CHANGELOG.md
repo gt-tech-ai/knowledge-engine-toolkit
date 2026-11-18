@@ -6,6 +6,22 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Python vision: `clients.vision` builds the `VisionClient` that page OCR reads scans through.
+  `VisionKind` has `stub` (the default; it returns empty text) and `bedrock`. `bedrock` sends one
+  bedrock-runtime `Converse` call per page, with the PNG and an instruction, at temperature 0, and
+  works with any image-capable model. `VisionConfig` sets `region`, `timeout_seconds`,
+  `max_tokens` and `instruction`. A reply that stops at `max_tokens` fails with `INTERNAL`
+  instead of returning part of a page. `clients.vision.decorated.decorate` runs each page
+  through the client tier. `techai-webutils` 0.20.0.
+
+### Fixed
+
+- Python Bedrock embedding: `LazyBedrockRuntime` now opens bedrock-runtime with its
+  `timeout_seconds` as the connect and read timeout. It used to build that config and never
+  pass it to the SDK, so every call ran on botocore's 60 s default.
+
 ## [0.0.67] - 2026-11-17
 
 ### Added

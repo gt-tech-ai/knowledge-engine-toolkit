@@ -1,6 +1,6 @@
 [project]
 name = "techai-webutils"
-version = "0.19.0"
+version = "0.20.0"
 # The published version, bumped by hand in the release PR whenever the package changes. It must
 # be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
 # earlier release line, so this line continues from 0.4.0.
@@ -257,7 +257,6 @@ omit = [
     "*/clients/llm/bedrock/*.py",                      # aiobotocore bedrock-runtime wrapper — integration/runtime
     "*/clients/retrieval/bedrock/*.py",                # aiobotocore bedrock-agent-runtime wrapper — integration/runtime
     "*/clients/kb_ingestion/bedrock/*.py",                       # aiobotocore bedrock-agent KB ingestion — integration/runtime
-    "*/clients/embedding/bedrock/runtime.py",          # aiobotocore bedrock-runtime client opener — integration/runtime
     "*/clients/email/ses/provider.py",                 # aiobotocore SESv2 send — E2E only (staging/prod SES)
     "*/clients/email/smtp/provider.py",                # aiosmtplib SMTP send — E2E only (dev Mailpit)
     "*/clients/cache/redis/cache.py",              # aioredis wrapper — integration (Redis)
@@ -356,6 +355,7 @@ modules = [
     "techai_webutils.clients.tokenizer",
     "techai_webutils.clients.vector",
     "techai_webutils.clients.vector_kb",
+    "techai_webutils.clients.vision",
 ]
 
 # Strict type-checking over src and tests. include is an allowlist, so tests are analyzed
