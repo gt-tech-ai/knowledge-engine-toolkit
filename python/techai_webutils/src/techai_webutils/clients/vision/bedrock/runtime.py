@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Unpack, cast, final
+from typing import TYPE_CHECKING, cast, final
 
 import aiobotocore.session
 from aiobotocore.config import AioConfig
 
 if TYPE_CHECKING:
-    from techai_webutils.clients.vision.bedrock.client import (
-        ConverseInvoker,
-        ConverseRequest,
-    )
+    from techai_webutils.clients.vision.bedrock.client import ConverseInvoker
 
 
 @final
@@ -38,11 +35,12 @@ class LazyBedrockConverse:
         self._stack: AsyncExitStack | None = None
         self._client: ConverseInvoker | None = None
 
-    async def converse(self, **kwargs: Unpack[ConverseRequest]) -> dict[str, object]:
+    async def converse(self, **kwargs: object) -> dict[str, object]:
         """Call bedrock-runtime ``Converse``, opening the shared client first if needed.
 
         Args:
-            **kwargs: The ``Converse`` request fields.
+            **kwargs: The ``Converse`` request fields (``modelId``, ``messages``,
+                ``inferenceConfig``), forwarded unchanged.
 
         Returns:
             The ``Converse`` response.

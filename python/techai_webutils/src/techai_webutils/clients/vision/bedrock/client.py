@@ -8,7 +8,7 @@ factory passes a ``LazyBedrockConverse`` that opens the aiobotocore client on fi
 
 from __future__ import annotations
 
-from typing import Protocol, Self, TypedDict, Unpack, cast, final, override
+from typing import Protocol, Self, cast, final, override
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -18,30 +18,18 @@ from techai_webutils.core.interfaces.vision import VisionClient
 from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to_app_error
 
 
-class ConverseRequest(TypedDict):
-    """The keyword arguments of the AWS ``converse`` call."""
-
-    modelId: str
-    """The AWS ``modelId`` request field."""
-
-    messages: list[dict[str, object]]
-    """The AWS ``messages`` request field: the conversation turns."""
-
-    inferenceConfig: dict[str, object]
-    """The AWS ``inferenceConfig`` request field: ``maxTokens`` and ``temperature``."""
-
-
 class ConverseInvoker(Protocol):
     """The bedrock-runtime ``Converse`` slice the vision client calls.
 
     aiobotocore is unstubbed.
     """
 
-    async def converse(self, **kwargs: Unpack[ConverseRequest]) -> dict[str, object]:
+    async def converse(self, **kwargs: object) -> dict[str, object]:
         """Send one conversation to a model and return its reply.
 
         Args:
-            **kwargs: The ``Converse`` request fields.
+            **kwargs: The ``Converse`` request fields (``modelId``, ``messages``,
+                ``inferenceConfig``).
 
         Returns:
             The ``Converse`` response.
