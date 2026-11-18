@@ -145,20 +145,26 @@ func (c *TestCassandra) Exec(ctx context.Context, cql string) error {
 // reconnects its control connection and refreshes its view of the ring, as it does
 // when a node restarts. A failed or non-zero nodetool is CodeInternal.
 func (c *TestCassandra) RestartNativeTransport(ctx context.Context) error {
-	for _, sub := range []string{"disablebinary", "enablebinary"} {
-		code, out, err := c.container.Exec(ctx, []string{"nodetool", sub})
-		if err != nil {
-			return apperr.Wrap(err, apperr.CodeInternal, "nodetool "+sub+" failed")
-		}
-
-		if code != 0 {
-			text, _ := io.ReadAll(out)
-
-			return apperr.New(apperr.CodeInternal, "nodetool "+sub+": "+string(text))
-		}
+	err := c.DisableNativeTransport(ctx)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	return c.EnableNativeTransport(ctx)
+}
+
+// DisableNativeTransport turns the node's CQL listener off (nodetool
+// disablebinary): every client connection is dropped and every new one refused, as
+// during a network outage between client and node. A failed or non-zero nodetool
+// is CodeInternal.
+func (c *TestCassandra) DisableNativeTransport(ctx context.Context) error {
+	return c.nodetool(ctx, "disablebinary")
+}
+
+// EnableNativeTransport turns the node's CQL listener back on (nodetool
+// enablebinary). A failed or non-zero nodetool is CodeInternal.
+func (c *TestCassandra) EnableNativeTransport(ctx context.Context) error {
+	return c.nodetool(ctx, "enablebinary")
 }
 
 // Close terminates the container. Safe to call on a nil receiver.
@@ -166,6 +172,23 @@ func (c *TestCassandra) Close(ctx context.Context) {
 	if c != nil && c.container != nil {
 		_ = c.container.Terminate(ctx) // best-effort cleanup on teardown
 	}
+}
+
+// nodetool runs one nodetool subcommand inside the container. A failed exec or a
+// non-zero exit is CodeInternal, carrying nodetool's output.
+func (c *TestCassandra) nodetool(ctx context.Context, sub string) error {
+	code, out, err := c.container.Exec(ctx, []string{"nodetool", sub})
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "nodetool "+sub+" failed")
+	}
+
+	if code != 0 {
+		text, _ := io.ReadAll(out)
+
+		return apperr.New(apperr.CodeInternal, "nodetool "+sub+": "+string(text))
+	}
+
+	return nil
 }
 
 // cassandraRequest describes the single-node container and how to tell it is ready.

@@ -150,3 +150,53 @@ func (s *CQLCASSuite) TestSession_SurvivesRingRefresh() {
 	s.Eventually(write, seconds*time.Second, time.Second,
 		"the session reaches the node again after a ring refresh")
 }
+
+// outageHold is how long TestSession_RecoversFromOutage keeps the node unreachable
+// after the session has seen it fail, so the driver marks the host down and its
+// control connection falls back to the contact point.
+const outageHold = 5 * time.Second
+
+// outageReconnect is the reconnect interval TestSession_RecoversFromOutage gives
+// its session, so the driver retries a downed host every few seconds rather than
+// at gocql's 60-second default.
+const outageReconnect = 2 * time.Second
+
+// TestSession_RecoversFromOutage tests that a pinned session reaches its node again
+// after an outage long enough for the driver to give the host up.
+//
+// Why this test is important:
+//   - A session pinned to one contact point skips the initial peer lookup, so the
+//     driver knows its node only through that contact point. If an outage made the
+//     driver give the host up for good, every query would fail "no hosts available"
+//     long after the node was back, and only a restart of the service would recover.
+//
+// What it tests:
+//   - With the node's CQL listener off until a write fails, then held off a few
+//     seconds more, a write through a fresh pinned session (2 s reconnect
+//     interval) succeeds within 20 seconds of the listener coming back.
+func (s *CQLCASSuite) TestSession_RecoversFromOutage() {
+	ctx := context.Background()
+	cfg := s.CQLConfig(casKeyspace)
+
+	cfg.Cassandra.ReconnectInterval = outageReconnect
+
+	session, err := cql.NewFromConfig(ctx, &cfg, cql.Deps{})
+	s.Require().NoError(err)
+	s.T().Cleanup(session.Close)
+
+	write := func() bool {
+		return session.Query(
+			"INSERT INTO "+casKeyspace+".kv (k, v) VALUES (?, ?)", "outage", 1,
+		).WithContext(ctx).Exec() == nil
+	}
+
+	s.Require().True(write(), "the session writes before the outage")
+	s.Require().NoError(s.Cassandra.DisableNativeTransport(ctx))
+	s.T().Cleanup(func() { _ = s.Cassandra.EnableNativeTransport(ctx) })
+	s.Require().Eventually(func() bool { return !write() }, seconds*time.Second,
+		time.Second, "writes fail while the listener is off")
+	time.Sleep(outageHold)
+	s.Require().NoError(s.Cassandra.EnableNativeTransport(ctx))
+	s.Eventually(write, seconds*time.Second, time.Second,
+		"the session reaches the node again after the outage")
+}
