@@ -334,7 +334,7 @@ class MarkItDownParser:
             path: The PDF file.
             first_page: The first page of the range, from 1.
             last_page: The last page of the range, at most the document's page count.
-            filename: The original file name, kept for the caller's records.
+            filename: Accepted for the ``PagedParser`` signature; unused here.
 
         Returns:
             The range as a parsed document.

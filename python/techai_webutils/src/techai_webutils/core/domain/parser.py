@@ -187,7 +187,9 @@ def page_spans(document: ParsedDocument) -> tuple[PageSpan, ...]:
     Pages are found in order, each searched from the end of the previous one, so a joined
     document (``join_parsed``) yields absolute offsets however its parts were split. A
     page with no text, or whose text is not in the markdown, is left out, and a document
-    without pages (every format but PDF) has no spans.
+    without pages (every format but PDF) has no spans. Spans need not abut: a left-out
+    page's text, or anything else between two located pages, belongs to no span, and a
+    consumer (the ``page_range`` chunker) still covers it.
 
     Args:
         document: A parsed document, whole or joined.

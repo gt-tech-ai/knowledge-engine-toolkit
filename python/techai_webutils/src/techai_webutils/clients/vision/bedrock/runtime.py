@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import AsyncExitStack
 from typing import TYPE_CHECKING, cast, final
 
@@ -17,6 +18,7 @@ class LazyBedrockConverse:
     """A ``ConverseInvoker`` that opens one bedrock-runtime client on first use.
 
     Construction does no I/O, so the composition root can build the client at startup.
+    Concurrent first calls share one client: the open runs under a lock.
     """
 
     def __init__(self, *, region: str, timeout_seconds: float) -> None:
@@ -34,6 +36,7 @@ class LazyBedrockConverse:
         self._session = aiobotocore.session.get_session()
         self._stack: AsyncExitStack | None = None
         self._client: ConverseInvoker | None = None
+        self._opening = asyncio.Lock()
 
     async def converse(self, **kwargs: object) -> dict[str, object]:
         """Call bedrock-runtime ``Converse``, opening the shared client first if needed.
@@ -46,19 +49,31 @@ class LazyBedrockConverse:
             The ``Converse`` response.
 
         """
-        if self._client is None:
-            self._stack = stack = AsyncExitStack()
-            self._client = cast(
-                "ConverseInvoker",
-                await stack.enter_async_context(
-                    self._session.create_client(
-                        "bedrock-runtime",
-                        region_name=self._region,
-                        config=self._config,
-                    )
-                ),
-            )
-        return await self._client.converse(**kwargs)
+        client = await self._opened()
+        return await client.converse(**kwargs)
+
+    async def _opened(self) -> ConverseInvoker:
+        """Return the client, opening it once (concurrent first calls share one client).
+
+        Returns:
+            The open bedrock-runtime client.
+
+        """
+        async with self._opening:
+            if self._client is None:
+                stack = AsyncExitStack()
+                self._client = cast(
+                    "ConverseInvoker",
+                    await stack.enter_async_context(
+                        self._session.create_client(
+                            "bedrock-runtime",
+                            region_name=self._region,
+                            config=self._config,
+                        )
+                    ),
+                )
+                self._stack = stack
+            return self._client
 
     async def aclose(self) -> None:
         """Close the shared client if one was opened (idempotent)."""

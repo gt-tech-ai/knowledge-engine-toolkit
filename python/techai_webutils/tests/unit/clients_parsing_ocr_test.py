@@ -1,6 +1,7 @@
 """Tests for page OCR: the factory and filling the blank pages of a parsed range."""
 
 import asyncio
+import dataclasses
 from typing import cast
 from unittest.mock import AsyncMock, call
 
@@ -136,6 +137,27 @@ class TestOcrFromConfig:
         with pytest.raises(AppValueError, match="model_id"):
             _ = ocr_from_config(config, client=client)
 
+    @staticmethod
+    def test_unknown_kind_and_dpi_below_one_are_rejected() -> None:
+        """Test that an unknown kind and a render resolution below 1 are refused.
+
+        **Why this test is important:**
+          - A typo in the kind must not silently turn OCR off, and a zero dpi must fail
+            at start-up instead of on every scanned page at run time.
+
+        **What it tests:**
+          - An unknown kind raises ``AppValueError`` naming it; ``dpi`` 0 and -1 raise
+            ``AppValueError`` when the config is built.
+        """
+        with pytest.raises(AppValueError, match="unknown ocr kind"):
+            _ = ocr_from_config(
+                OcrConfig(cast("OcrKind", cast("object", "tesseract")), model_id=_MODEL),
+                client=_vision(),
+            )
+        for dpi in (0, -1):
+            with pytest.raises(AppValueError, match="dpi"):
+                _ = OcrConfig(OcrKind.BEDROCK, dpi=dpi, model_id=_MODEL)
+
 
 class TestPageOcrFill:
     """``PageOcr.fill`` reads exactly the blank pages, in order."""
@@ -210,3 +232,26 @@ class TestPageOcrFill:
         )
         assert not result.ok
         assert "page 5" in result.error
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_whole_document_text_becomes_the_page_join_without_a_call() -> None:
+        """Test that a parse with no blank page still comes back as the page join.
+
+        **Why this test is important:**
+          - A whole-document parse carries its parser's own markdown; if OCR rebuilt it
+            only when a page was blank, the same file would index in two text shapes and
+            its page spans would locate differently.
+
+        **What it tests:**
+          - A document whose markdown is not the page join comes back with the page join
+            and its word count, and no model call is made.
+        """
+        client = _vision()
+        document = dataclasses.replace(
+            _document(set()), markdown_content="# Title\ntext1 text2 text3 text4 text5"
+        )
+        result = await PageOcr(client, model_id=_MODEL, dpi=_DPI).fill(document, _render)
+        assert result.markdown_content == "text1\n\ntext2\n\ntext3\n\ntext4\n\ntext5"
+        assert result.word_count == _FIVE_PAGES
+        assert not _calls(client)

@@ -9,6 +9,7 @@ body, the response parse, the dimension check, and the botocore error mapping.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 from typing import TYPE_CHECKING, cast
@@ -29,6 +30,8 @@ from techai_webutils.clients.embedding.builder import (
 from techai_webutils.core.errors import AppError, ErrorCode
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from aiobotocore.config import AioConfig
 
 _EXPECTED_TOKEN_COUNT = 7
@@ -311,3 +314,63 @@ async def test_lazy_runtime_hands_its_timeout_to_the_sdk_client() -> None:
     sdk_config = cast("AioConfig", create_client.call_args.kwargs.get("config"))
     assert sdk_config is not None
     assert (sdk_config.connect_timeout, sdk_config.read_timeout) == (timeout, timeout)
+
+
+def _slow_open(sdk: object) -> Callable[..., Awaitable[object]]:
+    """Build an ``__aenter__`` that yields once before returning ``sdk``.
+
+    A real client open awaits the network, so concurrent first calls interleave there.
+
+    Args:
+        sdk: The client the open resolves to.
+
+    Returns:
+        The async ``__aenter__`` side effect.
+
+    """
+
+    async def enter(*_: object) -> object:
+        await asyncio.sleep(0)
+        return sdk
+
+    return enter
+
+
+@pytest.mark.asyncio
+async def test_lazy_runtime_concurrent_first_calls_open_one_client() -> None:
+    """Test that embed calls made concurrently before the client exists open it once.
+
+    **Why this test is important:**
+      - A batch embeds its texts concurrently; without a lock each first call saw no
+        client, opened its own, and every one but the last leaked unclosed.
+
+    **What it tests:**
+      - Five concurrent ``invoke_model`` calls, with an open that yields, open
+        ``bedrock-runtime`` once; ``aclose`` closes that one client.
+    """
+    sdk = AsyncMock()
+    cast("AsyncMock", sdk.invoke_model).return_value = {}
+    opened = MagicMock()
+    opened.__aenter__ = AsyncMock(side_effect=_slow_open(sdk))
+    opened.__aexit__ = AsyncMock(return_value=None)
+    session = MagicMock()
+    create_client = cast("MagicMock", session.create_client)
+    create_client.return_value = opened
+    with patch(
+        "techai_webutils.clients.embedding.bedrock.runtime.aiobotocore.session.get_session",
+        return_value=session,
+    ):
+        runtime = LazyBedrockRuntime(region="eu-west-1", timeout_seconds=7.0)
+
+    _ = await asyncio.gather(
+        *(
+            runtime.invoke_model(
+                modelId=_MODEL, body="{}", contentType="application/json", accept="*/*"
+            )
+            for _ in range(5)
+        )
+    )
+    await runtime.aclose()
+
+    create_client.assert_called_once()
+    cast("AsyncMock", opened.__aexit__).assert_awaited_once()

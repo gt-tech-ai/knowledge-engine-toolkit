@@ -6,6 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Python chunking: the `page_range` chunker no longer loops forever when the page spans
+  leave a gap (text no page claims, such as a page `page_spans` could not locate); that text
+  becomes its own chunk and the chunker moves on.
+- Python page OCR: `PageOcr` always returns the page join as the markdown (each non-blank
+  page's text, separated by a blank line), so a whole-document parse and a page-range parse
+  come back in the same shape. `OcrConfig` rejects a `dpi` below 1 at construction, and the
+  render's temp file is made off the event loop.
+- Python vision and embedding: the lazy Bedrock runtime clients open their SDK client once,
+  under a lock, so concurrent first calls no longer open (and leak) one client each.
+- Python vision: `clients.vision.decorated.decorate` passes `async with` through to a managed
+  inner client, so the decorated Bedrock client closes its SDK client on exit.
+- Python parsing: `IsolatedParser.page_count` reads the file's first bytes, so a PDF saved
+  without a `.pdf` extension counts its pages instead of 0.
+- Tests: the isolated parser's paging and OCR tests fork the parse child, so they run in the
+  integration suite now. `techai-webutils` 0.20.2.
+
 ## [0.0.69] - 2026-11-17
 
 ### Fixed

@@ -111,7 +111,7 @@ class PageRangeChunker:
             if last_of_run >= len(pages) - 1:
                 cut = len(text)
             else:
-                cut = _cut(text, pos, pages[last_of_run])
+                cut = _cut(text, pos, pages[last_of_run], pages[last_of_run + 1].start)
             chunk = _chunk(text, pos, cut, pages, starts)
             chunks.append(chunk)
             if cut >= len(text):
@@ -181,17 +181,20 @@ def _page_index(starts: list[int], offset: int) -> int:
     return max(bisect_right(starts, offset) - 1, 0)
 
 
-def _cut(text: str, pos: int, last_page: PageSpan) -> int:
+def _cut(text: str, pos: int, last_page: PageSpan, next_start: int) -> int:
     """Return where a run starting at ``pos`` and ending with ``last_page`` is cut.
 
     The last heading in the run's second half, else the last paragraph break inside
     ``last_page``, else the end of ``last_page`` (the joins between pages are not
-    paragraph breaks of their own, or every run would end a page early).
+    paragraph breaks of their own, or every run would end a page early). When ``pos``
+    sits in text no page span claims, past ``last_page``'s end, the cut is the start of
+    the next page, so that text forms its own chunk and the chunker moves on.
 
     Args:
         text: The document text.
         pos: Where the run starts.
         last_page: The run's last page.
+        next_start: Where the page after ``last_page`` starts; always after ``pos``.
 
     Returns:
         The offset the chunk is cut at; always after ``pos``.
@@ -205,7 +208,7 @@ def _cut(text: str, pos: int, last_page: PageSpan) -> int:
     paragraph = text.rfind(_PARAGRAPH_BREAK, max(pos + 1, last_page.start), last_page.end)
     if paragraph > pos:
         return paragraph + len(_PARAGRAPH_BREAK)
-    return last_page.end
+    return last_page.end if last_page.end > pos else next_start
 
 
 def _chunk(

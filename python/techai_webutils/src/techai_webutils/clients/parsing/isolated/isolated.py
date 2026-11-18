@@ -39,7 +39,7 @@ from pathlib import Path
 from queue import Empty
 from typing import TYPE_CHECKING, ClassVar, cast
 
-from techai_webutils.clients.parsing.isolated.detect import detect_format
+from techai_webutils.clients.parsing.isolated.detect import detect_format, read_head
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
 from techai_webutils.core.domain import (
     DocumentFormat,
@@ -678,8 +678,10 @@ class IsolatedParser:
     async def page_count(self, path: str) -> int:
         """Count the pages of the PDF at ``path`` in the bounded child.
 
-        0 for a non-PDF or a bad file. The file is untrusted, so pymupdf opens it in the
-        same bounded child as a parse, not in this process.
+        0 for a non-PDF or a bad file. The format comes from the file's first bytes, then
+        its name, so a PDF stored without an extension still counts. The file is
+        untrusted, so pymupdf opens it in the same bounded child as a parse, not in this
+        process.
 
         Args:
             path: The PDF's local path.
@@ -688,7 +690,8 @@ class IsolatedParser:
             The page count, or 0 when ``path`` is not a readable PDF.
 
         """
-        if detect_format("", path, b"") != DocumentFormat.PDF:
+        head = await asyncio.to_thread(read_head, path)
+        if detect_format("", path, head) != DocumentFormat.PDF:
             return 0
         try:
             counted = await self._isolated(_page_count_path, path)
@@ -708,7 +711,8 @@ class IsolatedParser:
             path: The PDF's local path.
             first_page: The first page to parse, 1-based.
             last_page: The last page to parse, inclusive.
-            filename: The original file name, kept on the result; empty when unknown.
+            filename: The original file name; names a failed result's format, otherwise
+                unused. Empty when unknown.
 
         Returns:
             The parsed page range.
@@ -769,7 +773,7 @@ class IsolatedParser:
             InternalError: The render child failed or died.
 
         """
-        fd, png_path = tempfile.mkstemp(suffix=".page.png")
+        fd, png_path = await asyncio.to_thread(tempfile.mkstemp, suffix=".page.png")
         os.close(fd)
         try:
             _ = await self._isolated(_render_page_png, path, page_number, dpi, png_path)
