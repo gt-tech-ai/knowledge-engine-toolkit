@@ -428,6 +428,7 @@ class LayoutParser(IsolatedParser):
             return await super().parse_path(path, declared=declared, filename=filename)
         return await self._layout(path, self._options, declared, filename)
 
+    @override
     async def parse_pages(
         self, path: str, *, first_page: int, last_page: int, filename: str = ""
     ) -> ParsedDocument:
@@ -498,6 +499,7 @@ class LayoutParser(IsolatedParser):
             return ()
         return tuple(_page_text(p.page_number, p.text) for p in read.pages)
 
+    @override
     async def page_count(self, path: str) -> int:
         """Count the pages of the PDF at ``path`` in the bounded child.
 

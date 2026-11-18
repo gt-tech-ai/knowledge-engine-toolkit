@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from techai_webutils.clients.parsing.isolated import (
         IsolatedParser as _LazyIsolatedParser,
     )
+    from techai_webutils.clients.parsing.isolated.ocr import PageOcr
     from techai_webutils.clients.parsing.layout.parser import (
         LayoutConverter,
         LayoutParser,
@@ -78,6 +79,7 @@ def parser_from_config(
     *,
     executor: Executor | None = None,
     convert: LayoutConverter | None = None,
+    ocr: PageOcr | None = None,
 ) -> DocumentParser:
     """Build the ``DocumentParser`` selected by ``config.kind``.
 
@@ -94,6 +96,9 @@ def parser_from_config(
         executor: Runs blocking parses off the event loop; ``None`` uses the loop's
             default.
         convert: The layout converter the layout kind needs; ``None`` builds Docling's.
+        ocr: The page OCR the ``isolated`` kind reads text-less PDF pages with (built by
+            ``ocr_from_config``); ``None`` leaves them blank. ``layout`` runs its own OCR
+            and ignores it.
 
     Returns:
         The ``DocumentParser`` selected by ``config.kind``.
@@ -117,6 +122,7 @@ def parser_from_config(
             memory_bytes=config.memory_bytes,
             timeout_seconds=config.timeout_seconds,
             executor=executor,
+            ocr=ocr,
         )
     msg = f"unknown parser kind: {config.kind!r}"
     raise AppValueError(msg)

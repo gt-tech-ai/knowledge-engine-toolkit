@@ -17,6 +17,7 @@ from techai_webutils.core.domain import (
     Page,
     ParsedDocument,
     join_parsed,
+    page_spans,
     parsed_from_json,
     parsed_to_json,
 )
@@ -158,3 +159,41 @@ def test_join_parsed_reassembles_parts_into_one_document() -> None:
     )
     with pytest.raises(AppValueError):
         _ = join_parsed([])
+
+
+def test_page_spans_locate_each_page_in_the_joined_markdown() -> None:
+    """Test that ``page_spans`` gives each page's offsets in the joined markdown.
+
+    **Why this test is important:**
+      - A chunker that cuts the joined document by page count needs to know where every
+        page starts; the parts of a split PDF are joined with a separator, so a page's
+        offset in the whole is not its offset in its own part, and a wrong offset would
+        stamp chunks with the wrong page range.
+
+    **What it tests:**
+      - For parts of pages 1-200 and 201-401 joined into one document, page 201 starts
+        exactly where the second part's markdown starts and ends at its text's end.
+      - Every span's slice of the markdown is that page's text.
+      - A page with no text is left out, and a document without pages has no spans.
+    """
+    first, second = _part(1, 200), _part(201, 401)
+    joined = join_parsed([second, first])
+
+    spans = page_spans(joined)
+
+    by_page = {s.page_number: s for s in spans}
+    start_of_second = joined.markdown_content.index(second.markdown_content)
+    assert by_page[201].start == start_of_second
+    assert by_page[201].end == start_of_second + len("page 201")
+    assert all(
+        joined.markdown_content[s.start : s.end] == f"page {s.page_number}" for s in spans
+    )
+    assert len(spans) == len(joined.pages)
+
+    blank = ParsedDocument(
+        "alpha\n\nbeta",
+        DocumentFormat.PDF,
+        pages=[Page(1, "alpha"), Page(2, "  "), Page(3, "beta")],
+    )
+    assert [s.page_number for s in page_spans(blank)] == [1, 3]
+    assert page_spans(ParsedDocument("text", DocumentFormat.TXT)) == ()

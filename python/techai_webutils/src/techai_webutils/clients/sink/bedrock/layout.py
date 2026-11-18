@@ -7,7 +7,8 @@ S3 partitions) and ``version`` the first 16 characters of its content hash. Each
 attributes from (``{"metadataAttributes": {...}}``). The org leads, so one org's data
 source can include only its own prefix; the version directory makes a changed document a
 new set of keys, so a redelivery skips every key it finds and a new version replaces the
-old one.
+old one. A ``kb_units`` version also holds ``manifest.json`` (``MANIFEST_NAME``), written
+after every unit, which names the unit count a reader waits for.
 """
 
 from __future__ import annotations
@@ -29,8 +30,11 @@ if TYPE_CHECKING:
 SIDECAR_SUFFIX = ".metadata.json"
 """The suffix Bedrock looks for beside each object for its metadata attributes."""
 
-UNIT_SEPARATOR = "\n\n"
-"""Joins the chunks packed into one KB unit."""
+MANIFEST_NAME = "manifest.json"
+"""The ``kb_units`` version file naming its content hash and unit count, written last."""
+
+PAGE_FIELDS = ("page_start", "page_end")
+"""Chunk metadata fields a ``kb_units`` sidecar carries as numbers when present."""
 
 _VERSION_CHARS = 16
 """Characters of the content hash that name a version directory."""
@@ -43,8 +47,9 @@ class BedrockLayout(StrEnum):
     """One file per chunk, for a data source with ``NONE`` chunking (Bedrock embeds each
     file as one chunk, so retrieval sees the engine's chunks)."""
     KB_UNITS = "kb_units"
-    """Contiguous chunks packed into files of at most ``max_unit_bytes``, for a
-    ``FIXED_SIZE`` data source that chunks them itself."""
+    """One file per chunk (at most ``max_unit_bytes``) with its page range, plus a
+    ``manifest.json`` written last, for a ``FIXED_SIZE`` data source that chunks each
+    file itself."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +83,44 @@ def document_prefix(prefix: str, org_id: str, document_id: str) -> str:
             raise AppValueError(msg)
     hash2 = hashlib.sha256(document_id.encode()).hexdigest()[:2]
     return f"{prefix}/{org_id}/{hash2}/{document_id}/"
+
+
+def unit_prefix(prefix: str, org: str, document_id: str, content_hash: str) -> str:
+    """Return the version directory a document's units and manifest live in.
+
+    ``{prefix}/{org}/{hash2}/{document_id}/{content_hash[:16]}/``, so a reader lists one
+    version without re-deriving ``hash2``. An org or document id ``document_prefix``
+    refuses fails the same way here.
+
+    Args:
+        prefix: The sink's key prefix.
+        org: The document's organization.
+        document_id: The document.
+        content_hash: The document version's content hash.
+
+    Returns:
+        The version's key prefix (ends with ``/``).
+
+    """
+    return f"{document_prefix(prefix, org, document_id)}{content_hash[:_VERSION_CHARS]}/"
+
+
+def manifest(content_hash: str, unit_count: int) -> bytes:
+    """Return a ``kb_units`` manifest body: the version's content hash and unit count.
+
+    Args:
+        content_hash: The document version's content hash.
+        unit_count: How many units the version holds.
+
+    Returns:
+        The manifest's JSON body, keys sorted.
+
+    """
+    return json.dumps(
+        {"content_hash": content_hash, "unit_count": unit_count},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
 
 
 def unit_key(doc_prefix: str, content_hash: str, n: int) -> str:
@@ -123,15 +166,17 @@ def units(
     Args:
         document: The document.
         chunks: Its chunks.
-        layout: Whether a unit holds one chunk or packs several.
+        layout: Whether a unit carries the chunk's own attributes (``chunk_files``) or
+            the document's and its page range (``kb_units``).
         org_field: The attribute that carries the organization.
-        max_unit_bytes: The largest packed unit.
+        max_unit_bytes: The largest ``kb_units`` file.
 
     Returns:
-        The files ``layout`` makes of the chunks, in order.
+        The files ``layout`` makes of the chunks, one per chunk, in order.
 
     Raises:
-        AppValueError: An unknown layout (``INVALID_INPUT``).
+        AppValueError: An unknown layout, a ``kb_units`` chunk over ``max_unit_bytes``,
+            or a page field that is not a number (``INVALID_INPUT``).
 
     """
     if layout == BedrockLayout.CHUNK_FILES:
@@ -149,39 +194,60 @@ def units(
         ]
     if layout == BedrockLayout.KB_UNITS:
         return [
-            Unit(text, {**_document_attributes(document, org_field), "chunk_index": n})
-            for n, text in enumerate(_pack(chunks, max_unit_bytes))
+            _kb_unit(document, chunk, n, org_field, max_unit_bytes)
+            for n, chunk in enumerate(chunks)
         ]
     msg = f"unknown bedrock layout: {layout!r}"
     raise AppValueError(msg)
 
 
-def _pack(chunks: Sequence[ChunkPayload], max_bytes: int) -> list[str]:
-    """Pack contiguous chunk texts into units of at most ``max_bytes``.
+def _kb_unit(
+    document: SinkDocument,
+    chunk: ChunkPayload,
+    n: int,
+    org_field: str,
+    max_bytes: int,
+) -> Unit:
+    """Return chunk ``n`` as a ``kb_units`` file.
 
-    A bigger chunk goes alone.
+    Its sidecar holds the document's attributes, ``chunk_index`` and the chunk's page
+    range (``PAGE_FIELDS``) as numbers when the chunk has one.
 
     Args:
-        chunks: The chunks.
-        max_bytes: The largest unit.
+        document: The document.
+        chunk: The chunk.
+        n: The chunk's index in the write.
+        org_field: The attribute that carries the organization.
+        max_bytes: The largest file.
 
     Returns:
-        The packed units, in order.
+        The unit.
+
+    Raises:
+        AppValueError: The chunk is over ``max_bytes``, or a page field is not a number
+            (``INVALID_INPUT``).
 
     """
-    packed: list[str] = []
-    current: list[str] = []
-    size = 0
-    for chunk in chunks:
-        length = len(chunk.text.encode())
-        if current and size + len(UNIT_SEPARATOR) + length > max_bytes:
-            packed.append(UNIT_SEPARATOR.join(current))
-            current, size = [], 0
-        size += length + (len(UNIT_SEPARATOR) if current else 0)
-        current.append(chunk.text)
-    if current:
-        packed.append(UNIT_SEPARATOR.join(current))
-    return packed
+    size = len(chunk.text.encode())
+    if size > max_bytes:
+        msg = (
+            f"bedrock sink: chunk {n} of {document.document_id} is {size} bytes, over "
+            f"max_unit_bytes {max_bytes}"
+        )
+        raise AppValueError(msg)
+    attributes: dict[str, object] = {
+        **_document_attributes(document, org_field),
+        "chunk_index": n,
+    }
+    for key in PAGE_FIELDS:
+        value = chunk.metadata.get(key)
+        if value is None:
+            continue
+        if not value.isdecimal():
+            msg = f"bedrock sink: chunk {n} {key} {value!r} is not a page number"
+            raise AppValueError(msg)
+        attributes[key] = int(value)
+    return Unit(chunk.text, attributes)
 
 
 def _document_attributes(document: SinkDocument, org_field: str) -> dict[str, object]:

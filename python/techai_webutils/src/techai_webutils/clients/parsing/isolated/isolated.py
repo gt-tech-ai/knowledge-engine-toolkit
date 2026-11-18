@@ -48,6 +48,7 @@ from techai_webutils.core.domain import (
     blocks_from_json,
     blocks_to_json,
 )
+from techai_webutils.core.errors import AppTimeoutError, InternalError
 from techai_webutils.core.interfaces.parser import ParseCost
 from techai_webutils.foundation.logger import get_logger
 
@@ -57,6 +58,8 @@ if TYPE_CHECKING:
     from multiprocessing.context import ForkServerContext, SpawnContext
     from multiprocessing.process import BaseProcess
     from multiprocessing.queues import Queue
+
+    from techai_webutils.clients.parsing.isolated.ocr import PageOcr
 
 logger = get_logger(__name__)
 
@@ -350,6 +353,65 @@ def _parse_document_path(path: str, declared: str, filename: str) -> ParsedDocum
     return MarkItDownParser().parse_path(path, declared=declared, filename=filename)
 
 
+def _page_count_path(path: str) -> ParsedDocument:
+    """Module-level page-count entry, picklable for the spawned worker.
+
+    Args:
+        path: The PDF's file.
+
+    Returns:
+        An empty PDF document whose ``total_pages`` is the count (0 when unreadable).
+
+    """
+    return ParsedDocument(
+        markdown_content="",
+        document_format=DocumentFormat.PDF,
+        total_pages=MarkItDownParser.page_count(path),
+    )
+
+
+def _parse_pages_path(
+    path: str, first_page: int, last_page: int, filename: str
+) -> ParsedDocument:
+    """Module-level page-range parse entry, picklable for the spawned worker.
+
+    Args:
+        path: The PDF's file.
+        first_page: The first page, 1-based.
+        last_page: The last page, inclusive.
+        filename: The document's file name.
+
+    Returns:
+        The parsed page range.
+
+    """
+    return MarkItDownParser.parse_pages(
+        path, first_page=first_page, last_page=last_page, filename=filename
+    )
+
+
+def _render_page_png(
+    path: str, page_number: int, dpi: int, out_path: str
+) -> ParsedDocument:
+    """Module-level page-render entry, picklable for the spawned worker.
+
+    The PNG goes to ``out_path`` (bytes do not travel through the document hand-back).
+
+    Args:
+        path: The PDF's file.
+        page_number: The page to render, from 1.
+        dpi: The render resolution.
+        out_path: Where the PNG is written.
+
+    Returns:
+        An empty PDF document: the result is the file.
+
+    """
+    png = MarkItDownParser.render_page(path, page_number=page_number, dpi=dpi)
+    _ = Path(out_path).write_bytes(png)
+    return ParsedDocument(markdown_content="", document_format=DocumentFormat.PDF)
+
+
 def _write_scratch(document: ParsedDocument, path: str) -> None:
     """Write ``document`` to ``path`` as JSON (the child's half of the scratch hand-back).
 
@@ -425,8 +487,9 @@ class IsolatedParser:
         memory_bytes: int = _DEFAULT_MEMORY_BYTES,
         timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
         executor: Executor | None = None,
+        ocr: PageOcr | None = None,
     ) -> None:
-        """Configure the per-parse memory cap, the timeout and the executor.
+        """Configure the per-parse memory cap, the timeout, the executor and OCR.
 
         The parent waits on the executor.
 
@@ -439,11 +502,14 @@ class IsolatedParser:
             timeout_seconds: How long each parse may run.
             executor: Runs the blocking wait off the event loop; ``None`` uses the loop's
                 default.
+            ocr: Reads the pages a PDF parse leaves without text (scans) through a vision
+                model; ``None`` (the default) leaves them blank, as before.
 
         """
         self._memory_bytes: int = memory_bytes
         self._timeout_seconds: float = timeout_seconds
         self._executor: Executor | None = executor
+        self._ocr: PageOcr | None = ocr
 
     @property
     def executor(self) -> Executor | None:
@@ -579,11 +645,14 @@ class IsolatedParser:
 
         """
         try:
-            return await self._isolated(_parse_document_path, path, declared, filename)
+            document = await self._isolated(
+                _parse_document_path, path, declared, filename
+            )
         except TimeoutError:
             return self._failed_path(declared, filename, "parse_timeout")
         except IsolationError as exc:
             return self._failed_path(declared, filename, isolation_error_tag(exc))
+        return await self._read_blank_pages(path, document)
 
     @staticmethod
     def _failed_path(declared: str, filename: str, error: str) -> ParsedDocument:
@@ -605,3 +674,111 @@ class IsolatedParser:
             document_format=detect_format(declared, filename, b""),
             error=error,
         )
+
+    async def page_count(self, path: str) -> int:
+        """Count the pages of the PDF at ``path`` in the bounded child.
+
+        0 for a non-PDF or a bad file. The file is untrusted, so pymupdf opens it in the
+        same bounded child as a parse, not in this process.
+
+        Args:
+            path: The PDF's local path.
+
+        Returns:
+            The page count, or 0 when ``path`` is not a readable PDF.
+
+        """
+        if detect_format("", path, b"") != DocumentFormat.PDF:
+            return 0
+        try:
+            counted = await self._isolated(_page_count_path, path)
+        except (TimeoutError, IsolationError):
+            return 0
+        return counted.total_pages
+
+    async def parse_pages(
+        self, path: str, *, first_page: int, last_page: int, filename: str = ""
+    ) -> ParsedDocument:
+        """Parse pages ``first_page``..``last_page`` (1-based, inclusive) in the child.
+
+        A timeout, worker death or out-of-range request becomes a failed
+        ParsedDocument.
+
+        Args:
+            path: The PDF's local path.
+            first_page: The first page to parse, 1-based.
+            last_page: The last page to parse, inclusive.
+            filename: The original file name, kept on the result; empty when unknown.
+
+        Returns:
+            The parsed page range.
+
+        """
+        try:
+            document = await self._isolated(
+                _parse_pages_path, path, first_page, last_page, filename
+            )
+        except TimeoutError:
+            return self._failed_path("application/pdf", filename, "parse_timeout")
+        except IsolationError as exc:
+            return self._failed_path(
+                "application/pdf", filename, isolation_error_tag(exc)
+            )
+        return await self._read_blank_pages(path, document)
+
+    async def _read_blank_pages(
+        self, path: str, document: ParsedDocument
+    ) -> ParsedDocument:
+        """Read ``document``'s text-less pages through OCR, when it is on.
+
+        Only a successful PDF parse is read: a failed document, a non-PDF, or a parser
+        built without ``ocr`` comes back unchanged.
+
+        Args:
+            path: The PDF's local path, from which blank pages are rendered.
+            document: The parse of ``path``.
+
+        Returns:
+            ``document`` with its blank pages' text filled in, or ``document`` itself.
+
+        """
+        if (
+            self._ocr is None
+            or not document.ok
+            or document.document_format != DocumentFormat.PDF
+        ):
+            return document
+        dpi = self._ocr.dpi
+        return await self._ocr.fill(
+            document, lambda number: self._render_page(path, number, dpi)
+        )
+
+    async def _render_page(self, path: str, page_number: int, dpi: int) -> bytes:
+        """Render one page to PNG bytes in the bounded child.
+
+        Args:
+            path: The PDF's local path.
+            page_number: The page, from 1.
+            dpi: The render resolution.
+
+        Returns:
+            The page as a PNG image.
+
+        Raises:
+            AppTimeoutError: The render overran the timeout.
+            InternalError: The render child failed or died.
+
+        """
+        fd, png_path = tempfile.mkstemp(suffix=".page.png")
+        os.close(fd)
+        try:
+            _ = await self._isolated(_render_page_png, path, page_number, dpi, png_path)
+            return await asyncio.to_thread(Path(png_path).read_bytes)
+        except TimeoutError as exc:
+            msg = f"rendering page {page_number} timed out"
+            raise AppTimeoutError(msg) from exc
+        except IsolationError as exc:
+            msg = f"rendering page {page_number} failed: {isolation_error_tag(exc)}"
+            raise InternalError(msg, cause=exc) from exc
+        finally:
+            await asyncio.to_thread(Path(png_path).unlink, missing_ok=True)

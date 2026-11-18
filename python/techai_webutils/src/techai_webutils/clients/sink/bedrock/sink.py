@@ -6,7 +6,9 @@ Bedrock embeds by itself, so the sink takes no vectors: it writes text files and
 ``.metadata.json`` sidecars into the data source's bucket (``BedrockSinkConfig.layout``).
 Writes are idempotent: the document's objects are listed once, keys already present are
 skipped (a redelivery writes nothing), and objects of another version are deleted after
-the new ones are written. Every object carries ``BedrockSinkConfig.object_tags`` when any
+the new ones are written. Under ``kb_units`` the version's ``manifest.json`` is written
+after every unit and sidecar, on every write, so a reader that finds it knows the whole
+version is there. Every object carries ``BedrockSinkConfig.object_tags`` when any
 are set. The caller starts the data source's ingestion job
 (``StartBudget``) afterwards; until then Bedrock serves the previous files.
 """
@@ -18,10 +20,14 @@ import json
 from typing import TYPE_CHECKING, cast, final, override
 
 from techai_webutils.clients.sink.bedrock.layout import (
+    MANIFEST_NAME,
     SIDECAR_SUFFIX,
+    BedrockLayout,
     document_prefix,
+    manifest,
     sidecar,
     unit_key,
+    unit_prefix,
     units,
 )
 from techai_webutils.core.errors import AppValueError
@@ -73,7 +79,8 @@ class BedrockSink(NoOpAsyncResource, Sink):
     ) -> None:
         """Write the document's missing files and sidecars.
 
-        Other versions are then deleted.
+        A ``kb_units`` write then writes the version's manifest (always, so a rerun
+        rewrites it). Other versions are deleted last.
 
         Args:
             document: The document the chunks belong to.
@@ -82,8 +89,9 @@ class BedrockSink(NoOpAsyncResource, Sink):
                 store vectors.
 
         Raises:
-            AppValueError: Vectors were passed (Bedrock embeds by itself), or the org or
-                document id cannot be a key segment (``INVALID_INPUT``).
+            AppValueError: Vectors were passed (Bedrock embeds by itself), the org or
+                document id cannot be a key segment, or a ``kb_units`` chunk is over
+                ``max_unit_bytes`` (``INVALID_INPUT``).
 
         """
         if vectors is not None:
@@ -102,9 +110,22 @@ class BedrockSink(NoOpAsyncResource, Sink):
             for key, (body, content_type) in files.items()
             if key not in existing
         )
+        keep = files.keys()
+        if self._config.layout == BedrockLayout.KB_UNITS:
+            manifest_key = (
+                unit_prefix(
+                    self._config.prefix,
+                    document.org_id,
+                    document.document_id,
+                    document.content_hash,
+                )
+                + MANIFEST_NAME
+            )
+            body = manifest(document.content_hash, len(chunks))
+            await self._upload(manifest_key, body, _JSON)
+            keep = {*keep, manifest_key}
         await self._each(
-            self._storage.delete(self._config.bucket, key)
-            for key in existing - files.keys()
+            self._storage.delete(self._config.bucket, key) for key in existing - keep
         )
 
     @override

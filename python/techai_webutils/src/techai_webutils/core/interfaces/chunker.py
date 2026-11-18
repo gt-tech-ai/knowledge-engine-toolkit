@@ -69,6 +69,11 @@ class StructuredChunk:
     turns: tuple[Turn, ...] = ()
     """The input transcript turns the chunk overlaps, in order (their ids and
     speakers)."""
+    page_start: int | None = None
+    """The first source page the chunk touches (1-based); ``None`` for a chunker that
+    does not track pages, or a document that has none."""
+    page_end: int | None = None
+    """The last source page the chunk touches; ``None`` when ``page_start`` is."""
 
 
 @runtime_checkable

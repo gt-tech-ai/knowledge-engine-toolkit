@@ -7,11 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pymupdf
+import pytest
 
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
 from techai_webutils.core.domain import DocumentFormat
+from techai_webutils.core.errors import AppValueError
 
 _EXPECTED_TOTAL_PAGES = 2
+_THREE_PAGES = 3
+_TWO_WORDS = 2
 
 
 def _make_pdf(*lines: str) -> bytes:
@@ -276,3 +280,104 @@ class TestMarkItDownParser:
         assert result.document_format is DocumentFormat.PDF
         assert result.total_pages == _EXPECTED_TOTAL_PAGES
         assert "Alpha" in result.markdown_content
+
+
+class TestMarkItDownPaging:
+    """Tests for the page-range entries (``page_count`` / ``parse_pages``)."""
+
+    @staticmethod
+    def test_page_count_counts_pdf_pages(tmp_path: Path) -> None:
+        """Test that ``page_count`` reports a PDF's pages without parsing it.
+
+        **Why this test is important:**
+          - The caller cuts a large PDF into page ranges from this count; a wrong count
+            drops or duplicates pages in the units built from the parts.
+
+        **What it tests:**
+          - A 3-page PDF on disk counts 3.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        pdf = tmp_path / "doc.pdf"
+        _ = pdf.write_bytes(_make_pdf("One", "Two", "Three"))
+        assert MarkItDownParser().page_count(str(pdf)) == _THREE_PAGES
+
+    @staticmethod
+    def test_page_count_is_zero_for_unreadable_files(tmp_path: Path) -> None:
+        """Test that a non-PDF or truncated PDF counts 0 instead of raising.
+
+        **Why this test is important:**
+          - 0 tells the caller to parse the document whole; an exception would fail a
+            document that the whole-file parse can still handle.
+
+        **What it tests:**
+          - A text file and a PDF cut mid-file both count 0, and a missing path too.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        text = tmp_path / "note.txt"
+        _ = text.write_text("plain text")
+        cut = tmp_path / "cut.pdf"
+        _ = cut.write_bytes(_make_pdf("One", "Two")[:200])
+        parser = MarkItDownParser()
+        assert parser.page_count(str(text)) == 0
+        assert parser.page_count(str(cut)) == 0
+        assert parser.page_count(str(tmp_path / "missing.pdf")) == 0
+
+    @staticmethod
+    def test_parse_pages_numbers_pages_by_position(tmp_path: Path) -> None:
+        """Test that a range keeps each page's real number and only the range's text.
+
+        **Why this test is important:**
+          - A unit built from pages 2-3 must cite pages 2-3 of the original; renumbering
+            from 1 would point citations at the wrong page.
+
+        **What it tests:**
+          - Range 2-3 of a 3-page PDF yields pages numbered 2 and 3, the document's real
+            total, and Markdown holding those pages' text but not page 1's.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        pdf = tmp_path / "doc.pdf"
+        _ = pdf.write_bytes(_make_pdf("Alpha", "Bravo", "Charlie"))
+        result = MarkItDownParser().parse_pages(
+            str(pdf), first_page=2, last_page=3, filename="doc.pdf"
+        )
+        assert result.ok
+        assert [p.page_number for p in result.pages] == [2, 3]
+        assert result.total_pages == _THREE_PAGES
+        assert "Bravo" in result.markdown_content
+        assert "Charlie" in result.markdown_content
+        assert "Alpha" not in result.markdown_content
+        assert result.word_count == _TWO_WORDS
+
+    @staticmethod
+    @pytest.mark.parametrize(("first", "last"), [(0, 1), (3, 2), (3, 4)])
+    def test_parse_pages_rejects_a_bad_range(
+        tmp_path: Path, first: int, last: int
+    ) -> None:
+        """Test that an out-of-range request raises a coded error naming the range.
+
+        **Why this test is important:**
+          - A caller that miscounts must fail loudly, not receive a silently short part.
+
+        **What it tests:**
+          - Ranges 0-1, 3-2 and 3-4 of a 3-page PDF raise ``AppValueError`` with the
+            range and the page count in the message.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+            first: The first page requested.
+            last: The last page requested.
+
+        """
+        pdf = tmp_path / "doc.pdf"
+        _ = pdf.write_bytes(_make_pdf("Alpha", "Bravo", "Charlie"))
+        with pytest.raises(AppValueError, match=rf"{first}-{last}.*3 pages"):
+            _ = MarkItDownParser().parse_pages(str(pdf), first_page=first, last_page=last)
