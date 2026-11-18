@@ -6,6 +6,19 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.70] - 2026-11-18
+
+### Added
+
+- Go Bedrock Agent client: `clients/aws/bedrockagent.API` gains
+  `ListKnowledgeBaseDocuments` (one page of a data source's documents and their ingestion
+  status) and `DeleteKnowledgeBaseDocuments` (a batch of a data source's documents), so a
+  consumer can sweep a data source and delete the documents it no longer wants. Both run
+  through the client tier as `list_knowledge_base_documents` and
+  `delete_knowledge_base_documents` and retry, since a replayed delete removes nothing more.
+  The stub lists no documents and deletes nothing. The generated mock is regenerated. Go
+  only; `techai-webutils` is unchanged.
+
 ## [0.0.69] - 2026-11-17
 
 ### Fixed
@@ -3052,7 +3065,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.69...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.70...HEAD
+[0.0.70]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.69...v0.0.70
 [0.0.69]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.68...v0.0.69
 [0.0.68]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.67...v0.0.68
 [0.0.67]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.66...v0.0.67
