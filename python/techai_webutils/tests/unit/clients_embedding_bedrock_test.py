@@ -11,19 +11,25 @@ from __future__ import annotations
 
 import io
 import json
-from typing import cast
-from unittest.mock import AsyncMock, MagicMock
+from typing import TYPE_CHECKING, cast
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 
-from techai_webutils.clients.embedding.bedrock import BedrockEmbeddingProvider
+from techai_webutils.clients.embedding.bedrock import (
+    BedrockEmbeddingProvider,
+    LazyBedrockRuntime,
+)
 from techai_webutils.clients.embedding.builder import (
     EmbeddingConfig,
     EmbeddingKind,
     new_embedding_from_config,
 )
 from techai_webutils.core.errors import AppError, ErrorCode
+
+if TYPE_CHECKING:
+    from aiobotocore.config import AioConfig
 
 _EXPECTED_TOKEN_COUNT = 7
 _EXPECTED_AWAIT_COUNT = 2
@@ -266,3 +272,42 @@ class TestBedrockEmbeddingKind:
         assert isinstance(provider, BedrockEmbeddingProvider)
         assert provider.model_name() == _MODEL
         assert provider.dimension() == _EXPECTED_DIMENSION
+
+
+@pytest.mark.asyncio
+async def test_lazy_runtime_hands_its_timeout_to_the_sdk_client() -> None:
+    """Test that the runtime opens bedrock-runtime with its configured timeout.
+
+    **Why this test is important:**
+      - The runtime built an ``AioConfig`` from ``timeout_seconds`` but never passed it
+        to ``create_client``, so every embed call ran on botocore's 60 s default whatever
+        the config said; a hung call then held its caller past the configured bound.
+
+    **What it tests:**
+      - The first ``invoke_model`` opens ``bedrock-runtime`` once with a ``config``
+        whose connect and read timeouts are both ``timeout_seconds``.
+    """
+    timeout = 7.0
+    sdk = AsyncMock()
+    cast("AsyncMock", sdk.invoke_model).return_value = {}
+    opened = MagicMock()
+    opened.__aenter__ = AsyncMock(return_value=sdk)
+    opened.__aexit__ = AsyncMock(return_value=None)
+    session = MagicMock()
+    create_client = cast("MagicMock", session.create_client)
+    create_client.return_value = opened
+    with patch(
+        "techai_webutils.clients.embedding.bedrock.runtime.aiobotocore.session.get_session",
+        return_value=session,
+    ):
+        runtime = LazyBedrockRuntime(region="eu-west-1", timeout_seconds=timeout)
+
+    _ = await runtime.invoke_model(
+        modelId=_MODEL, body="{}", contentType="application/json", accept="*/*"
+    )
+    await runtime.aclose()
+
+    create_client.assert_called_once()
+    sdk_config = cast("AioConfig", create_client.call_args.kwargs.get("config"))
+    assert sdk_config is not None
+    assert (sdk_config.connect_timeout, sdk_config.read_timeout) == (timeout, timeout)

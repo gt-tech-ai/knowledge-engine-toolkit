@@ -1,7 +1,7 @@
 """Lazily opened aiobotocore bedrock-runtime client for the Bedrock embedding provider.
 
-Carved out of unit coverage like the other aiobotocore wrappers: its lines are the real
-SDK calls, exercised against real Bedrock, not by unit tests.
+Unit tests mock ``aiobotocore.session.get_session`` to pin how the client is opened (once,
+with the configured timeout); the SDK calls themselves run against real Bedrock.
 """
 
 from __future__ import annotations
@@ -76,6 +76,7 @@ class LazyBedrockRuntime:
                         "bedrock-runtime",
                         region_name=self._region,
                         endpoint_url=self._endpoint,
+                        config=self._config,
                     )
                 ),
             )

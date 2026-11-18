@@ -1406,9 +1406,15 @@ pages of a parsed PDF whose text is blank, has the child render each at `OcrConf
 and sends it to the injected `VisionClient` (`core.interfaces.vision`, one method:
 `describe_page(png, *, model_id) -> str`). Pages are read one at a time in page order, one call
 each, so a part's OCR cost is bounded by its page range. A page the model cannot read fails the
-document, with the page number in `error` (`ocr_failed: page N: <code>`). The vision backend is the
-consumer's: the toolkit ships the contract, not a model client. Python only; Go has no page-range
-parser, so there is no Go counterpart yet. The `layout` kind keeps its own Docling OCR.
+document, with the page number in `error` (`ocr_failed: page N: <code>`). The vision backend comes
+from `clients/vision` (`vision_from_config(VisionConfig(kind=…))`): `stub`, the default, reads
+every page as empty text; `bedrock` sends the PNG and an instruction to the model `model_id` names
+through bedrock-runtime `Converse` at temperature 0, one call per page, opening its aiobotocore
+client on first use with `timeout_seconds` as the connect and read timeout. A botocore failure is
+coded through `botocore_error_to_app_error`, and a reply stopped at `max_tokens` is `INTERNAL`,
+never a partial page. `clients.vision.decorated.decorate` runs `describe_page` through the client
+tier, so the consumer's `decoration.clients` sets its timeout, breaker and bulkhead. Python only;
+Go has no page-range parser, so there is no Go counterpart yet. The `layout` kind keeps its own Docling OCR.
 
 A child that raises `MemoryError` under its address-space cap now fails its document with
 `parse_isolation_failed: memory_exceeded` (`MEMORY_EXCEEDED`, raised as `IsolationMemoryError`),
