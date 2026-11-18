@@ -410,13 +410,13 @@ class S3StorageClient(StorageClient):
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
         objects: list[StorageObject] = []
-        token = ""
+        cursor: str | None = None
         while True:
             resp = (
                 await self._client.list_objects_v2(
-                    Bucket=bucket, Prefix=prefix, ContinuationToken=token
+                    Bucket=bucket, Prefix=prefix, ContinuationToken=cursor
                 )
-                if token
+                if cursor
                 else await self._client.list_objects_v2(Bucket=bucket, Prefix=prefix)
             )
             objects.extend(
@@ -429,8 +429,8 @@ class S3StorageClient(StorageClient):
                 )
                 for item in resp.get("Contents", [])
             )
-            token = resp.get("NextContinuationToken", "")
-            if not resp.get("IsTruncated") or not token:
+            cursor = resp.get("NextContinuationToken")
+            if not resp.get("IsTruncated") or not cursor:
                 return objects
 
     @override
