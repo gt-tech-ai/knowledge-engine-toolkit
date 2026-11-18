@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.69] - 2026-11-17
+
+### Fixed
+
+- Python S3 storage: `S3StorageClient.list_objects` now follows every truncated
+  `ListObjectsV2` page through its continuation token. It used to read only the first page, so
+  any prefix holding more than 1,000 objects came back short, and callers that dedupe or clean
+  up from the listing (the Bedrock sink among them) missed every key past the first page.
+  `techai-webutils` 0.20.1.
+
 ## [0.0.68] - 2026-11-17
 
 ### Added
@@ -3042,7 +3052,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.68...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.69...HEAD
+[0.0.69]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.68...v0.0.69
 [0.0.68]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.67...v0.0.68
 [0.0.67]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.66...v0.0.67
 [0.0.66]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.65...v0.0.66

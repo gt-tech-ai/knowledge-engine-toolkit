@@ -236,6 +236,49 @@ class TestS3StorageClient:
 
     @staticmethod
     @pytest.mark.asyncio
+    async def test_list_objects_follows_every_truncated_page(
+        s3_config: S3Config, aws_client: AsyncMock
+    ) -> None:
+        """Test that list_objects returns the keys of every page, not just the first.
+
+        **Why this test is important:**
+          - ListObjectsV2 returns at most 1,000 keys a call; a caller that dedupes or
+            cleans up from the listing (the Bedrock sink, a unit lister) silently misses
+            every key past the first page when only one page is read
+
+        **What it tests:**
+          - A truncated first page is followed by a call carrying its continuation
+            token, and both pages' keys come back in order
+
+        Args:
+            s3_config: An S3 config pointed at the local MinIO defaults.
+            aws_client: The client the patched aiobotocore session opens.
+
+        """
+        listing = AsyncMock(
+            side_effect=[
+                {
+                    "Contents": [{"Key": "p/1.txt"}],
+                    "IsTruncated": True,
+                    "NextContinuationToken": "t1",
+                },
+                {"Contents": [{"Key": "p/2.txt"}], "IsTruncated": False},
+            ]
+        )
+        aws_client.list_objects_v2 = listing
+        client = await _open(s3_config)
+
+        objects = await client.list_objects("bucket", "p/")
+
+        assert [o.key for o in objects] == ["p/1.txt", "p/2.txt"]
+        assert listing.await_args_list[1].kwargs == {
+            "Bucket": "bucket",
+            "Prefix": "p/",
+            "ContinuationToken": "t1",
+        }
+
+    @staticmethod
+    @pytest.mark.asyncio
     async def test_raises_when_not_initialized(s3_config: S3Config) -> None:
         """Test that operations raise RuntimeError before the client is initialized.
 
