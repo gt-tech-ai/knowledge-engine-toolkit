@@ -389,14 +389,17 @@ class S3StorageClient(StorageClient):
 
     @override
     async def list_objects(self, bucket: str, prefix: str) -> list[StorageObject]:
-        """List objects in a bucket with the given prefix.
+        """List every object in a bucket under the given prefix, across every page.
+
+        ``ListObjectsV2`` returns at most 1,000 keys a call, so this follows each
+        truncated page's ``NextContinuationToken`` until the listing ends.
 
         Args:
             bucket: The bucket.
             prefix: The key prefix to list under.
 
         Returns:
-            The matching objects.
+            Every matching object, in the order S3 lists them.
 
         Raises:
             AppRuntimeError: S3StorageClient not initialized. Use as async context
@@ -406,18 +409,29 @@ class S3StorageClient(StorageClient):
         if self._client is None:
             msg = "S3StorageClient not initialized. Use as async context manager."
             raise AppRuntimeError(msg)
-        resp = await self._client.list_objects_v2(Bucket=bucket, Prefix=prefix)
-        objects: list[StorageObject] = [
-            StorageObject(
-                key=_required(item.get("Key"), "Key"),
-                size=item.get("Size", 0),
-                content_type="",
-                last_modified=str(item.get("LastModified", "")),
-                etag=item.get("ETag", ""),
+        objects: list[StorageObject] = []
+        cursor: str | None = None
+        while True:
+            resp = (
+                await self._client.list_objects_v2(
+                    Bucket=bucket, Prefix=prefix, ContinuationToken=cursor
+                )
+                if cursor
+                else await self._client.list_objects_v2(Bucket=bucket, Prefix=prefix)
             )
-            for item in resp.get("Contents", [])
-        ]
-        return objects
+            objects.extend(
+                StorageObject(
+                    key=_required(item.get("Key"), "Key"),
+                    size=item.get("Size", 0),
+                    content_type="",
+                    last_modified=str(item.get("LastModified", "")),
+                    etag=item.get("ETag", ""),
+                )
+                for item in resp.get("Contents", [])
+            )
+            cursor = resp.get("NextContinuationToken")
+            if not resp.get("IsTruncated") or not cursor:
+                return objects
 
     @override
     async def stat(self, bucket: str, key: str) -> StorageObject:
