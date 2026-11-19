@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -99,3 +100,36 @@ async def test_duplicate_passages_collapse_to_the_best_scored_member() -> None:
         ("d6", ""),
     ]
     assert len(plain) == _EXPECTED_PLAIN_COUNT
+
+
+@pytest.mark.asyncio
+async def test_duplicate_group_keeps_a_named_member_over_an_unnamed_one() -> None:
+    """Test that a duplicate group keeps a member with a document name.
+
+    **Why this test is important:**
+      - Copies of one text indexed at different times may disagree on metadata: an older
+        copy can lack the document name. Keeping that copy because it scored best leaves
+        the reader a citation with no title, though a named copy of the same text exists.
+
+    **What it tests:**
+      - An unnamed 0.9 passage and named 0.7 and 0.5 copies collapse into the 0.7 one,
+        whose ``also_in`` lists the displaced unnamed document first, then the other;
+        the results stay in score order of the kept passages.
+    """
+    passages = [
+        replace(_passage("u1", "Revenue grew 18%.", 0.9), document_name=""),
+        _passage("n1", "Revenue grew 18%.", 0.7),
+        _passage("n2", "Revenue grew 18%.", 0.5),
+        _passage("d6", "Costs fell.", 0.8),
+    ]
+    config = RetrievalConfig(min_score=0.0, collapse_duplicates=True)
+
+    results = await wrap_retrieval_engine(
+        _engine(passages), config, policies=[MetadataEquals("scope")]
+    ).retrieve("q", filters={"scope": "a"})
+
+    assert [(r.document_id, r.metadata.get(ALSO_IN_KEY, "")) for r in results] == [
+        ("d6", ""),
+        ("n1", "u1,n2"),
+    ]
+    assert results[1].document_name == "N1"
