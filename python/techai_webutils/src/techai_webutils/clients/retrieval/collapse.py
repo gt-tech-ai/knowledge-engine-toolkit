@@ -2,9 +2,11 @@
 
 Two passages are duplicates when their text is equal up to case and whitespace, or when
 both carry the same value under ``cluster_key`` (a near-duplicate cluster id an indexer
-stamps). Each group keeps its best-scored member, whose ``also_in`` metadata lists the
-other members' document ids (comma-separated, in score order), so a citation can still
-name every place the text lives. ``wrap_retrieval_engine`` applies it after the scope
+stamps). Each group keeps its best-scored member that carries a document name (its
+best-scored member when none does, so an unnamed copy never hides a named one from the
+citation), whose ``also_in`` metadata lists the other members' document ids
+(comma-separated, in score order), so a citation can still name every place the text
+lives. ``wrap_retrieval_engine`` applies it after the scope
 policies, so a copy the caller may not see is dropped before it could be named.
 """
 
@@ -31,7 +33,8 @@ def collapse_duplicates(
 ) -> list[RetrievalResult]:
     """Return ``passages`` with each duplicate group reduced to one.
 
-    The best-scored member stays; best first.
+    The best-scored member with a ``document_name`` stays (the best-scored one when no
+    member has a name); best first.
 
     Args:
         passages: The passages, in any order.
@@ -40,7 +43,7 @@ def collapse_duplicates(
 
     Returns:
         One passage per group, best score first; a kept passage with collapsed members
-            carries their document ids under ``also_in``.
+            carries their document ids under ``also_in``, in score order.
 
     """
     kept: list[RetrievalResult] = []
@@ -53,15 +56,40 @@ def collapse_duplicates(
             group = len(kept)
             kept.append(passage)
             also.append([])
+        elif passage.document_name and not kept[group].document_name:
+            also[group] = _members(kept[group].document_id, also[group], passage)
+            kept[group] = passage
         elif passage.document_id not in {kept[group].document_id, *also[group]}:
             also[group].append(passage.document_id)
         for key in keys:
             _ = group_of.setdefault(key, group)
-    return [
+    collapsed = [
         replace(p, metadata={**p.metadata, ALSO_IN_KEY: ",".join(others)})
         if others
         else p
         for p, others in zip(kept, also, strict=True)
+    ]
+    return sorted(collapsed, key=lambda p: -p.score)
+
+
+def _members(displaced: str, members: list[str], named: RetrievalResult) -> list[str]:
+    """Return a group's ``also_in`` ids after ``named`` displaces its unnamed keeper.
+
+    Args:
+        displaced: The unnamed keeper's document id, which outscored every member.
+        members: The group's collapsed document ids, in score order.
+        named: The named passage that is kept instead.
+
+    Returns:
+        ``displaced`` first, then ``members``, without ``named``'s own document or a
+            repeat.
+
+    """
+    ordered = [displaced, *members]
+    return [
+        doc
+        for index, doc in enumerate(ordered)
+        if doc != named.document_id and doc not in ordered[:index]
     ]
 
 

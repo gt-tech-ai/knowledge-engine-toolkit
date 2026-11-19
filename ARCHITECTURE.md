@@ -1112,9 +1112,11 @@ Python only; the defaults (`qdrant` store, `noop` sink, `stub` metrics querier) 
   `passage_header(n, passage)` gives the consumer's prompt `[n] <document> · <section> · p. <page>`.
 - **Duplicate passages.** With `RetrievalConfig.collapse_duplicates`, passages whose text is equal up
   to case and whitespace, or that share a `collapse_cluster_key` value (a near-duplicate cluster id),
-  collapse into the best-scored one, whose `also_in` metadata lists the others' document ids
-  (`clients.retrieval.collapse`). It runs after the scope policies, so an out-of-scope copy is never
-  named, and before abstention and ordering. Off by default.
+  collapse into one kept passage, whose `also_in` metadata lists the others' document ids
+  (`clients.retrieval.collapse`). The kept passage is the best-scored member that carries a
+  document name, else the best-scored member, so a copy indexed before names were recorded
+  never leaves a citation without a title. It runs after the scope policies, so an out-of-scope
+  copy is never named, and before abstention and ordering. Off by default.
 - **Off-Bedrock model Kinds.** `EmbeddingKind.openai_compatible` and `LlmKind.openai_compatible`
   speak `/v1/embeddings` and `/v1/chat/completions` (vLLM, TEI, LiteLLM, llama.cpp, OpenAI) with
   an optional bearer `api_key` (never in a repr). A stream that sends nothing for

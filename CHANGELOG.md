@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.72] - 2026-11-19
+
+### Fixed
+
+- Python retrieval: duplicate collapsing (`RetrievalConfig.collapse_duplicates`) keeps the
+  best-scored member that carries a document name, falling back to the best-scored member,
+  so an older copy indexed without a name no longer wins the group and leaves the citation
+  untitled. `also_in` names the displaced copy first; the kept passages stay in score order.
+  `techai-webutils` 0.20.3.
+
 ## [0.0.71] - 2026-11-18
 
 ### Fixed
@@ -3085,7 +3095,8 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.71...HEAD
+[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.72...HEAD
+[0.0.72]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.71...v0.0.72
 [0.0.71]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.70...v0.0.71
 [0.0.70]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.69...v0.0.70
 [0.0.69]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.68...v0.0.69
