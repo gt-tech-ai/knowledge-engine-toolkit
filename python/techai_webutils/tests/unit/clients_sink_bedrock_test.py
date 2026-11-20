@@ -284,6 +284,9 @@ async def test_sidecar_keeps_chunk_metadata_and_reserved_keys_win(
       - in both layouts, a chunk's ``section`` field is in its sidecar
       - a chunk's ``org_id``, ``document_id`` and ``content_hash`` fields do not
         replace the document's
+
+    Args:
+        layout: How documents are laid out; both layouts write sidecars.
     """
     storage = _storage()
     chunk = ChunkPayload(
