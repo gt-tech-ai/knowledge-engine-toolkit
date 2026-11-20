@@ -89,9 +89,12 @@ class BedrockSink(NoOpAsyncResource, Sink):
                 store vectors.
 
         Raises:
-            AppValueError: Vectors were passed (Bedrock embeds by itself), the org or
+            AppValueError: No chunks were passed (a write keeps only what it writes, so
+                it would delete the previous version and leave the document with no
+                text), vectors were passed (Bedrock embeds by itself), the org or
                 document id cannot be a key segment, or a ``kb_units`` chunk is over
-                ``max_unit_bytes`` (``INVALID_INPUT``).
+                ``max_unit_bytes`` (``INVALID_INPUT``). Each is raised before any
+                storage call.
 
         """
         if vectors is not None:
@@ -99,6 +102,9 @@ class BedrockSink(NoOpAsyncResource, Sink):
                 f"the bedrock sink embeds by itself; got vectors for "
                 f"{document.document_id}"
             )
+            raise AppValueError(msg)
+        if not chunks:
+            msg = f"refusing to write zero units for {document.document_id}"
             raise AppValueError(msg)
         doc_prefix = document_prefix(
             self._config.prefix, document.org_id, document.document_id

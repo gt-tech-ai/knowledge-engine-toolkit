@@ -290,6 +290,38 @@ async def test_kb_units_refuse_a_chunk_over_the_size_limit() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("layout", list(BedrockLayout))
+async def test_a_write_with_no_chunks_is_refused_and_touches_nothing(
+    layout: BedrockLayout,
+) -> None:
+    """Test that a write with no chunks fails before any storage call.
+
+    **Why this test is important:**
+      - A zero-chunk write would keep no files, so it deleted the document's previous
+        version and, under ``kb_units``, wrote a manifest declaring zero units: the
+        caller then indexed a document with no text, which reads as indexed but can
+        never be cited. Refusing it lets the caller fail the document instead.
+
+    **What it tests:**
+      - in every layout, an empty chunk list raises ``AppValueError`` naming the
+        zero units, and nothing is listed, uploaded or deleted, so a previous version
+        survives
+
+    Args:
+        layout: The sink layout under test.
+
+    """
+    storage = _storage([f"{_PREFIX}old.txt"])
+
+    with pytest.raises(AppValueError, match="zero units"):
+        await _sink(storage, layout).write(_DOC, [], None)
+
+    cast("AsyncMock", storage.list_objects).assert_not_awaited()
+    cast("AsyncMock", storage.upload).assert_not_awaited()
+    cast("AsyncMock", storage.delete).assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_kb_units_write_the_manifest_last_and_keep_it_on_a_rerun() -> None:
     """Test that the version's manifest is written after every unit and survives a rerun.
 
