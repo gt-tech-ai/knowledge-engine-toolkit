@@ -6,6 +6,16 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.74] - 2026-11-20
+
+### Fixed
+
+- Python parsing: `MarkItDownParser.parse` and `parse_path` fail a document that resolves to
+  PDF from its declared type or extension but has no `%PDF-` header in its first KiB, with
+  `conversion_failed: not a readable PDF (no %PDF- header)`, before conversion. MarkItDown
+  used to read such bytes as plain text, so a non-PDF uploaded as `application/pdf` indexed
+  as if it were the PDF. New `detect.has_pdf_header`. `techai-webutils` 0.20.5.
+
 ## [0.0.73] - 2026-11-20
 
 ### Fixed
