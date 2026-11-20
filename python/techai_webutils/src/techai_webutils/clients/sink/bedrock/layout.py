@@ -210,8 +210,9 @@ def _kb_unit(
 ) -> Unit:
     """Return chunk ``n`` as a ``kb_units`` file.
 
-    Its sidecar holds the document's attributes, ``chunk_index`` and the chunk's page
-    range (``PAGE_FIELDS``) as numbers when the chunk has one.
+    Its sidecar holds the document's attributes, the chunk's own metadata (never
+    over a reserved key: see ``_document_attributes``), ``chunk_index`` and the chunk's
+    page range (``PAGE_FIELDS``) as numbers when the chunk has one.
 
     Args:
         document: The document.
@@ -236,7 +237,7 @@ def _kb_unit(
         )
         raise AppValueError(msg)
     attributes: dict[str, object] = {
-        **_document_attributes(document, org_field),
+        **_document_attributes(document, org_field, chunk),
         "chunk_index": n,
     }
     for key in PAGE_FIELDS:
@@ -250,19 +251,27 @@ def _kb_unit(
     return Unit(chunk.text, attributes)
 
 
-def _document_attributes(document: SinkDocument, org_field: str) -> dict[str, object]:
-    """Return the attributes every file of the document carries.
+def _document_attributes(
+    document: SinkDocument, org_field: str, chunk: ChunkPayload
+) -> dict[str, object]:
+    """Return the document's and the chunk's attributes, the reserved keys last.
+
+    The document's metadata, then the chunk's, then the reserved keys: the
+    organization, ``document_id`` and ``content_hash``. A metadata field of a reserved
+    key's name never replaces it, because those keys scope and cite every passage.
 
     Args:
         document: The document.
         org_field: The attribute that carries the organization.
+        chunk: The chunk whose own metadata the file carries.
 
     Returns:
-        The attributes every file of the document carries.
+        The document's and the chunk's attributes, the reserved keys last.
 
     """
     return {
         **document.metadata,
+        **chunk.metadata,
         org_field: document.org_id,
         "document_id": document.document_id,
         "content_hash": document.content_hash,
@@ -274,7 +283,8 @@ def _chunk_attributes(
 ) -> dict[str, object]:
     """Return chunk ``n``'s attributes.
 
-    The document's, the chunk's own, and its structure.
+    The document's, the chunk's own (never over a reserved key: see
+    ``_document_attributes``), and its structure.
 
     ``n`` is the chunk's ordinal in the document (its position in the write when unset).
 
@@ -294,8 +304,7 @@ def _chunk_attributes(
 
     """
     attributes: dict[str, object] = {
-        **_document_attributes(document, org_field),
-        **chunk.metadata,
+        **_document_attributes(document, org_field, chunk),
         "chunk_index": n,
         CHUNK_ID_KEY: chunk_id(document.document_id, n),
     }

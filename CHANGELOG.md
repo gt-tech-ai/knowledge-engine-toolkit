@@ -6,6 +6,24 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.75] - 2026-11-20
+
+### Fixed
+
+- Python Bedrock sink: a `kb_units` sidecar now carries the chunk's own metadata, as a
+  `chunk_files` sidecar does; it used to keep only the page range, so a chunk field a
+  retriever filters or cites on never reached Bedrock. In both layouts the organization
+  field, `document_id` and `content_hash` are written last, so a chunk or document
+  metadata field of the same name can no longer replace them (a `chunk_files` chunk
+  field used to).
+
+### Added
+
+- Python retrieval: the `FilteringRetrievalEngine` "retrieval passages filtered" log
+  gains `top_score` (the best retrieved score, `None` when nothing was retrieved), and
+  each dropped passage logs "retrieval passage dropped" at debug with its `document_id`,
+  `score` and the rejecting `policy`. `techai-webutils` 0.20.6.
+
 ## [0.0.74] - 2026-11-20
 
 ### Fixed

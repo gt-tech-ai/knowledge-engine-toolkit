@@ -546,11 +546,16 @@ class TestFilteringRetrievalEngine:
         **Why this test is important:**
           - "10 retrieved, 0 kept" is otherwise undiagnosable: it could be the score
             floor, a scope mismatch or a missing label, and each has a different fix.
+          - A passage retrieved but never cited needs its own trail: the top score says
+            whether anything ranked well, and a debug line per drop names the document
+            and the policy that removed it.
 
         **What it tests:**
           - With MinScore(0.1) + MetadataEquals("tenant") over one kept, one low-score and
             one other-tenant passage, the info log reports retrieved=3, kept=1 and
             dropped_by={"MinScore": 1, "MetadataEquals": 1}.
+          - The info log's top_score is the best retrieved score (0.9), and each drop
+            logs one debug line naming its document, score and policy.
         """
         passages = (
             _passage("a", tenant="t1"),
@@ -571,6 +576,17 @@ class TestFilteringRetrievalEngine:
         assert fields["retrieved"] == _EXPECTED_FIELDS
         assert fields["kept"] == 1
         assert fields["dropped_by"] == {"MinScore": 1, "MetadataEquals": 1}
+        assert fields["top_score"] == pytest.approx(0.9)
+        debug_calls = cast(
+            "list[MagicMock]",
+            cast("MagicMock", mock_logger.debug).call_args_list,
+        )
+        drop_fields = [cast("dict[str, object]", c.kwargs) for c in debug_calls]
+        drops = sorted(
+            (str(f["document_id"]), cast("float", f["score"]), str(f["policy"]))
+            for f in drop_fields
+        )
+        assert drops == [("b", 0.9, "MetadataEquals"), ("c", 0.05, "MinScore")]
 
 
 class TestRetrievalFactory:

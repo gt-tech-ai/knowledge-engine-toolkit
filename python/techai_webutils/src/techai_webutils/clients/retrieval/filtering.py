@@ -213,11 +213,21 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
             if rejecting is None:
                 kept.append(result)
             else:
-                dropped_by[type(rejecting).__name__] += 1
+                policy = type(rejecting).__name__
+                dropped_by[policy] += 1
+                logger.debug(
+                    "retrieval passage dropped",
+                    index_id=index_id,
+                    document_id=result.document_id,
+                    score=result.score,
+                    policy=policy,
+                )
         # Observability: a 0-result response is otherwise indistinguishable from an error.
         # The retrieved-vs-kept counts separate "nothing retrieved" from "all filtered
-        # out", and dropped_by (each drop attributed to the first policy that rejected it)
-        # tells a score floor from a scope mismatch or a missing label.
+        # out", dropped_by (each drop attributed to the first policy that rejected it)
+        # tells a score floor from a scope mismatch or a missing label, and top_score
+        # (None when nothing was retrieved) says whether anything ranked well at all.
+        # The debug line per drop names the document a policy removed.
         logger.info(
             "retrieval passages filtered",
             index_id=index_id,
@@ -225,5 +235,6 @@ class FilteringRetrievalEngine(DelegatingAsyncResource[RetrievalEngine], Retriev
             kept=len(kept),
             dropped=len(results) - len(kept),
             dropped_by=dict(dropped_by),
+            top_score=max((r.score for r in results), default=None),
         )
         return kept
