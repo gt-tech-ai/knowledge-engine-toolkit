@@ -267,6 +267,55 @@ async def test_kb_units_write_one_unit_per_chunk_with_page_sidecars() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("layout", [BedrockLayout.KB_UNITS, BedrockLayout.CHUNK_FILES])
+async def test_sidecar_keeps_chunk_metadata_and_reserved_keys_win(
+    layout: BedrockLayout,
+) -> None:
+    """Test that a unit's sidecar keeps the chunk's metadata but never its reserved keys.
+
+    **Why this test is important:**
+      - ``kb_units`` dropped every chunk field but the page range, so a field a
+        retriever filters or cites on (a section, a source URL) never reached Bedrock.
+      - The organization, ``document_id`` and ``content_hash`` scope and cite a passage:
+        a chunk field of the same name must not replace them, or a passage is filed
+        under another tenant or document.
+
+    **What it tests:**
+      - in both layouts, a chunk's ``section`` field is in its sidecar
+      - a chunk's ``org_id``, ``document_id`` and ``content_hash`` fields do not
+        replace the document's
+
+    Args:
+        layout: How documents are laid out; both layouts write sidecars.
+
+    """
+    storage = _storage()
+    chunk = ChunkPayload(
+        "alpha",
+        metadata={
+            "section": "s1",
+            "org_id": "o2",
+            "document_id": "doc2",
+            "content_hash": "d" * 64,
+        },
+    )
+
+    await _sink(storage, layout).write(_DOC, [chunk], None)
+
+    body = cast(
+        "dict[str, object]",
+        json.loads(_uploads(storage)[f"{_PREFIX}{_VERSION}/0.txt.metadata.json"]),
+    )
+    attributes = cast("dict[str, object]", dig(body, "metadataAttributes"))
+    assert attributes["section"] == "s1"
+    assert (
+        attributes["org_id"],
+        attributes["document_id"],
+        attributes["content_hash"],
+    ) == ("o1", "doc1", "c" * 64)
+
+
+@pytest.mark.asyncio
 async def test_kb_units_refuse_a_chunk_over_the_size_limit() -> None:
     """Test that a chunk bigger than ``max_unit_bytes`` fails the write.
 
