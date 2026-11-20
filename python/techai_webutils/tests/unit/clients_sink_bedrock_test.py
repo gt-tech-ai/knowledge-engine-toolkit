@@ -306,6 +306,10 @@ async def test_a_write_with_no_chunks_is_refused_and_touches_nothing(
       - in every layout, an empty chunk list raises ``AppValueError`` naming the
         zero units, and nothing is listed, uploaded or deleted, so a previous version
         survives
+
+    Args:
+        layout: The sink layout under test.
+
     """
     storage = _storage([f"{_PREFIX}old.txt"])
 
