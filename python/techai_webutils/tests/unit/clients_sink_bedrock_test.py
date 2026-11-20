@@ -287,6 +287,7 @@ async def test_sidecar_keeps_chunk_metadata_and_reserved_keys_win(
 
     Args:
         layout: How documents are laid out; both layouts write sidecars.
+
     """
     storage = _storage()
     chunk = ChunkPayload(
