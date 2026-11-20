@@ -49,6 +49,8 @@ ZIP magic."""
 
 _PDF_MAGIC = b"%PDF-"
 """Leading magic bytes of a PDF file."""
+_PDF_HEADER_WINDOW = 1024
+"""Bytes a PDF reader searches for the header: the PDF spec lets junk precede it."""
 _ZIP_MAGIC = b"PK\x03\x04"
 """Leading magic bytes of a ZIP archive (the OOXML container)."""
 _OLE2_MAGIC = b"\xd0\xcf\x11\xe0"  # legacy Office (.xls / .doc)
@@ -87,6 +89,22 @@ def _ooxml_kind(content: bytes) -> DocumentFormat:
         if any(name.startswith(prefix) for name in names):
             return fmt
     return DocumentFormat.UNKNOWN
+
+
+def has_pdf_header(head: bytes) -> bool:
+    """Report whether ``head`` holds a PDF header where a PDF reader would find it.
+
+    A document resolved to PDF from its declared type or extension alone may not be a
+    PDF at all; the parser checks this before converting it.
+
+    Args:
+        head: The document's leading bytes (at least its first KiB when available).
+
+    Returns:
+        True when ``%PDF-`` occurs in the first 1024 bytes.
+
+    """
+    return _PDF_MAGIC in head[:_PDF_HEADER_WINDOW]
 
 
 def _detect_by_magic(content: bytes) -> DocumentFormat:

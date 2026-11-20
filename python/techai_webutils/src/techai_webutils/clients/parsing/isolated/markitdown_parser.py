@@ -4,7 +4,9 @@ Microsoft's ``markitdown`` is the single unified conversion engine (all formats 
 Markdown); ``pymupdf`` runs *alongside* it for PDFs only, extracting page-by-page text +
 boundaries for citation provenance. The parser never raises for a bad document: a
 conversion failure is captured as ``error`` on the returned ``ParsedDocument`` so a single
-poison document fails alone.
+poison document fails alone. A document that resolves to PDF (from its declared type or
+extension) but carries no PDF header fails as ``conversion_failed`` before conversion:
+MarkItDown would otherwise read its bytes as plain text and index them as the PDF.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Protocol, cast
 
-from techai_webutils.clients.parsing.isolated.detect import detect_format
+from techai_webutils.clients.parsing.isolated.detect import detect_format, has_pdf_header
 from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.logger import get_logger
@@ -50,6 +52,10 @@ list."""
 # sanitized only when it fits this cap, so the memory-bounded large lane never buffers a
 # multi-GB file to recover a rare mis-encoding. Above the cap the original
 # UnicodeDecodeError surfaces (recorded as conversion_failed).
+_UNREADABLE_PDF = "conversion_failed: not a readable PDF (no %PDF- header)"
+"""The error for a document resolved to PDF (by its declared type or extension) whose
+bytes carry no PDF header: converting it would index the bytes as plain text."""
+
 _MAX_SANITIZE_BYTES = 64 << 20  # 64 MiB
 """Cap (64 MiB) on the lenient-decode fallback so the large lane never buffers a multi-GB
 file to recover."""
@@ -234,6 +240,10 @@ class MarkItDownParser:
                 document_format=fmt,
                 error="unsupported_format",
             )
+        if fmt is DocumentFormat.PDF and not has_pdf_header(content):
+            return ParsedDocument(
+                markdown_content="", document_format=fmt, error=_UNREADABLE_PDF
+            )
 
         try:
             markdown = self._to_markdown(content, fmt)
@@ -416,10 +426,15 @@ class MarkItDownParser:
             A document from a file ``path``.
 
         """
-        fmt = detect_format(declared, filename, self._read_header(path))
+        head = self._read_header(path)
+        fmt = detect_format(declared, filename, head)
         if fmt is DocumentFormat.UNKNOWN:
             return ParsedDocument(
                 markdown_content="", document_format=fmt, error="unsupported_format"
+            )
+        if fmt is DocumentFormat.PDF and not has_pdf_header(head):
+            return ParsedDocument(
+                markdown_content="", document_format=fmt, error=_UNREADABLE_PDF
             )
 
         try:

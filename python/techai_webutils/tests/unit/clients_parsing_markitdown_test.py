@@ -254,6 +254,55 @@ class TestMarkItDownParser:
         assert "converted markdown" in result.markdown_content
 
     @staticmethod
+    def test_declared_pdf_without_pdf_header_fails_conversion() -> None:
+        """Test that bytes declared a PDF but lacking its header fail, not index as text.
+
+        **Why this test is important:**
+          - The declared type wins format detection when the magic is absent, so a
+            text body uploaded as ``application/pdf`` used to convert as plain text and
+            index as if it were the PDF; the uploader must instead see the document fail.
+
+        **What it tests:**
+          - Non-PDF bytes declared ``application/pdf`` yield not-ok, PDF format, empty
+            Markdown and a ``conversion_failed`` error, even with a converter that would
+            accept them.
+        """
+        parser = MarkItDownParser(converter=_FixedMarkdownConverter())
+        result = parser.parse(
+            b"this is not a pdf", declared="application/pdf", filename="bogus.pdf"
+        )
+        assert not result.ok
+        assert result.document_format is DocumentFormat.PDF
+        assert not result.markdown_content
+        assert result.error.startswith("conversion_failed")
+
+    @staticmethod
+    def test_parse_path_declared_pdf_without_pdf_header_fails(tmp_path: Path) -> None:
+        """Test that the path lane refuses a declared PDF that lacks the PDF header.
+
+        **Why this test is important:**
+          - The large lane parses from a path; it must reach the same verdict as the
+            bytes lane, or a bogus PDF over the large-lane threshold would still index.
+
+        **What it tests:**
+          - A non-PDF file declared ``application/pdf`` yields not-ok, PDF format and a
+            ``conversion_failed`` error via parse_path.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        bogus = tmp_path / "bogus.pdf"
+        _ = bogus.write_bytes(b"this is not a pdf")
+        parser = MarkItDownParser(converter=_FixedMarkdownConverter())
+        result = parser.parse_path(
+            str(bogus), declared="application/pdf", filename="bogus.pdf"
+        )
+        assert not result.ok
+        assert result.document_format is DocumentFormat.PDF
+        assert result.error.startswith("conversion_failed")
+
+    @staticmethod
     def test_parse_path_reads_pdf_from_disk(tmp_path: Path) -> None:
         """Test that parse_path parses a PDF from a file path like the bytes path.
 
