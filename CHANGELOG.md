@@ -6,6 +6,15 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.73] - 2026-11-20
+
+### Fixed
+
+- Python Bedrock sink: `BedrockSink.write` refuses an empty chunk list with `AppValueError`
+  (`INVALID_INPUT`) before any storage call. A zero-chunk write kept no files, so it deleted
+  the document's previous version and, under `kb_units`, wrote a manifest of zero units,
+  leaving a document indexed with no text. `techai-webutils` 0.20.4.
+
 ## [0.0.72] - 2026-11-19
 
 ### Fixed
