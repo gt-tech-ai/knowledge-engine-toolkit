@@ -24,6 +24,10 @@ def test_warm_forkserver_imports_the_configured_preload(tmp_path: Path) -> None:
       - In a fresh interpreter, ``configure_forkserver_preload([name])`` then
         ``warm_forkserver()`` makes the server import ``name`` (its import writes a
         marker file), while the parent process never imports it.
+
+    Args:
+        tmp_path: A scratch directory for the marker module and its marker file.
+
     """
     marker = tmp_path / "imported"
     module_dir = tmp_path / "mods"
