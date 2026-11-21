@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, cast
 from techai_webutils.core.errors import AppValueError
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from concurrent.futures import Executor
 
     from techai_webutils.clients.parsing.isolated import (
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         LayoutParser,
         LayoutParserOptions,
     )
+    from techai_webutils.core.interfaces.metrics import MetricsProvider
     from techai_webutils.core.interfaces.parser import DocumentParser
 
 # Default per-parse address-space cap (512 MiB) and wall-clock ceiling (60 s) for the
@@ -72,6 +73,10 @@ class ParserConfig:
     them)."""
     ocr: bool = True
     """``layout``: run OCR on pages and regions with no text layer."""
+    preload_modules: tuple[str, ...] = ()
+    """``isolated``: modules the forkserver imports once, beyond the parser libraries;
+    name the service's main module (``myservice.__main__``) so each child stops
+    re-importing it."""
 
 
 def parser_from_config(
@@ -80,6 +85,7 @@ def parser_from_config(
     executor: Executor | None = None,
     convert: LayoutConverter | None = None,
     ocr: PageOcr | None = None,
+    metrics: MetricsProvider | None = None,
 ) -> DocumentParser:
     """Build the ``DocumentParser`` selected by ``config.kind``.
 
@@ -99,6 +105,8 @@ def parser_from_config(
         ocr: The page OCR the ``isolated`` kind reads text-less PDF pages with (built by
             ``ocr_from_config``); ``None`` leaves them blank. ``layout`` runs its own OCR
             and ignores it.
+        metrics: Records the ``isolated`` kind's ``parse_child_start_seconds``; ``None``
+            records nothing.
 
     Returns:
         The ``DocumentParser`` selected by ``config.kind``.
@@ -111,18 +119,18 @@ def parser_from_config(
     if config.kind is ParserKind.LAYOUT:
         return _layout(config, executor, convert)
     if config.kind is ParserKind.ISOLATED:
-        isolated_parser_cls = cast(
-            "type[_LazyIsolatedParser]",
-            importlib.import_module(
-                "techai_webutils.clients.parsing.isolated"
-            ).IsolatedParser,
+        isolated = importlib.import_module("techai_webutils.clients.parsing.isolated")
+        cast("Callable[[Sequence[str]], None]", isolated.configure_forkserver_preload)(
+            config.preload_modules
         )
+        isolated_parser_cls = cast("type[_LazyIsolatedParser]", isolated.IsolatedParser)
 
         return isolated_parser_cls(
             memory_bytes=config.memory_bytes,
             timeout_seconds=config.timeout_seconds,
             executor=executor,
             ocr=ocr,
+            metrics=metrics,
         )
     msg = f"unknown parser kind: {config.kind!r}"
     raise AppValueError(msg)

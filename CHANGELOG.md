@@ -6,6 +6,27 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.77] - 2026-11-21
+
+### Fixed
+
+- Python isolated parsing: a service can now stop every parse child from re-importing
+  its own main module. CPython starts a forkserver child by re-running the parent's main
+  module as `__mp_main__`, so a child of a service's console script imported the whole
+  service (seconds) before parsing. `ParserConfig.preload_modules` names extra modules
+  the forkserver imports once (pass the service's `<package>.__main__`), and the
+  default preload now includes the isolated module itself, so a child unpickles its
+  target without importing anything. `techai-webutils` 0.20.8.
+
+### Added
+
+- Python isolated parsing: `configure_forkserver_preload(modules)` and
+  `warm_forkserver()` (starts the server and its preload imports at boot, off the first
+  parse); `run_isolated(..., on_start=)` reports each child's start time; and
+  `parser_from_config(..., metrics=)` records it as the `parse_child_start_seconds`
+  histogram, labelled by `operation`. `LayoutParser` keeps `spawn` (Docling is not
+  fork-safe); its docstring now says its children always pay the main-module import.
+
 ## [0.0.76] - 2026-11-21
 
 ### Fixed

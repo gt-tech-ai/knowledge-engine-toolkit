@@ -46,8 +46,26 @@ def test_factory_selects_isolated_backend() -> None:
     with patch("techai_webutils.clients.parsing.isolated.IsolatedParser") as parser_cls:
         _ = parser_from_config(config)
     parser_cls.assert_called_once_with(
-        memory_bytes=123, timeout_seconds=7.0, executor=None, ocr=None
+        memory_bytes=123, timeout_seconds=7.0, executor=None, ocr=None, metrics=None
     )
+
+
+def test_factory_applies_the_forkserver_preload() -> None:
+    """kind=isolated hands ``preload_modules`` to the forkserver preload.
+
+    Why this test is important:
+      - The service's own main module must reach the preload, or every parse child
+        re-imports the service (seconds per child).
+    What it tests:
+      - ``parser_from_config`` calls ``configure_forkserver_preload`` once with the
+        configured modules.
+    """
+    config = ParserConfig(preload_modules=("myservice.__main__",))
+    with patch(
+        "techai_webutils.clients.parsing.isolated.configure_forkserver_preload"
+    ) as configure:
+        _ = parser_from_config(config)
+    configure.assert_called_once_with(("myservice.__main__",))
 
 
 def test_factory_rejects_unknown_kind() -> None:

@@ -363,7 +363,9 @@ class LayoutParser(IsolatedParser):
     """
 
     _context = SPAWN_CONTEXT
-    """Docling runs in a spawned child (see the module docs)."""
+    """Docling runs in a spawned child (see the module docs). A spawned child re-imports
+    the parent's main module and gains nothing from the forkserver preload, so each
+    layout parse pays that import."""
 
     def __init__(self, options: LayoutParserOptions) -> None:
         """Bound each parse like ``IsolatedParser``.
