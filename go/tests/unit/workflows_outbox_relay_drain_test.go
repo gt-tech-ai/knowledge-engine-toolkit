@@ -46,7 +46,7 @@ func expectSent(
 }
 
 // drainMetrics returns a metrics mock whose counters and gauges accept anything, and
-// the outbox_relay_passes histogram it hands out.
+// the outbox_relay_passes histogram it hands out; delivery times are accepted unchecked.
 func drainMetrics(ctrl *gomock.Controller) (*mocks.MockMetrics, *mocks.MockHistogram) {
 	metrics := mocks.NewMockMetrics(ctrl)
 	counter := mocks.NewMockCounter(ctrl)
@@ -64,6 +64,7 @@ func drainMetrics(ctrl *gomock.Controller) (*mocks.MockMetrics, *mocks.MockHisto
 	metrics.EXPECT().
 		Histogram("outbox_relay_passes", gomock.Any(), gomock.Any(), textLane).
 		Return(passes)
+	expectAnyDelivery(ctrl, metrics)
 
 	return metrics, passes
 }

@@ -592,7 +592,9 @@ attempt (`outbox_{sent,retried,parked}_total`, `outbox_depth`, `outbox_lag_secon
 by lane). With `ParkOnPermanent` a permanent failure parks the row at once; a run cancelled mid-send
 leaves its unfinished rows leased for the next claim. With a `DrainBudget` (default 0: one claim per
 run) a run claims again while claims come back full, until the budget elapses, the context ends or a
-pass fails, and `outbox_relay_passes` records the claims per run by lane. A lane splits into
+pass fails, and `outbox_relay_passes` records the claims per run by lane. `outbox_delivery_seconds`
+records each sent row's time from `CreatedAt` to delivery, by lane: the lag gauge is sampled after a
+run drains the lane, so only this histogram shows the poll wait a row paid. A lane splits into
 `Partitions` (default 1): the postgres store's optional `PartitionColumn` holds
 `core/types.OutboxPartition(key, partitions)` = `fnv32a(key) mod partitions`, written at insert
 and never recomputed, and a relay with `Partition` p claims only partition p, so one relay per

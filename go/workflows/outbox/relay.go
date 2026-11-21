@@ -4,7 +4,8 @@
 // retried with capped exponential backoff and full jitter, or parked once its
 // attempts are exhausted. With a drain budget a run keeps claiming while claims
 // come back full, so a burst drains in one run instead of one batch per tick. It
-// reports per-lane outcome counters, passes per run, and the lane's depth and lag.
+// reports per-lane outcome counters, passes per run, the lane's depth and lag, and
+// each sent record's write-to-delivery time.
 // The repository and sink are injected (and decorated) by the caller: build the
 // repository with repos/outbox.New over the store.
 //
@@ -195,6 +196,10 @@ type Relay struct {
 	depth, lag interfaces.Gauge
 	// passes records how many claims each run made, by lane (nil = metrics off).
 	passes interfaces.Histogram
+	// delivery records each sent record's write-to-delivery time, by lane (nil =
+	// metrics off). Unlike lag, which is sampled after a run drains the lane, it
+	// shows the poll wait every record paid.
+	delivery interfaces.Histogram
 	// now is the clock.
 	now func() time.Time
 	// jitter randomizes a capped backoff.
@@ -236,12 +241,13 @@ func NewRelay(
 		tx:  base,
 		cfg: *cfg, store: store, sink: sink, logger: logger, tracer: tracer,
 		now: time.Now, jitter: retry.FullJitter,
-		sent:    nil,
-		retried: nil,
-		parked:  nil,
-		depth:   nil,
-		lag:     nil,
-		passes:  nil,
+		sent:     nil,
+		retried:  nil,
+		parked:   nil,
+		depth:    nil,
+		lag:      nil,
+		passes:   nil,
+		delivery: nil,
 	}
 	if metrics != nil {
 		relay.registerMetrics(metrics)
@@ -309,6 +315,13 @@ func (r *Relay) registerMetrics(metrics interfaces.Metrics) {
 		"Claims one relay run made before its lane drained or its drain budget ran out.",
 		// One claim (no backlog, or no drain budget) up to a long drain.
 		[]float64{1, 2, 4, 8, 16, 32, 64, 128},
+		textLane,
+	)
+	r.delivery = metrics.Histogram(
+		"outbox_delivery_seconds",
+		"Time from an outbox record's write to its delivery, in seconds.",
+		// Sub-second wake-ups up to a stalled relay.
+		[]float64{0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300},
 		textLane,
 	)
 }
@@ -490,7 +503,21 @@ func (r *Relay) finalize(
 		outcome.Inc(r.cfg.Lane)
 	}
 
+	if sendErr == nil {
+		r.observeDelivery(rec)
+	}
+
 	return nil
+}
+
+// observeDelivery records how long a sent record waited from its write to its
+// delivery. A clock skewed behind CreatedAt observes 0, never a negative time.
+func (r *Relay) observeDelivery(rec *types.OutboxRecord) {
+	if r.delivery == nil {
+		return
+	}
+
+	r.delivery.Observe(max(r.now().Sub(rec.CreatedAt).Seconds(), 0), r.cfg.Lane)
 }
 
 // record writes one row's outcome and returns the counter it is counted on (nil with

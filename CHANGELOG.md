@@ -26,6 +26,9 @@ All notable changes to this project are recorded here. The format follows
   `parser_from_config(..., metrics=)` records it as the `parse_child_start_seconds`
   histogram, labelled by `operation`. `LayoutParser` keeps `spawn` (Docling is not
   fork-safe); its docstring now says its children always pay the main-module import.
+- Go outbox relay: the `outbox_delivery_seconds{lane}` histogram records each sent
+  record's time from its write (`CreatedAt`) to its delivery. `outbox_lag_seconds` is
+  sampled after a run drains the lane, so it read about 0 and never showed the poll wait.
 
 ## [0.0.76] - 2026-11-21
 
