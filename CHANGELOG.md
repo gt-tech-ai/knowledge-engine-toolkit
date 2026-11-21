@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.0.76] - 2026-11-21
+
+### Fixed
+
+- Python Bedrock sink: a `kb_units` write no longer deletes the document's other
+  versions. It deletes only stale files inside its own version directory, so the
+  superseded version's units stay until the caller's reconciler has deleted their
+  Knowledge Base entries (which outlive the files) and then removes them. Deleting them
+  at once left the reconciler nothing to find, and the old version's text stayed in the
+  Knowledge Base and kept being cited. `chunk_files` writes are unchanged: they still keep
+  only what they write. `techai-webutils` 0.20.7.
+
 ## [0.0.75] - 2026-11-20
 
 ### Fixed
