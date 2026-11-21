@@ -78,7 +78,9 @@ type Waker struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
 	dsn       string
-	channel   string
+	// listenSQL is the LISTEN statement for the validated channel, built once in New.
+	// LISTEN takes no bound parameter, so the channel is quoted as an identifier there.
+	listenSQL string
 	mu        sync.Mutex
 	started   bool
 }
@@ -121,7 +123,7 @@ func New(
 		cancel:    nil,
 		done:      make(chan struct{}),
 		dsn:       dsn,
-		channel:   cfg.Channel,
+		listenSQL: listenStatement(cfg.Channel),
 		mu:        sync.Mutex{},
 		started:   false,
 	}
@@ -210,6 +212,13 @@ func (w *Waker) Close() error {
 	return nil
 }
 
+// listenStatement returns the LISTEN statement for channel, which New has already
+// checked with validChannel; the identifier is quoted as well, so it can only name a
+// channel.
+func listenStatement(channel string) string {
+	return "LISTEN " + pgx.Identifier{channel}.Sanitize()
+}
+
 // connect dials a dedicated connection and LISTENs on the channel.
 func (w *Waker) connect(ctx context.Context) (*pgx.Conn, error) {
 	conn, err := pgx.Connect(ctx, w.dsn)
@@ -221,7 +230,7 @@ func (w *Waker) connect(ctx context.Context) (*pgx.Conn, error) {
 		)
 	}
 
-	_, err = conn.Exec(ctx, "LISTEN "+pgx.Identifier{w.channel}.Sanitize())
+	_, err = conn.Exec(ctx, w.listenSQL)
 	if err != nil {
 		_ = conn.Close(context.WithoutCancel(ctx))
 

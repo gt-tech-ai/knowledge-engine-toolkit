@@ -208,6 +208,12 @@ def test_link_aware_is_ratio_plus_sampled_links(
       - For random trace ids, rates in [0, 1] and link sets with random sampled flags, a
         root span is sampled by ``link_aware`` exactly when the ratio sampler samples it
         or any link is sampled.
+
+    Args:
+        trace_id: The trace id of the root span, as an integer.
+        rate: The ratio sampler's rate.
+        sampled_flags: One entry per link: whether the linked span context is sampled.
+
     """
     links = tuple(
         _link(TraceFlags.SAMPLED if sampled else TraceFlags.DEFAULT)
