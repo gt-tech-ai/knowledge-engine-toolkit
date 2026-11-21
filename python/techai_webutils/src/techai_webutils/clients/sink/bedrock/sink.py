@@ -79,8 +79,13 @@ class BedrockSink(NoOpAsyncResource, Sink):
     ) -> None:
         """Write the document's missing files and sidecars.
 
-        A ``kb_units`` write then writes the version's manifest (always, so a rerun
-        rewrites it). Other versions are deleted last.
+        A ``chunk_files`` write then deletes every other file of the document, so a
+        changed document keeps only its new text. A ``kb_units`` write writes the
+        version's manifest (always, so a rerun rewrites it) and deletes only the stale
+        files of its own version directory: the other versions stay, because their
+        knowledge-base entries outlive the files. The caller's reconciler lists them as
+        superseded, deletes their entries, and only then deletes their files (``delete``
+        removes every version when the document goes).
 
         Args:
             document: The document the chunks belong to.
@@ -89,12 +94,12 @@ class BedrockSink(NoOpAsyncResource, Sink):
                 store vectors.
 
         Raises:
-            AppValueError: No chunks were passed (a write keeps only what it writes, so
-                it would delete the previous version and leave the document with no
-                text), vectors were passed (Bedrock embeds by itself), the org or
-                document id cannot be a key segment, or a ``kb_units`` chunk is over
-                ``max_unit_bytes`` (``INVALID_INPUT``). Each is raised before any
-                storage call.
+            AppValueError: No chunks were passed (a ``chunk_files`` write keeps only
+                what it writes, so it would delete the previous version and leave the
+                document with no text), vectors were passed (Bedrock embeds by
+                itself), the org or document id cannot be a key segment, or a
+                ``kb_units`` chunk is over ``max_unit_bytes`` (``INVALID_INPUT``).
+                Each is raised before any storage call.
 
         """
         if vectors is not None:
@@ -117,21 +122,21 @@ class BedrockSink(NoOpAsyncResource, Sink):
             if key not in existing
         )
         keep = files.keys()
+        stale = existing
         if self._config.layout == BedrockLayout.KB_UNITS:
-            manifest_key = (
-                unit_prefix(
-                    self._config.prefix,
-                    document.org_id,
-                    document.document_id,
-                    document.content_hash,
-                )
-                + MANIFEST_NAME
+            version = unit_prefix(
+                self._config.prefix,
+                document.org_id,
+                document.document_id,
+                document.content_hash,
             )
+            manifest_key = version + MANIFEST_NAME
             body = manifest(document.content_hash, len(chunks))
             await self._upload(manifest_key, body, _JSON)
             keep = {*keep, manifest_key}
+            stale = {key for key in existing if key.startswith(version)}
         await self._each(
-            self._storage.delete(self._config.bucket, key) for key in existing - keep
+            self._storage.delete(self._config.bucket, key) for key in stale - keep
         )
 
     @override

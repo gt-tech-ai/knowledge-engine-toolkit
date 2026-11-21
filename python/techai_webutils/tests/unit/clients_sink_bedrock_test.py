@@ -381,8 +381,10 @@ async def test_kb_units_write_the_manifest_last_and_keep_it_on_a_rerun() -> None
     **What it tests:**
       - the last upload is ``{version}/manifest.json`` holding the content hash and the
         unit count
-      - a rerun with the manifest already stored writes it again and never deletes it,
-        while an old version's manifest is deleted
+      - a rerun with the manifest already stored writes it again and never deletes it;
+        a stale file inside the version's own directory is deleted, while an older
+        version's files are kept (their knowledge-base entries still exist, and the
+        caller's reconciler finds them by those files to delete the entries)
       - ``unit_prefix`` names the version directory the units and manifest live in
     """
     storage = _storage()
@@ -400,7 +402,9 @@ async def test_kb_units_write_the_manifest_last_and_keep_it_on_a_rerun() -> None
     }
 
     old_manifest = f"{_PREFIX}{'a' * 16}/manifest.json"
-    rerun = _storage([*_uploads(storage), old_manifest])
+    old_unit = f"{_PREFIX}{'a' * 16}/0.txt"
+    stale_unit = f"{version}9.txt"
+    rerun = _storage([*_uploads(storage), old_manifest, old_unit, stale_unit])
     await _sink(rerun, BedrockLayout.KB_UNITS).write(_DOC, _CHUNKS, None)
 
     assert list(_uploads(rerun)) == [f"{version}manifest.json"]
@@ -408,7 +412,7 @@ async def test_kb_units_write_the_manifest_last_and_keep_it_on_a_rerun() -> None
         cast("tuple[object, ...]", c.args)[1]
         for c in cast("list[object]", cast("AsyncMock", rerun.delete).await_args_list)
     ]
-    assert deleted == [old_manifest]
+    assert deleted == [stale_unit]
 
 
 @pytest.mark.asyncio
