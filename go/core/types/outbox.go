@@ -57,6 +57,17 @@ type OutboxRecord struct {
 	ID uuid.UUID
 }
 
+// OutboxWake is one hint that outbox rows were committed. It names the partition to
+// drain, or every partition when the source cannot say (the payload had no partition, or
+// notifications may have been missed while the waker was disconnected).
+type OutboxWake struct {
+	// Partition is the relay partition holding new rows; meaningful only when All is
+	// false.
+	Partition int
+	// All asks the relay to drain every partition it owns.
+	All bool
+}
+
 // OutboxStats is a point-in-time summary of one lane.
 type OutboxStats struct {
 	// OldestPending is the CreatedAt of the oldest undelivered, unparked row (zero when

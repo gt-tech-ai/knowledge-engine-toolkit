@@ -214,3 +214,7 @@ class TelemetrySettings(BaseSettings):
     trace_sample_rate: str = Field(default="", validation_alias="TRACE_SAMPLE_RATE")
     """Fraction of traces sampled, 0.0-1.0 (TRACE_SAMPLE_RATE); empty or invalid
     samples every trace."""
+    trace_sampler: str = Field(default="ratio", validation_alias="TRACE_SAMPLER")
+    """Sampler kind (TRACE_SAMPLER): ``ratio`` samples roots by the rate,
+    ``link_aware`` also samples a root linked to a sampled span; anything else fails the
+    boot."""

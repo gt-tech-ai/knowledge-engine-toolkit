@@ -22,6 +22,14 @@
 // are rewritten, so a reduction needs a migration; Stats counts them (Stranded) so a
 // relay host can refuse to start over them.
 //
+// With Config.NotifyChannel, Enqueue also runs pg_notify on that channel inside the
+// enqueuing transaction, with the lane (or "<lane>:<partition>" when the table is
+// partitioned) as the payload. PostgreSQL delivers a notification on commit only, so a
+// listener (clients/outboxwake) wakes exactly when the row becomes claimable and never
+// for a rollback. The notification is a latency hint, not a delivery channel: a lost one
+// is covered by the relay's poll, and a product's own INSERT that skips Enqueue simply
+// does not wake anyone.
+//
 // Every write (Claim, the finalizers, DeleteSentBefore) runs on the *sql.Tx a
 // transaction manager (stores/sqltx) bound to the context, and fails INTERNAL without
 // touching the database when none is bound, so a write never autocommits outside the
@@ -70,6 +78,15 @@ type Config struct {
 	// table has none and every row is in partition 0.
 	PartitionColumn string `yaml:"partition_column" mapstructure:"partition_column"`
 
+	// NotifyChannel is the PostgreSQL channel Enqueue notifies after it inserts a row,
+	// so a relay holding a LISTEN on it wakes on commit instead of at its next poll.
+	// The notification is queued in the enqueuing transaction, so a listener receives
+	// it only once the row is committed and never for a rollback. Its payload is the
+	// record's lane, or "<lane>:<partition>" when the table has a partition column.
+	// Empty sends no notification (polling only). Rows a product inserts with its own
+	// INSERT notify only if that statement does.
+	NotifyChannel string `yaml:"notify_channel" mapstructure:"notify_channel"`
+
 	// Partitions is how many partitions a lane is split into; zero means 1. More than
 	// one needs PartitionColumn.
 	Partitions int `yaml:"partitions" mapstructure:"partitions"`
@@ -84,8 +101,8 @@ type Config struct {
 	MaxErrorLen int `yaml:"max_error_len" mapstructure:"max_error_len"`
 }
 
-// Validate rejects a non-identifier table or column and a non-positive lease with
-// CodeInvalidInput.
+// Validate rejects a non-identifier table, column or notify channel and a non-positive
+// lease with CodeInvalidInput.
 func (c *Config) Validate() error {
 	err := c.validateIdentifiers()
 	if err != nil {
@@ -112,7 +129,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// validateIdentifiers requires every configured table and column name to be plain.
+// validateIdentifiers requires every configured table, column and notify channel name
+// to be plain.
 func (c *Config) validateIdentifiers() error {
 	names := []string{c.Table, c.keyColumn()}
 	if c.TenantColumn != "" {
@@ -125,6 +143,10 @@ func (c *Config) validateIdentifiers() error {
 
 	for _, col := range c.AttributeColumns {
 		names = append(names, col)
+	}
+
+	if c.NotifyChannel != "" {
+		names = append(names, c.NotifyChannel)
 	}
 
 	for _, n := range names {
@@ -181,17 +203,20 @@ func (c *Config) keyColumn() string {
 
 // Store is the OutboxStore over one PostgreSQL outbox table.
 type Store struct {
-	db          *sql.DB
-	claimSQL    string
-	statsSQL    string
-	sentSQL     string
-	retrySQL    string
-	parkSQL     string
-	purgeSQL    string
-	enqueueSQL  string
-	attrKeys    []string
-	maxErrorLen int
-	lease       time.Duration
+	db         *sql.DB
+	claimSQL   string
+	statsSQL   string
+	sentSQL    string
+	retrySQL   string
+	parkSQL    string
+	purgeSQL   string
+	enqueueSQL string
+
+	// notifyChannel is the channel Enqueue notifies; empty sends none.
+	notifyChannel string
+	attrKeys      []string
+	maxErrorLen   int
+	lease         time.Duration
 
 	// partitions is how many partitions a lane is split into (1 without a column).
 	partitions int
@@ -220,6 +245,7 @@ func New(value *sql.DB, cfg *Config) (*Store, error) {
 		db: value, lease: cfg.Lease, maxErrorLen: cfg.MaxErrorLen,
 		tenantColumn: cfg.TenantColumn != "", partitions: cfg.partitions(),
 		partitionColumn: cfg.PartitionColumn != "",
+		notifyChannel:   cfg.NotifyChannel,
 		claimSQL:        "",
 		statsSQL:        "",
 		sentSQL:         "",
@@ -323,9 +349,15 @@ ON CONFLICT (id) DO NOTHING`,
 		cfg.Table, strings.Join(cols, ", "), strings.Join(vals, ", "))
 }
 
+// notifySQL queues a notification on the transaction it runs in; PostgreSQL delivers
+// it to the channel's listeners when that transaction commits, and drops it on rollback.
+const notifySQL = "SELECT pg_notify($1, $2)"
+
 // Enqueue writes rec as a pending row due now on the transaction bound to ctx; see
 // interfaces.OutboxWriter. An empty Key, Tenant or attribute is NULL; with a partition
-// column the row's partition is types.OutboxPartition(rec.Key, partitions).
+// column the row's partition is types.OutboxPartition(rec.Key, partitions). With a
+// NotifyChannel it then notifies that channel on the same transaction, so listeners
+// wake once the row is committed.
 // rec must not be nil.
 func (s *Store) Enqueue(ctx context.Context, rec *types.OutboxRecord) error {
 	value, err := writeTx(ctx, "enqueue")
@@ -349,8 +381,9 @@ func (s *Store) Enqueue(ctx context.Context, rec *types.OutboxRecord) error {
 		args = append(args, nullable(rec.Tenant))
 	}
 
+	partition := types.OutboxPartition(rec.Key, s.partitions)
 	if s.partitionColumn {
-		args = append(args, types.OutboxPartition(rec.Key, s.partitions))
+		args = append(args, partition)
 	}
 
 	for _, key := range s.attrKeys {
@@ -362,7 +395,7 @@ func (s *Store) Enqueue(ctx context.Context, rec *types.OutboxRecord) error {
 		return apperr.Wrap(err, apperr.CodeUnavailable, "outbox postgres store: enqueue")
 	}
 
-	return nil
+	return s.notify(ctx, value, rec.Lane, partition)
 }
 
 // nullable binds v, or NULL when it is empty.
@@ -501,6 +534,31 @@ func (s *Store) DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, er
 	}
 
 	return int(count), nil
+}
+
+// notify queues the wake-up for a row just enqueued on value: the lane, plus the
+// partition when the table has a partition column. A no-op without a NotifyChannel.
+func (s *Store) notify(
+	ctx context.Context,
+	value *sql.Tx,
+	lane string,
+	partition int,
+) error {
+	if s.notifyChannel == "" {
+		return nil
+	}
+
+	payload := lane
+	if s.partitionColumn {
+		payload = fmt.Sprintf("%s:%d", lane, partition)
+	}
+
+	_, err := value.ExecContext(ctx, notifySQL, s.notifyChannel, payload)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeUnavailable, "outbox postgres store: notify")
+	}
+
+	return nil
 }
 
 // collectClaimed reads every claimed row into a record.

@@ -52,6 +52,10 @@ type Config struct {
 	// Endpoint is the OTLP gRPC collector address in host:port format.
 	Endpoint string
 
+	// Sampler selects the sampling rule: SamplerRatio (the default when empty) or
+	// SamplerLinkAware. An unknown kind fails New with CodeInvalidInput.
+	Sampler string
+
 	// SampleRate controls the fraction of traces sampled (0.0 to 1.0; 1.0 = always).
 	SampleRate float64
 
@@ -163,6 +167,11 @@ func setup(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
 		return nil, apperr.Wrap(err, apperr.CodeInternal, "create resource")
 	}
 
+	sampler, err := NewSampler(cfg.Sampler, cfg.SampleRate)
+	if err != nil {
+		return nil, err
+	}
+
 	tracerProvider := sdktrace.NewTracerProvider(
 		// A span queue larger than the SDK default (2048) so a burst on a freshly-started
 		// pod — a cold exporter catching up while its connection re-establishes — buffers
@@ -170,7 +179,7 @@ func setup(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
 		// memory.
 		sdktrace.WithBatcher(exporter, sdktrace.WithMaxQueueSize(batchQueueSize)),
 		sdktrace.WithResource(res),
-		sdktrace.WithSampler(newSampler(cfg.SampleRate)),
+		sdktrace.WithSampler(sampler),
 	)
 
 	otel.SetTracerProvider(tracerProvider)
@@ -218,23 +227,6 @@ func exporterOptions(cfg Config) []otlptracegrpc.Option {
 	}
 
 	return opts
-}
-
-// newSampler picks the sampler for the configured rate.
-func newSampler(rate float64) sdktrace.Sampler {
-	switch {
-	case rate >= alwaysSampleRate:
-		return sdktrace.AlwaysSample()
-	case rate <= 0:
-		return sdktrace.NeverSample()
-	default:
-		// ParentBased so an incoming sampled parent (a W3C traceparent with sampled=1,
-		// extracted by the TraceContext propagator) forces the span sampled — the lever
-		// an end-to-end telemetry check relies on to guarantee its one request's trace
-		// reaches the backend without raising the ratio for normal traffic. A ROOT span
-		// with no parent still follows the ratio.
-		return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(rate))
-	}
 }
 
 // toOTelSpanKind maps a foundation SpanKind to its OTel equivalent, defaulting

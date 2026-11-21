@@ -515,6 +515,19 @@ previous root (Go `ConversationStartOptions`; Python `foundation/tracer/conversa
 `extract_conversation`, `stamp_conversation`, `conversation_links`). A missing or malformed id or
 index yields an unthreaded trace; a malformed `traceparent` drops only the link.
 
+### Trace sampling
+
+`tracing.sampler` (Go `foundation/tracer/oteltracer.NewSampler`; Python
+`foundation/tracer/sampler.build_sampler`, setting `TRACE_SAMPLER`) selects the rule; an empty
+value is `ratio`, an unknown one fails the tracer build (`CodeInvalidInput` / `InvalidInputError`).
+`ratio` samples a root span by `sample_rate` and a child by its parent. `link_aware` does the same
+and also samples a root span that holds a link to a sampled span, so a batch span that links to
+the traces it carries (one round for many documents) is never dropped while a trace pointing at
+it is kept; a child still follows its parent. The sampler reads links at span start, so a caller
+passes them when it starts the span (Go `trace.WithLinks`, Python `links=`); a link added later
+is invisible to it. The same rule keeps a conversation turn (see Conversation threading) when
+the turn it links to is sampled, as the link is set at the turn's root span start.
+
 ## Query core (listquery)
 
 List endpoints and charts share one query core in `foundation/listquery`. A `listquery.Schema`
@@ -608,6 +621,24 @@ a non-empty `Key` also rides every message as the `partition_key` attribute); th
 one object per row by key template with a SHA-256 checksum (Object Lock) and optional SSE-KMS.
 `go/tests/fixtures/outboxtest` is the store and routing conformance suites (`Run`, `RunRouting`),
 run against the `postgres` store kind.
+
+A relay can wake on commit instead of waiting out its poll interval. The postgres store's
+optional `NotifyChannel` makes `Enqueue` run `pg_notify(channel, payload)` inside the
+enqueuing transaction; PostgreSQL delivers it on commit only, so a rollback wakes nobody and
+a wake never precedes the row's visibility. The payload is the lane, or `<lane>:<partition>`
+for a partitioned table. `core/interfaces.OutboxWaker` (`Wakes()` yields a
+`core/types.OutboxWake{Partition, All}`; `Start`; `Close`) is the listening side, built by
+`clients/outboxwake` (`KindNone` default — a stub that never fires, so a relay runs on its poll
+alone; `KindPgNotify`). The `pg_notify` kind holds one dedicated connection outside any pool,
+`LISTEN`s on the channel, and sends each wake without blocking into a buffered channel (full:
+the wake is dropped and counted, since the poll still claims the row). A payload with a missing
+or unparsable partition wakes every partition. On a lost connection it reconnects with
+exponential backoff and full jitter (100 ms to 30 s) and emits one wake-all after each
+reconnect, because notifications sent while it was away are gone. `outbox_wake_total{source}`
+counts `notify`, `reconnect` and `dropped` wakes and `outbox_wake_connected` is 1 while the
+listener holds its connection. A wake is only a hint: delivery stays at least once and the
+poll stays the safety net. No backend closes the `Wakes()` channel, so a relay's `select` never
+spins on a closed one.
 
 `core/interfaces.MetricsQuerier` evaluates PromQL: `Query` returns one instant sample and
 `QueryRange` one series of `core/types.MetricSample`. It is built by `clients/prometheus`

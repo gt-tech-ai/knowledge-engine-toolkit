@@ -39,6 +39,8 @@ class TracerConfig:
     """OTLP collector gRPC endpoint spans are exported to."""
     insecure: bool = True
     """Whether the OTLP gRPC connection skips TLS (true for local dev)."""
+    sampler: str = "ratio"
+    """Sampler kind: ``ratio`` (default) or ``link_aware`` (see ``build_sampler``)."""
 
 
 def default_config(service_name: str) -> TracerConfig:
@@ -74,6 +76,7 @@ def new_tracer_from_config(config: TracerConfig) -> TracerProvider:
             service_name=config.service_name,
             otlp_endpoint=config.otlp_endpoint,
             insecure=config.insecure,
+            sampler=config.sampler,
         )
 
     if config.kind == TracerKind.NULL:

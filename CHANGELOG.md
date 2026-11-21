@@ -4,7 +4,23 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
-## [Unreleased]
+## [0.0.78] - 2026-11-21
+
+### Added
+
+- Trace sampler kinds: `tracing.sampler` (Go; Python `TelemetrySettings.trace_sampler`, env
+  `TRACE_SAMPLER`) is `ratio` (the default, unchanged) or `link_aware`, which also samples a
+  root span holding a link to a sampled span, so a batch span is never dropped while a trace it
+  links to is kept. Go `oteltracer.NewSampler`, `tracer.WithSampler`; Python
+  `foundation/tracer.build_sampler`, `LinkAwareSampler`, `TracerConfig.sampler`. An unknown
+  kind fails the build. `setup_observability` (the v1 keyword bootstrap) stays `ratio`; use
+  `start_observability` for another kind. `techai-webutils` 0.20.9.
+- Outbox wake on commit: the postgres outbox store's `NotifyChannel` makes `Enqueue` run
+  `pg_notify` inside the enqueuing transaction (payload `<lane>` or `<lane>:<partition>`),
+  so the notification is delivered on commit only. New `core/interfaces.OutboxWaker` and
+  `core/types.OutboxWake`, and `clients/outboxwake` (`none` stub default, `pg_notify`): a
+  dedicated `LISTEN` connection with non-blocking sends, a wake-all after every reconnect
+  (backoff with full jitter), and `outbox_wake_total{source}` / `outbox_wake_connected`.
 
 ## [0.0.77] - 2026-11-21
 
@@ -3168,7 +3184,6 @@ Python: `techai-webutils` 0.5.2.
   decorator stacks, the execution fan-out engine, and the test fixtures and generated mocks.
   `ARCHITECTURE.md` describes each layer.
 
-[Unreleased]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.72...HEAD
 [0.0.72]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.71...v0.0.72
 [0.0.71]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.70...v0.0.71
 [0.0.70]: https://github.com/gt-tech-ai/knowledge-engine-toolkit/compare/v0.0.69...v0.0.70

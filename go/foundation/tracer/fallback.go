@@ -23,6 +23,7 @@ func NewFromTracing(
 
 	cfg.Endpoint = tracingConfig.Endpoint
 	cfg.SampleRate = tracingConfig.SampleRate
+	cfg.Sampler = tracingConfig.Sampler
 
 	if !tracingConfig.Enabled {
 		cfg.Kind = KindNoop

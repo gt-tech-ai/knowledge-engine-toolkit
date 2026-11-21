@@ -1239,6 +1239,7 @@ func TestOTelTracer_NewAndShutdown(t *testing.T) {
 	cfg := oteltracer.Config{
 		ServiceName: "test-service-shutdown",
 		Endpoint:    textLocalhost4317,
+		Sampler:     "",
 		SampleRate:  sampleRate,
 		Insecure:    true,
 	}
@@ -1276,6 +1277,7 @@ func TestOTelTracer_SpanConversions(t *testing.T) {
 	currentTracer, err := oteltracer.New(ctx, oteltracer.Config{
 		ServiceName: "test-service-spans",
 		Endpoint:    textLocalhost4317,
+		Sampler:     "",
 		SampleRate:  1.0,
 		Insecure:    true,
 	})
@@ -1371,7 +1373,7 @@ func TestOTelTracer_EndUnsampledSpan(t *testing.T) {
 	ctx := context.Background()
 	currentTracer, err := oteltracer.New(ctx, oteltracer.Config{
 		ServiceName: "test-service-end", Endpoint: textLocalhost4317, Insecure: true,
-		SampleRate: 0,
+		SampleRate: 0, Sampler: "",
 	})
 	require.NoError(t, err, textOteltracerNew)
 	t.Cleanup(func() { _ = currentTracer.Shutdown(ctx) })
@@ -1404,6 +1406,7 @@ func TestOTelTracer_SampleRates(t *testing.T) {
 		cfg := oteltracer.Config{
 			ServiceName: "sample-test",
 			Endpoint:    textLocalhost4317,
+			Sampler:     "",
 			SampleRate:  rate,
 			Insecure:    true,
 		}
@@ -1433,6 +1436,7 @@ func TestOTelTracer_SecureMode(t *testing.T) {
 	cfg := oteltracer.Config{
 		ServiceName: "secure-test",
 		Endpoint:    textLocalhost4317,
+		Sampler:     "",
 		SampleRate:  sampleRate,
 		Insecure:    false,
 	}
@@ -1513,6 +1517,7 @@ func TestOTelTracer_ShutdownNilFn(t *testing.T) {
 	cfg := oteltracer.Config{
 		ServiceName: "nil-shutdown-test",
 		Endpoint:    textLocalhost4317,
+		Sampler:     "",
 		SampleRate:  sampleRate,
 		Insecure:    true,
 	}

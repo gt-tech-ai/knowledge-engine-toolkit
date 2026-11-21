@@ -418,6 +418,13 @@ linters:
         linters:
           - gocritic
         text: 'hugeParam: \w+ is heavy \(288 bytes\)'
+      # The OpenTelemetry sdktrace.Sampler interface fixes ShouldSample's
+      # SamplingParameters (104 bytes) by value, and gocritic has no interface
+      # awareness.
+      - path: ^go/foundation/tracer/oteltracer/sampler\.go$
+        linters:
+          - gocritic
+        text: 'hugeParam: params is heavy \(104 bytes\)'
       # A struct tag is a single string literal that Go cannot wrap, so a field whose
       # tag pushes it past the column limit has no compliant spelling.
       - linters:

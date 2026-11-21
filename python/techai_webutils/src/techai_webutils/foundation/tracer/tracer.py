@@ -17,10 +17,10 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider as SDKTracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.trace import StatusCode
 
 from techai_webutils.core.interfaces.tracer import SpanKind, TracerProvider, TracerSpan
+from techai_webutils.foundation.tracer.sampler import build_sampler
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -126,6 +126,7 @@ def _setup_provider(
     *,
     insecure: bool,
     sample_rate: float = 1.0,
+    sampler: str = "ratio",
 ) -> SDKTracerProvider:
     """Create and register an OTel TracerProvider with OTLP export.
 
@@ -135,6 +136,8 @@ def _setup_provider(
         insecure: Whether to use insecure gRPC connection.
         sample_rate: Fraction of root traces to sample (0.0-1.0); 1.0 keeps every
             trace. Set below 1.0 (via TRACE_SAMPLE_RATE) to cut export volume.
+        sampler: The sampler kind, ``ratio`` or ``link_aware`` (via TRACE_SAMPLER);
+            see ``build_sampler``.
 
     Returns:
         The configured SDK TracerProvider.
@@ -146,8 +149,9 @@ def _setup_provider(
     # the SDK samples 100% of spans, so the Python services exported ~10x what the
     # Go services do (which sample at TRACE_SAMPLE_RATE) and overran the OTLP export
     # deadline (StatusCode.DEADLINE_EXCEEDED against the collector).
-    sampler = ParentBased(root=TraceIdRatioBased(sample_rate))
-    provider = SDKTracerProvider(resource=resource, sampler=sampler)
+    provider = SDKTracerProvider(
+        resource=resource, sampler=build_sampler(sampler, sample_rate)
+    )
     exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=insecure)
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
@@ -160,6 +164,7 @@ def new_tracer(
     *,
     insecure: bool = True,
     sample_rate: float = 1.0,
+    sampler: str = "ratio",
 ) -> TracerProvider:
     """Create a TracerProvider backed by OpenTelemetry.
 
@@ -171,13 +176,18 @@ def new_tracer(
         otlp_endpoint: OTLP collector gRPC endpoint.
         insecure: Whether to use insecure gRPC connection.
         sample_rate: Fraction of root traces to sample (0.0-1.0).
+        sampler: The sampler kind, ``ratio`` or ``link_aware``; see ``build_sampler``.
 
     Returns:
         An interfaces.TracerProvider implementation.
 
     """
     provider = _setup_provider(
-        service_name, otlp_endpoint, insecure=insecure, sample_rate=sample_rate
+        service_name,
+        otlp_endpoint,
+        insecure=insecure,
+        sample_rate=sample_rate,
+        sampler=sampler,
     )
     return OTelTracerProvider(trace.get_tracer(service_name), provider)
 
@@ -188,6 +198,7 @@ def configure_tracer(
     *,
     insecure: bool = True,
     sample_rate: float = 1.0,
+    sampler: str = "ratio",
 ) -> trace.Tracer:
     """Configure OpenTelemetry tracing with OTLP gRPC export.
 
@@ -196,12 +207,17 @@ def configure_tracer(
         otlp_endpoint: OTLP collector gRPC endpoint.
         insecure: Whether to use insecure gRPC connection.
         sample_rate: Fraction of root traces to sample (0.0-1.0).
+        sampler: The sampler kind, ``ratio`` or ``link_aware``; see ``build_sampler``.
 
     Returns:
         A configured Tracer instance.
 
     """
     _ = _setup_provider(
-        service_name, otlp_endpoint, insecure=insecure, sample_rate=sample_rate
+        service_name,
+        otlp_endpoint,
+        insecure=insecure,
+        sample_rate=sample_rate,
+        sampler=sampler,
     )
     return trace.get_tracer(service_name)

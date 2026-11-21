@@ -15,6 +15,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from techai_webutils.foundation.logger.logger import configure_logging
+from techai_webutils.foundation.tracer.sampler import SAMPLER_RATIO
 from techai_webutils.foundation.tracer.tracer import configure_tracer
 
 if TYPE_CHECKING:
@@ -60,8 +61,8 @@ def setup_observability(
     The OTLP endpoint and trace sample rate are INJECTED by the caller (the
     composition-root entrypoint reads OTEL_EXPORTER_OTLP_ENDPOINT / TRACE_SAMPLE_RATE from
     the environment once and passes them down) — this foundation function does not read
-    the environment itself (ARCHITECTURE.md#configuration). For log schema v2, use
-    ``start_observability``.
+    the environment itself (ARCHITECTURE.md#configuration). It always uses the ``ratio``
+    sampler; for log schema v2 or another sampler kind, use ``start_observability``.
 
     Args:
         service_name: Service name used for trace resource attribution + logs.
@@ -75,16 +76,19 @@ def setup_observability(
 
     """
     _ = configure_logging(level=level, redact_pii=redact_pii)
-    _start_tracing(service_name, otlp_endpoint, trace_sample_rate)
+    _start_tracing(service_name, otlp_endpoint, trace_sample_rate, SAMPLER_RATIO)
 
 
-def _start_tracing(service_name: str, otlp_endpoint: str, sample_rate: float) -> None:
+def _start_tracing(
+    service_name: str, otlp_endpoint: str, sample_rate: float, sampler: str
+) -> None:
     """Install the global tracer provider exporting to the OTLP collector.
 
     Args:
         service_name: Service name used for trace resource attribution.
         otlp_endpoint: OTLP collector endpoint (host:port or URL).
         sample_rate: Span sampling fraction 0.0-1.0.
+        sampler: Sampler kind, ``ratio`` or ``link_aware``.
 
     """
     endpoint = otlp_endpoint
@@ -95,7 +99,11 @@ def _start_tracing(service_name: str, otlp_endpoint: str, sample_rate: float) ->
     # configure_tracer installs the global tracer provider; spans created by the
     # HTTP/gRPC middleware are exported to the OTLP collector and correlated into logs.
     _ = configure_tracer(
-        service_name, otlp_endpoint=endpoint, insecure=True, sample_rate=sample_rate
+        service_name,
+        otlp_endpoint=endpoint,
+        insecure=True,
+        sample_rate=sample_rate,
+        sampler=sampler,
     )
 
 
@@ -112,8 +120,8 @@ def start_observability(
     Args:
         service: The service name the logs and spans carry.
         level: The log level, in any case (``logging_level``).
-        telemetry: The OTLP endpoint and the raw trace sample rate (parsed with
-            ``parse_sample_rate``).
+        telemetry: The OTLP endpoint, the raw trace sample rate (parsed with
+            ``parse_sample_rate``) and the sampler kind.
         redact_pii: Redact PII in every log line (pass the ``logging_redact_pii``
             setting).
         schema: The log schema (build it from the ``logging_schema`` setting); None is
@@ -127,4 +135,5 @@ def start_observability(
         service,
         telemetry.otel_exporter_otlp_endpoint,
         parse_sample_rate(telemetry.trace_sample_rate),
+        telemetry.trace_sampler,
     )

@@ -307,7 +307,7 @@ def test_settings_subclass_owns_its_env_prefix(monkeypatch: pytest.MonkeyPatch) 
 def test_telemetry_settings_read_the_standard_otel_variables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test that a prefixed settings class reads the OTLP endpoint and rate.
+    """Test that a prefixed settings class reads the OTLP endpoint, rate and sampler.
 
     It reads them by their OTel names.
 
@@ -315,10 +315,13 @@ def test_telemetry_settings_read_the_standard_otel_variables(
       - Every deployment sets the standard ``OTEL_EXPORTER_OTLP_ENDPOINT`` and
         ``TRACE_SAMPLE_RATE``; read under the consumer's prefix instead, traces would go
         to the localhost default and be lost.
+      - ``TRACE_SAMPLER`` selects the sampler kind the same way; unread, a deployment
+        that asks for ``link_aware`` would silently keep the ratio sampler.
 
     **What it tests:**
       - a ``MYAPP_``-prefixed class mixing in ``TelemetrySettings`` defaults to
-        ``localhost:4317`` and no rate, then takes both unprefixed variables
+        ``localhost:4317``, no rate and the ``ratio`` sampler, then takes all three
+        unprefixed variables
       - mixing it in keeps the class's own prefix for its other fields
 
     Args:
@@ -331,11 +334,12 @@ def test_telemetry_settings_read_the_standard_otel_variables(
             env_prefix="MYAPP_", frozen=True, extra="ignore"
         )
 
-    for name in ("OTEL_EXPORTER_OTLP_ENDPOINT", "TRACE_SAMPLE_RATE"):
+    for name in ("OTEL_EXPORTER_OTLP_ENDPOINT", "TRACE_SAMPLE_RATE", "TRACE_SAMPLER"):
         monkeypatch.delenv(name, raising=False)
     defaults = _Probe()
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "collector:4317")
     monkeypatch.setenv("TRACE_SAMPLE_RATE", "0.25")
+    monkeypatch.setenv("TRACE_SAMPLER", "link_aware")
     monkeypatch.setenv("MYAPP_LOGGING_LEVEL", "debug")
     probe = _Probe()
 
@@ -347,4 +351,5 @@ def test_telemetry_settings_read_the_standard_otel_variables(
         "collector:4317",
         "0.25",
     )
+    assert (defaults.trace_sampler, probe.trace_sampler) == ("ratio", "link_aware")
     assert probe.logging_level == "debug"
