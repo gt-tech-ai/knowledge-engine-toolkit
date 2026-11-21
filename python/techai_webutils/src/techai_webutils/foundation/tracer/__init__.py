@@ -1,7 +1,8 @@
 """Tracer implementations and builder.
 
 Provides OTelTracerProvider, NullTracerProvider, a builder factory for config-driven
-tracer selection, and ``inject`` / ``continued`` to carry a trace across a message broker.
+tracer selection, the ``ratio`` and ``link_aware`` samplers, and ``inject`` /
+``continued`` to carry a trace across a message broker.
 """
 
 from techai_webutils.foundation.tracer.builder import (
@@ -18,6 +19,7 @@ from techai_webutils.foundation.tracer.conversation import (
 )
 from techai_webutils.foundation.tracer.null_tracer import NullTracerProvider
 from techai_webutils.foundation.tracer.propagate import continued, inject
+from techai_webutils.foundation.tracer.sampler import LinkAwareSampler, build_sampler
 from techai_webutils.foundation.tracer.tracer import (
     OTelTracerProvider,
     configure_tracer,
@@ -26,10 +28,12 @@ from techai_webutils.foundation.tracer.tracer import (
 
 __all__ = [
     "ConversationContext",
+    "LinkAwareSampler",
     "NullTracerProvider",
     "OTelTracerProvider",
     "TracerConfig",
     "TracerKind",
+    "build_sampler",
     "configure_tracer",
     "continued",
     "conversation_links",

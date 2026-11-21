@@ -515,6 +515,19 @@ previous root (Go `ConversationStartOptions`; Python `foundation/tracer/conversa
 `extract_conversation`, `stamp_conversation`, `conversation_links`). A missing or malformed id or
 index yields an unthreaded trace; a malformed `traceparent` drops only the link.
 
+### Trace sampling
+
+`tracing.sampler` (Go `foundation/tracer/oteltracer.NewSampler`; Python
+`foundation/tracer/sampler.build_sampler`, setting `TRACE_SAMPLER`) selects the rule; an empty
+value is `ratio`, an unknown one fails the tracer build (`CodeInvalidInput` / `InvalidInputError`).
+`ratio` samples a root span by `sample_rate` and a child by its parent. `link_aware` does the same
+and also samples a root span that holds a link to a sampled span, so a batch span that links to
+the traces it carries (one round for many documents) is never dropped while a trace pointing at
+it is kept; a child still follows its parent. The sampler reads links at span start, so a caller
+passes them when it starts the span (Go `trace.WithLinks`, Python `links=`); a link added later
+is invisible to it. The same rule keeps a conversation turn (see Conversation threading) when
+the turn it links to is sampled, as the link is set at the turn's root span start.
+
 ## Query core (listquery)
 
 List endpoints and charts share one query core in `foundation/listquery`. A `listquery.Schema`

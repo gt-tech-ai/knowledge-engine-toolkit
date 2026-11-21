@@ -434,11 +434,11 @@ class TestHTTPRequestLogging:
 
 
 def test_start_observability_passes_the_telemetry_settings_through() -> None:
-    """Test that the bootstrap gets the endpoint and the parsed sample rate from settings.
+    """Test that the bootstrap gets the endpoint, rate and sampler from settings.
 
     **Why this test is important:**
-      - The endpoint and rate are deployment config; an entrypoint that read them from the
-        environment itself would bypass the config layer.
+      - The endpoint, rate and sampler kind are deployment config; an entrypoint that
+        read them from the environment itself would bypass the config layer.
       - A v2 schema built from settings carries no service; the bootstrap must stamp
         the service name, or every v2 line would lose its ``service`` field.
 
@@ -446,11 +446,12 @@ def test_start_observability_passes_the_telemetry_settings_through() -> None:
       - Logging is configured with the upper-cased level, the redaction flag and the
         schema with the service name filled in.
       - The tracer gets the service name, the endpoint with its URL scheme stripped,
-        and the rate parsed to a float.
+        the rate parsed to a float and the sampler kind from ``TRACE_SAMPLER``.
     """
     telemetry = TelemetrySettings.model_validate({
         "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4317",
         "TRACE_SAMPLE_RATE": "0.5",
+        "TRACE_SAMPLER": "link_aware",
     })
     with (
         patch.object(observability, "configure_logging") as logging_setup,
@@ -470,7 +471,11 @@ def test_start_observability_passes_the_telemetry_settings_through() -> None:
         schema=LogSchema(name="v2", service="probe", env="staging"),
     )
     tracer_setup.assert_called_once_with(
-        "probe", otlp_endpoint="collector:4317", insecure=True, sample_rate=0.5
+        "probe",
+        otlp_endpoint="collector:4317",
+        insecure=True,
+        sample_rate=0.5,
+        sampler="link_aware",
     )
 
 
@@ -485,7 +490,7 @@ def test_setup_observability_configures_v1_logging_and_the_tracer() -> None:
       - Logging is configured with the level and redaction flag as given and no schema
         (v1).
       - The tracer gets the service name, the endpoint with its URL scheme stripped,
-        and the sample rate.
+        the sample rate, and the ``ratio`` sampler (the v1 bootstrap takes no kind).
     """
     with (
         patch.object(observability, "configure_logging") as logging_setup,
@@ -501,5 +506,9 @@ def test_setup_observability_configures_v1_logging_and_the_tracer() -> None:
 
     logging_setup.assert_called_once_with(level="WARNING", redact_pii=True)
     tracer_setup.assert_called_once_with(
-        "probe", otlp_endpoint="collector:4317", insecure=True, sample_rate=0.25
+        "probe",
+        otlp_endpoint="collector:4317",
+        insecure=True,
+        sample_rate=0.25,
+        sampler="ratio",
     )

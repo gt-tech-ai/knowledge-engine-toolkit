@@ -1,6 +1,9 @@
 package tracer
 
-import "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
+import (
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/options"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/tracer/oteltracer"
+)
 
 // Config is the superset configuration for all tracer kinds.
 type Config struct {
@@ -10,6 +13,11 @@ type Config struct {
 	// Endpoint is the OTLP gRPC collector address in host:port format.
 	// Only used when Kind is KindOTel.
 	Endpoint string
+
+	// Sampler selects the sampling rule: "ratio" (the default when empty) or
+	// "link_aware", which also samples a root span holding a link to a sampled span.
+	// Only used when Kind is KindOTel.
+	Sampler string
 
 	// Kind specifies which tracer implementation to use.
 	Kind Kind
@@ -29,6 +37,7 @@ func DefaultConfig(serviceName string) Config {
 		Kind:        KindOTel,
 		ServiceName: serviceName,
 		Endpoint:    "localhost:4317",
+		Sampler:     oteltracer.SamplerRatio,
 		SampleRate:  fullSampleRate,
 		Insecure:    true,
 	}
@@ -52,6 +61,13 @@ func WithServiceName(name string) options.Option[Config] {
 func WithEndpoint(endpoint string) options.Option[Config] {
 	return func(c *Config) {
 		c.Endpoint = endpoint
+	}
+}
+
+// WithSampler sets the sampling rule: "ratio" or "link_aware".
+func WithSampler(kind string) options.Option[Config] {
+	return func(c *Config) {
+		c.Sampler = kind
 	}
 }
 

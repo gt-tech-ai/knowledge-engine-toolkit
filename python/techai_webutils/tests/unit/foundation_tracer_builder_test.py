@@ -50,6 +50,27 @@ class TestTracerBuilder:
         assert isinstance(tracer, OTelTracerProvider)
 
     @staticmethod
+    def test_sampler_kind_reaches_the_provider() -> None:
+        """Test that ``TracerConfig.sampler`` reaches the provider setup.
+
+        **Why this test is important:**
+          - The sampler kind is config; a builder that dropped it would leave every
+            service on the ratio sampler however the deployment is set.
+
+        **What it tests:**
+          - ``new_tracer_from_config`` hands ``_setup_provider`` the configured kind.
+        """
+        config = TracerConfig(
+            kind=TracerKind.OTEL, service_name="test-svc", sampler="link_aware"
+        )
+        with (
+            patch("techai_webutils.foundation.tracer.tracer._setup_provider") as setup,
+            patch("opentelemetry.trace.get_tracer"),
+        ):
+            _ = new_tracer_from_config(config)
+        assert setup.call_args.kwargs["sampler"] == "link_aware"
+
+    @staticmethod
     def test_new_tracer_null() -> None:
         """Test that TracerKind.NULL creates a NullTracerProvider.
 

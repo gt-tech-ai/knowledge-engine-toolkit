@@ -11,6 +11,12 @@ type TracingConfig struct {
 	// Endpoint is the OTLP collector address (e.g. "localhost:4317").
 	Endpoint string `mapstructure:"endpoint" envalias:"OTEL_EXPORTER_OTLP_ENDPOINT"`
 
+	// Sampler selects the sampling rule: "ratio" samples a root span by SampleRate;
+	// "link_aware" also samples a root span that holds a link to a sampled span, so a
+	// batch span is never dropped while a trace it links to is kept. An unknown kind
+	// fails the tracer build.
+	Sampler string `mapstructure:"sampler"`
+
 	// SampleRate is the fraction of traces to sample (0.0-1.0; 0.1 = 10%).
 	SampleRate float64 `mapstructure:"sample_rate"`
 
@@ -42,6 +48,7 @@ func DefaultObservabilityConfig() ObservabilityConfig {
 		Tracing: TracingConfig{
 			Enabled:    true,
 			Endpoint:   "localhost:4317",
+			Sampler:    "ratio",
 			SampleRate: defaultObservabilityConfigSampleRate,
 		},
 		Metrics: MetricsConfig{

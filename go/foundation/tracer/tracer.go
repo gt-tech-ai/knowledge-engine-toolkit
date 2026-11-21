@@ -160,6 +160,7 @@ func NewFromConfig(ctx context.Context, cfg Config) (interfaces.Tracer, error) {
 		otelCfg := oteltracer.Config{
 			ServiceName: cfg.ServiceName,
 			Endpoint:    normalizeEndpoint(cfg.Endpoint),
+			Sampler:     cfg.Sampler,
 			SampleRate:  cfg.SampleRate,
 			Insecure:    cfg.Insecure,
 		}
