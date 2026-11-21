@@ -6,6 +6,15 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Outbox wake on commit: the postgres outbox store's `NotifyChannel` makes `Enqueue` run
+  `pg_notify` inside the enqueuing transaction (payload `<lane>` or `<lane>:<partition>`),
+  so the notification is delivered on commit only. New `core/interfaces.OutboxWaker` and
+  `core/types.OutboxWake`, and `clients/outboxwake` (`none` stub default, `pg_notify`): a
+  dedicated `LISTEN` connection with non-blocking sends, a wake-all after every reconnect
+  (backoff with full jitter), and `outbox_wake_total{source}` / `outbox_wake_connected`.
+
 ## [0.0.77] - 2026-11-21
 
 ### Fixed

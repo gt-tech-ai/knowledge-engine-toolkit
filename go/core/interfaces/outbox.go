@@ -49,6 +49,25 @@ type OutboxStore interface {
 	DeleteSentBefore(ctx context.Context, cutoff time.Time) (int, error)
 }
 
+// OutboxWaker tells an outbox relay that rows were committed, so it drains at once
+// instead of at its next poll. A wake is a hint, never a source of truth: it can be lost
+// or arrive for rows another relay already took, so a relay keeps polling and only
+// shortens its sleep on a wake.
+type OutboxWaker interface {
+	// Wakes returns the channel the waker delivers wakes on. It is the same channel on
+	// every call, and the waker never blocks sending to it: a wake that finds the
+	// buffer full is dropped. The channel is never closed, not even by Close: a closed
+	// channel is always ready, so a relay selecting on it would spin.
+	Wakes() <-chan types.OutboxWake
+	// Start connects the waker to its source and returns once it is listening, or the
+	// error that kept it from doing so. After Start the waker keeps itself connected,
+	// reconnecting as needed, until ctx ends or Close is called. Start does not block.
+	Start(ctx context.Context) error
+	// Close stops the waker and releases its connection; it is safe to call more than
+	// once, and without Start.
+	Close() error
+}
+
 // OutboxRepository is the OutboxStore run through the repository tier, the seam the
 // outbox relay programs to. Build it with repos/outbox.New: Claim, which leases
 // rows and counts an attempt, is never retried; the idempotent finalizers, Stats and

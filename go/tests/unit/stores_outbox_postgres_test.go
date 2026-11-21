@@ -23,17 +23,19 @@ import (
 //     identifier would be an injection point, and a zero lease re-claims rows at once.
 //
 // What it tests:
-//   - A quoted or punctuated table, key, tenant or attribute column, a non-positive
-//     lease, and a negative error cap are CodeInvalidInput; a plain config is valid.
+//   - A quoted or punctuated table, key, tenant or attribute column, a punctuated notify
+//     channel, a non-positive lease, and a negative error cap are CodeInvalidInput; a
+//     plain config, with or without a notify channel, is valid.
 func TestPgstoreConfig_RejectsUnsafeNamesAndLeases(t *testing.T) {
 	t.Parallel()
 
-	ok := fixtures.Build(func(row *outboxpg.Config) {
+	valid := fixtures.Build(func(row *outboxpg.Config) {
 		row.Table = "aiops_outbox"
 		row.TenantColumn = textTenant
 		row.Lease = time.Minute
+		row.NotifyChannel = "outbox_wake"
 	})
-	require.NoError(t, ok.Validate())
+	require.NoError(t, valid.Validate())
 
 	bad := []outboxpg.Config{
 		fixtures.Build(func(row *outboxpg.Config) {
@@ -54,6 +56,11 @@ func TestPgstoreConfig_RejectsUnsafeNamesAndLeases(t *testing.T) {
 			row.Table = textT
 			row.AttributeColumns = map[string]string{textA: "1a"}
 			row.Lease = time.Minute
+		}),
+		fixtures.Build(func(row *outboxpg.Config) {
+			row.Table = textT
+			row.Lease = time.Minute
+			row.NotifyChannel = "wake; DROP TABLE y"
 		}),
 		fixtures.Build(func(row *outboxpg.Config) {
 			row.Table = textT

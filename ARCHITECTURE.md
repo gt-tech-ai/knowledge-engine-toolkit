@@ -609,6 +609,24 @@ one object per row by key template with a SHA-256 checksum (Object Lock) and opt
 `go/tests/fixtures/outboxtest` is the store and routing conformance suites (`Run`, `RunRouting`),
 run against the `postgres` store kind.
 
+A relay can wake on commit instead of waiting out its poll interval. The postgres store's
+optional `NotifyChannel` makes `Enqueue` run `pg_notify(channel, payload)` inside the
+enqueuing transaction; PostgreSQL delivers it on commit only, so a rollback wakes nobody and
+a wake never precedes the row's visibility. The payload is the lane, or `<lane>:<partition>`
+for a partitioned table. `core/interfaces.OutboxWaker` (`Wakes()` yields a
+`core/types.OutboxWake{Partition, All}`; `Start`; `Close`) is the listening side, built by
+`clients/outboxwake` (`KindNone` default — a stub that never fires, so a relay runs on its poll
+alone; `KindPgNotify`). The `pg_notify` kind holds one dedicated connection outside any pool,
+`LISTEN`s on the channel, and sends each wake without blocking into a buffered channel (full:
+the wake is dropped and counted, since the poll still claims the row). A payload with a missing
+or unparsable partition wakes every partition. On a lost connection it reconnects with
+exponential backoff and full jitter (100 ms to 30 s) and emits one wake-all after each
+reconnect, because notifications sent while it was away are gone. `outbox_wake_total{source}`
+counts `notify`, `reconnect` and `dropped` wakes and `outbox_wake_connected` is 1 while the
+listener holds its connection. A wake is only a hint: delivery stays at least once and the
+poll stays the safety net. No backend closes the `Wakes()` channel, so a relay's `select` never
+spins on a closed one.
+
 `core/interfaces.MetricsQuerier` evaluates PromQL: `Query` returns one instant sample and
 `QueryRange` one series of `core/types.MetricSample`. It is built by `clients/prometheus`
 (`KindStub` default, which answers 0 and an empty series; `KindHTTP`, the Prometheus HTTP API

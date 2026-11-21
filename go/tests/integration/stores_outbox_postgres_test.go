@@ -36,7 +36,8 @@ CREATE TABLE product_outbox (
 	next_attempt_at timestamptz NOT NULL DEFAULT now(),
 	last_error      text        NOT NULL DEFAULT '',
 	created_at      timestamptz NOT NULL DEFAULT now(),
-	sent_at         timestamptz
+	sent_at         timestamptz,
+	partition       integer     NOT NULL DEFAULT 0
 )`
 
 // newPgstore starts Postgres, creates the product table and returns the store over it
@@ -44,12 +45,25 @@ CREATE TABLE product_outbox (
 func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 	t.Helper()
 
-	ctx := context.Background()
-	pg, err := postgres.NewTestDatabase(ctx)
-	require.NoError(t, err, "start postgres")
-	t.Cleanup(func() { pg.Close(context.Background()) })
+	store, db, _ := newPgstoreWith(t, func(*outboxpg.Config) {})
 
-	value, err := pg.OpenDB()
+	return store, db
+}
+
+// newPgstoreWith is newPgstore with tune applied to the store's config last; it also
+// returns the database's DSN, for a test that opens its own connection (LISTEN).
+func newPgstoreWith(
+	t *testing.T,
+	tune func(*outboxpg.Config),
+) (*outboxpg.Store, *sql.DB, string) {
+	t.Helper()
+
+	ctx := context.Background()
+	container, err := postgres.NewTestDatabase(ctx)
+	require.NoError(t, err, "start postgres")
+	t.Cleanup(func() { container.Close(context.Background()) })
+
+	value, err := container.OpenDB()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = value.Close() })
 
@@ -62,10 +76,11 @@ func newPgstore(t *testing.T) (*outboxpg.Store, *sql.DB) {
 		row.AttributeColumns = map[string]string{textEventType: textEventType}
 		row.Lease = time.Minute
 		row.MaxErrorLen = 16
+		tune(row)
 	}))
 	require.NoError(t, err)
 
-	return store, value
+	return store, value, container.GetDSN()
 }
 
 // pgstoreEnqueue enqueues rec through the store's own producer side, in a transaction
