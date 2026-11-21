@@ -6,14 +6,15 @@ per-child ``RLIMIT_AS`` caps address space (best-effort — enforced on Linux, a
 platforms that reject it, e.g. macOS dev). ``IsolatedParser.parse`` maps a breach to a
 failed ``ParsedDocument`` rather than raising, so the job fails one document alone.
 
-The child is forked from a **forkserver** that preloads the heavy parser libraries
-(``markitdown`` + ``pymupdf``) where the platform supports it, so each parse pays a cheap
-fork instead of a full interpreter spawn + a per-parse re-import of the markitdown/pymupdf
-dependency tree. The forkserver is a SEPARATE process that holds those imports, so the
-async parent stays lazy-import-clean. Every parse still gets its OWN fresh, killable,
+The child is forked from a **forkserver** that preloads the heavy parser libraries where
+the platform supports it (``context.py``: the preload, the service's own main module, and
+the warm-up), so each parse pays a cheap fork instead of a full interpreter spawn and a
+re-import. The forkserver is a SEPARATE process that holds those imports, so the async
+parent stays lazy-import-clean. Every parse still gets its OWN fresh, killable,
 memory-capped child — the forkserver only changes how cheaply that child is created, not
 the isolation contract. Platforms without forkserver (e.g. Windows) fall back to
-``spawn``.
+``spawn``. With ``metrics`` injected, ``parse_child_start_seconds`` records how long each
+child took from ``start()`` to its first line of work, per operation.
 
 The child writes the parsed document to a scratch file (JSON) and puts nothing on the
 result queue, so a large document's text is not pickled through the pipe on top of the
@@ -29,7 +30,6 @@ import asyncio
 import contextlib
 import functools
 import json
-import multiprocessing as mp
 import os
 import resource
 import tempfile
@@ -39,6 +39,7 @@ from pathlib import Path
 from queue import Empty
 from typing import TYPE_CHECKING, ClassVar, cast
 
+from techai_webutils.clients.parsing.isolated.context import ISOLATED_CONTEXT
 from techai_webutils.clients.parsing.isolated.detect import detect_format, read_head
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
 from techai_webutils.core.domain import (
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
     from multiprocessing.queues import Queue
 
     from techai_webutils.clients.parsing.isolated.ocr import PageOcr
+    from techai_webutils.core.interfaces.metrics import MetricHistogram, MetricsProvider
 
 logger = get_logger(__name__)
 
@@ -85,48 +87,14 @@ _POLL_INTERVAL_SECONDS = 0.05
 """How often (seconds) the parent re-checks the result queue and child liveness while
 waiting."""
 
-# Heavy parser libraries the forkserver preloads so a forked parse child inherits them (no
-# per-parse re-import). They must be importable in the forkserver — both are hard
-# ingestion deps.
-_FORKSERVER_PRELOAD = ["markitdown", "pymupdf"]
-"""Heavy parser libs the forkserver preloads so a forked parse child inherits them (no
-re-import)."""
+# _CHILD_START_BUCKETS spans a warm fork (milliseconds) to a child that re-imports a
+# service graph (seconds).
+_CHILD_START_BUCKETS = [0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 20.0]
+"""Buckets (seconds) of ``parse_child_start_seconds``: a warm fork to a cold re-import."""
 
-
-def _isolated_context() -> SpawnContext | ForkServerContext:
-    """Return the mp context for isolated parses.
-
-    Forkserver (preloaded) where available, else spawn.
-
-    forkserver forks each parse child from a server process that has already imported the
-    heavy parser libs, so a parse pays a cheap fork instead of a full interpreter spawn +
-    markitdown/pymupdf re-import, while every parse still gets its own killable,
-    memory-capped child. spawn is the fallback where forkserver is unsupported (e.g.
-    Windows); it re-imports per child as before.
-
-    Returns:
-        The mp context for isolated parses: forkserver (preloaded) where available.
-
-    """
-    if "forkserver" in mp.get_all_start_methods():
-        ctx = mp.get_context("forkserver")
-        # Sets a config only; the forkserver process (separate from this parent) does the
-        # actual import when it starts lazily on the first parse — so the async parent
-        # stays import-clean.
-        ctx.set_forkserver_preload(_FORKSERVER_PRELOAD)
-        return ctx
-    return mp.get_context("spawn")
-
-
-# Built once at import: the forkserver itself is started lazily on the first Process, so
-# this is cheap.
-_MP_CONTEXT = _isolated_context()
-"""The multiprocessing context for isolated parses (forkserver where available, else
-spawn)."""
-
-SPAWN_CONTEXT = mp.get_context("spawn")
-"""A fresh-interpreter context, for parsers whose native libraries are not fork-safe
-(Docling)."""
+type _Result = tuple[str, object, float]
+"""A child's ``(status, payload, started_at)``: ``ok``/``oom``/``err``, the return value
+or error text, and the wall-clock time the child's entry began."""
 
 
 class IsolationError(Exception):
@@ -176,7 +144,7 @@ def _worker[T](
     fn: Callable[..., T],
     args: tuple[object, ...],
     memory_bytes: int,
-    result_queue: Queue[tuple[str, object]],
+    result_queue: Queue[_Result],
 ) -> None:
     """Subprocess entry: apply the memory cap, run fn, and return its result or error.
 
@@ -184,23 +152,24 @@ def _worker[T](
         fn: The function to run.
         args: Its arguments.
         memory_bytes: The address-space cap; 0 leaves it unset.
-        result_queue: Where the ``(status, payload)`` result goes.
+        result_queue: Where the ``(status, payload, started_at)`` result goes.
 
     """
+    started_at = time.time()
     if memory_bytes > 0:
         _apply_memory_limit(memory_bytes)
     try:
-        result_queue.put(("ok", fn(*args)))
+        result_queue.put(("ok", fn(*args), started_at))
     # Over the address-space cap: report it without allocating a traceback.
     except MemoryError:
-        result_queue.put(("oom", ""))
+        result_queue.put(("oom", "", started_at))
     # Return the failure to the parent instead of crashing silently.
     except Exception as exc:
         # Carry the full traceback (not just repr) so an IsolationError in the parent is
         # diagnosable — the child's stack is otherwise invisible (mirrors fan_out's
         # detail).
         logger.exception("worker failed")
-        result_queue.put(("err", f"{exc!r}\n{traceback.format_exc()}"))
+        result_queue.put(("err", f"{exc!r}\n{traceback.format_exc()}", started_at))
 
 
 def _kill(proc: BaseProcess) -> None:
@@ -225,8 +194,9 @@ def run_isolated[T](
     timeout_seconds: float,
     memory_bytes: int = 0,
     context: SpawnContext | ForkServerContext | None = None,
+    on_start: Callable[[float], None] | None = None,
 ) -> T:
-    """Run ``fn(*args)`` in a spawned subprocess.
+    """Run ``fn(*args)`` in an isolated subprocess.
 
     It is killed if it exceeds ``timeout_seconds``.
 
@@ -240,7 +210,11 @@ def run_isolated[T](
         *args: Its picklable arguments.
         timeout_seconds: How long the child may run.
         memory_bytes: The child's address-space cap; 0 leaves it unset.
-        context: The multiprocessing context; ``None`` uses spawn.
+        context: The multiprocessing context; ``None`` uses ``ISOLATED_CONTEXT`` (the
+            preloaded forkserver, else spawn).
+        on_start: Called in the parent with the child's start time in seconds (from
+            ``start()`` to the child's entry), once its result arrives; ``None`` skips
+            it.
 
     Returns:
         What ``fn`` returns.
@@ -250,9 +224,10 @@ def run_isolated[T](
         IsolationMemoryError: Isolated task ran out of memory.
 
     """
-    ctx = context or _MP_CONTEXT
-    result_queue: Queue[tuple[str, object]] = ctx.Queue()
+    ctx = context or ISOLATED_CONTEXT
+    result_queue: Queue[_Result] = ctx.Queue()
     proc = ctx.Process(target=_worker, args=(fn, args, memory_bytes, result_queue))
+    launched_at = time.time()
     proc.start()
 
     # Drain the result queue BEFORE join()ing. A child that put() a result does not exit
@@ -267,7 +242,11 @@ def run_isolated[T](
     proc.join(_TERMINATE_GRACE_SECONDS)
     if proc.is_alive():  # result delivered but the child is lingering — reap it
         _kill(proc)
-    status, payload = result
+    status, payload, started_at = result
+    start_seconds = max(0.0, started_at - launched_at)
+    logger.debug("isolated child started", start_seconds=round(start_seconds, 3))
+    if on_start is not None:
+        on_start(start_seconds)
     if status == "oom":
         msg = "isolated task ran out of memory"
         raise IsolationMemoryError(msg)
@@ -278,10 +257,12 @@ def run_isolated[T](
 
 def _await_result(
     proc: BaseProcess,
-    result_queue: Queue[tuple[str, object]],
+    result_queue: Queue[_Result],
     timeout_seconds: float,
-) -> tuple[str, object]:
-    """Poll for the worker's ``(status, payload)`` result, killing it on overrun.
+) -> _Result:
+    """Poll for the worker's ``(status, payload, started_at)`` result.
+
+    It kills the child on overrun.
 
     Raises ``TimeoutError`` if the child is still running at the deadline (after killing
     it), or ``IsolationError`` if the child exits without ever producing a result.
@@ -292,7 +273,7 @@ def _await_result(
         timeout_seconds: How long to wait.
 
     Returns:
-        The status and the payload.
+        The status, the payload and the child's entry time.
 
     Raises:
         TimeoutError: Isolated task exceeded ``timeout_seconds``s.
@@ -475,10 +456,22 @@ def _parse_to_scratch(
     _write_scratch(parse(*args), scratch_path)
 
 
+def _observe_start(histogram: MetricHistogram, operation: str, seconds: float) -> None:
+    """Record one child's start time under ``operation``.
+
+    Args:
+        histogram: ``parse_child_start_seconds``.
+        operation: The parse entry's name.
+        seconds: The child's start time.
+
+    """
+    histogram.observe(seconds, operation=operation)
+
+
 class IsolatedParser:
     """Async facade that parses each document in a memory/time-bounded subprocess."""
 
-    _context: ClassVar[SpawnContext | ForkServerContext] = _MP_CONTEXT
+    _context: ClassVar[SpawnContext | ForkServerContext] = ISOLATED_CONTEXT
     """How each parse child starts (a subclass may need ``SPAWN_CONTEXT``)."""
 
     def __init__(
@@ -488,8 +481,9 @@ class IsolatedParser:
         timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
         executor: Executor | None = None,
         ocr: PageOcr | None = None,
+        metrics: MetricsProvider | None = None,
     ) -> None:
-        """Configure the per-parse memory cap, the timeout, the executor and OCR.
+        """Configure the per-parse memory cap, the timeout, the executor, OCR, metrics.
 
         The parent waits on the executor.
 
@@ -504,12 +498,24 @@ class IsolatedParser:
                 default.
             ocr: Reads the pages a PDF parse leaves without text (scans) through a vision
                 model; ``None`` (the default) leaves them blank, as before.
+            metrics: Records ``parse_child_start_seconds`` (labelled by ``operation``)
+                for every child; ``None`` records nothing.
 
         """
         self._memory_bytes: int = memory_bytes
         self._timeout_seconds: float = timeout_seconds
         self._executor: Executor | None = executor
         self._ocr: PageOcr | None = ocr
+        self._child_start: MetricHistogram | None = (
+            None
+            if metrics is None
+            else metrics.histogram(
+                "parse_child_start_seconds",
+                "Seconds from starting an isolated parse child to its first line of work",
+                labels=["operation"],
+                buckets=_CHILD_START_BUCKETS,
+            )
+        )
 
     @property
     def executor(self) -> Executor | None:
@@ -557,10 +563,32 @@ class IsolatedParser:
                 timeout_seconds=self._timeout_seconds,
                 memory_bytes=self._memory_bytes,
                 context=self._context,
+                on_start=self._start_observer(parse),
             )
             return _read_scratch(scratch)
         finally:
             Path(scratch).unlink(missing_ok=True)
+
+    def _start_observer(
+        self, parse: Callable[..., ParsedDocument]
+    ) -> Callable[[float], None] | None:
+        """Return what records a child's start time for ``parse``, or ``None``.
+
+        The operation label is the parse entry's name without its leading underscore.
+
+        Args:
+            parse: The parse entry the child runs.
+
+        Returns:
+            A callback observing ``parse_child_start_seconds``, or ``None`` with no
+            metrics injected.
+
+        """
+        histogram = self._child_start
+        if histogram is None:
+            return None
+        operation = getattr(parse, "__name__", "parse").removeprefix("_")
+        return functools.partial(_observe_start, histogram, operation)
 
     async def _isolated(
         self, parse: Callable[..., ParsedDocument], *args: object

@@ -6,6 +6,8 @@ import time
 from collections.abc import Callable
 from multiprocessing.context import ForkServerContext, SpawnContext
 from pathlib import Path
+from typing import cast
+from unittest.mock import MagicMock
 
 import pymupdf
 import pytest
@@ -18,6 +20,7 @@ from techai_webutils.clients.parsing.isolated.isolated import (
 )
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
 from techai_webutils.core.domain import DocumentFormat
+from techai_webutils.core.interfaces.metrics import MetricHistogram, MetricsProvider
 
 _EXPECTED_RUN_ISOLATED = 42
 _EXPECTED_MONOTONIC = 10.0
@@ -115,6 +118,24 @@ class TestRunIsolated:
           - run_isolated(_double, 21) returns 42.
         """
         assert run_isolated(_double, 21, timeout_seconds=30) == _EXPECTED_RUN_ISOLATED
+
+    @staticmethod
+    def test_reports_child_start_time() -> None:
+        """Test that ``on_start`` receives the child's start time once.
+
+        **Why this test is important:**
+          - Child start was the hidden ~7 s per parse in a service whose main module the
+            child re-imported; the callback is how a parser reports it as a metric.
+
+        **What it tests:**
+          - One run calls ``on_start`` exactly once with a non-negative number of seconds,
+            and the result still round-trips.
+        """
+        starts: list[float] = []
+        result = run_isolated(_double, 21, timeout_seconds=30, on_start=starts.append)
+        assert result == _EXPECTED_RUN_ISOLATED
+        assert len(starts) == 1
+        assert starts[0] >= 0.0
 
     @staticmethod
     def test_timeout_kills_worker_and_raises() -> None:
@@ -288,6 +309,34 @@ class TestIsolatedParser:
         )
         assert result.ok
         assert result.document_format is DocumentFormat.HTML
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_records_child_start_per_operation() -> None:
+        """Test that an injected metrics provider records each child's start time.
+
+        **Why this test is important:**
+          - Without the histogram, child start hides inside the parse span and nobody can
+            tell a slow parse from a slow interpreter start.
+
+        **What it tests:**
+          - The parser registers ``parse_child_start_seconds`` labelled by ``operation``
+            and observes it once for an HTML parse, under ``operation=parse_document``.
+        """
+        histogram = MagicMock(spec=MetricHistogram)
+        metrics = MagicMock(spec=MetricsProvider)
+        register = cast("MagicMock", metrics.histogram)
+        register.return_value = histogram
+        result = await IsolatedParser(timeout_seconds=60, metrics=metrics).parse(
+            b"<html><h1>Hi</h1></html>", filename="p.html"
+        )
+        assert result.ok
+        assert register.call_args.args[0] == "parse_child_start_seconds"
+        assert register.call_args.kwargs["labels"] == ["operation"]
+        observe = cast("MagicMock", histogram.observe)
+        assert observe.call_count == 1
+        assert observe.call_args.kwargs == {"operation": "parse_document"}
+        assert observe.call_args.args[0] >= 0.0
         assert "# Hi" in result.markdown_content
 
     @staticmethod
@@ -484,6 +533,7 @@ class TestScratchHandBack:
             timeout_seconds: float,
             memory_bytes: int = 0,
             context: SpawnContext | ForkServerContext | None = None,
+            on_start: Callable[[float], None] | None = None,
         ) -> object:
             value = real_run_isolated(
                 fn,
@@ -491,6 +541,7 @@ class TestScratchHandBack:
                 timeout_seconds=timeout_seconds,
                 memory_bytes=memory_bytes,
                 context=context,
+                on_start=on_start,
             )
             queued.append(value)
             return value

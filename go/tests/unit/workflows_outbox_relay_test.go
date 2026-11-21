@@ -34,6 +34,33 @@ func relayNow() time.Time {
 	)
 }
 
+// deliveryAge is how long before the run a delivered test record was written.
+const deliveryAge = 12 * time.Second
+
+// expectDelivery registers the outbox_delivery_seconds histogram on metrics and
+// expects exactly one observation of age, for the audit lane.
+func expectDelivery(
+	ctrl *gomock.Controller,
+	metrics *mocks.MockMetrics,
+	age time.Duration,
+) {
+	delivery := mocks.NewMockHistogram(ctrl)
+	delivery.EXPECT().Observe(age.Seconds(), textAudit).Times(1)
+	metrics.EXPECT().
+		Histogram("outbox_delivery_seconds", gomock.Any(), gomock.Any(), textLane).
+		Return(delivery)
+}
+
+// expectAnyDelivery registers the outbox_delivery_seconds histogram on metrics,
+// accepting any observation, for tests that do not assert delivery times.
+func expectAnyDelivery(ctrl *gomock.Controller, metrics *mocks.MockMetrics) {
+	delivery := mocks.NewMockHistogram(ctrl)
+	delivery.EXPECT().Observe(gomock.Any(), gomock.Any()).AnyTimes()
+	metrics.EXPECT().
+		Histogram("outbox_delivery_seconds", gomock.Any(), gomock.Any(), textLane).
+		Return(delivery)
+}
+
 // relayConfig is a valid relay config for lane "audit" with the given batch shape.
 func relayConfig(sendBatch, concurrency, maxAttempts int) outbox.RelayConfig {
 	return fixtures.Build(func(row *outbox.RelayConfig) {
@@ -143,6 +170,7 @@ func testRelayCommitsClaimAndEachFinalizeAndDeliversOutsideATransactionExpectsMe
 	metrics.EXPECT().
 		Histogram("outbox_relay_passes", gomock.Any(), gomock.Any(), textLane).
 		Return(passes)
+	expectAnyDelivery(ctrl, metrics)
 
 	testRelayCommitsClaimAndFinalizeExpectsTransactions(
 		t,
@@ -593,6 +621,8 @@ func TestRelay_ParksAfterMaxAttempts(t *testing.T) {
 //   - Depth and lag are the outbox's health signals: a stuck relay shows as a
 //     growing backlog and an aging oldest row long before anyone notices
 //     missing messages downstream
+//   - The lag gauge is sampled after a run has drained its lane, so it cannot show
+//     how long a record waited for the next poll; only a per-record delivery time can
 //
 // What it tests:
 //   - Stats{Pending 7, OldestPending now-90s} sets outbox_depth{audit}=7 and
@@ -601,6 +631,8 @@ func TestRelay_ParksAfterMaxAttempts(t *testing.T) {
 //     outbox_retried_total and outbox_parked_total{audit} once each
 //   - an empty lane (zero OldestPending) reports lag 0
 //   - each run observes one pass on outbox_relay_passes{audit}
+//   - the sent record, written deliveryAge before the run, observes deliveryAge on
+//     outbox_delivery_seconds{audit}; the retried and parked records observe nothing
 func TestRelay_ReportsDepthAndLag(t *testing.T) {
 	t.Parallel()
 
@@ -623,13 +655,8 @@ func testRelayReportsDepthAndLagExpectsCounters(
 ) {
 	t.Helper()
 
-	sent, retried, parked := mocks.NewMockCounter(
-		ctrl,
-	), mocks.NewMockCounter(
-		ctrl,
-	), mocks.NewMockCounter(
-		ctrl,
-	)
+	sent, retried := mocks.NewMockCounter(ctrl), mocks.NewMockCounter(ctrl)
+	parked := mocks.NewMockCounter(ctrl)
 	depth, lag := mocks.NewMockGauge(ctrl), mocks.NewMockGauge(ctrl)
 	ctx := context.Background()
 
@@ -651,9 +678,14 @@ func testRelayReportsDepthAndLagExpectsCounters(
 
 		// one claim per run, two runs
 
+	expectDelivery(ctrl, metrics, deliveryAge)
+
 	outboxRecord, retry, park := outboxRecords(1, 1)[0], outboxRecords(1, 1)[0],
 		outboxRecords(1,
 			outboxRecordsInput)[0]
+
+	outboxRecord.CreatedAt = relayNow().Add(-deliveryAge)
+
 	recs := []types.OutboxRecord{outboxRecord, retry, park}
 	fail := apperr.New(apperr.CodeUnavailable, textDown)
 
@@ -910,6 +942,7 @@ func TestRelay_SpansRunsAndLogsStatsFailure(t *testing.T) {
 	passes.EXPECT().
 		Observe(1.0, textAudit).
 		Times(1)
+	expectAnyDelivery(ctrl, metrics)
 
 	testRelaySpansRunsAndLogsStatsFailureExpectsSpan(ctx,
 		t,

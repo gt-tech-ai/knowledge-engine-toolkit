@@ -592,7 +592,9 @@ attempt (`outbox_{sent,retried,parked}_total`, `outbox_depth`, `outbox_lag_secon
 by lane). With `ParkOnPermanent` a permanent failure parks the row at once; a run cancelled mid-send
 leaves its unfinished rows leased for the next claim. With a `DrainBudget` (default 0: one claim per
 run) a run claims again while claims come back full, until the budget elapses, the context ends or a
-pass fails, and `outbox_relay_passes` records the claims per run by lane. A lane splits into
+pass fails, and `outbox_relay_passes` records the claims per run by lane. `outbox_delivery_seconds`
+records each sent row's time from `CreatedAt` to delivery, by lane: the lag gauge is sampled after a
+run drains the lane, so only this histogram shows the poll wait a row paid. A lane splits into
 `Partitions` (default 1): the postgres store's optional `PartitionColumn` holds
 `core/types.OutboxPartition(key, partitions)` = `fnv32a(key) mod partitions`, written at insert
 and never recomputed, and a relay with `Partition` p claims only partition p, so one relay per
@@ -1390,7 +1392,8 @@ so a large PDF can parse in checkpointed parts; each part is one bounded child, 
 or unreadable file, meaning parse it whole), so the parser is a `PagedParser`
 (`core.interfaces.parser`), and `join_parsed(parts)` (`core.domain`) joins the parts in page order,
 renumbering block `order`; a failed part fails the joined document. The child is spawned, not forked (Docling's torch stack aborts in a forked child on
-macOS; the forkserver does not preload Docling, so a fresh interpreter costs about the same).
+macOS). A spawned child starts a fresh interpreter and re-imports the parent's main module, so it
+gets nothing from the forkserver preload below.
 `artifacts_path` points Docling at model weights baked into the image (empty: Docling downloads
 them on first use); `ocr` runs OCR on pages and regions with no text layer. Furniture (page
 headers and footers) is dropped, and a table's or picture's caption travels with it. Measured on
@@ -1398,6 +1401,18 @@ a three-page PDF (two columns, a ruled table, an image-only page): reading order
 as one 4x2 block with its header, the scanned page OCR'd, and a peak child RSS of about 1.7 GiB,
 so `layout` needs a `memory_bytes` of several GiB. `parser_from_config` refuses `layout` when
 Docling is not installed unless a `convert` function is injected.
+
+`ParserKind.isolated` starts each child from the `forkserver` context (`spawn` where the platform
+has none; `clients.parsing.isolated.context`). The server preloads markitdown, pymupdf and the
+isolated module, so a child is a fork, not an interpreter start. CPython also re-runs the parent's
+main module as `__mp_main__` in every child; when the parent is a service's console script, that
+is the whole service graph (measured at about 7.4 s per child). `ParserConfig.preload_modules`
+adds modules to the preload (a service passes its `<package>.__main__`, and the child then
+inherits it), and the composition root calls `warm_forkserver()` off the event loop at startup so
+the first parse does not pay for the preload. The preload is process-global and read when the
+server starts. `parser_from_config(..., metrics=)` records each child's start time as the
+`parse_child_start_seconds` histogram, labelled by `operation` (`parse_document`,
+`page_count_path`, `parse_pages_path`, `render_page_png`, ...).
 
 `ParserKind.isolated` is a `PagedParser` too: `page_count` and `parse_pages` run pymupdf in the
 bounded child, so a large PDF parses in parts whatever the parser kind, and an out-of-range
