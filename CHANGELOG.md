@@ -4,7 +4,7 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
-## [Unreleased]
+## [0.0.79] - 2026-11-22
 
 ### Fixed
 
