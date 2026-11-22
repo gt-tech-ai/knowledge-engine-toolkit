@@ -195,6 +195,9 @@ func (e *engine) step(
 }
 
 // whenSkip evaluates the step's guard, returning its skip row when the guard is false.
+// The row's name is interpolated like a run row's, so a skipped `kube context "{env}"`
+// reads `kube context "staging"`. A name that names an each item cannot resolve before
+// the items do, so it keeps its template rather than failing a step that never runs.
 func whenSkip(
 	ctx context.Context, currentCompiled *compiled, procStep *types.ProcStep, vars Vars,
 ) (types.StepResults, error) {
@@ -207,8 +210,13 @@ func whenSkip(
 		return nil, err
 	}
 
+	name, err := text(procStep.Name, vars)
+	if err != nil {
+		name = procStep.Name
+	}
+
 	return types.StepResults{
-		currentCompiled.result(procStep.Name, types.StatusSkip, "when "+procStep.When),
+		currentCompiled.result(name, types.StatusSkip, "when "+procStep.When),
 	}, nil
 }
 
