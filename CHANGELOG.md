@@ -4,6 +4,14 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [Unreleased]
+
+### Fixed
+
+- Go procedures: a step skipped by its `when` guard now reports its interpolated name, as a
+  run step does (`kube context "{env}"` reads `kube context "staging"`). A name that names an
+  `each` item keeps its template, since the items are not resolved for a skipped step.
+
 ## [0.0.78] - 2026-11-21
 
 ### Added
