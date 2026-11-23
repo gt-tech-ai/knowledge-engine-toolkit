@@ -64,6 +64,32 @@ func TestActionableLines(t *testing.T) {
 	assert.False(t, report.IsNoiseLine("--- FAIL: TestThing"))
 }
 
+// TestActionableLines_TerraformError tests that a Terraform diagnostic printed after a
+// long stdout is kept.
+//
+// Why this test is important:
+//   - A failed tool row's output is stdout followed by stderr, and Terraform writes its
+//     `Error:` diagnostic to stderr after the plan's refresh lines. Without a priority
+//     rule the first ten stdout lines fill the block and the error is never shown.
+//
+// What it tests:
+//   - A bare `Error:` line and a boxed one (`│ Error:`, also behind a terragrunt log
+//     prefix) are kept, in order, ahead of the refresh lines before them.
+func TestActionableLines_TerraformError(t *testing.T) {
+	t.Parallel()
+
+	refresh := strings.Repeat("data.aws_caller_identity.current: Reading...\n",
+		actionableLinesInput+1)
+	boxed := "│ Error: reading Secrets Manager Secret Version (a/b): not found"
+	prefixed := "12:00:00.000 STDERR [auth0] terraform: │ Error: no valid credential sources"
+
+	got := report.ActionableLines([]byte(refresh+"Error: Invalid value for variable\n"+
+		"╷\n"+boxed+"\n│\n│   with data.aws_secretsmanager_secret_version.x,\n╵\n"+
+		prefixed+"\n"), actionableLinesInput)
+
+	assert.Equal(t, []string{"Error: Invalid value for variable", boxed, prefixed}, got)
+}
+
 // FuzzActionableLines tests that ActionableLines only ever selects from its input.
 //
 // Why this test is important:

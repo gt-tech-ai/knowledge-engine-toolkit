@@ -14,8 +14,9 @@ const summaryWidth = 200
 // ActionableLines condenses a failed step's captured output to at most limit lines an
 // operator can act on. It keeps the decisive lines first (Go test failures, file:line
 // compiler and linter errors, pytest FAILED lines, the files a diff touches,
-// govulncheck findings); when there are none it keeps the first lines that are not
-// noise (see IsNoiseLine). Each line is trimmed and capped at 200 characters.
+// govulncheck findings, Terraform `Error:` diagnostics); when there are none it keeps
+// the first lines that are not noise (see IsNoiseLine). Each line is trimmed and capped
+// at 200 characters.
 func ActionableLines(output []byte, limit int) []string {
 	lines := nonEmptyLines(output)
 
@@ -64,13 +65,22 @@ func priorityLine(line string) (string, bool) {
 		strings.HasPrefix(line, "FAIL "),
 		isSourceError(line),
 		strings.HasPrefix(line, "FAILED "),
-		strings.HasPrefix(line, "Vulnerability #"):
+		strings.HasPrefix(line, "Vulnerability #"),
+		isTerraformError(line):
 		return line, true
 	case strings.HasPrefix(line, "diff --git "):
 		return diffFile(line), true
 	default:
 		return "", false
 	}
+}
+
+// isTerraformError matches a Terraform diagnostic's `Error:` line: bare, inside its
+// `│` box, or behind the log prefix terragrunt puts on each line of a unit's stderr.
+// Terraform writes it to stderr, after the plan's stdout, so without this rule the
+// first lines of a long plan crowd it out of the failure block.
+func isTerraformError(line string) bool {
+	return strings.HasPrefix(line, "Error: ") || strings.Contains(line, "│ Error: ")
 }
 
 // IsNoiseLine reports whether a trimmed output line carries nothing actionable: a bare
