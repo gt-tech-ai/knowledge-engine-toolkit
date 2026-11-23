@@ -486,8 +486,10 @@ func getSchemas(oas map[string]any) map[string]any {
 // knowledge-engine-toolkit/go/transport/jsonapi.TransformError emits: "code"
 // (machine-readable app error code) and "status" (the HTTP status as a string) are always
 // present, while "detail" (the human-readable message) is omitted when the upstream error
-// carries none — so it is the only optional member. "errors" itself is required: JSON:API
-// models it as an array, and the transformer always writes exactly one element.
+// carries none. "meta" is optional too: it is present only when the upstream error
+// carries a google.rpc.ErrorInfo, and then meta.errorInfo holds its reason, domain and
+// metadata (errorInfoMetaSchema). "errors" itself is required: JSON:API models it as an
+// array, and the transformer always writes exactly one element.
 func addJSONAPISchemas(schemas map[string]any) {
 	schemas["JsonApiError"] = map[string]any{
 		keyType:     typeObject,
@@ -505,6 +507,7 @@ func addJSONAPISchemas(schemas map[string]any) {
 				keyType:    keyString,
 				keyExample: "user not found",
 			},
+			keyMeta: errorInfoMetaSchema(),
 		},
 	}
 
@@ -516,6 +519,32 @@ func addJSONAPISchemas(schemas map[string]any) {
 				keyType: "array",
 				textItems: map[string]any{
 					keyRef: "#/components/schemas/JsonApiError",
+				},
+			},
+		},
+	}
+}
+
+// errorInfoMetaSchema returns the schema of a JSON:API error's "meta" member: an object
+// whose errorInfo member mirrors a google.rpc.ErrorInfo — "reason" and "domain" strings
+// and "metadata", a string map — as TransformError copies it from the error's details.
+func errorInfoMetaSchema() map[string]any {
+	str := func(example string) map[string]any {
+		return map[string]any{keyType: keyString, keyExample: example}
+	}
+
+	return map[string]any{
+		keyType: typeObject,
+		keyProperties: map[string]any{
+			keyErrorInfo: map[string]any{
+				keyType: typeObject,
+				keyProperties: map[string]any{
+					"reason": str("APP_NOT_ENTITLED"),
+					"domain": str("entitlements.example.com"),
+					"metadata": map[string]any{
+						keyType:                typeObject,
+						"additionalProperties": map[string]any{keyType: keyString},
+					},
 				},
 			},
 		},

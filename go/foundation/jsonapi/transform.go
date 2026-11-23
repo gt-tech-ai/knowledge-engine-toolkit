@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"strconv"
+	"strings"
 
 	"connectrpc.com/connect/v2"
 
@@ -197,13 +198,19 @@ func buildResourceObject(resource map[string]any, resourceType string) map[strin
 //
 // Output: {"errors":[{"code":"not_found","status":"404","detail":"user not found"}]}
 //
-// The member carries three fields: "code" (the machine-readable app error code,
+// The member carries up to four fields: "code" (the machine-readable app error code,
 // defaulting to "unknown" when the upstream body is empty, unparseable, or carries
-// an unrecognized code), "status" (the HTTP status as a string) and "detail" (the
-// human-readable message). Only "detail" is optional — it is omitted rather than
-// filled with a placeholder when the upstream body carries no message, so a client
-// can tell "no message was sent" from "this is the message". No "title" is emitted:
-// it was derived from the status code alone and so duplicated "status".
+// an unrecognized code), "status" (the HTTP status as a string), "detail" (the
+// human-readable message) and "meta". "detail" is omitted rather than filled with a
+// placeholder when the upstream body carries no message, so a client can tell "no
+// message was sent" from "this is the message". No "title" is emitted: it was
+// derived from the status code alone and so duplicated "status".
+//
+// "meta" is present only when the body's google.rpc.Status details hold a
+// google.rpc.ErrorInfo: meta[MetaErrorInfo] then carries the first one's "reason",
+// "domain" and "metadata", so a REST caller can tell one refusal from another sharing
+// its status code, as a Connect caller does from the error details. Other detail
+// types are not carried.
 //
 // Vanguard renders a transcoded Connect/gRPC error as a google.rpc.Status whose
 // "code" is a NUMBER, so the numeric code is normalized to its canonical connect
@@ -214,7 +221,7 @@ func buildResourceObject(resource map[string]any, resourceType string) map[strin
 // as an array, and that shape is kept even though nothing here reports more
 // than one failure at a time.
 func TransformError(statusCode int, body []byte) []byte {
-	code, detail := parseErrorBody(body)
+	code, detail, meta := parseErrorBody(body)
 
 	statusStr := strconv.Itoa(statusCode)
 	member := map[string]any{
@@ -226,6 +233,10 @@ func TransformError(statusCode int, body []byte) []byte {
 		member["detail"] = detail
 	}
 
+	if meta != nil {
+		member["meta"] = meta
+	}
+
 	out, err := json.Marshal(map[string]any{"errors": []any{member}})
 	if err != nil {
 		// Should not happen, but return a safe fallback.
@@ -235,20 +246,20 @@ func TransformError(statusCode int, body []byte) []byte {
 	return out
 }
 
-// parseErrorBody reads a Connect error body's code and message; anything unreadable
-// leaves code "unknown" and no detail.
-func parseErrorBody(body []byte) (code, detail string) {
+// parseErrorBody reads a Connect error body's code, message and ErrorInfo meta (see
+// errorInfoMeta); anything unreadable leaves code "unknown", no detail and no meta.
+func parseErrorBody(body []byte) (code, detail string, meta map[string]any) {
 	code = "unknown"
 
 	if len(body) == 0 {
-		return code, ""
+		return code, "", nil
 	}
 
 	var parsed map[string]any
 
 	err := json.Unmarshal(body, &parsed)
 	if err != nil {
-		return code, ""
+		return code, "", nil
 	}
 
 	if c := normalizeErrorCode(parsed[MemberCode]); c != "" {
@@ -257,7 +268,44 @@ func parseErrorBody(body []byte) (code, detail string) {
 
 	detail = stdx.As[string](parsed["message"])
 
-	return code, detail
+	return code, detail, errorInfoMeta(parsed["details"])
+}
+
+// MetaErrorInfo is the JSON:API error meta member carrying a google.rpc.ErrorInfo's
+// reason, domain and metadata.
+const MetaErrorInfo = "errorInfo"
+
+// errorInfoTypeSuffix ends the "@type" of a google.rpc.ErrorInfo in a protojson Any,
+// whatever its type-URL prefix.
+const errorInfoTypeSuffix = "/google.rpc.ErrorInfo"
+
+// errorInfoMeta returns the error meta for the first google.rpc.ErrorInfo among the
+// "details" of a google.rpc.Status rendered as JSON, or nil when there is none.
+// google.rpc allows at most one ErrorInfo per status, so the first is the only one.
+func errorInfoMeta(details any) map[string]any {
+	for _, item := range stdx.As[[]any](details) {
+		detail := stdx.AsMap(item)
+		if strings.HasSuffix(stdx.As[string](detail["@type"]), errorInfoTypeSuffix) {
+			return map[string]any{MetaErrorInfo: errorInfoMembers(detail)}
+		}
+	}
+
+	return nil
+}
+
+// errorInfoMembers copies the reason, domain and metadata a google.rpc.ErrorInfo detail
+// carries; protojson omits an empty member, so a missing one stays missing.
+func errorInfoMembers(detail map[string]any) map[string]any {
+	fields := [...]string{"reason", "domain", "metadata"}
+	info := make(map[string]any, len(fields))
+
+	for _, field := range fields {
+		if value, found := detail[field]; found {
+			info[field] = value
+		}
+	}
+
+	return info
 }
 
 // MemberCode is the error-body member carrying the machine-readable error code,
