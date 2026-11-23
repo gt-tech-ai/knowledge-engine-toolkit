@@ -409,6 +409,62 @@ func testTransformErrorOutOfRange(t *testing.T) {
 	})
 }
 
+// TestTransformError_CarriesErrorInfo tests that a google.rpc.ErrorInfo in a Vanguard
+// error body reaches the JSON:API error object's meta, and that a body with no ErrorInfo
+// gets no meta.
+//
+// Why this test is important:
+//   - A REST caller with no other channel (no JWT, no Connect client) can tell one
+//     refusal from another only by the ErrorInfo's reason and domain; dropping the
+//     details leaves it with the bare status code, which every refusal shares.
+//   - meta is emitted only when an ErrorInfo is present, so an error without one keeps
+//     the exact document it had before.
+//
+// What it tests:
+//   - The body Vanguard writes for a PERMISSION_DENIED carrying ErrorInfo
+//     {APP_NOT_ENTITLED, entitlements.example.com, app=interviews} becomes an error
+//     object with code permission_denied, status 403 and meta.errorInfo holding that
+//     reason, domain and metadata.
+//   - A body whose only detail is another type (google.rpc.BadRequest), and a body with
+//     no details, carry no meta member.
+func TestTransformError_CarriesErrorInfo(t *testing.T) {
+	t.Parallel()
+
+	refused := []byte(`{"code":7,"message":"permission denied","details":[` +
+		`{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"APP_NOT_ENTITLED",` +
+		`"domain":"entitlements.example.com","metadata":{"app":"interviews"}}]}`)
+
+	errObj := firstErrorObject(t, codec.TransformError(http.StatusForbidden, refused))
+	assert.Equal(t, "permission_denied", errObj["code"])
+	assert.Equal(t, "403", errObj[textStatus])
+	assert.Equal(t, map[string]any{codec.MetaErrorInfo: map[string]any{
+		"reason":   "APP_NOT_ENTITLED",
+		textDomain: "entitlements.example.com",
+		"metadata": map[string]any{"app": "interviews"},
+	}}, errObj[textMeta])
+
+	other := []byte(`{"code":3,"message":"bad","details":[` +
+		`{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[]}]}`)
+	assert.NotContains(t,
+		firstErrorObject(t, codec.TransformError(http.StatusBadRequest, other)), textMeta)
+
+	bare := []byte(`{"code":7,"message":"permission denied"}`)
+	assert.NotContains(t,
+		firstErrorObject(t, codec.TransformError(http.StatusForbidden, bare)), textMeta)
+}
+
+// firstErrorObject decodes a JSON:API error document and returns its first error
+// object.
+func firstErrorObject(t *testing.T, doc []byte) map[string]any {
+	t.Helper()
+
+	var parsed map[string]any
+
+	require.NoError(t, json.Unmarshal(doc, &parsed))
+
+	return asType[map[string]any](t, asType[[]any](t, parsed[textErrors])[0])
+}
+
 // ---------------------------------------------------------------------------
 // IsRESTRequest
 // ---------------------------------------------------------------------------

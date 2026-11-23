@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/fsys"
+	codec "github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/jsonapi"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/openapi"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/tests/fixtures"
 )
@@ -225,3 +226,42 @@ const (
 	// text403 is the literal "403".
 	text403 = "403"
 )
+
+// TestOpenAPI_ErrorSchemaDescribesErrorInfoMeta tests that the emitted JsonApiError
+// schema documents the optional meta.errorInfo member TransformError writes.
+//
+// Why this test is important:
+//   - A REST client reads a refusal's google.rpc.ErrorInfo (reason, domain, metadata)
+//     from errors[0].meta.errorInfo; a schema without it leaves generated clients
+//     typing the member away, so the contract and the runtime disagree.
+//
+// What it tests:
+//   - components.schemas.JsonApiError keeps code and status required and has a meta
+//     property whose errorInfo object carries reason and domain as strings and
+//     metadata as a string map.
+func TestOpenAPI_ErrorSchemaDescribesErrorInfoMeta(t *testing.T) {
+	t.Parallel()
+
+	spec := runDocConvert(t, docSwagger)
+	schemas := openapiAsMap(t,
+		openapiAsMap(t, spec["components"], "components")["schemas"], "schemas")
+	errSchema := openapiAsMap(t, schemas["JsonApiError"], "JsonApiError")
+
+	require.Equal(t, []any{"code", textStatus}, errSchema["required"])
+
+	props := openapiAsMap(t, errSchema["properties"], textProps)
+	meta := openapiAsMap(t, props[textMeta], textMeta)
+	metaProps := openapiAsMap(t, meta["properties"], textProps)
+	info := openapiAsMap(t, metaProps[codec.MetaErrorInfo], codec.MetaErrorInfo)
+	infoProps := openapiAsMap(t, info["properties"], textProps)
+
+	for _, field := range []string{"reason", textDomain} {
+		require.Equal(t, textString,
+			openapiAsMap(t, infoProps[field], field)["type"], field)
+	}
+
+	metadata := openapiAsMap(t, infoProps["metadata"], "metadata")
+	require.Equal(t, "object", metadata["type"])
+	require.Equal(t, textString,
+		openapiAsMap(t, metadata["additionalProperties"], "additionalProperties")["type"])
+}

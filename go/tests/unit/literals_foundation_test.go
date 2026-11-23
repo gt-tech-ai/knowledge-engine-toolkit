@@ -135,6 +135,9 @@ const (
 	// textDocuments is the literal "documents".
 	textDocuments = "documents"
 
+	// textDomain is the literal "domain".
+	textDomain = "domain"
+
 	// textDotDot is the literal "..".
 	textDotDot = ".."
 

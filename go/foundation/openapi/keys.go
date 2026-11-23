@@ -14,11 +14,14 @@ const (
 	keyData        = "data"
 	keyExample     = "example"
 	keyMeta        = "meta"
-	keyProperties  = "properties"
-	keyString      = "string"
-	keyType        = "type"
-	typeObject     = "object"
-	mediaJSON      = "application/json"
+	// keyErrorInfo is the error meta member carrying a google.rpc.ErrorInfo; it equals
+	// foundation/jsonapi.MetaErrorInfo, which this package cannot import (same layer).
+	keyErrorInfo  = "errorInfo"
+	keyProperties = "properties"
+	keyString     = "string"
+	keyType       = "type"
+	typeObject    = "object"
+	mediaJSON     = "application/json"
 
 	emptyResponseDesc = "Empty response"
 )

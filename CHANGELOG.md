@@ -4,6 +4,17 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [0.0.81] - 2026-11-23
+
+### Fixed
+
+- Go JSON:API errors: `jsonapi.TransformError` carries a `google.rpc.ErrorInfo` from the
+  Connect error body's `details` into the error object's `meta.errorInfo` (`reason`,
+  `domain`, `metadata`; `foundation/jsonapi.MetaErrorInfo`), so a REST caller can tell a
+  refusal by its reason as a Connect caller can. Other detail types are not carried, and an
+  error with no ErrorInfo has no `meta`. The generated OpenAPI `JsonApiError` schema
+  documents the optional `meta` member.
+
 ## [0.0.80] - 2026-11-22
 
 ### Fixed

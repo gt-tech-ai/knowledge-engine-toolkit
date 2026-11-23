@@ -190,7 +190,7 @@ func TestFileSource_ReadsExportAndQuotedDotenv(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	runner := mocks.NewMockCommandRunner(ctrl) // Get must not call the runner.
 	sec := types.Ref{Env: textDev, Class: textBootstrap, Field: textClientSecret}
-	dom := types.Ref{Env: textDev, Class: textBootstrap, Field: "domain"}
+	dom := types.Ref{Env: textDev, Class: textBootstrap, Field: textDomain}
 	plain := types.Ref{Env: textDev, Class: textBootstrap, Field: textPlain}
 	src := file.New(map[types.Ref]file.Location{
 		sec:   {Path: path, Key: textClientSecretUpper},
