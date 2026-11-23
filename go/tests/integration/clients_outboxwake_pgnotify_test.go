@@ -155,7 +155,8 @@ func TestPgNotifyWaker_ReconnectsAndWakesAll(t *testing.T) {
 //
 // What it tests:
 //   - With a one-slot buffer and a burst of notifications nobody reads, the extras are
-//     dropped, and the waker still delivers a notification sent afterwards.
+//     dropped, and once the buffer is drained the waker still delivers a notification
+//     sent afterwards.
 func TestPgNotifyWaker_FullBufferDropsWithoutBlocking(t *testing.T) {
 	t.Parallel()
 
@@ -169,14 +170,36 @@ func TestPgNotifyWaker_FullBufferDropsWithoutBlocking(t *testing.T) {
 
 	first := nextWake(t, waker)
 	require.False(t, first.All)
+	drainUntilQuiet(waker)
 
-	select {
-	case <-waker.Wakes():
-	case <-time.After(wakeQuiet):
+	notify(t, database, "docs:"+strconv.Itoa(wakeBurst))
+	require.Equal(t, types.OutboxWake{Partition: wakeBurst, All: false},
+		nextWakeAfterBurst(t, waker))
+}
+
+// drainUntilQuiet reads wakes until none arrives for wakeQuiet. The listener may still
+// be delivering the burst after the first read, so a single read would leave a late
+// burst wake in the buffer and the next notification would be dropped behind it.
+func drainUntilQuiet(waker interfaces.OutboxWaker) {
+	for {
+		select {
+		case <-waker.Wakes():
+		case <-time.After(wakeQuiet):
+			return
+		}
 	}
+}
 
-	notify(t, database, "docs:7")
-	require.Equal(t, types.OutboxWake{Partition: 7, All: false}, nextWake(t, waker))
+// nextWakeAfterBurst returns the first wake that is not one of the burst's partitions
+// (0 to wakeBurst-1), skipping a burst wake that arrived after the drain went quiet.
+func nextWakeAfterBurst(t *testing.T, waker interfaces.OutboxWaker) types.OutboxWake {
+	t.Helper()
+
+	for {
+		if wake := nextWake(t, waker); wake.All || wake.Partition >= wakeBurst {
+			return wake
+		}
+	}
 }
 
 // TestPgNotifyWaker_CloseReturnsPromptly tests shutdown.

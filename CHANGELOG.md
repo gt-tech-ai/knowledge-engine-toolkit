@@ -4,6 +4,14 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [0.0.80] - 2026-11-22
+
+### Fixed
+
+- Go report: a failed step's failure block keeps Terraform `Error:` diagnostics (bare, inside
+  the `│` box, or behind a terragrunt log prefix). Terraform prints them to stderr after the
+  plan's stdout, so the first ten stdout lines used to fill the block and hide the error.
+
 ## [0.0.79] - 2026-11-22
 
 ### Fixed
