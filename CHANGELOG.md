@@ -4,6 +4,17 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [0.0.82] - 2026-11-23
+
+### Fixed
+
+- Python parsing: a PDF whose markitdown Markdown lost its word spacing now indexes its pymupdf
+  page text instead. markitdown switches a whole PDF to pdfplumber when one page looks like a
+  form or a table, and pdfplumber ran the words of tightly typeset text together (a 468-page
+  typeset book kept 96,506 of its 191,015 words). `MarkItDownParser.parse` and `parse_path`
+  replace Markdown holding under 80% of the page text's words with the page text, and log a
+  warning with both counts. `techai-webutils` 0.20.10.
+
 ## [0.0.81] - 2026-11-23
 
 ### Fixed
@@ -22,6 +33,7 @@ All notable changes to this project are recorded here. The format follows
 - Go report: a failed step's failure block keeps Terraform `Error:` diagnostics (bare, inside
   the `│` box, or behind a terragrunt log prefix). Terraform prints them to stderr after the
   plan's stdout, so the first ten stdout lines used to fill the block and hide the error.
+||||||| parent of a6a265b (fix(parsing): index PDF page text when markitdown drops word spacing)
 
 ## [0.0.79] - 2026-11-22
 

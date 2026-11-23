@@ -5,6 +5,7 @@ Unified Markdown conversion plus pymupdf PDF page extraction.
 
 from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import Mock
 
 import pymupdf
 import pytest
@@ -16,6 +17,7 @@ from techai_webutils.core.errors import AppValueError
 _EXPECTED_TOTAL_PAGES = 2
 _THREE_PAGES = 3
 _TWO_WORDS = 2
+_BOOK_WORDS = 10
 
 
 def _make_pdf(*lines: str) -> bytes:
@@ -68,8 +70,82 @@ class _FixedMarkdownConverter:
         return _Converted(text_content="converted markdown")
 
 
+def _converter_returning(markdown: str) -> Mock:
+    """Build a mock converter whose every conversion yields ``markdown``.
+
+    Args:
+        markdown: The Markdown each conversion returns.
+
+    Returns:
+        The mock converter.
+
+    """
+    return Mock(
+        spec=["convert_stream"],
+        convert_stream=Mock(return_value=_Converted(text_content=markdown)),
+    )
+
+
 class TestMarkItDownParser:
     """Tests for the MarkItDown parser."""
+
+    @staticmethod
+    @pytest.mark.parametrize("lane", ["bytes", "path"])
+    def test_pdf_markdown_without_word_spacing_falls_back_to_page_text(
+        lane: str, tmp_path: Path
+    ) -> None:
+        """Test that a PDF whose Markdown lost its word spacing indexes the page text.
+
+        **Why this test is important:**
+          - MarkItDown extracts a whole PDF with pdfplumber when one page looks like a
+            form, and pdfplumber drops the spaces of tightly typeset text: a typeset book
+            indexed about half its words as run-together tokens that match no query,
+            while still reporting a successful parse.
+
+        **What it tests:**
+          - On both the bytes and the path lane, Markdown with the page text's words run
+            together is replaced by the pymupdf page text, and the word count is the
+            page text's.
+
+        Args:
+            lane: Which entry point parses the PDF.
+            tmp_path: A fresh directory for the path lane.
+
+        """
+        content = _make_pdf("Call me Ishmael some years ago", "never mind how long")
+        parser = MarkItDownParser(
+            converter=_converter_returning(
+                "CallmeIshmaelsomeyearsago\n\nnevermindhowlong"
+            )
+        )
+        if lane == "bytes":
+            result = parser.parse(content, filename="book.pdf")
+        else:
+            pdf = tmp_path / "book.pdf"
+            _ = pdf.write_bytes(content)
+            result = parser.parse_path(str(pdf), filename="book.pdf")
+        assert result.ok
+        assert result.markdown_content == (
+            "Call me Ishmael some years ago\n\nnever mind how long"
+        )
+        assert result.word_count == _BOOK_WORDS
+
+    @staticmethod
+    def test_pdf_markdown_with_its_words_is_kept() -> None:
+        """Test that PDF Markdown carrying the page text's words is kept as converted.
+
+        **Why this test is important:**
+          - MarkItDown's Markdown keeps structure the page text lacks (tables as
+            Markdown tables); the fallback must replace it only when words were lost.
+
+        **What it tests:**
+          - Markdown holding the page text's words plus table syntax is returned
+            unchanged.
+        """
+        markdown = "| Alpha | page |\n| --- | --- |\n\nBravo page"
+        parser = MarkItDownParser(converter=_converter_returning(markdown))
+        result = parser.parse(_make_pdf("Alpha page", "Bravo page"), filename="t.pdf")
+        assert result.markdown_content == markdown
 
     @staticmethod
     def test_pdf_converts_and_extracts_pages() -> None:
