@@ -206,6 +206,10 @@ class TestConfigLoader:
         **What it tests:**
           - secrets.d/database/password sets database.password with its one trailing
             newline trimmed, and secrets.d/redis/password sets redis.password.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         _ = (tmp_path / "base.yaml").write_text("database:\n  host: localhost\n")
         tree = tmp_path / "secrets.d"
@@ -229,6 +233,10 @@ class TestConfigLoader:
 
         **What it tests:**
           - With no secrets.d/, load_config succeeds and keeps the base value.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         _ = (tmp_path / "base.yaml").write_text("database:\n  host: localhost\n")
 
@@ -247,6 +255,10 @@ class TestConfigLoader:
         **What it tests:**
           - A base value "${SUBST_PROBE}" still substitutes from the environment even
             when a secrets.d file is also present.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         _ = (tmp_path / "base.yaml").write_text('api:\n  region: "${SUBST_PROBE}"\n')
         tree = tmp_path / "secrets.d"
@@ -272,6 +284,10 @@ class TestConfigLoader:
         **What it tests:**
           - With secrets.d -> ..data (a real dir holding database/password), the value
             merges.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         _ = (tmp_path / "base.yaml").write_text("database:\n  host: localhost\n")
         data = tmp_path / "..data"
@@ -293,6 +309,10 @@ class TestConfigLoader:
 
         **What it tests:**
           - A secrets.d/database/password with mode 0o000 raises InternalError.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
         """
         if os.geteuid() == 0:
             pytest.skip("root bypasses file mode bits")
