@@ -4,6 +4,24 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [0.0.85] - 2026-11-24
+
+### Added
+
+- gRPC client-side load balancing: the Go `clients/rpc/grpc` `ClientConfig` and the Python
+  `clients/rpc/grpc` `ChannelConfig` gain a `load_balancing` knob (`pick_first`, the default
+  and gRPC's own behaviour, or `round_robin`). `round_robin` installs the round-robin service
+  config so a client dialing a multi-address target (a headless Kubernetes Service) spreads
+  calls across every resolved backend instead of pinning to one. An unrecognised value fails
+  loudly with a coded `InvalidInput` error.
+- gRPC server connection-age recycling: the Go `transport/grpc` `ServerConfig` gains
+  `MaxConnectionAge` + `MaxConnectionAgeGrace`, and the Python `controllers/grpc` `ServerConfig`
+  gains `max_connection_age_ms` + `max_connection_age_grace_ms` (0, the default, keeps a
+  connection until the pod dies). A non-zero age makes the server send GOAWAY, so a round-robin
+  client re-resolves DNS and picks up pods added after it first connected.
+
+`techai-webutils` 0.20.13.
+
 ## [0.0.84] - 2026-11-24
 
 ### Added

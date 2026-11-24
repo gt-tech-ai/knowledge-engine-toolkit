@@ -50,6 +50,14 @@ class ServerConfig:
     """Maximum inbound gRPC message size, in bytes."""
     max_concurrent_rpcs: int | None = None
     """Cap on concurrently handled RPCs; None leaves it unbounded."""
+    max_connection_age_ms: int = 0
+    """Max age of a connection before the server sends GOAWAY, in ms; 0 never does.
+
+    Capping it makes a round-robin client re-resolve DNS, so it picks up pods added after
+    it first connected (a headless-Service rollout).
+    """
+    max_connection_age_grace_ms: int = 0
+    """Grace period after the GOAWAY before the connection is forcibly closed, in ms."""
     max_workers: int = 10
     """Retained for config compat; grpc.aio uses the event loop, not a thread pool."""
     shutdown_timeout: float = 30.0
@@ -59,19 +67,28 @@ class ServerConfig:
 
 
 def _options(cfg: ServerConfig) -> list[tuple[str, int]]:
-    """Build the gRPC channel-arg options (message-size limits) from the config.
+    """Build the gRPC channel-arg options from the config.
+
+    Carries the message-size limits always, and the max-connection-age args when a
+    non-zero ``max_connection_age_ms`` asks the server to recycle connections.
 
     Args:
         cfg: The server config.
 
     Returns:
-        The gRPC channel-arg options (message-size limits) from the config.
+        The gRPC channel-arg options from the config.
 
     """
-    return [
+    options = [
         ("grpc.max_send_message_length", cfg.max_send_message_length),
         ("grpc.max_receive_message_length", cfg.max_receive_message_length),
     ]
+    if cfg.max_connection_age_ms > 0:
+        options.extend((
+            ("grpc.max_connection_age_ms", cfg.max_connection_age_ms),
+            ("grpc.max_connection_age_grace_ms", cfg.max_connection_age_grace_ms),
+        ))
+    return options
 
 
 @final

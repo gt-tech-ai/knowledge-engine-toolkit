@@ -399,3 +399,41 @@ class TestGracefulServer:
         assert isinstance(
             create_server(ServerConfig(interceptors=chain)), grpc.aio.Server
         )
+
+
+@pytest.mark.asyncio
+async def test_max_connection_age_recycles_the_connection() -> None:
+    """A short ``max_connection_age_ms`` makes the server GOAWAY, ending the connection.
+
+    Why this test is important:
+      - A client that round-robins over a headless Service only re-resolves DNS when a
+        connection ends. Left uncapped a connection lives until the pod dies, so pods
+        added after a client connected stay idle; capping the age makes the server end
+        the connection so the client reconnects and picks up new pods.
+
+    What it tests:
+      - With a short ``max_connection_age_ms`` an established connection leaves READY
+        within the deadline (the server ended it), and a later call still succeeds (the
+        client reconnects transparently).
+    """
+    server = create_server(ServerConfig(port=0, max_connection_age_ms=150))
+    server.add_generic_rpc_handlers((
+        grpc.method_handlers_generic_handler(
+            "test.Svc", {"Echo": grpc.unary_unary_rpc_method_handler(_echo)}
+        ),
+    ))
+    port = server.add_insecure_port("127.0.0.1:0")
+    await server.start()
+    try:
+        async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+            call = channel.unary_unary("/test.Svc/Echo")
+            _ = await call(b"hi")
+            assert channel.get_state() is grpc.ChannelConnectivity.READY
+
+            await asyncio.wait_for(
+                channel.wait_for_state_change(grpc.ChannelConnectivity.READY), 3.0
+            )
+
+            _ = await call(b"hi")
+    finally:
+        await server.stop(None)
