@@ -4,6 +4,33 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [0.0.83] - 2026-11-23
+
+### Added
+
+- Python LLM: `LlmConfig.sampling` and `LlmConfig.thinking` (`core.types.llm.LlmThinking`) for
+  Bedrock models that reject sampling parameters and think by default (the Claude 5.5 family).
+  `sampling=False` omits `temperature` from every Converse request; `thinking=disabled` sends
+  `additionalModelRequestFields` `thinking: {type: disabled}`. Both apply to `model` and
+  `fallback_model` alike, so a fallback must be of the same family. The defaults (`True`,
+  `default`) send what they sent before.
+- Python parsing: PDF text at Private Use Area code points is spelled. A typeset book's `c_t`
+  and `T_h` ligatures, small caps and oldstyle figures used to index as PUA characters ("fact"
+  became "fa" plus U+E053). `clients.parsing.isolated.glyphs.glyph_table` maps each to the text
+  its glyph name spells, through the embedded font's cmap (fontTools, now in the `parsing`
+  extra) or the Adobe legacy glyph list, and `MarkItDownParser.parse`, `parse_path` and
+  `parse_pages` apply it to the Markdown and every page. With OCR on, `PageOcr.read_glyphs`
+  reads the glyphs no name spells from their rendered images (`MarkItDownParser.render_glyphs`,
+  in the bounded child at `PageOcr.glyph_dpi`), at most 64 per document, keeping a one-to-four
+  character answer and never failing the document. The `layout` parser does not map glyphs.
+  Documents already indexed keep their PUA text until they are re-parsed.
+
+### Fixed
+
+- `CHANGELOG.md`: a stray merge-conflict marker above the 0.0.79 entry is removed.
+
+`techai-webutils` 0.20.11.
+
 ## [0.0.82] - 2026-11-23
 
 ### Fixed
@@ -33,7 +60,6 @@ All notable changes to this project are recorded here. The format follows
 - Go report: a failed step's failure block keeps Terraform `Error:` diagnostics (bare, inside
   the `│` box, or behind a terragrunt log prefix). Terraform prints them to stderr after the
   plan's stdout, so the first ten stdout lines used to fill the block and hide the error.
-||||||| parent of a6a265b (fix(parsing): index PDF page text when markitdown drops word spacing)
 
 ## [0.0.79] - 2026-11-22
 

@@ -3,9 +3,16 @@
 A scanned page has no text layer, so a text parse leaves it blank. ``PageOcr`` finds those
 pages in a parsed range and reads each through a ``VisionClient``, one call at a time (a
 document's pages are read in order, never fanned out, so the model's rate limit is never
-the parser's concern). The page render happens in the bounded parse child, supplied as a
-``render`` callable; this module holds only the policy, so it imports neither pymupdf nor
-a model SDK.
+the parser's concern).
+
+It also reads the Private Use Area glyphs no glyph name spells (``glyphs.glyph_table``
+maps the rest in the parse child): ``read_glyphs`` renders each such glyph's box at
+``glyph_dpi`` and asks the model what it says, keeping only a one-to-four-character
+answer. At most 64 distinct glyphs are read per document, and a glyph the model cannot
+read stays as it is: glyph OCR never fails a document.
+
+The renders happen in the bounded parse child, supplied as ``render`` callables; this
+module holds only the policy, so it imports neither pymupdf nor a model SDK.
 """
 
 from __future__ import annotations
@@ -16,11 +23,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from techai_webutils.clients.parsing.isolated.glyphs import plain_text, pua_points
 from techai_webutils.core.domain import Page, ParsedDocument
 from techai_webutils.core.errors import AppError, AppValueError
+from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from techai_webutils.core.interfaces.vision import VisionClient
 
@@ -28,6 +37,12 @@ _WORD_RE = re.compile(r"\S+")
 """Splits text into words for the document's word count."""
 _DEFAULT_DPI = 150
 """Render resolution: sharp enough for body text, small enough for a model's image cap."""
+_GLYPH_SCALE = 4
+"""How much finer than a page one glyph is rendered, so it is large enough to read."""
+_MAX_GLYPHS = 64
+"""The most distinct PUA glyphs read per document (one model call each)."""
+
+logger = get_logger(__name__)
 
 
 class OcrKind(StrEnum):
@@ -83,6 +98,11 @@ class PageOcr:
         """The resolution the caller renders pages at."""
         return self._dpi
 
+    @property
+    def glyph_dpi(self) -> int:
+        """The resolution the caller renders single glyphs at (finer than a page)."""
+        return self._dpi * _GLYPH_SCALE
+
     async def fill(
         self, document: ParsedDocument, render: Callable[[int], Awaitable[bytes]]
     ) -> ParsedDocument:
@@ -126,6 +146,85 @@ class PageOcr:
             markdown_content=markdown,
             word_count=len(_WORD_RE.findall(markdown)),
         )
+
+    async def read_glyphs(
+        self,
+        document: ParsedDocument,
+        render: Callable[[Sequence[int]], Awaitable[Mapping[int, bytes]]],
+    ) -> ParsedDocument:
+        """Read the PUA glyphs left in ``document`` and spell them in its text.
+
+        The distinct PUA code points of the markdown and pages are read in code point
+        order, at most 64 (the rest are logged and left). Each rendered glyph is one
+        model call; an answer that is not one to four visible characters, a model
+        error, or a failed render leaves that glyph as it is.
+
+        Args:
+            document: A parsed document or page range.
+            render: Renders the given code points' first drawings to PNG bytes at
+                ``glyph_dpi``; a point it cannot draw is absent from the result.
+
+        Returns:
+            ``document`` with each read glyph replaced in its pages and markdown and
+            the word count refreshed; ``document`` itself when none was read.
+
+        """
+        found = sorted(
+            pua_points(
+                document.markdown_content + "".join(p.text for p in document.pages)
+            )
+        )
+        if not found:
+            return document
+        points = found[:_MAX_GLYPHS]
+        if len(found) > len(points):
+            logger.warning(
+                "pua glyphs over the ocr cap", found=len(found), read=len(points)
+            )
+        try:
+            images = await render(points)
+        except AppError:
+            logger.warning("pua glyph render failed", glyphs=len(points), exc_info=True)
+            return document
+        table: dict[int, str] = {}
+        for point in points:
+            image = images.get(point)
+            if image is not None:
+                text = await self._read_glyph(point, image)
+                if text is not None:
+                    table[point] = text
+        logger.info("pua glyphs read", found=len(points), read=len(table))
+        if not table:
+            return document
+        markdown = document.markdown_content.translate(table)
+        return dataclasses.replace(
+            document,
+            pages=[
+                dataclasses.replace(p, text=p.text.translate(table))
+                for p in document.pages
+            ],
+            markdown_content=markdown,
+            word_count=len(_WORD_RE.findall(markdown)),
+        )
+
+    async def _read_glyph(self, point: int, image: bytes) -> str | None:
+        """Ask the model what one glyph image says.
+
+        Args:
+            point: The glyph's code point (for the log).
+            image: The glyph rendered to PNG.
+
+        Returns:
+            The answer when it can stand for one glyph, else ``None``.
+
+        """
+        try:
+            answer = await self._client.describe_page(image, model_id=self._model_id)
+        except AppError:
+            logger.warning("pua glyph ocr failed", point=point, exc_info=True)
+            return None
+        text = answer.strip()
+        return text if plain_text(text) else None
 
 
 def ocr_from_config(config: OcrConfig, *, client: VisionClient | None) -> PageOcr | None:

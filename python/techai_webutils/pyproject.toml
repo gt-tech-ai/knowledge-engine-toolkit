@@ -1,6 +1,6 @@
 [project]
 name = "techai-webutils"
-version = "0.20.10"
+version = "0.20.11"
 # The published version, bumped by hand in the release PR whenever the package changes. It must
 # be greater than every version already on PyPI: 0.1.0 through 0.3.3 belong to the package's
 # earlier release line, so this line continues from 0.4.0.
@@ -74,7 +74,7 @@ postgres = ["asyncpg>=0.30.0"]
 # parse-running deployable installs `techai-webutils[parsing]`. The
 # `clients/parsing` factory + interface never import these — the `isolated` backend imports them
 # lazily inside its parse methods / the forkserver, so the default import graph never pulls them.
-parsing = ["markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6", "pymupdf>=1.28.0"]
+parsing = ["markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6", "pymupdf>=1.28.0", "fonttools>=4.60.2"]
 
 # Language-detection backend (the `langdetect` MetadataExtractor). Optional: only a
 # deployable that extracts document metadata installs `techai-webutils[langdetect]`. The `clients/metadata`
@@ -169,6 +169,9 @@ dev = [
     # consumers pull them via the `parsing` extra.
     "markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6",
     "pymupdf>=1.28.0",
+    # fonttools in dev so the `isolated` parser's PUA glyph-name table resolves and its tests run;
+    # production consumers pull it via the `parsing` extra.
+    "fonttools>=4.60.2",
     # langdetect in dev so basedpyright resolves the `langdetect` metadata backend and its parity
     # tests run; production consumers pull it via the `langdetect` extra.
     "langdetect>=1.0.9",
@@ -456,6 +459,7 @@ DEP002 = [
     "protovalidate",            # controllers/grpc/interceptors/edge.py: request validation
     "markitdown",               # clients/parsing/isolated: the `isolated` parser (`parsing` extra)
     "pymupdf",                  # clients/parsing/{isolated,layout}: PDF page access (`parsing` extra)
+    "fonttools",                # clients/parsing/isolated: PUA glyph names (`parsing` extra)
     "fasttext-predict",         # clients/language/fasttext: the `fasttext` identifier (extra)
     "lingua-language-detector", # clients/language/lingua: the `lingua` identifier (extra)
     "docling",                  # clients/parsing/layout: the `layout` parser (extra)

@@ -32,6 +32,7 @@ import functools
 import json
 import os
 import resource
+import shutil
 import tempfile
 import time
 import traceback
@@ -54,7 +55,7 @@ from techai_webutils.core.interfaces.parser import ParseCost
 from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from concurrent.futures import Executor
     from multiprocessing.context import ForkServerContext, SpawnContext
     from multiprocessing.process import BaseProcess
@@ -393,6 +394,42 @@ def _render_page_png(
     return ParsedDocument(markdown_content="", document_format=DocumentFormat.PDF)
 
 
+def _render_glyphs_png(
+    path: str, points: list[int], dpi: int, out_dir: str
+) -> ParsedDocument:
+    """Module-level glyph-render entry, picklable for the spawned worker.
+
+    Every glyph renders in this one child; each PNG goes to ``out_dir/<point>.png``.
+
+    Args:
+        path: The PDF's file.
+        points: The code points to render.
+        dpi: The render resolution.
+        out_dir: The directory the PNGs are written to.
+
+    Returns:
+        An empty PDF document: the result is the files.
+
+    """
+    images = MarkItDownParser.render_glyphs(path, points=points, dpi=dpi)
+    for point, png in images.items():
+        _ = (Path(out_dir) / f"{point}.png").write_bytes(png)
+    return ParsedDocument(markdown_content="", document_format=DocumentFormat.PDF)
+
+
+def _read_glyph_pngs(out_dir: str) -> dict[int, bytes]:
+    """Read back the PNGs ``_render_glyphs_png`` wrote, keyed by code point.
+
+    Args:
+        out_dir: The directory holding ``<point>.png`` files.
+
+    Returns:
+        Code point → PNG bytes.
+
+    """
+    return {int(png.stem): png.read_bytes() for png in Path(out_dir).glob("*.png")}
+
+
 def _write_scratch(document: ParsedDocument, path: str) -> None:
     """Write ``document`` to ``path`` as JSON (the child's half of the scratch hand-back).
 
@@ -680,7 +717,7 @@ class IsolatedParser:
             return self._failed_path(declared, filename, "parse_timeout")
         except IsolationError as exc:
             return self._failed_path(declared, filename, isolation_error_tag(exc))
-        return await self._read_blank_pages(path, document)
+        return await self._read_with_ocr(path, document)
 
     @staticmethod
     def _failed_path(declared: str, filename: str, error: str) -> ParsedDocument:
@@ -756,22 +793,22 @@ class IsolatedParser:
             return self._failed_path(
                 "application/pdf", filename, isolation_error_tag(exc)
             )
-        return await self._read_blank_pages(path, document)
+        return await self._read_with_ocr(path, document)
 
-    async def _read_blank_pages(
-        self, path: str, document: ParsedDocument
-    ) -> ParsedDocument:
-        """Read ``document``'s text-less pages through OCR, when it is on.
+    async def _read_with_ocr(self, path: str, document: ParsedDocument) -> ParsedDocument:
+        """Read ``document``'s text-less pages and unspelled PUA glyphs through OCR.
 
         Only a successful PDF parse is read: a failed document, a non-PDF, or a parser
-        built without ``ocr`` comes back unchanged.
+        built without ``ocr`` comes back unchanged. Blank pages are filled first, then
+        the PUA glyphs no glyph name spelled are read (``PageOcr.read_glyphs``).
 
         Args:
-            path: The PDF's local path, from which blank pages are rendered.
+            path: The PDF's local path, from which pages and glyphs are rendered.
             document: The parse of ``path``.
 
         Returns:
-            ``document`` with its blank pages' text filled in, or ``document`` itself.
+            ``document`` with its blank pages' text filled in and its readable glyphs
+            spelled, or ``document`` itself.
 
         """
         if (
@@ -780,10 +817,46 @@ class IsolatedParser:
             or document.document_format != DocumentFormat.PDF
         ):
             return document
-        dpi = self._ocr.dpi
-        return await self._ocr.fill(
-            document, lambda number: self._render_page(path, number, dpi)
+        ocr = self._ocr
+        filled = await ocr.fill(
+            document, lambda number: self._render_page(path, number, ocr.dpi)
         )
+        if not filled.ok:
+            return filled
+        return await ocr.read_glyphs(
+            filled, lambda points: self._render_glyphs(path, points, ocr.glyph_dpi)
+        )
+
+    async def _render_glyphs(
+        self, path: str, points: Sequence[int], dpi: int
+    ) -> dict[int, bytes]:
+        """Render the given PUA glyphs to PNG bytes in one bounded child.
+
+        Args:
+            path: The PDF's local path.
+            points: The code points to render.
+            dpi: The render resolution.
+
+        Returns:
+            Code point → PNG, for each glyph the document draws.
+
+        Raises:
+            AppTimeoutError: The render overran the timeout.
+            InternalError: The render child failed or died.
+
+        """
+        out_dir = await asyncio.to_thread(tempfile.mkdtemp, suffix=".glyphs")
+        try:
+            _ = await self._isolated(_render_glyphs_png, path, list(points), dpi, out_dir)
+            return await asyncio.to_thread(_read_glyph_pngs, out_dir)
+        except TimeoutError as exc:
+            msg = f"rendering {len(points)} glyphs timed out"
+            raise AppTimeoutError(msg) from exc
+        except IsolationError as exc:
+            msg = f"rendering {len(points)} glyphs failed: {isolation_error_tag(exc)}"
+            raise InternalError(msg, cause=exc) from exc
+        finally:
+            await asyncio.to_thread(shutil.rmtree, out_dir, ignore_errors=True)
 
     async def _render_page(self, path: str, page_number: int, dpi: int) -> bytes:
         """Render one page to PNG bytes in the bounded child.

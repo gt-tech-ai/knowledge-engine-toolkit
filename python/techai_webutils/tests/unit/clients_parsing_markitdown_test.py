@@ -13,11 +13,36 @@ import pytest
 from techai_webutils.clients.parsing.isolated.markitdown_parser import MarkItDownParser
 from techai_webutils.core.domain import DocumentFormat
 from techai_webutils.core.errors import AppValueError
+from tests.pua_pdf import pua_pdf
 
 _EXPECTED_TOTAL_PAGES = 2
 _THREE_PAGES = 3
 _TWO_WORDS = 2
 _BOOK_WORDS = 10
+
+_PUA_TEXT = "fa\ue053 \uf761"
+"""A ligature and a legacy small cap at Private Use Area code points: "fact a"."""
+
+_PUA_CMAP = {
+    0x20: "space",
+    0x61: "a",
+    0x66: "f",
+    0xE053: "c_t",
+    0xF761: "uniF761",
+}
+"""The probe font's names: ``c_t`` spells "ct"; ``uniF761`` spells nothing, so the
+legacy glyph list's ``Asmall`` names it."""
+
+
+def _assert_glyphs_spelled(text: str) -> None:
+    """Assert ``text`` holds the PUA sample spelled out and no PUA character.
+
+    Args:
+        text: Parsed text.
+
+    """
+    assert "fact a" in text
+    assert not any("\ue000" <= c <= "\uf8ff" for c in text)
 
 
 def _make_pdf(*lines: str) -> bytes:
@@ -406,6 +431,46 @@ class TestMarkItDownParser:
         assert result.total_pages == _EXPECTED_TOTAL_PAGES
         assert "Alpha" in result.markdown_content
 
+    @staticmethod
+    def test_pdf_pua_glyphs_are_spelled_in_markdown_and_pages() -> None:
+        """Test that parse replaces a PDF's PUA glyphs with the text their names spell.
+
+        **Why this test is important:**
+          - Books set "ct" and "Th" ligatures and small caps at PUA code points; left in
+            place, "fact" indexes as "fa" plus a character no query or embedder matches.
+
+        **What it tests:**
+          - The Markdown and every page read "fact a", with no PUA character left.
+        """
+        result = MarkItDownParser().parse(
+            pua_pdf(_PUA_TEXT, _PUA_CMAP), filename="book.pdf"
+        )
+        assert result.ok
+        _assert_glyphs_spelled(result.markdown_content)
+        _assert_glyphs_spelled(result.pages[0].text)
+
+    @staticmethod
+    def test_parse_path_spells_pua_glyphs(tmp_path: Path) -> None:
+        """Test that the streaming path replaces PUA glyphs like the bytes path.
+
+        **Why this test is important:**
+          - Large books go through ``parse_path``; a lane that skipped the table would
+            index the ligatures only for small files.
+
+        **What it tests:**
+          - A PUA PDF on disk parses to Markdown and pages reading "fact a".
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        pdf = tmp_path / "book.pdf"
+        _ = pdf.write_bytes(pua_pdf(_PUA_TEXT, _PUA_CMAP))
+        result = MarkItDownParser().parse_path(str(pdf), filename="book.pdf")
+        assert result.ok
+        _assert_glyphs_spelled(result.markdown_content)
+        _assert_glyphs_spelled(result.pages[0].text)
+
 
 class TestMarkItDownPaging:
     """Tests for the page-range entries (``page_count`` / ``parse_pages``)."""
@@ -506,3 +571,50 @@ class TestMarkItDownPaging:
         _ = pdf.write_bytes(_make_pdf("Alpha", "Bravo", "Charlie"))
         with pytest.raises(AppValueError, match=rf"{first}-{last}.*3 pages"):
             _ = MarkItDownParser().parse_pages(str(pdf), first_page=first, last_page=last)
+
+    @staticmethod
+    def test_parse_pages_spells_pua_glyphs(tmp_path: Path) -> None:
+        """Test that a page range replaces PUA glyphs with their names' text.
+
+        **Why this test is important:**
+          - A long book is parsed in page ranges; each range must spell its ligatures.
+
+        **What it tests:**
+          - Range 1-1 of a PUA PDF yields Markdown and a page reading "fact a".
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        pdf = tmp_path / "book.pdf"
+        _ = pdf.write_bytes(pua_pdf(_PUA_TEXT, _PUA_CMAP))
+        result = MarkItDownParser().parse_pages(
+            str(pdf), first_page=1, last_page=1, filename="book.pdf"
+        )
+        assert result.ok
+        _assert_glyphs_spelled(result.markdown_content)
+        _assert_glyphs_spelled(result.pages[0].text)
+
+    @staticmethod
+    def test_render_glyphs_draws_each_drawn_point_once(tmp_path: Path) -> None:
+        """Test that each requested PUA glyph the document draws renders to one PNG.
+
+        **Why this test is important:**
+          - OCR of a glyph no name spells needs that glyph's image alone; a point the
+            document never draws must not produce an image (or an error).
+
+        **What it tests:**
+          - The ligature point renders to PNG bytes; a point absent from the document
+            is left out of the result.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        pdf = tmp_path / "book.pdf"
+        _ = pdf.write_bytes(pua_pdf(_PUA_TEXT, _PUA_CMAP))
+        images = MarkItDownParser.render_glyphs(
+            str(pdf), points=[0xE053, 0xE000], dpi=144
+        )
+        assert list(images) == [0xE053]
+        assert images[0xE053].startswith(b"\x89PNG")
