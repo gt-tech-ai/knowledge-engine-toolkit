@@ -19,7 +19,8 @@ A name becomes text by the Adobe Glyph List rules (``agl.toUnicode``: ``c_t`` â†
 whitespace and control characters is left unmapped, and so is its character; OCR can
 read those (``PageOcr.read_glyphs``). No code point is hard-coded.
 
-fontTools and pymupdf load lazily, inside the parse child only.
+fontTools and pymupdf load lazily, inside the parse child only. Without fontTools (it
+ships in the ``parsing`` extra) no table is built and the text is left as parsed.
 """
 
 from __future__ import annotations
@@ -251,7 +252,8 @@ def table_from_names(
 def glyph_table(doc: object, text: str) -> dict[int, str]:
     """Build the translate table for the PUA characters of ``text`` in open PDF ``doc``.
 
-    A text with no PUA character returns ``{}`` before any font is read.
+    A text with no PUA character returns ``{}`` before any font is read, and so does a
+    process without fontTools (logged as a warning): the text is then left as parsed.
 
     Args:
         doc: The open pymupdf document ``text`` came from.
@@ -263,6 +265,15 @@ def glyph_table(doc: object, text: str) -> dict[int, str]:
     """
     points = pua_points(text)
     if not points:
+        return {}
+    try:
+        _ = importlib.import_module("fontTools.agl")
+    except ImportError:
+        # fontTools ships in the ``parsing`` extra; a consumer that installs markitdown
+        # and pymupdf on its own may lack it. The text is kept as parsed, never lost.
+        logger.warning(
+            "pua glyphs left unmapped: fontTools is not installed", found=len(points)
+        )
         return {}
     pdf: _FontDocument = cast("_FontDocument", doc)
     xrefs = dict.fromkeys(

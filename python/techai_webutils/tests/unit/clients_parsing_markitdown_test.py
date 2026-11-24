@@ -3,6 +3,7 @@
 Unified Markdown conversion plus pymupdf PDF page extraction.
 """
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import Mock
@@ -448,6 +449,33 @@ class TestMarkItDownParser:
         assert result.ok
         _assert_glyphs_spelled(result.markdown_content)
         _assert_glyphs_spelled(result.pages[0].text)
+
+    @staticmethod
+    def test_pdf_without_fonttools_keeps_its_pages(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that a PUA PDF parsed with no fontTools keeps its text as parsed.
+
+        **Why this test is important:**
+          - fontTools ships in the ``parsing`` extra; a consumer that installs markitdown
+            and pymupdf on its own lacks it. Page extraction is best-effort, so an
+            import error there would silently drop every page of the document.
+
+        **What it tests:**
+          - With ``fontTools.agl`` unimportable, the parse succeeds and its page still
+            holds the text, PUA characters included.
+
+        Args:
+            monkeypatch: Makes ``fontTools.agl`` unimportable for this test.
+
+        """
+        monkeypatch.setitem(sys.modules, "fontTools.agl", None)
+        result = MarkItDownParser().parse(
+            pua_pdf(_PUA_TEXT, _PUA_CMAP), filename="book.pdf"
+        )
+        assert result.ok
+        assert len(result.pages) == 1
+        assert "fa\ue053" in result.pages[0].text
 
     @staticmethod
     def test_parse_path_spells_pua_glyphs(tmp_path: Path) -> None:

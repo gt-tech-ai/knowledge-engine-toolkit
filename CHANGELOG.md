@@ -22,7 +22,9 @@ All notable changes to this project are recorded here. The format follows
   `parse_pages` apply it to the Markdown and every page. With OCR on, `PageOcr.read_glyphs`
   reads the glyphs no name spells from their rendered images (`MarkItDownParser.render_glyphs`,
   in the bounded child at `PageOcr.glyph_dpi`), at most 64 per document, keeping a one-to-four
-  character answer and never failing the document. The `layout` parser does not map glyphs.
+  character answer and never failing the document. A consumer that installs markitdown and
+  pymupdf without the `parsing` extra must add `fonttools`; without it the text is left as
+  parsed, with a warning. The `layout` parser does not map glyphs.
   Documents already indexed keep their PUA text until they are re-parsed.
 
 ### Fixed

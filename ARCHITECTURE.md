@@ -1461,7 +1461,8 @@ List rules): through each embedded font's cmap when fontTools can read the font 
 OpenType; a bare CFF has none), else through the Adobe legacy list, which named the Expert-set
 small caps at fixed PUA code points. `parse`, `parse_path` and `parse_pages` apply the table to
 the Markdown and every page. No code point is hard-coded, a name that spells nothing is left
-alone, and a PDF with no PUA text reads no font. fontTools comes with the `parsing` extra. The
+alone, and a PDF with no PUA text reads no font. fontTools comes with the `parsing` extra; a
+process without it logs a warning and keeps the text as parsed, never dropping its pages. The
 `layout` kind does not map glyphs.
 
 `ParserKind.isolated` is a `PagedParser` too: `page_count` and `parse_pages` run pymupdf in the
