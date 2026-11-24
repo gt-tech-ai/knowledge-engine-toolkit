@@ -30,7 +30,7 @@ from pathlib import Path
 
 import pytest
 
-from techai_webutils.core.errors import AppFileNotFoundError
+from techai_webutils.core.errors import AppFileNotFoundError, InternalError
 from techai_webutils.foundation.config.loader import load_config
 from tests.json_path import dig
 
@@ -193,3 +193,136 @@ class TestConfigLoader:
         """
         with pytest.raises(AppFileNotFoundError):
             _ = load_config(config_dir="/nonexistent/path")
+
+    @staticmethod
+    def test_secret_tree_merges_key_per_file(tmp_path: Path) -> None:
+        """Test that each file under secrets.d/ merges at the key its path names.
+
+        **Why this test is important:**
+          - BYOC workloads receive credentials as a key-per-file tree projected from a
+            Secret; a file beside base.yaml is useless unless the loader reads
+            it, and a value with a stray trailing newline would authenticate as wrong.
+
+        **What it tests:**
+          - secrets.d/database/password sets database.password with its one trailing
+            newline trimmed, and secrets.d/redis/password sets redis.password.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        _ = (tmp_path / "base.yaml").write_text("database:\n  host: localhost\n")
+        tree = tmp_path / "secrets.d"
+        _ = (tree / "database").mkdir(parents=True)
+        _ = (tree / "database" / "password").write_text("s3cret\n")
+        _ = (tree / "redis").mkdir(parents=True)
+        _ = (tree / "redis" / "password").write_text("r3dis")
+
+        cfg = load_config(config_dir=str(tmp_path))
+
+        assert dig(cfg, "database", "password") == "s3cret"
+        assert dig(cfg, "redis", "password") == "r3dis"
+
+    @staticmethod
+    def test_secret_tree_missing_dir_is_no_layer(tmp_path: Path) -> None:
+        """Test that a config dir with no secrets.d/ loads unchanged.
+
+        **Why this test is important:**
+          - Compose and local runs have no secrets.d; the new layer must be strictly
+            additive and never fail or alter a boot that worked before.
+
+        **What it tests:**
+          - With no secrets.d/, load_config succeeds and keeps the base value.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        _ = (tmp_path / "base.yaml").write_text("database:\n  host: localhost\n")
+
+        cfg = load_config(config_dir=str(tmp_path))
+
+        assert dig(cfg, "database", "host") == "localhost"
+
+    @staticmethod
+    def test_secret_tree_runs_before_substitution(tmp_path: Path) -> None:
+        """Test that ${VAR} substitution still runs after the secrets.d merge.
+
+        **Why this test is important:**
+          - The tree is a layer below substitution; adding it must not break the existing
+            ${VAR} behavior Compose and local runs rely on.
+
+        **What it tests:**
+          - A base value "${SUBST_PROBE}" still substitutes from the environment even
+            when a secrets.d file is also present.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        _ = (tmp_path / "base.yaml").write_text('api:\n  region: "${SUBST_PROBE}"\n')
+        tree = tmp_path / "secrets.d"
+        _ = (tree / "database").mkdir(parents=True)
+        _ = (tree / "database" / "password").write_text("s3cret")
+        os.environ["SUBST_PROBE"] = "from-env"
+        try:
+            cfg = load_config(config_dir=str(tmp_path))
+        finally:
+            del os.environ["SUBST_PROBE"]
+
+        assert dig(cfg, "api", "region") == "from-env"
+        assert dig(cfg, "database", "password") == "s3cret"
+
+    @staticmethod
+    def test_secret_tree_resolves_projected_symlink(tmp_path: Path) -> None:
+        """Test that a secrets.d symlink into a projected volume's ..data dir is walked.
+
+        **Why this test is important:**
+          - A projected Secret volume's entries are symlinks into kubelet's ..data dir;
+            reading the symlink itself as a file would misread every credential.
+
+        **What it tests:**
+          - With secrets.d -> ..data (a real dir holding database/password), the value
+            merges.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        _ = (tmp_path / "base.yaml").write_text("database:\n  host: localhost\n")
+        data = tmp_path / "..data"
+        _ = (data / "database").mkdir(parents=True)
+        _ = (data / "database" / "password").write_text("linked\n")
+        (tmp_path / "secrets.d").symlink_to("..data")
+
+        cfg = load_config(config_dir=str(tmp_path))
+
+        assert dig(cfg, "database", "password") == "linked"
+
+    @staticmethod
+    def test_secret_tree_unreadable_file_raises(tmp_path: Path) -> None:
+        """Test that an unreadable credential file fails the boot with a coded error.
+
+        **Why this test is important:**
+          - A credential the loader cannot read must stop the process loudly; booting with
+            an empty password would fail far from the cause or authenticate as a default.
+
+        **What it tests:**
+          - A secrets.d/database/password with mode 0o000 raises InternalError.
+
+        Args:
+            tmp_path: A fresh directory for the test.
+
+        """
+        if os.geteuid() == 0:
+            pytest.skip("root bypasses file mode bits")
+
+        _ = (tmp_path / "base.yaml").write_text("database:\n  host: localhost\n")
+        tree = tmp_path / "secrets.d"
+        _ = (tree / "database").mkdir(parents=True)
+        secret = tree / "database" / "password"
+        _ = secret.write_text("s3cret")
+        secret.chmod(0o000)
+
+        with pytest.raises(InternalError):
+            _ = load_config(config_dir=str(tmp_path))

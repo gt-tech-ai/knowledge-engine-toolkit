@@ -4,6 +4,7 @@ Load order (deep merge):
   1. base.yaml (base)
   2. {ENV}.yaml (environment overlay)
   3. secrets.yaml (secrets overlay)
+  4. secrets.d/ (key-per-file credential tree)
   4. Environment variables (${VAR} substitution with ${VAR:-default} support)
 """
 
@@ -16,7 +17,7 @@ from typing import cast
 
 import yaml
 
-from techai_webutils.core.errors import AppFileNotFoundError
+from techai_webutils.core.errors import AppFileNotFoundError, InternalError
 
 _ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
 """Matches ``${VAR}`` / ``${VAR:-default}`` placeholders substituted in config values."""
@@ -112,6 +113,61 @@ def _deep_merge(
     return result
 
 
+def _set_path(tree: dict[str, object], segments: tuple[str, ...], value: object) -> None:
+    """Set *value* in *tree* at the nested key *segments* names, creating dicts.
+
+    Args:
+        tree: The mapping to mutate.
+        segments: The path segments, outermost first; the last is the leaf key.
+        value: The value to set at the leaf.
+
+    """
+    cursor = tree
+    for segment in segments[:-1]:
+        nxt = cursor.get(segment)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            cursor[segment] = nxt
+        cursor = cast("dict[str, object]", nxt)
+    cursor[segments[-1]] = value
+
+
+def _load_secret_tree(path: Path) -> dict[str, object]:
+    """Return the key-per-file credential tree under *path*, empty when it is absent.
+
+    Each regular file under *path* becomes a config value whose key is the file's path
+    below *path*, one nesting level per segment (``secrets.d/database/password`` ->
+    ``{"database": {"password": ...}}``); the value is the file's text with one trailing
+    newline trimmed. Files merge in sorted path order. A Kubernetes projected Secret
+    volume's entries are symlinks into kubelet's ``..data`` directory, so *path* is
+    resolved to its real target before the walk.
+
+    Args:
+        path: The ``secrets.d`` directory.
+
+    Returns:
+        The merged credential tree, or an empty mapping when *path* does not exist.
+
+    Raises:
+        InternalError: When a credential file cannot be read.
+
+    """
+    if not path.exists():
+        return {}
+    root = path.resolve()
+    tree: dict[str, object] = {}
+    for file in sorted(root.rglob("*")):
+        if not file.is_file():
+            continue
+        try:
+            raw = file.read_text(encoding="utf-8")
+        except OSError as exc:
+            msg = f"read secret file: {file}"
+            raise InternalError(msg, cause=exc) from exc
+        _set_path(tree, file.relative_to(root).parts, raw.removesuffix("\n"))
+    return tree
+
+
 def load_config(
     config_dir: str,
     environment: str | None = None,
@@ -136,11 +192,12 @@ def load_config(
         msg = f"Config directory not found: {config_dir}"
         raise AppFileNotFoundError(msg)
 
-    # Layer 1: base config, then the environment overlay, then the secrets overlay
+    # base config, then the environment overlay, secrets.yaml, then the secrets.d tree
     config = _read_yaml(config_path / "base.yaml")
     if environment:
         config = _deep_merge(config, _read_yaml(config_path / f"{environment}.yaml"))
     config = _deep_merge(config, _read_yaml(config_path / "secrets.yaml"))
+    config = _deep_merge(config, _load_secret_tree(config_path / "secrets.d"))
 
-    # Layer 4: environment variable substitution
+    # finally, ${VAR} substitution over the merged config
     return cast("dict[str, object]", _substitute_env_vars(config))

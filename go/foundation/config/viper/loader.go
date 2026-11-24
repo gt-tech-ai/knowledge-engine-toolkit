@@ -6,7 +6,9 @@ package viper
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -262,8 +264,8 @@ func (l *Loader) mergeIfPresent(file, failure string) error {
 	return nil
 }
 
-// readLayers reads the base file (optional), then merges the environment overlay and
-// the secrets file when each exists.
+// readLayers reads the base file (optional), then merges the environment overlay, the
+// secrets file, and the secrets.d credential tree when each exists.
 func (l *Loader) readLayers() error {
 	l.v.SetConfigFile(l.baseDir + "/base.yaml")
 
@@ -282,5 +284,112 @@ func (l *Loader) readLayers() error {
 		}
 	}
 
-	return l.mergeIfPresent(l.baseDir+"/secrets.yaml", "merge secrets")
+	err = l.mergeIfPresent(l.baseDir+"/secrets.yaml", "merge secrets")
+	if err != nil {
+		return err
+	}
+
+	return l.mergeSecretTree(l.baseDir + "/secrets.d")
+}
+
+// mergeSecretTree merges one config key per regular file under dir (a key-per-file
+// credential tree, e.g. secrets.d/database/password -> database.password), as a layer
+// above secrets.yaml and below the environment bindings, so an env var still wins.
+// A missing dir adds no layer; an unreadable file fails Load with a coded error.
+func (l *Loader) mergeSecretTree(dir string) error {
+	root, err := resolveSecretRoot(dir)
+	if err != nil || root == "" {
+		return err
+	}
+
+	tree, err := readSecretTree(root)
+	if err != nil {
+		return err
+	}
+
+	if len(tree) == 0 {
+		return nil
+	}
+
+	err = l.v.MergeConfigMap(tree)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "merge secret tree")
+	}
+
+	return nil
+}
+
+// readSecretTree walks the resolved secrets.d root and returns one nested entry per
+// regular file, keyed by its path below root. A walk or read error carries a code.
+func readSecretTree(root string) (map[string]any, error) {
+	tree := map[string]any{}
+
+	err := filepath.WalkDir(
+		root,
+		func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return apperr.Wrap(walkErr, apperr.CodeInternal, "walk secret tree")
+			}
+
+			if entry.IsDir() {
+				return nil
+			}
+
+			return setSecretFromFile(tree, root, path)
+		},
+	)
+	if err != nil {
+		return nil, apperr.Wrap(
+			err,
+			apperr.CodeOr(err, apperr.CodeInternal),
+			"read secret tree",
+		)
+	}
+
+	return tree, nil
+}
+
+// resolveSecretRoot returns the real directory dir resolves to, or "" with a nil error
+// when dir does not exist (no layer). A Kubernetes projected Secret volume's secrets.d
+// entry is a symlink into kubelet's ..data directory, so it is resolved here before the
+// walk, whose contents are then regular files.
+func resolveSecretRoot(dir string) (string, error) {
+	_, err := os.Stat(dir)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+
+	if err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "stat secret tree")
+	}
+
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", apperr.Wrap(err, apperr.CodeInternal, "resolve secret tree")
+	}
+
+	return root, nil
+}
+
+// setSecretFromFile sets the file at path into tree at the config key its path below
+// root names (one nesting level per segment), with one trailing newline trimmed.
+func setSecretFromFile(tree map[string]any, root, path string) error {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "resolve secret file")
+	}
+
+	raw, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return apperr.Wrap(err, apperr.CodeInternal, "read secret file")
+	}
+
+	segments := strings.Split(rel, string(filepath.Separator))
+	setNested(
+		tree,
+		strings.Join(segments, textDot),
+		strings.TrimSuffix(string(raw), "\n"),
+	)
+
+	return nil
 }
