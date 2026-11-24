@@ -28,6 +28,17 @@ class LlmKind(StrEnum):
     OpenAI)."""
 
 
+class LlmThinking(StrEnum):
+    """Whether a Bedrock request sets the model's extended thinking."""
+
+    DEFAULT = "default"
+    """Send no thinking setting; the model's own default applies (Claude 5.5 models think
+    unless told otherwise)."""
+    DISABLED = "disabled"
+    """Send ``thinking: {type: disabled}``, so the answer starts without a reasoning
+    block (lower latency and cost on short tasks)."""
+
+
 @dataclass(frozen=True, slots=True)
 class LlmConfig:
     """LLM client configuration."""
@@ -56,3 +67,10 @@ class LlmConfig:
     stall_timeout_seconds: float = 60.0
     """Longest silence an ``openai_compatible`` stream may keep before it fails with
     ``TIMEOUT``."""
+    sampling: bool = True
+    """Whether a ``bedrock`` request sends the per-call ``temperature``. ``False`` omits
+    it, for models that reject sampling parameters (the Claude 5.5 family). Applies to
+    ``model`` and ``fallback_model`` alike, so pick a fallback of the same family."""
+    thinking: LlmThinking = LlmThinking.DEFAULT
+    """The extended-thinking setting a ``bedrock`` request sends, for ``model`` and
+    ``fallback_model`` alike; ``DEFAULT`` sends none."""
