@@ -103,9 +103,12 @@ def _load_balancing_options(policy: LoadBalancing) -> list[tuple[str, int | str]
         InvalidInputError: The policy is not a recognised ``LoadBalancing`` value.
 
     """
-    if policy == LoadBalancing.PICK_FIRST:
-        return []
-    if policy == LoadBalancing.ROUND_ROBIN:
-        return [("grpc.service_config", _ROUND_ROBIN_SERVICE_CONFIG)]
-    msg = f"grpc client: unknown load_balancing {policy!r}"
-    raise InvalidInputError(msg)
+    by_policy: dict[LoadBalancing, list[tuple[str, int | str]]] = {
+        LoadBalancing.PICK_FIRST: [],
+        LoadBalancing.ROUND_ROBIN: [("grpc.service_config", _ROUND_ROBIN_SERVICE_CONFIG)],
+    }
+    options = by_policy.get(policy)
+    if options is None:
+        msg = f"grpc client: unknown load_balancing {policy!r}"
+        raise InvalidInputError(msg)
+    return options
