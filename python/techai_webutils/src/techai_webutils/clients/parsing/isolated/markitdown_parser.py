@@ -7,6 +7,9 @@ conversion failure is captured as ``error`` on the returned ``ParsedDocument`` s
 poison document fails alone. A document that resolves to PDF (from its declared type or
 extension) but carries no PDF header fails as ``conversion_failed`` before conversion:
 MarkItDown would otherwise read its bytes as plain text and index them as the PDF.
+A PDF whose Markdown carries far fewer words than its pymupdf page text (MarkItDown's
+pdfplumber path drops the inter-word spaces of tightly typeset text) is indexed from the
+page text instead; see ``_prefer_page_text``.
 """
 
 from __future__ import annotations
@@ -59,6 +62,11 @@ bytes carry no PDF header: converting it would index the bytes as plain text."""
 _MAX_SANITIZE_BYTES = 64 << 20  # 64 MiB
 """Cap (64 MiB) on the lenient-decode fallback so the large lane never buffers a multi-GB
 file to recover."""
+
+
+_MIN_MARKDOWN_WORD_SHARE = 0.8
+"""Below this share of the page text's word count, a PDF's Markdown has lost its word
+boundaries (or its text) and the page text replaces it."""
 
 
 class _ConversionResult(Protocol):
@@ -191,6 +199,37 @@ def _page_texts(doc: object) -> list[Page]:
     ]
 
 
+def _prefer_page_text(markdown: str, pages: list[Page]) -> str:
+    """Return ``markdown``, or the joined page text when ``markdown`` lost its words.
+
+    MarkItDown converts a PDF with pdfminer, unless one page looks like a form or a table:
+    then it extracts the whole document with pdfplumber, whose default spacing tolerance
+    drops the inter-word spaces of tightly typeset text (LaTeX output, many books), so
+    whole sentences index as one token and match no query. pymupdf's page text keeps the
+    spaces, and the page-range path (``parse_pages``) already indexes it. When the
+    Markdown's word count is under ``_MIN_MARKDOWN_WORD_SHARE`` of the page text's, the
+    page text, one block per page, is the document's Markdown.
+
+    Args:
+        markdown: MarkItDown's Markdown for the PDF.
+        pages: The PDF's pymupdf pages; empty when extraction failed.
+
+    Returns:
+        ``markdown``, or the joined page text when it holds far more words.
+
+    """
+    page_words = sum(sum(1 for _ in _WORD_RE.finditer(p.text)) for p in pages)
+    markdown_words = sum(1 for _ in _WORD_RE.finditer(markdown))
+    if markdown_words >= _MIN_MARKDOWN_WORD_SHARE * page_words:
+        return markdown
+    logger.warning(
+        "pdf markdown lost words; using page text",
+        markdown_words=markdown_words,
+        page_words=page_words,
+    )
+    return "\n\n".join(page.text.strip() for page in pages)
+
+
 class MarkItDownParser:
     """Parse document bytes into Markdown + (for PDFs) per-page text.
 
@@ -256,6 +295,7 @@ class MarkItDownParser:
             )
 
         pages = self._pdf_pages(content) if fmt is DocumentFormat.PDF else []
+        markdown = _prefer_page_text(markdown, pages)
         return ParsedDocument(
             markdown_content=markdown,
             document_format=fmt,
@@ -448,6 +488,7 @@ class MarkItDownParser:
             )
 
         pages = self._pdf_pages_path(path) if fmt is DocumentFormat.PDF else []
+        markdown = _prefer_page_text(markdown, pages)
         return ParsedDocument(
             markdown_content=markdown,
             document_format=fmt,

@@ -1445,6 +1445,14 @@ server starts. `parser_from_config(..., metrics=)` records each child's start ti
 `parse_child_start_seconds` histogram, labelled by `operation` (`parse_document`,
 `page_count_path`, `parse_pages_path`, `render_page_png`, ...).
 
+`MarkItDownParser`, which `isolated` runs in the child, converts every format with markitdown and
+also extracts a PDF's per-page text with pymupdf for citations. markitdown extracts a whole PDF
+with pdfplumber once a single page looks like a form or a table, and pdfplumber drops the
+inter-word spaces of tightly typeset text, so a typeset book indexed about half its words run
+together. When a PDF's Markdown holds under 80% of the page text's words, the page text, one
+block per page, becomes the Markdown, as `parse_pages` already produces, and the parser logs a
+warning with both counts.
+
 `ParserKind.isolated` is a `PagedParser` too: `page_count` and `parse_pages` run pymupdf in the
 bounded child, so a large PDF parses in parts whatever the parser kind, and an out-of-range
 request fails the document, never raises. A scanned page has no text layer, so `IsolatedParser(ocr=…)`
