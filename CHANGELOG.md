@@ -4,6 +4,23 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [0.0.84] - 2026-11-24
+
+### Added
+
+- Config loader: a `secrets.d/` credential-tree layer, in both the Go viper loader and the
+  Python loader. After `secrets.yaml` and below the environment bindings, each regular file
+  under `<config dir>/secrets.d/` is merged as one config value whose key is the file's path
+  below `secrets.d/` (`secrets.d/database/password` sets `database.password`); the value is the
+  file's contents with one trailing newline trimmed. A missing `secrets.d/` adds no layer; an
+  unreadable file fails startup with a coded internal error. A Kubernetes projected Secret
+  volume's `secrets.d` entry is a symlink into kubelet's `..data` directory, so the loader
+  resolves it before walking. Environment variables still take precedence, so Compose and local
+  runs are unchanged. This lets a workload read its credentials from files rather than
+  environment variables.
+
+`techai-webutils` 0.20.12.
+
 ## [0.0.83] - 2026-11-23
 
 ### Added
