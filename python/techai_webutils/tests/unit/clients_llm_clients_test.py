@@ -6,9 +6,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from botocore.exceptions import ClientError
 
 from techai_webutils.clients.llm.bedrock import BedrockLlmProvider
-from techai_webutils.clients.llm.builder import LlmConfig, LlmKind, new_llm_from_config
+from techai_webutils.clients.llm.builder import (
+    LlmConfig,
+    LlmKind,
+    LlmThinking,
+    new_llm_from_config,
+)
 from techai_webutils.clients.llm.decorators import FallbackLlmProvider
 from techai_webutils.clients.llm.ollama import OllamaLlmProvider
 from techai_webutils.clients.llm.stub import StubLlmProvider
@@ -65,6 +71,50 @@ async def _converse_args(
     return cast(
         "dict[str, object]",
         cast("MagicMock", cast("MagicMock", runtime.converse).call_args).kwargs,
+    )
+
+
+async def _factory_requests(
+    config: LlmConfig, responses: list[object]
+) -> list[dict[str, object]]:
+    """Build a provider with the factory and run ``complete`` on a mocked runtime.
+
+    Every provider the factory builds (a fallback's included) opens its client from the
+    one patched session, so each Converse request lands on the same mock in call order.
+
+    Args:
+        config: The factory configuration.
+        responses: The mocked ``converse`` outcomes in order (a dict, or an exception).
+
+    Returns:
+        The keyword arguments of every Converse request sent.
+
+    """
+    runtime = MagicMock()
+    runtime.converse = AsyncMock(side_effect=responses)
+    client_cm = MagicMock()
+    client_cm.__aenter__ = AsyncMock(return_value=runtime)
+    client_cm.__aexit__ = AsyncMock(return_value=None)
+    session = MagicMock()
+    session.create_client = MagicMock(return_value=client_cm)
+    with patch("aiobotocore.session.get_session", return_value=session):
+        provider = new_llm_from_config(config)
+        _ = await provider.complete(_messages("hi"), LLMConfig(temperature=0.2))
+    return [
+        cast("dict[str, object]", call.kwargs)
+        for call in cast("MagicMock", runtime.converse).call_args_list
+    ]
+
+
+def _throttled() -> ClientError:
+    """Return the botocore throttle error a fallback chain fails over on.
+
+    Returns:
+        A ``ThrottlingException`` client error.
+
+    """
+    return ClientError(
+        {"Error": {"Code": "ThrottlingException", "Message": "slow down"}}, "Converse"
     )
 
 
@@ -196,6 +246,61 @@ class TestConverseArgs:
         )
         assert inf == {"maxTokens": 4096, "temperature": 0.1}
         assert "topP" not in default
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_sampling_off_and_thinking_disabled_shape_the_request() -> None:
+        """Test that sampling=False and thinking=DISABLED reach every Converse request.
+
+        **Why this test is important:**
+          - Claude 5.5 models reject ``temperature`` with a ValidationException, and they
+            think by default, so an answer arrives seconds later behind a reasoning block.
+            A deployment selects such a model only through config; if the settings did
+            not reach the request, every query would fail with a 400.
+          - The fallback is built from the same config, so the throttle path must send
+            the same shape, or the failover itself fails.
+
+        **What it tests:**
+          - The primary request omits ``temperature``, still carries ``maxTokens``, and
+            sends ``additionalModelRequestFields`` disabling thinking; after a throttle,
+            the fallback's request has the same shape for its own model.
+        """
+        sent = await _factory_requests(
+            LlmConfig(
+                kind=LlmKind.BEDROCK,
+                model="primary",
+                fallback_model="secondary",
+                sampling=False,
+                thinking=LlmThinking.DISABLED,
+            ),
+            [_throttled(), {}],
+        )
+        assert [request["modelId"] for request in sent] == ["primary", "secondary"]
+        for request in sent:
+            assert request["inferenceConfig"] == {"maxTokens": 1024}
+            assert request["additionalModelRequestFields"] == {
+                "thinking": {"type": "disabled"}
+            }
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_default_settings_keep_temperature_and_send_no_thinking() -> None:
+        """Test that the default LlmConfig keeps today's request shape.
+
+        **Why this test is important:**
+          - Every deployment on a model that accepts ``temperature`` (Claude 4.x, Nova,
+            Llama) relies on it for faithful answers; the new settings must change
+            nothing until a config opts in.
+
+        **What it tests:**
+          - With the defaults the request carries the per-call ``temperature`` and no
+            ``additionalModelRequestFields``.
+        """
+        (request,) = await _factory_requests(
+            LlmConfig(kind=LlmKind.BEDROCK, model="m"), [{}]
+        )
+        assert request["inferenceConfig"] == {"maxTokens": 1024, "temperature": 0.2}
+        assert "additionalModelRequestFields" not in request
 
 
 class TestLlmFactory:

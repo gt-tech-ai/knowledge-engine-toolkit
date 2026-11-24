@@ -16,7 +16,7 @@ import httpx
 from techai_webutils.clients.llm.openai_compatible import OpenAICompatibleLlmProvider
 from techai_webutils.clients.llm.stub import StubLlmProvider
 from techai_webutils.core.errors import AppValueError
-from techai_webutils.core.types.llm import LlmConfig, LlmKind
+from techai_webutils.core.types.llm import LlmConfig, LlmKind, LlmThinking
 
 if TYPE_CHECKING:
     from techai_webutils.clients.llm.bedrock import (
@@ -31,9 +31,9 @@ if TYPE_CHECKING:
     from techai_webutils.core.interfaces.llm import LLMProvider
 
 
-__all__ = ["LlmConfig", "LlmKind", "new_llm_from_config"]
-"""``LlmConfig`` and ``LlmKind`` live in ``core.types.llm`` and are re-exported here, the
-factory's home."""
+__all__ = ["LlmConfig", "LlmKind", "LlmThinking", "new_llm_from_config"]
+"""``LlmConfig``, ``LlmKind`` and ``LlmThinking`` live in ``core.types.llm`` and are
+re-exported here, the factory's home."""
 
 _MODEL_KINDS = frozenset({LlmKind.OLLAMA, LlmKind.BEDROCK, LlmKind.OPENAI_COMPATIBLE})
 """The kinds that need ``LlmConfig.model`` (every kind but the stub)."""
@@ -56,7 +56,11 @@ def _build_bedrock(config: LlmConfig) -> LLMProvider:
     )
 
     primary = bedrock_llm_provider_cls(
-        region=config.region, model=config.model, endpoint=config.endpoint
+        region=config.region,
+        model=config.model,
+        endpoint=config.endpoint,
+        sampling=config.sampling,
+        thinking=config.thinking,
     )
     if not config.fallback_model:
         return primary
@@ -68,8 +72,13 @@ def _build_bedrock(config: LlmConfig) -> LLMProvider:
         ).FallbackLlmProvider,
     )
 
+    # The fallback shares the primary's request settings: pick one of the same family.
     fallback = bedrock_llm_provider_cls(
-        region=config.region, model=config.fallback_model, endpoint=config.endpoint
+        region=config.region,
+        model=config.fallback_model,
+        endpoint=config.endpoint,
+        sampling=config.sampling,
+        thinking=config.thinking,
     )
     return fallback_llm_provider_cls(primary, fallback)
 

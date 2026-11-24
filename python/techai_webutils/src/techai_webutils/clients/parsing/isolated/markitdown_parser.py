@@ -9,7 +9,9 @@ extension) but carries no PDF header fails as ``conversion_failed`` before conve
 MarkItDown would otherwise read its bytes as plain text and index them as the PDF.
 A PDF whose Markdown carries far fewer words than its pymupdf page text (MarkItDown's
 pdfplumber path drops the inter-word spaces of tightly typeset text) is indexed from the
-page text instead; see ``_prefer_page_text``.
+page text instead; see ``_prefer_page_text``. A PDF whose text layer carries Private Use
+Area characters (ligatures, small caps and oldstyle figures some typesetters place there)
+has them replaced by the text their embedded glyph names spell; see ``glyphs``.
 """
 
 from __future__ import annotations
@@ -21,12 +23,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Protocol, cast
 
 from techai_webutils.clients.parsing.isolated.detect import detect_format, has_pdf_header
+from techai_webutils.clients.parsing.isolated.glyphs import glyph_table
 from techai_webutils.core.domain import DocumentFormat, Page, ParsedDocument
 from techai_webutils.core.errors import AppValueError
 from techai_webutils.foundation.logger import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Collection, Mapping, Sequence
     from contextlib import AbstractContextManager
 
     from markitdown import MarkItDown as _LazyMarkItDown
@@ -50,15 +53,15 @@ _WORD_RE = re.compile(r"\S+")
 """Matches runs of non-whitespace; counting matches avoids materializing a full token
 list."""
 
+_UNREADABLE_PDF = "conversion_failed: not a readable PDF (no %PDF- header)"
+"""The error for a document resolved to PDF (by its declared type or extension) whose
+bytes carry no PDF header: converting it would index the bytes as plain text."""
+
 # _MAX_SANITIZE_BYTES bounds the lenient-decode fallback on the streaming (large) lane: a
 # file whose bytes are not valid UTF-8 even after the forced-charset pass is re-read +
 # sanitized only when it fits this cap, so the memory-bounded large lane never buffers a
 # multi-GB file to recover a rare mis-encoding. Above the cap the original
 # UnicodeDecodeError surfaces (recorded as conversion_failed).
-_UNREADABLE_PDF = "conversion_failed: not a readable PDF (no %PDF- header)"
-"""The error for a document resolved to PDF (by its declared type or extension) whose
-bytes carry no PDF header: converting it would index the bytes as plain text."""
-
 _MAX_SANITIZE_BYTES = 64 << 20  # 64 MiB
 """Cap (64 MiB) on the lenient-decode fallback so the large lane never buffers a multi-GB
 file to recover."""
@@ -114,20 +117,30 @@ class _PdfPixmap(Protocol):
 class _PdfPage(Protocol):
     """The slice of a pymupdf ``Page`` the parser reads."""
 
-    def get_text(self) -> object:
-        """Return the page's plain text (pymupdf types it as ``str | list | dict``).
+    @property
+    def rect(self) -> Sequence[float]:
+        """The page's bounds as (x0, y0, x1, y1), in points."""
+        ...
+
+    def get_text(self, option: str = "text") -> object:
+        """Return the page's text (pymupdf types it as ``str | list | dict``).
+
+        Args:
+            option: ``"text"`` for plain text, ``"rawdict"`` for each character with
+                its bounding box.
 
         Returns:
-            The page's text.
+            The page's text in the ``option`` shape.
 
         """
         ...
 
-    def get_pixmap(self, *, dpi: int) -> _PdfPixmap:
-        """Render the page to a bitmap at ``dpi``.
+    def get_pixmap(self, *, dpi: int, clip: Sequence[float] | None = None) -> _PdfPixmap:
+        """Render the page, or the ``clip`` rectangle of it, to a bitmap at ``dpi``.
 
         Args:
             dpi: The render resolution.
+            clip: The (x0, y0, x1, y1) area to render; the whole page when ``None``.
 
         Returns:
             The rendered bitmap.
@@ -178,25 +191,31 @@ def _open_pdf(*args: object, **kwargs: object) -> AbstractContextManager[object]
     return opener(*args, **kwargs)
 
 
-def _page_texts(doc: object) -> list[Page]:
+def _page_texts(doc: object) -> tuple[list[Page], dict[int, str]]:
     """Extract per-page text from an open pymupdf document, numbering pages from 1.
 
     Iterates by index: pymupdf's ``Document`` has no typed ``__iter__``, and its
     ``page_count`` / ``load_page`` are untyped, so the document is read through the
-    ``_PdfDocument`` view.
+    ``_PdfDocument`` view. The pages' Private Use Area characters are replaced by the
+    text their glyph names spell (``glyph_table``); the table comes back too, so the
+    caller can translate the document's Markdown the same way.
 
     Args:
         doc: The open PyMuPDF document.
 
     Returns:
-        The extracted pages.
+        The extracted pages, and the glyph table applied to them (empty when the text
+        holds no Private Use Area character).
 
     """
     pdf = cast("_PdfDocument", doc)
-    return [
-        Page(page_number=index + 1, text=str(pdf.load_page(index).get_text()))
-        for index in range(pdf.page_count)
+    texts = [str(pdf.load_page(index).get_text()) for index in range(pdf.page_count)]
+    table = glyph_table(doc, "".join(texts))
+    pages = [
+        Page(page_number=index + 1, text=text.translate(table))
+        for index, text in enumerate(texts)
     ]
+    return pages, table
 
 
 def _prefer_page_text(markdown: str, pages: list[Page]) -> str:
@@ -294,8 +313,10 @@ class MarkItDownParser:
                 error=f"conversion_failed: {exc}",
             )
 
-        pages = self._pdf_pages(content) if fmt is DocumentFormat.PDF else []
-        markdown = _prefer_page_text(markdown, pages)
+        pages, table = ([], {})
+        if fmt is DocumentFormat.PDF:
+            pages, table = self._pdf_pages(content)
+        markdown = _prefer_page_text(markdown.translate(table), pages)
         return ParsedDocument(
             markdown_content=markdown,
             document_format=fmt,
@@ -333,14 +354,14 @@ class MarkItDownParser:
         return str(result.text_content)
 
     @staticmethod
-    def _pdf_pages(content: bytes) -> list[Page]:
-        """Extract per-page text from a PDF via pymupdf; return [] if extraction fails.
+    def _pdf_pages(content: bytes) -> tuple[list[Page], dict[int, str]]:
+        """Extract per-page text from a PDF via pymupdf; empty if extraction fails.
 
         Args:
             content: The PDF's bytes.
 
         Returns:
-            The extracted pages; empty if extraction fails.
+            The extracted pages and their glyph table; both empty if extraction fails.
 
         """
         try:
@@ -348,7 +369,7 @@ class MarkItDownParser:
                 return _page_texts(doc)
         except Exception:  # PDF page extraction is best-effort supplementary data
             logger.exception("pdf_pages failed")
-            return []
+            return [], {}
 
     @staticmethod
     def page_count(path: str) -> int:
@@ -378,7 +399,8 @@ class MarkItDownParser:
 
         Pages keep their real position in the document (a range 2-3 yields pages numbered
         2 and 3), ``total_pages`` is the whole document's count, and
-        ``markdown_content`` holds only the range's text, one block per page.
+        ``markdown_content`` holds only the range's text, one block per page. The range's
+        Private Use Area characters are replaced by their glyph names' text.
 
         Args:
             path: The PDF file.
@@ -404,9 +426,14 @@ class MarkItDownParser:
                     f"{total} pages"
                 )
                 raise AppValueError(msg)
-            pages = [
-                Page(page_number=n, text=str(pdf.load_page(n - 1).get_text()))
+            texts = [
+                str(pdf.load_page(n - 1).get_text())
                 for n in range(first_page, last_page + 1)
+            ]
+            table = glyph_table(doc, "".join(texts))
+            pages = [
+                Page(page_number=n, text=text.translate(table))
+                for n, text in zip(range(first_page, last_page + 1), texts, strict=True)
             ]
         markdown = "\n\n".join(page.text.strip() for page in pages)
         return ParsedDocument(
@@ -443,6 +470,45 @@ class MarkItDownParser:
                 )
                 raise AppValueError(msg)
             return pdf.load_page(page_number - 1).get_pixmap(dpi=dpi).tobytes("png")
+
+    @staticmethod
+    def render_glyphs(
+        path: str, *, points: Collection[int], dpi: int
+    ) -> dict[int, bytes]:
+        """Render the first drawing of each code point in ``points`` to PNG bytes.
+
+        It feeds OCR of a Private Use Area glyph that no glyph name spells: the image
+        is the glyph's bounding box alone, so the model reads that glyph and not its
+        neighbours. Pages are scanned in order, and a page whose plain text holds none
+        of the code points still wanted is skipped before its characters are listed.
+
+        Args:
+            path: The PDF file.
+            points: The code points to render.
+            dpi: The render resolution.
+
+        Returns:
+            Code point → PNG, for each point drawn with a non-empty box; a point the
+            document never draws is left out.
+
+        """
+        wanted = set(points)
+        images: dict[int, bytes] = {}
+        with _open_pdf(path, filetype="pdf") as doc:
+            pdf = cast("_PdfDocument", doc)
+            for number in range(pdf.page_count):
+                if not wanted:
+                    break
+                page = pdf.load_page(number)
+                if not wanted.intersection(map(ord, str(page.get_text()))):
+                    continue
+                for char, box in _page_chars(page):
+                    clip = _clip(box, page.rect)
+                    if ord(char) in wanted and clip is not None:
+                        wanted.discard(ord(char))
+                        pixmap = page.get_pixmap(dpi=dpi, clip=clip)
+                        images[ord(char)] = pixmap.tobytes("png")
+        return images
 
     def parse_path(
         self, path: str, *, declared: str = "", filename: str = ""
@@ -487,8 +553,10 @@ class MarkItDownParser:
                 error=f"conversion_failed: {exc}",
             )
 
-        pages = self._pdf_pages_path(path) if fmt is DocumentFormat.PDF else []
-        markdown = _prefer_page_text(markdown, pages)
+        pages, table = ([], {})
+        if fmt is DocumentFormat.PDF:
+            pages, table = self._pdf_pages_path(path)
+        markdown = _prefer_page_text(markdown.translate(table), pages)
         return ParsedDocument(
             markdown_content=markdown,
             document_format=fmt,
@@ -553,7 +621,7 @@ class MarkItDownParser:
                 )
 
     @staticmethod
-    def _pdf_pages_path(path: str) -> list[Page]:
+    def _pdf_pages_path(path: str) -> tuple[list[Page], dict[int, str]]:
         """Extract per-page text from a PDF opened by path via pymupdf.
 
         ``[]`` on failure.
@@ -562,7 +630,7 @@ class MarkItDownParser:
             path: The PDF file.
 
         Returns:
-            The extracted pages; empty if extraction fails.
+            The extracted pages and their glyph table; both empty if extraction fails.
 
         """
         try:
@@ -570,4 +638,57 @@ class MarkItDownParser:
                 return _page_texts(doc)
         except Exception:  # PDF page extraction is best-effort supplementary data
             logger.exception("pdf_pages_path failed")
-            return []
+            return [], {}
+
+
+def _items(node: Mapping[str, object], key: str) -> list[Mapping[str, object]]:
+    """Return the child list ``key`` of one node of pymupdf's ``rawdict`` text.
+
+    Args:
+        node: A page, block, line or span of the ``rawdict``.
+        key: The child list (``blocks``, ``lines``, ``spans``, ``chars``).
+
+    Returns:
+        The children; empty when the node has none (an image block has no lines).
+
+    """
+    return cast("list[Mapping[str, object]]", node.get(key, []))
+
+
+def _page_chars(page: _PdfPage) -> list[tuple[str, Sequence[float]]]:
+    """List every character a page draws with its bounding box, in reading order.
+
+    Args:
+        page: The page.
+
+    Returns:
+        (character, (x0, y0, x1, y1)) pairs.
+
+    """
+    option = "rawdict"  # each character with its bounding box
+    raw = cast("Mapping[str, object]", page.get_text(option))
+    return [
+        (cast("str", char["c"]), cast("Sequence[float]", char["bbox"]))
+        for block in _items(raw, "blocks")
+        for line in _items(block, "lines")
+        for span in _items(line, "spans")
+        for char in _items(span, "chars")
+    ]
+
+
+def _clip(
+    box: Sequence[float], bounds: Sequence[float]
+) -> tuple[float, float, float, float] | None:
+    """Intersect a glyph's box with the page's bounds.
+
+    Args:
+        box: The glyph's (x0, y0, x1, y1).
+        bounds: The page's (x0, y0, x1, y1).
+
+    Returns:
+        The intersection, or ``None`` when it is empty (nothing to render).
+
+    """
+    x0, y0 = max(box[0], bounds[0]), max(box[1], bounds[1])
+    x1, y1 = min(box[2], bounds[2]), min(box[3], bounds[3])
+    return (x0, y0, x1, y1) if x0 < x1 and y0 < y1 else None

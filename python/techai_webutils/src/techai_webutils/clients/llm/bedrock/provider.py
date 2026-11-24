@@ -22,6 +22,7 @@ from techai_webutils.core.interfaces.llm import (
     StreamUsage,
     text_only,
 )
+from techai_webutils.core.types.llm import LlmThinking
 from techai_webutils.foundation.resilience.aws_boundary import botocore_error_to_app_error
 
 if TYPE_CHECKING:
@@ -152,8 +153,17 @@ _DEFAULT_TEMPERATURE = 0.7
 """Default sampling temperature when the caller supplies no per-call config."""
 
 
+_THINKING_DISABLED: dict[str, object] = {"thinking": {"type": "disabled"}}
+"""The ``additionalModelRequestFields`` that turn extended thinking off."""
+
+
 def _converse_args(
-    model: str, messages: list[LLMMessage], config: LLMConfig | None
+    model: str,
+    messages: list[LLMMessage],
+    config: LLMConfig | None,
+    *,
+    sampling: bool = True,
+    thinking: LlmThinking = LlmThinking.DEFAULT,
 ) -> dict[str, object]:
     """Build the model-agnostic Converse request from messages + config.
 
@@ -164,12 +174,17 @@ def _converse_args(
     come from the per-call ``config`` when the caller supplies one (the consumer builds it
     from its own config); otherwise the conservative provider defaults apply. ``topP`` is
     deliberately not sent: Claude on Converse rejects ``temperature`` and ``topP``
-    together, and the retrieval path tunes temperature.
+    together, and the retrieval path tunes temperature. With ``sampling`` off,
+    ``temperature`` is omitted too, for models that reject it (the Claude 5.5 family);
+    ``thinking`` ``DISABLED`` adds ``additionalModelRequestFields`` turning extended
+    thinking off.
 
     Args:
         model: The model id.
         messages: The conversation.
         config: Per-call settings; ``None`` uses the defaults.
+        sampling: Whether to send ``temperature``.
+        thinking: The extended-thinking setting to send.
 
     Returns:
         The model-agnostic Converse request from messages + config.
@@ -185,16 +200,20 @@ def _converse_args(
     # ("`temperature` and `top_p` cannot both be specified for this model"), so the
     # request carries only temperature — the decoding dial the retrieval path tunes for
     # faithfulness.
+    inference: dict[str, object] = {
+        "maxTokens": config.max_tokens if config else _DEFAULT_MAX_TOKENS,
+    }
+    if sampling:
+        inference["temperature"] = config.temperature if config else _DEFAULT_TEMPERATURE
     args: dict[str, object] = {
         "modelId": model,
         "messages": turns,
-        "inferenceConfig": {
-            "maxTokens": config.max_tokens if config else _DEFAULT_MAX_TOKENS,
-            "temperature": config.temperature if config else _DEFAULT_TEMPERATURE,
-        },
+        "inferenceConfig": inference,
     }
     if system:
         args["system"] = system
+    if thinking is LlmThinking.DISABLED:
+        args["additionalModelRequestFields"] = _THINKING_DISABLED
     return args
 
 
@@ -253,8 +272,16 @@ class BedrockLlmProvider(LLMProvider):
     (``amazon.nova-*``, ``us.anthropic.*``, ...) works without a code change.
     """
 
-    def __init__(self, *, region: str, model: str, endpoint: str | None = None) -> None:
-        """Store the region, model id and optional endpoint.
+    def __init__(
+        self,
+        *,
+        region: str,
+        model: str,
+        endpoint: str | None = None,
+        sampling: bool = True,
+        thinking: LlmThinking = LlmThinking.DEFAULT,
+    ) -> None:
+        """Store the region, model id, optional endpoint and request settings.
 
         The client is opened lazily on first use.
 
@@ -262,11 +289,16 @@ class BedrockLlmProvider(LLMProvider):
             region: The AWS region.
             model: The default model id.
             endpoint: An endpoint override; ``None`` uses the region's.
+            sampling: Whether requests send ``temperature`` (``False`` for models that
+                reject it).
+            thinking: The extended-thinking setting every request sends.
 
         """
         self._region = region
         self._model = model
         self._endpoint = endpoint
+        self._sampling = sampling
+        self._thinking = thinking
         self._session = aiobotocore.session.get_session()
         # The exit stack that owns the opened client's async context (entered on first
         # use).
@@ -345,7 +377,13 @@ class BedrockLlmProvider(LLMProvider):
         client = await self._runtime_client()
         try:
             response = await client.converse(
-                **_converse_args(self._model, messages, config)
+                **_converse_args(
+                    self._model,
+                    messages,
+                    config,
+                    sampling=self._sampling,
+                    thinking=self._thinking,
+                )
             )
         except (ClientError, BotoCoreError) as exc:
             raise _to_app_error(exc) from exc
@@ -418,7 +456,13 @@ class BedrockLlmProvider(LLMProvider):
         client = await self._runtime_client()
         try:
             response = await client.converse_stream(
-                **_converse_args(self._model, messages, config)
+                **_converse_args(
+                    self._model,
+                    messages,
+                    config,
+                    sampling=self._sampling,
+                    thinking=self._thinking,
+                )
             )
         except (ClientError, BotoCoreError) as exc:
             raise _to_app_error(exc) from exc

@@ -17,6 +17,7 @@ from techai_webutils.clients.parsing.isolated.isolated import IsolatedParser
 from techai_webutils.clients.parsing.isolated.ocr import PageOcr
 from techai_webutils.core.interfaces.parser import PagedParser
 from techai_webutils.core.interfaces.vision import VisionClient
+from tests.pua_pdf import pua_pdf
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -222,4 +223,40 @@ class TestIsolatedOcr:
             "Charlie",
         ]
         assert "Bravo scanned" in document.markdown_content
+        describe.assert_awaited_once()
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_parse_path_reads_a_pua_glyph_no_name_spells(tmp_path: Path) -> None:
+        """Test that a PUA glyph whose name spells nothing is read through OCR.
+
+        **Why this test is important:**
+          - Some embedded fonts name their ligatures ``uniE053`` or not at all; the
+            glyph's image is then the only record of its letters. The render must run
+            in the bounded child and hand the model a real PNG.
+
+        **What it tests:**
+          - A page "fa" + an unnamed PUA glyph: one vision call with PNG bytes, whose
+            answer "ct" makes the page and markdown read "fact".
+
+        Args:
+            tmp_path: pytest-provided temporary directory.
+
+        """
+        pdf = tmp_path / "book.pdf"
+        _ = pdf.write_bytes(
+            pua_pdf("fa\ue053", {0x61: "a", 0x66: "f", 0xE053: "uniE053"})
+        )
+        client = AsyncMock(spec=VisionClient)
+        describe = cast("AsyncMock", client.describe_page)
+        describe.side_effect = ["ct"]
+        parser = IsolatedParser(
+            timeout_seconds=60, ocr=PageOcr(client, model_id="m", dpi=_OCR_DPI)
+        )
+        document = await parser.parse_path(str(pdf), filename="book.pdf")
+        assert document.ok
+        assert "fact" in document.pages[0].text
+        assert "fact" in document.markdown_content
+        image = cast("bytes", describe.await_args_list[0][0][0])
+        assert image.startswith(_PNG_MAGIC)
         describe.assert_awaited_once()

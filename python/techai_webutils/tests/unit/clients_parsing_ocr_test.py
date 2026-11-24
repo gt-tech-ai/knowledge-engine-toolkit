@@ -255,3 +255,180 @@ class TestPageOcrFill:
         assert result.markdown_content == "text1\n\ntext2\n\ntext3\n\ntext4\n\ntext5"
         assert result.word_count == _FIVE_PAGES
         assert not _calls(client)
+
+
+_LIGATURE = 0xE053
+_SMALL_CAP = 0xE076
+_GLYPH_CAP = 64
+
+
+def _glyph_document(text: str) -> ParsedDocument:
+    """Build a one-page parsed document whose page and markdown are ``text``.
+
+    Args:
+        text: The page's text, PUA characters included.
+
+    Returns:
+        The document.
+
+    """
+    return ParsedDocument(
+        markdown_content=text,
+        document_format=DocumentFormat.PDF,
+        total_pages=1,
+        pages=[Page(page_number=1, text=text)],
+    )
+
+
+def _glyph_render(points: list[int]) -> AsyncMock:
+    """Build a mock glyph render that draws each of ``points`` as bytes naming it.
+
+    Args:
+        points: The code points the "document" draws.
+
+    Returns:
+        The mock render.
+
+    """
+    return AsyncMock(return_value={point: f"glyph{point}".encode() for point in points})
+
+
+class TestPageOcrReadGlyphs:
+    """``PageOcr.read_glyphs`` spells the PUA glyphs no glyph name spelled."""
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_a_read_glyph_is_spelled_in_pages_and_markdown() -> None:
+        """Test that each glyph the model reads replaces its character everywhere.
+
+        **Why this test is important:**
+          - A ligature no font names indexes as "fa" plus a PUA character; reading its
+            image is the only way left to recover the word.
+
+        **What it tests:**
+          - Two glyphs read "ct" and "A": the page and markdown read "fact Ant", the
+            word count is refreshed, the render is asked for both points, each image
+            goes to the model once, and glyphs render finer than pages.
+        """
+        client = _vision("ct", "A")
+        render = _glyph_render([_LIGATURE, _SMALL_CAP])
+        ocr = PageOcr(client, model_id=_MODEL, dpi=_DPI)
+        result = await ocr.read_glyphs(_glyph_document("fa\ue053 \ue076nt"), render)
+        assert result.pages[0].text == "fact Ant"
+        assert result.markdown_content == "fact Ant"
+        assert result.word_count == len(["fact", "Ant"])
+        render.assert_awaited_once_with([_LIGATURE, _SMALL_CAP])
+        assert _calls(client) == [
+            call(b"glyph57427", model_id=_MODEL),
+            call(b"glyph57462", model_id=_MODEL),
+        ]
+        assert ocr.glyph_dpi > ocr.dpi
+
+    @staticmethod
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "answer", ["The image shows the letters ct", "", " ", "\ue000"]
+    )
+    async def test_an_answer_that_is_not_one_glyph_is_dropped(answer: str) -> None:
+        """Test that a verbose, empty or PUA answer leaves the glyph as it is.
+
+        **Why this test is important:**
+          - A model that describes the image instead of transcribing it would splice
+            a sentence into every word holding the glyph.
+
+        **What it tests:**
+          - The document comes back unchanged.
+
+        Args:
+            answer: The model's answer.
+
+        """
+        document = _glyph_document("fa\ue053")
+        result = await PageOcr(_vision(answer), model_id=_MODEL, dpi=_DPI).read_glyphs(
+            document, _glyph_render([_LIGATURE])
+        )
+        assert result is document
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_a_model_error_skips_only_that_glyph() -> None:
+        """Test that one glyph the model cannot read does not stop the others.
+
+        **Why this test is important:**
+          - Glyph OCR is a best-effort repair; it must never fail or block a document.
+
+        **What it tests:**
+          - The first call raises, the second reads "A": only the second glyph is
+            spelled and the document stays ok.
+        """
+        client = _vision()
+        cast("AsyncMock", client.describe_page).side_effect = [
+            UnavailableError("model down"),
+            "A",
+        ]
+        result = await PageOcr(client, model_id=_MODEL, dpi=_DPI).read_glyphs(
+            _glyph_document("fa\ue053 \ue076"),
+            _glyph_render([_LIGATURE, _SMALL_CAP]),
+        )
+        assert result.ok
+        assert result.markdown_content == "fa\ue053 A"
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_a_failed_render_returns_the_document() -> None:
+        """Test that a glyph render failure leaves the document as parsed.
+
+        **Why this test is important:**
+          - The render runs in the bounded child, which can time out; the parse it
+            follows already succeeded and must still be returned.
+
+        **What it tests:**
+          - The render raises: the same document comes back and no model call is made.
+        """
+        client = _vision()
+        document = _glyph_document("fa\ue053")
+        render = AsyncMock(side_effect=UnavailableError("child died"))
+        result = await PageOcr(client, model_id=_MODEL, dpi=_DPI).read_glyphs(
+            document, render
+        )
+        assert result is document
+        assert not _calls(client)
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_text_without_pua_renders_nothing() -> None:
+        """Test that a document with no PUA character costs no render or model call.
+
+        **Why this test is important:**
+          - Nearly every document has no PUA text; glyph OCR must cost them nothing.
+
+        **What it tests:**
+          - The document comes back unchanged and the render is never awaited.
+        """
+        document = _glyph_document("plain text")
+        render = _glyph_render([])
+        result = await PageOcr(_vision(), model_id=_MODEL, dpi=_DPI).read_glyphs(
+            document, render
+        )
+        assert result is document
+        render.assert_not_awaited()
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_glyphs_past_the_cap_are_not_read() -> None:
+        """Test that at most 64 distinct glyphs are read, lowest code points first.
+
+        **Why this test is important:**
+          - Each glyph is a model call; a font with hundreds of PUA glyphs must not
+            turn one document into hundreds of calls.
+
+        **What it tests:**
+          - A document with 65 distinct PUA characters asks the render for the lowest
+            64 only.
+        """
+        points = list(range(0xE000, 0xE000 + _GLYPH_CAP + 1))
+        render = _glyph_render([])
+        _ = await PageOcr(_vision(), model_id=_MODEL, dpi=_DPI).read_glyphs(
+            _glyph_document("".join(map(chr, points))), render
+        )
+        render.assert_awaited_once_with(points[:_GLYPH_CAP])

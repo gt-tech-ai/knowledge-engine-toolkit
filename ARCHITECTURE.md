@@ -1453,6 +1453,18 @@ together. When a PDF's Markdown holds under 80% of the page text's words, the pa
 block per page, becomes the Markdown, as `parse_pages` already produces, and the parser logs a
 warning with both counts.
 
+Some typesetters put ligatures (`c_t`, `T_h`), small caps and oldstyle figures at Private Use
+Area code points, so a word such as "fact" indexes as "fa" plus a character no query matches.
+`clients.parsing.isolated.glyphs.glyph_table` maps each PUA character of a parsed PDF to the
+text its glyph name spells (`c_t` → "ct", `Asmall` → "a", `uni0041` → "A", by the Adobe Glyph
+List rules): through each embedded font's cmap when fontTools can read the font (TrueType and
+OpenType; a bare CFF has none), else through the Adobe legacy list, which named the Expert-set
+small caps at fixed PUA code points. `parse`, `parse_path` and `parse_pages` apply the table to
+the Markdown and every page. No code point is hard-coded, a name that spells nothing is left
+alone, and a PDF with no PUA text reads no font. fontTools comes with the `parsing` extra; a
+process without it logs a warning and keeps the text as parsed, never dropping its pages. The
+`layout` kind does not map glyphs.
+
 `ParserKind.isolated` is a `PagedParser` too: `page_count` and `parse_pages` run pymupdf in the
 bounded child, so a large PDF parses in parts whatever the parser kind, and an out-of-range
 request fails the document, never raises. A scanned page has no text layer, so `IsolatedParser(ocr=…)`
@@ -1471,6 +1483,15 @@ coded through `botocore_error_to_app_error`, and a reply stopped at `max_tokens`
 never a partial page. `clients.vision.decorated.decorate` runs `describe_page` through the client
 tier, so the consumer's `decoration.clients` sets its timeout, breaker and bulkhead. Python only;
 Go has no page-range parser, so there is no Go counterpart yet. The `layout` kind keeps its own Docling OCR.
+
+A PUA glyph whose name spells nothing (a subset font naming it `uniE053`, or a CID font with no
+names fontTools can read) is read through the same OCR: after the blank pages, `PageOcr.read_glyphs`
+has the child render the first drawing of each such code point, its bounding box alone, at
+`glyph_dpi` (four times `OcrConfig.dpi`), all in one child, and asks the `VisionClient` what each
+says. An answer of one to four visible characters replaces the glyph in the pages and Markdown;
+a longer answer, a model error or a failed render leaves the glyph as it is, so glyph OCR never
+fails a document. At most 64 distinct glyphs are read per document or page range, lowest code
+point first (a warning logs the rest), one call each.
 
 A child that raises `MemoryError` under its address-space cap now fails its document with
 `parse_isolation_failed: memory_exceeded` (`MEMORY_EXCEEDED`, raised as `IsolationMemoryError`),
