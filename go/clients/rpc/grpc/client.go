@@ -3,6 +3,7 @@
 package grpc
 
 import (
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -58,6 +59,14 @@ type ClientConfig struct {
 
 	// UseTLS enables TLS transport credentials; when false, insecure credentials are used.
 	UseTLS bool
+
+	// ResolveInterval, when positive and LoadBalancing is LoadBalancingRoundRobin,
+	// re-resolves the target's DNS address set on this interval so a round_robin client
+	// dialing a headless Kubernetes Service picks up pods added by a scale-up without
+	// waiting for a connection to break. The zero value disables periodic re-resolution
+	// (gRPC's dns resolver re-resolves only on a connection failure) and leaves the target
+	// untouched. It has no effect with pick_first.
+	ResolveInterval time.Duration
 }
 
 // DefaultClientConfig returns default gRPC client configuration.
@@ -69,7 +78,17 @@ func DefaultClientConfig(target string) ClientConfig {
 		KeepaliveTimeout: defaultClientConfigKeepaliveTimeout,
 		UseTLS:           false, // insecure: enable TLS outside local dev
 		LoadBalancing:    LoadBalancingPickFirst,
+		ResolveInterval:  0, // periodic re-resolution off; opt in with round_robin
 	}
+}
+
+// dnsEndpoint returns the host:port endpoint of a gRPC target, stripping a leading
+// "dns:///" scheme so a round_robin target written as dns:///host:port can be re-dialed
+// under DNSPollScheme. A bare host:port is returned unchanged.
+func dnsEndpoint(target string) string {
+	const dnsPrefix = "dns:///"
+
+	return strings.TrimPrefix(target, dnsPrefix)
 }
 
 // NewClient creates a configured gRPC client connection.
@@ -109,7 +128,17 @@ func NewClient(cfg ClientConfig, opts ...grpc.DialOption) (*grpc.ClientConn, err
 
 	dialOpts = append(dialOpts, opts...)
 
-	conn, err := grpc.NewClient(cfg.Target, dialOpts...)
+	// Periodic re-resolution only helps round_robin (pick_first re-resolves anyway on
+	// reconnect), so it is opt-in there via a positive ResolveInterval: dial the target
+	// under DNSPollScheme with a polling resolver that re-runs the lookup on the interval.
+	target := cfg.Target
+	if cfg.LoadBalancing == LoadBalancingRoundRobin && cfg.ResolveInterval > 0 {
+		dialOpts = append(dialOpts,
+			grpc.WithResolvers(NewDNSPollingResolver(cfg.ResolveInterval, nil)))
+		target = DNSPollScheme + ":///" + dnsEndpoint(cfg.Target)
+	}
+
+	conn, err := grpc.NewClient(target, dialOpts...)
 	if err != nil {
 		return nil, apperr.Wrap(err, apperr.CodeInvalidInput, "create grpc client")
 	}
