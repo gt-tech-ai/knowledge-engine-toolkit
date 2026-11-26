@@ -4,6 +4,20 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [0.0.86] - 2026-11-25
+
+### Fixed
+
+- JSON:API custom-verb routes: a google.api.http custom-verb path (`/v1/campaigns/{campaign_id}:launch`)
+  now matches in both route lookups. Before, the middleware's runtime matcher
+  (`foundation/jsonapi` `Config.MatchRoute`) and the OpenAPI converter's operation lookup
+  (`foundation/openapi`) took only a whole `{param}` segment as a parameter. A `{param}:verb`
+  segment matched neither, so the gateway passed the handler's raw body through while the
+  converter fell back to the by-property resource envelope, and the generated client expected a
+  `data` member that never arrived. A `{param}:verb` template segment now matches a non-empty
+  value followed by the same `:verb`, and counts as a literal, so it beats the plain `{param}`
+  instance route.
+
 ## [0.0.85] - 2026-11-24
 
 ### Added

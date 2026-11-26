@@ -156,9 +156,10 @@ func splitPath(path string) []string {
 }
 
 // matchTemplate reports whether a template's segments match a concrete path's
-// segments (same length; each template segment is a "{param}" wildcard or
-// byte-equal), and returns the count of literal (non-wildcard) matches so the
-// caller can prefer the most-literal template on a collision.
+// segments (same length; each template segment is a "{param}" wildcard, a
+// "{param}:verb" custom-verb segment, or byte-equal), and returns the count of
+// literal matches so the caller can prefer the most-literal template on a
+// collision. A custom-verb segment counts as literal, so "{id}:launch" beats "{id}".
 func matchTemplate(tmpl, path []string) (literals int, ok bool) {
 	if len(tmpl) != len(path) {
 		return 0, false
@@ -169,7 +170,7 @@ func matchTemplate(tmpl, path []string) (literals int, ok bool) {
 			continue
 		}
 
-		if t != path[i] {
+		if !matchVerbSegment(t, path[i]) && t != path[i] {
 			return 0, false
 		}
 
@@ -177,6 +178,28 @@ func matchTemplate(tmpl, path []string) (literals int, ok bool) {
 	}
 
 	return literals, true
+}
+
+// matchVerbSegment reports whether tmpl is a google.api.http custom-verb segment
+// ("{param}:verb") and seg is a non-empty value followed by the same ":verb".
+func matchVerbSegment(tmpl, seg string) bool {
+	verb, ok := customVerb(tmpl)
+	if !ok {
+		return false
+	}
+
+	return len(seg) > len(verb) && strings.HasSuffix(seg, verb)
+}
+
+// customVerb returns the ":verb" suffix of a "{param}:verb" template segment, and
+// whether the segment has that shape.
+func customVerb(seg string) (string, bool) {
+	end := strings.Index(seg, "}:")
+	if end < 1 || seg[0] != '{' || end+len("}:") == len(seg) {
+		return "", false
+	}
+
+	return seg[end+1:], true
 }
 
 // isParam reports whether a template segment is a "{name}" parameter capture.

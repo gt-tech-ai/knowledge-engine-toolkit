@@ -119,13 +119,20 @@ func routeKey(method, path, basePath string) string {
 	return strings.ToUpper(method) + " " + canonicalizePathParams(text)
 }
 
-// canonicalizePathParams rewrites every "{param}" path segment to "{}" so a path
+// canonicalizePathParams rewrites every "{param}" path segment to "{}", and every
+// "{param}:verb" custom-verb segment to "{}:verb", so a path
 // template matches regardless of the (camelCase vs snake_case) parameter name.
 func canonicalizePathParams(path string) string {
 	segs := strings.Split(path, textSlash)
-	for i, s := range segs {
-		if len(s) >= minPathParamLen && s[0] == '{' && s[len(s)-1] == '}' {
-			segs[i] = "{}"
+	for idx, seg := range segs {
+		if len(seg) >= minPathParamLen && seg[0] == '{' && seg[len(seg)-1] == '}' {
+			segs[idx] = "{}"
+
+			continue
+		}
+
+		if end := strings.Index(seg, "}:"); end > 0 && seg[0] == '{' {
+			segs[idx] = "{}" + seg[end+1:]
 		}
 	}
 
