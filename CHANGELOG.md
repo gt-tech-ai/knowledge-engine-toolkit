@@ -4,6 +4,29 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [0.0.87] - 2026-11-25
+
+### Added
+
+- gRPC client periodic DNS re-resolution: the Go `clients/rpc/grpc` `ClientConfig` gains
+  `ResolveInterval`. With `round_robin` and a positive interval, the client dials through a
+  `dnspoll` target scheme served by a polling resolver (`NewDNSPollingResolver`) that re-runs
+  the DNS lookup every interval and pushes the address set to gRPC, so it picks up pods added
+  by a scale-up without waiting for a connection to break — gRPC's built-in dns resolver
+  re-resolves only on a connection failure. The zero value (the default) is off and leaves the
+  target untouched; the knob has no effect with `pick_first`.
+- Connect server connection-age limiter: the Go `transport/connect` package gains
+  `NewConnAgeLimiter(maxAge, grace)`, an `http.Server` `ConnState` hook that closes a
+  connection once it is older than `maxAge` the next time it goes idle (no in-flight request is
+  cut), or force-closes it `maxAge+grace` after it was accepted, with per-connection jitter so
+  reconnections stagger. A Connect server runs over net/http, which cannot send the HTTP/2
+  GOAWAY the `transport/grpc` `MaxConnectionAge` uses, so bounding a connection's life this way
+  is how its clients — in any language, including Python — are made to re-resolve DNS and pick
+  up scaled-up pods. A non-positive `maxAge` returns nil, leaving `http.Server.ConnState` unset
+  (today's behaviour: a connection lives until the pod dies).
+
+`techai-webutils` 0.20.13 (unchanged; this release is Go-only).
+
 ## [0.0.86] - 2026-11-25
 
 ### Fixed

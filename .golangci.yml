@@ -425,6 +425,13 @@ linters:
         linters:
           - gocritic
         text: 'hugeParam: params is heavy \(104 bytes\)'
+      # grpc's resolver.Builder interface fixes Build's resolver.Target (144 bytes) and
+      # resolver.BuildOptions (80 bytes) by value, and gocritic has no interface
+      # awareness.
+      - path: ^go/clients/rpc/grpc/resolver\.go$
+        linters:
+          - gocritic
+        text: 'hugeParam: \w+ is heavy \((144|80) bytes\)'
       # A struct tag is a single string literal that Go cannot wrap, so a field whose
       # tag pushes it past the column limit has no compliant spelling.
       - linters:
