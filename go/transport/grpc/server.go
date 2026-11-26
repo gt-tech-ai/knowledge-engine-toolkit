@@ -44,15 +44,27 @@ type ServerConfig struct {
 	// down with ENHANCE_YOUR_CALM. Relaxing it here keeps long-lived idle streams
 	// stable.
 	KeepaliveMinTime time.Duration
+
+	// MaxConnectionAge is how long a connection may live before the server sends a
+	// GOAWAY, so a client re-resolves DNS and picks up pods added since it connected
+	// Zero (the default) keeps a connection until the pod dies.
+	MaxConnectionAge time.Duration
+
+	// MaxConnectionAgeGrace is how long in-flight RPCs may finish after the
+	// MaxConnectionAge GOAWAY before the connection is forcibly closed; it must exceed
+	// the longest expected stream. Zero (the default) adds no grace.
+	MaxConnectionAgeGrace time.Duration
 }
 
 // DefaultServerConfig returns default gRPC server configuration.
 func DefaultServerConfig() ServerConfig {
 	return ServerConfig{
-		MaxMessageSize:   defaultMaxMessageSize, // 16MB
-		KeepaliveTime:    time.Minute,
-		KeepaliveTimeout: defaultServerConfigKeepaliveTimeout,
-		KeepaliveMinTime: defaultServerConfigKeepaliveMinTime,
+		MaxMessageSize:        defaultMaxMessageSize, // 16MB
+		KeepaliveTime:         time.Minute,
+		KeepaliveTimeout:      defaultServerConfigKeepaliveTimeout,
+		KeepaliveMinTime:      defaultServerConfigKeepaliveMinTime,
+		MaxConnectionAge:      0, // keep a connection until the pod dies (today's behaviour)
+		MaxConnectionAgeGrace: 0,
 	}
 }
 
@@ -68,8 +80,8 @@ func NewServer(cfg ServerConfig, opts ...grpc.ServerOption) *grpc.Server {
 			Time:                  cfg.KeepaliveTime,
 			Timeout:               cfg.KeepaliveTimeout,
 			MaxConnectionIdle:     0,
-			MaxConnectionAge:      0,
-			MaxConnectionAgeGrace: 0,
+			MaxConnectionAge:      cfg.MaxConnectionAge,
+			MaxConnectionAgeGrace: cfg.MaxConnectionAgeGrace,
 		}),
 		// Accept the client's keepalive cadence (client.go pings every minute, even
 		// with no active stream) instead of GoAway-ing it with ENHANCE_YOUR_CALM.

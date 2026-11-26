@@ -19,11 +19,17 @@ from techai_webutils.clients.client import ClientBase
 from techai_webutils.clients.rpc import RpcConfig, RpcKind, new_rpc_channel_from_config
 from techai_webutils.clients.rpc.grpc import (
     ChannelConfig,
+    LoadBalancing,
     client_interceptors,
     create_channel,
 )
 from techai_webutils.clients.rpc.grpc.interceptors import to_rpc_error
-from techai_webutils.core.errors import AppError, AppValueError, ErrorCode
+from techai_webutils.core.errors import (
+    AppError,
+    AppValueError,
+    ErrorCode,
+    InvalidInputError,
+)
 from techai_webutils.core.interfaces.circuit_breaker import CircuitBreakerInterface
 from techai_webutils.foundation.decorate import Decorations, Deps
 from techai_webutils.foundation.resilience.circuit_breaker import CircuitOpenError
@@ -432,3 +438,104 @@ async def test_new_rpc_channel_from_config_decorates_and_rejects_an_unknown_kind
             RpcConfig(kind=cast("RpcKind", cast("object", "kafka")))
         )
     assert RpcKind("grpc") is RpcKind.GRPC
+
+
+async def _serve_counting() -> tuple[
+    int, Callable[[], int], Callable[[], Awaitable[None]]
+]:
+    """Serve an echo service on a loopback port, counting the calls it answers.
+
+    Returns:
+        The port, a reader of the call count, and an async stopper.
+
+    """
+    calls = 0
+
+    async def echo(
+        request: bytes, context: grpc.aio.ServicerContext[bytes, bytes]
+    ) -> bytes:
+        """Echo the request and count the call.
+
+        Args:
+            request: The request bytes.
+            context: The call's context.
+
+        Returns:
+            The request bytes.
+
+        """
+        nonlocal calls
+        calls += 1
+        _ = context
+        await asyncio.sleep(0)
+        return request
+
+    server = grpc.aio.server()
+    server.add_generic_rpc_handlers((
+        grpc.method_handlers_generic_handler(
+            "test.Svc", {"Echo": grpc.unary_unary_rpc_method_handler(echo)}
+        ),
+    ))
+    port = server.add_insecure_port("127.0.0.1:0")
+    await server.start()
+
+    async def stop() -> None:
+        await server.stop(None)
+
+    return port, (lambda: calls), stop
+
+
+@pytest.mark.asyncio
+async def test_round_robin_spreads_calls_across_backends() -> None:
+    """``round_robin`` rotates calls over every resolved backend; ``pick_first`` pins one.
+
+    Why this test is important:
+      - A client dialing a headless Service must spread load across its pods; with the
+        default ``pick_first`` every call pins to one pod, so added pods stay idle.
+
+    What it tests:
+      - Over two backends resolved from one target, ``round_robin`` sends calls to both,
+        while the default ``pick_first`` sends them all to one.
+    """
+    port1, count1, stop1 = await _serve_counting()
+    port2, count2, stop2 = await _serve_counting()
+    target = f"ipv4:127.0.0.1:{port1},127.0.0.1:{port2}"
+    try:
+        rr = create_channel(
+            target, config=ChannelConfig(load_balancing=LoadBalancing.ROUND_ROBIN)
+        )
+        for _ in range(4):
+            _ = await rr.unary_unary("/test.Svc/Echo")(b"hi")
+        await rr.close()
+        assert count1() > 0
+        assert count2() > 0
+
+        before1, before2 = count1(), count2()
+        pf = create_channel(target, config=ChannelConfig())
+        for _ in range(4):
+            _ = await pf.unary_unary("/test.Svc/Echo")(b"hi")
+        await pf.close()
+        hit1, hit2 = count1() - before1, count2() - before2
+        assert (hit1 == 0) != (hit2 == 0)
+    finally:
+        await stop1()
+        await stop2()
+
+
+def test_an_unknown_load_balancing_policy_is_a_coded_rejection() -> None:
+    """An unrecognised ``load_balancing`` fails loudly with a coded error.
+
+    Why this test is important:
+      - A typo in the policy must not silently fall back to ``pick_first`` and mask a
+        mis-configured client.
+
+    What it tests:
+      - ``create_channel`` with an unknown policy raises ``InvalidInputError``.
+    """
+    with pytest.raises(InvalidInputError, match="load_balancing"):
+        _ = create_channel(
+            "127.0.0.1:1",
+            config=ChannelConfig(
+                load_balancing=cast("LoadBalancing", cast("object", "bogus"))
+            ),
+        )
