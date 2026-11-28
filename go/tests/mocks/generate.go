@@ -55,7 +55,7 @@
 //go:generate mockgen -destination=mock_cas.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces NodeStore,RefStore
 //go:generate mockgen -destination=mock_observer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ExecutionObserver
 //go:generate mockgen -destination=mock_ops.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Operation,Reservation
-//go:generate mockgen -destination=mock_outbox.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OutboxStore,OutboxSink
+//go:generate mockgen -destination=mock_outbox.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OutboxStore,OutboxSink,OutboxRelay
 //go:generate mockgen -destination=mock_outbox_s3_api.go -package=mocks -mock_names=API=MockOutboxS3API github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/s3 API
 //go:generate mockgen -destination=mock_outbox_sqs_api.go -package=mocks -mock_names=API=MockOutboxSQSAPI github.com/gt-tech-ai/knowledge-engine-toolkit/go/clients/outbox/sqs API
 //go:generate mockgen -destination=mock_pipeline.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Pipeline

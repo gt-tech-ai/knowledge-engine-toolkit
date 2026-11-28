@@ -9,6 +9,10 @@
 // The repository and sink are injected (and decorated) by the caller: build the
 // repository with repos/outbox.New over the store.
 //
+// A deployable that drains several lanes, or one lane across partitions, declares them in
+// a RelaySetConfig and builds every relay with NewRelaySet; RelaySet.Group runs them on
+// their intervals under one start and stop.
+//
 // Each pass is a saga, so the relay is a workflow: the claim commits in its own
 // transaction, delivery runs with no transaction open (a remote call never holds one),
 // and each row's finalize commits in its own transaction, all opened through the
@@ -157,6 +161,9 @@ func LoadRelayConfig(
 
 	return cfg, nil
 }
+
+// Relay is an interfaces.OutboxRelay: one pass is RunOnce.
+var _ interfaces.OutboxRelay = (*Relay)(nil)
 
 // Option customizes a Relay beyond its config (the deterministic seams tests use).
 type Option func(*Relay)

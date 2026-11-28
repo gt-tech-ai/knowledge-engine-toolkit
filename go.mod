@@ -8,6 +8,7 @@ require (
 	cel.dev/cel-go v0.32.0
 	connectrpc.com/connect/v2 v2.0.2
 	connectrpc.com/validate v0.9.0
+	dario.cat/mergo v1.0.2
 	entgo.io/ent v0.14.6
 	github.com/DataDog/sketches-go v1.4.8
 	github.com/aws/aws-sdk-go-v2 v1.47.2
@@ -77,7 +78,6 @@ require (
 	buf.build/go/protovalidate v1.4.0 // indirect
 	cel.dev/expr v0.25.3 // indirect
 	connectrpc.com/connect v1.21.0 // indirect
-	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect

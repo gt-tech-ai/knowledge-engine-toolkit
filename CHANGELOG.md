@@ -17,6 +17,13 @@ All notable changes to this project are recorded here. The format follows
   `Kind` factory (`stub` default, `postgres`) with a `schema.sql` and configurable table
   names; a write joins the transaction `stores/sqltx` bound to the context. Conformance suites
   for both interfaces ship in `tests/fixtures/castest`, and mocks in `tests/mocks`.
+- Outbox relay sets: `core/interfaces` gains `OutboxRelay` (one pass, `RunOnce`), which
+  `workflows/outbox.Relay` satisfies, with a generated mock. `workflows/outbox` gains
+  `RelaySetConfig` (a list of `LaneConfig` rows: lane, sink, poll interval and per-field
+  `RelayConfig` overrides of the defaults), `NewRelaySet` (one relay per lane partition,
+  named `<lane>-<partition>`, over shared `RelaySetDeps`) and `RelaySet.Group`, which runs
+  every relay on a `workflows/loop` ticker. A bad row is `CodeInvalidInput` naming
+  `lanes[i]`. `dario.cat/mergo` (BSD-3, already in `go.sum`) is now a direct dependency.
 
 ### Changed
 
