@@ -154,3 +154,33 @@ func TestListQueryMapAccessors(t *testing.T) {
 		},
 	)
 }
+
+// TestListQueryFieldPolarity tests the polarity a field declares for its values.
+//
+// Why this test is important:
+//   - A diverging stack puts each value above or below the axis by its polarity; a
+//     builder that mutated the shared field, or a lookup that read a missing value as
+//     neutral, would draw a negative answer on the positive side
+//
+// What it tests:
+//   - WithPolarity returns a copy and leaves the original without any polarity
+//   - Polarity returns -1, 0 and +1 for declared values and reports false for a value
+//     the field does not declare
+func TestListQueryFieldPolarity(t *testing.T) {
+	t.Parallel()
+
+	base := listquery.String("sentiment")
+	signed := base.WithPolarity(shapeSigns())
+
+	for value, want := range shapeSigns() {
+		got, ok := signed.Polarity(value)
+		require.True(t, ok, value)
+		require.Equal(t, want, got, value)
+	}
+
+	_, ok := signed.Polarity("mixed")
+	require.False(t, ok, "undeclared value")
+
+	_, ok = base.Polarity(shapePositive)
+	require.False(t, ok, "the original keeps no polarity")
+}

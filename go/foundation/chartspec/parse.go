@@ -15,7 +15,8 @@ const MaxShelfDepth = 8
 // validMark reports whether m is an accepted explicit mark (MarkAuto included).
 func validMark(m types.Mark) bool {
 	switch m {
-	case types.MarkAuto, types.MarkText, types.MarkBar, types.MarkLine, types.MarkPoint:
+	case types.MarkAuto, types.MarkText, types.MarkBar, types.MarkLine,
+		types.MarkPoint, types.MarkCell:
 		return true
 	default:
 		return false
@@ -30,6 +31,34 @@ func validOp(op types.AlgebraOp) bool {
 	default:
 		return false
 	}
+}
+
+// validStack reports whether s is an accepted stack mode (StackNone included).
+func validStack(s types.Stack) bool {
+	switch s {
+	case types.StackNone, types.StackZero, types.StackNormalize, types.StackDiverging:
+		return true
+	default:
+		return false
+	}
+}
+
+// validateReduce checks the reduce block: a known percent mode and a min_cell that is
+// not negative. An absent block is valid.
+func validateReduce(reduce *types.Reduce) error {
+	if reduce == nil {
+		return nil
+	}
+
+	if reduce.Percent != types.PercentNone && reduce.Percent != types.PercentOfTotal {
+		return invalid("unknown reduce percent " + string(reduce.Percent))
+	}
+
+	if reduce.MinCell < 0 {
+		return invalid("reduce min_cell must not be negative")
+	}
+
+	return nil
 }
 
 // invalid builds the CodeInvalidInput error every rejection returns.
@@ -102,7 +131,7 @@ func validateSpec(spec *types.ChartSpec, fieldMap *listquery.Map) error {
 	return compileFilter(spec, fieldMap)
 }
 
-// validateScalars checks the cube, grain, mark and time range.
+// validateScalars checks the cube, grain, mark, stack, reduce and time range.
 func validateScalars(spec *types.ChartSpec) error {
 	if spec.Cube == "" {
 		return invalid("cube is required")
@@ -112,8 +141,9 @@ func validateScalars(spec *types.ChartSpec) error {
 		return invalid("unknown grain " + string(spec.Grain))
 	}
 
-	if !validMark(spec.Mark) {
-		return invalid("unknown mark " + string(spec.Mark))
+	err := validateShaping(spec)
+	if err != nil {
+		return err
 	}
 
 	if tr := spec.TimeRange; !tr.From.IsZero() && !tr.To.IsZero() &&
@@ -122,6 +152,19 @@ func validateScalars(spec *types.ChartSpec) error {
 	}
 
 	return nil
+}
+
+// validateShaping checks the mark, stack and reduce block.
+func validateShaping(spec *types.ChartSpec) error {
+	if !validMark(spec.Mark) {
+		return invalid("unknown mark " + string(spec.Mark))
+	}
+
+	if !validStack(spec.Stack) {
+		return invalid("unknown stack " + string(spec.Stack))
+	}
+
+	return validateReduce(spec.Reduce)
 }
 
 // validateFields checks every field reference (shelves, detail, encodings) and

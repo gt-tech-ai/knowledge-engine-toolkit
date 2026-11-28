@@ -55,6 +55,21 @@
       },
       "root": "bcc7133131c08eace6435615426f1eeaa60fe57c3994f7f28de0a5b947ee69f5",
       "nodes": 9
+    },
+    {
+      "name": "cell mark with diverging stack and reduce",
+      "spec": {
+        "cube": "genai_calls",
+        "rows": {"field": "team"},
+        "columns": {"field": "model"},
+        "encodings": {"color": {"field": "tokens_in", "agg": "sum"}},
+        "time_range": {"from": "2026-10-01T00:00:00Z", "to": "2026-10-02T00:00:00Z"},
+        "mark": "cell",
+        "stack": "diverging",
+        "reduce": {"percent": "percent_of_total", "min_cell": 5}
+      },
+      "root": "5122932204c0970c38f68e040cef4486654f55830570d1a3eaac0ea1373c5df5",
+      "nodes": 6
     }
   ]
 }

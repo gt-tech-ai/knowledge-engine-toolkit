@@ -192,7 +192,8 @@ tier out in the framework's interceptor shape.
 - Go: `core/apperr` `New(code, msg)` / `Wrap(err, code, msg)`. `fmt.Errorf` is banned in
   production code by `forbidigo`. Python: `AppError(code, message, cause=…)` or a subclass.
 - Retryability, transport status and breaker accounting derive from the code, never the message.
-  Only transient codes (`TIMEOUT`, `UNAVAILABLE`) retry; `RESOURCE_EXHAUSTED` never does.
+  Only transient codes (`TIMEOUT`, `UNAVAILABLE`) retry; `RESOURCE_EXHAUSTED` and
+  `FAILED_PRECONDITION` never do.
 - SDK errors are translated to coded errors at the client boundary
   (`foundation/resilience/{grpc,aws}_boundary.py`, `clients/rpc/wire`). Messages are sanitized at
   the transport edge.

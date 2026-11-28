@@ -133,3 +133,15 @@ codes:
     retry: none
     safe_message: resource exhausted
     fixed_client_message: true
+
+  - code: FAILED_PRECONDITION
+    go: CodeFailedPrecondition
+    doc: a request the system's current state cannot honour, until that state changes
+    note: >-
+      It is not a malformed request (the same input succeeds once the state is right: a
+      stale revision, an unsupported language, a population below a privacy floor), so it
+      is neither transient nor permanent.
+    http: 400
+    grpc: FAILED_PRECONDITION
+    retry: none
+    safe_message: failed precondition

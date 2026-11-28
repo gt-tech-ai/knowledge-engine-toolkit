@@ -61,6 +61,15 @@ const (
 	// It is neither transient (retrying before the window resets only burns the quota check)
 	// nor permanent (the request succeeds once the window resets).
 	CodeResourceExhausted ErrorCode = "RESOURCE_EXHAUSTED"
+
+	// CodeFailedPrecondition is a request the system's current state cannot honour, until
+	// that state changes: HTTP 400, gRPC FAILED_PRECONDITION; neither transient nor
+	// permanent.
+	//
+	// It is not a malformed request (the same input succeeds once the state is right: a
+	// stale revision, an unsupported language, a population below a privacy floor), so it is
+	// neither transient nor permanent.
+	CodeFailedPrecondition ErrorCode = "FAILED_PRECONDITION"
 )
 
 // Codes returns every error code, in taxonomy order.
@@ -80,6 +89,7 @@ func Codes() []ErrorCode {
 		CodeQualityFailed,
 		CodeUpstream,
 		CodeResourceExhausted,
+		CodeFailedPrecondition,
 	}
 }
 
@@ -182,6 +192,13 @@ func infoOf(code ErrorCode) (codeInfo, bool) {
 			grpc:        8, // RESOURCE_EXHAUSTED
 			retry:       retryNone,
 			safeMessage: "resource exhausted",
+		}, true
+	case CodeFailedPrecondition:
+		return codeInfo{
+			http:        400,
+			grpc:        9, // FAILED_PRECONDITION
+			retry:       retryNone,
+			safeMessage: "failed precondition",
 		}, true
 	default:
 		return codeInfo{}, false

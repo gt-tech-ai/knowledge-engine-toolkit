@@ -73,6 +73,9 @@ type Field struct {
 	// Join, when non-nil, resolves this field to a correlated-EXISTS predicate on a
 	// joined table instead of the same-table Column. Filter-only.
 	Join *types.JoinTarget
+	// Signs maps a value of the field to its polarity: -1 below the axis of a
+	// diverging stack, +1 above, 0 split across both. Nil when the field has none.
+	Signs map[string]int8
 	// Name is the DTO field name a client uses in the filter JSON.
 	Name string
 	// Column is the storage column the filter compiles against (defaults to Name).
@@ -120,6 +123,25 @@ func (f *Field) AsTime() Field {
 	fCopy.Role = RoleTime
 
 	return fCopy
+}
+
+// WithPolarity returns a copy of the field whose values carry a polarity for a diverging
+// stack: -1 negative, 0 neutral, +1 positive. A value outside that set is refused when
+// a chart using the field compiles, not here.
+func (f *Field) WithPolarity(values map[string]int8) Field {
+	fCopy := *f
+
+	fCopy.Signs = values
+
+	return fCopy
+}
+
+// Polarity returns the polarity of value (-1, 0 or +1) and whether the field declares
+// one for it.
+func (f *Field) Polarity(value string) (int8, bool) {
+	sign, ok := f.Signs[value]
+
+	return sign, ok
 }
 
 // Allows reports whether agg is one of the field's permitted aggregates.
@@ -172,6 +194,7 @@ func String(
 		Join:       nil,
 		Ordinal:    nil,
 		Aggregates: nil,
+		Signs:      nil,
 		Role:       0,
 		Orderable:  false,
 	}
@@ -186,6 +209,7 @@ func Int(name string) Field {
 		Join:       nil,
 		Ordinal:    nil,
 		Aggregates: nil,
+		Signs:      nil,
 		Role:       0,
 		Orderable:  false,
 	}
@@ -200,6 +224,7 @@ func Float(name string) Field {
 		Join:       nil,
 		Ordinal:    nil,
 		Aggregates: nil,
+		Signs:      nil,
 		Role:       0,
 		Orderable:  false,
 	}
@@ -214,6 +239,7 @@ func Bool(name string) Field {
 		Join:       nil,
 		Ordinal:    nil,
 		Aggregates: nil,
+		Signs:      nil,
 		Role:       0,
 		Orderable:  false,
 	}
@@ -228,6 +254,7 @@ func Time(name string) Field {
 		Join:       nil,
 		Ordinal:    nil,
 		Aggregates: nil,
+		Signs:      nil,
 		Role:       0,
 		Orderable:  false,
 	}
@@ -242,6 +269,7 @@ func ID(name string) Field {
 		Join:       nil,
 		Ordinal:    nil,
 		Aggregates: nil,
+		Signs:      nil,
 		Role:       0,
 		Orderable:  false,
 	}

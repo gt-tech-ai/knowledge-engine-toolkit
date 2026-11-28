@@ -187,7 +187,8 @@ func ExitCode(code apperr.ErrorCode) int {
 		apperr.CodeCanceled,
 		apperr.CodeIngestion,
 		apperr.CodeUpstream,
-		apperr.CodeResourceExhausted:
+		apperr.CodeResourceExhausted,
+		apperr.CodeFailedPrecondition:
 		return 1
 	default:
 		// Any other value takes the shared result below.

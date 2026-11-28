@@ -338,3 +338,125 @@ func testDrillTeamToWorkspaceChecksSpec(t *testing.T,
 		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), field)
 	}
 }
+
+const (
+	// shapeSentiment is the dimension the stacking tests give a polarity.
+	shapeSentiment = "sentiment"
+	// shapeNegative, shapeNeutral and shapePositive are its values.
+	shapeNegative = "negative"
+	shapeNeutral  = "neutral"
+	shapePositive = "positive"
+)
+
+// shapeSigns is the polarity of the sentiment values: -1, 0 and +1.
+func shapeSigns() map[string]int8 {
+	return map[string]int8{shapeNegative: -1, shapeNeutral: 0, shapePositive: 1}
+}
+
+// shapeCube is the test cube with a sentiment dimension declaring polarity signs.
+func shapeCube(signs map[string]int8) listquery.Schema {
+	cube := chartCube()
+	cube.Fields.Add(new(listquery.String(shapeSentiment)).WithPolarity(signs))
+
+	return cube
+}
+
+// shapeSpec is a team × tokens_in bar coloured by the sentiment dimension and stacked
+// by mode.
+func shapeSpec(mode types.Stack) types.ChartSpec {
+	return fixtures.Build(func(row *types.ChartSpec) {
+		row.Cube = textGenaiCalls
+		row.Rows = leaf(textTeam, "")
+		row.Columns = leaf(textTokensIn, types.AggSum)
+		row.Mark = types.MarkBar
+		row.Stack = mode
+		row.Encodings.Color = &types.FieldRef{Name: shapeSentiment, Agg: ""}
+	})
+}
+
+// TestCompile_CellMarkNeedsDimensionsAndAMeasureColour tests the cell mark's shape.
+//
+// Why this test is important:
+//   - A cell grid is dimension × dimension coloured by a measure; a measure on a shelf
+//     would draw one cell per value instead of one per pair, with no error to say so
+//
+// What it tests:
+//   - team × model with a summed colour compiles to the cell mark in its one pane
+//   - a measure on a shelf, or a colour that is not a measure, is CodeInvalidInput
+func TestCompile_CellMarkNeedsDimensionsAndAMeasureColour(t *testing.T) {
+	t.Parallel()
+
+	cellSpec := func(edit func(row *types.ChartSpec)) types.ChartSpec {
+		return fixtures.Build(func(row *types.ChartSpec) {
+			row.Cube = textGenaiCalls
+			row.Rows = leaf(textTeam, "")
+			row.Columns = leaf(textModel, "")
+			row.Mark = types.MarkCell
+			row.Encodings.Color = &types.FieldRef{Name: textTokensIn, Agg: types.AggSum}
+			edit(row)
+		})
+	}
+
+	good := cellSpec(func(*types.ChartSpec) {})
+	plan, err := chartspec.Compile(&good, chartCube())
+	require.NoError(t, err)
+	require.Len(t, plan.Panes, 1)
+	assert.Equal(t, types.MarkCell, plan.Marks[plan.Panes[0]])
+
+	for name, spec := range map[string]types.ChartSpec{
+		"measure on a shelf": cellSpec(func(row *types.ChartSpec) {
+			row.Columns = leaf(textTokensIn, types.AggSum)
+		}),
+		"colour is a dimension": cellSpec(func(row *types.ChartSpec) {
+			row.Encodings.Color = &types.FieldRef{Name: textTeam, Agg: ""}
+		}),
+		"no colour": cellSpec(func(row *types.ChartSpec) {
+			row.Encodings.Color = nil
+		}),
+	} {
+		_, err = chartspec.Compile(&spec, chartCube())
+		require.Error(t, err, name)
+		assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err), name)
+	}
+}
+
+// TestCompile_DivergingStackNeedsPolarity tests the polarity check of a diverging stack.
+//
+// Why this test is important:
+//   - Without a polarity a diverging stack cannot tell negative from positive and
+//     would stack everything on one side; refusing at compile names the field to fix
+//
+// What it tests:
+//   - a diverging stack coloured by a field with no polarity is CodeInvalidInput and
+//     the message names the field
+//   - a polarity value outside -1, 0, +1 is CodeInvalidInput
+//   - a field with a full polarity compiles, and so do zero and normalize stacks on a
+//     field without one
+func TestCompile_DivergingStackNeedsPolarity(t *testing.T) {
+	t.Parallel()
+
+	spec := shapeSpec(types.StackDiverging)
+
+	_, err := chartspec.Compile(&spec, chartCube())
+	require.Error(t, err)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
+	_, err = chartspec.Compile(&spec, shapeCube(nil))
+	require.Error(t, err)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+	assert.Contains(t, err.Error(), shapeSentiment)
+
+	_, err = chartspec.Compile(&spec, shapeCube(map[string]int8{shapeNegative: -2}))
+	require.Error(t, err)
+	assert.Equal(t, apperr.CodeInvalidInput, apperr.Code(err))
+
+	_, err = chartspec.Compile(&spec, shapeCube(shapeSigns()))
+	require.NoError(t, err)
+
+	for _, mode := range []types.Stack{types.StackZero, types.StackNormalize} {
+		plain := shapeSpec(mode)
+
+		_, err = chartspec.Compile(&plain, shapeCube(nil))
+		require.NoError(t, err, string(mode))
+	}
+}

@@ -24,6 +24,19 @@ All notable changes to this project are recorded here. The format follows
   named `<lane>-<partition>`, over shared `RelaySetDeps`) and `RelaySet.Group`, which runs
   every relay on a `workflows/loop` ticker. A bad row is `CodeInvalidInput` naming
   `lanes[i]`. `dario.cat/mergo` (BSD-3, already in `go.sum`) is now a direct dependency.
+- Chart engine: `core/types` gains the `cell` mark, `Stack` (`zero`, `normalize`, `diverging`)
+  and `Reduce` (`percent_of_total`, `min_cell`) on `ChartSpec`, encoded as scalar members of the
+  spec node so existing roots keep their hashes. `listquery.Field` gains `WithPolarity` and
+  `Polarity`, and `chartspec.Compile` checks a cell mark's shelves and a diverging stack's colour
+  dimension. `chartspec` gains `Cell`, `ApplyMinCell`, `PercentOfTotal`, `StackCells`/`Segment`
+  and `(*Plan).Shape`, which apply the privacy floor, the share and the stack in that order.
+  `core/interfaces` gains `CountSource` (the population the floor is checked against), with a
+  generated mock.
+- Error taxonomy: the `FAILED_PRECONDITION` code (HTTP 400, gRPC 9, never retried) in Go and
+  Python, with `FailedPreconditionError`, and its mapping in the connect principal interceptor,
+  the rpc wire boundary and the console report. The retry layer treats it as non-retryable.
+
+`techai-webutils` 0.20.14 (adds `FAILED_PRECONDITION` and `FailedPreconditionError`).
 
 ### Changed
 
