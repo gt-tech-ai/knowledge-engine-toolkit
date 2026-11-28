@@ -67,6 +67,9 @@ const (
 	MarkLine Mark = "line"
 	// MarkPoint draws a scatter (measure × measure).
 	MarkPoint Mark = "point"
+	// MarkCell draws a grid of cells (dimension × dimension), each coloured by its
+	// measure.
+	MarkCell Mark = "cell"
 )
 
 // FieldRef references one cube field on a shelf; Agg is set for a measure and empty for a
@@ -123,6 +126,10 @@ type chartSpecWire struct {
 	Grain Grain `json:"grain,omitempty"`
 	// Mark is the explicit mark.
 	Mark Mark `json:"mark,omitempty"`
+	// Stack is how a group's values are laid end to end.
+	Stack Stack `json:"stack,omitempty"`
+	// Reduce hides small cells and turns values into shares.
+	Reduce *Reduce `json:"reduce,omitempty"`
 	// Filter is the filter tree in the listquery grammar.
 	Filter *FilterNode `json:"filter,omitempty"`
 	// Detail adds group-by fields.

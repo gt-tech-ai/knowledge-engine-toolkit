@@ -53,6 +53,7 @@
 // console) depends on, mocked in place of a Prometheus server.
 //go:generate mockgen -destination=mock_metrics_querier.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces MetricsQuerier
 //go:generate mockgen -destination=mock_cas.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces NodeStore,RefStore
+//go:generate mockgen -destination=mock_count_source.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces CountSource
 //go:generate mockgen -destination=mock_observer.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces ExecutionObserver
 //go:generate mockgen -destination=mock_ops.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces Operation,Reservation
 //go:generate mockgen -destination=mock_outbox.go -package=mocks github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/interfaces OutboxStore,OutboxSink,OutboxRelay

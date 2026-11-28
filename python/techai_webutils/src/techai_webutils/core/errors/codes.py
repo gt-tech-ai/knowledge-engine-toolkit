@@ -100,6 +100,16 @@ class ErrorCode(StrEnum):
     nor permanent (the request succeeds once the window resets).
     """
 
+    FAILED_PRECONDITION = "FAILED_PRECONDITION"
+    """A request the system's current state cannot honour, until that state changes.
+
+    HTTP 400, gRPC FAILED_PRECONDITION; neither transient nor permanent.
+
+    It is not a malformed request (the same input succeeds once the state is right: a
+    stale revision, an unsupported language, a population below a privacy floor), so it is
+    neither transient nor permanent.
+    """
+
 
 GRPC_STATUS: Final[Mapping[ErrorCode, int]] = MappingProxyType({
     ErrorCode.UNKNOWN: 13,  # INTERNAL
@@ -116,6 +126,7 @@ GRPC_STATUS: Final[Mapping[ErrorCode, int]] = MappingProxyType({
     ErrorCode.QUALITY_FAILED: 13,  # INTERNAL
     ErrorCode.UPSTREAM: 14,  # UNAVAILABLE
     ErrorCode.RESOURCE_EXHAUSTED: 8,  # RESOURCE_EXHAUSTED
+    ErrorCode.FAILED_PRECONDITION: 9,  # FAILED_PRECONDITION
 })
 """Each code's gRPC status number."""
 
@@ -134,6 +145,7 @@ HTTP_STATUS: Final[Mapping[ErrorCode, int]] = MappingProxyType({
     ErrorCode.QUALITY_FAILED: 500,
     ErrorCode.UPSTREAM: 502,
     ErrorCode.RESOURCE_EXHAUSTED: 429,
+    ErrorCode.FAILED_PRECONDITION: 400,
 })
 """Each code's HTTP status."""
 
@@ -163,6 +175,7 @@ SAFE_MESSAGE: Final[Mapping[ErrorCode, str]] = MappingProxyType({
     ErrorCode.UNAVAILABLE: "service unavailable",
     ErrorCode.UPSTREAM: "upstream service unavailable",
     ErrorCode.RESOURCE_EXHAUSTED: "resource exhausted",
+    ErrorCode.FAILED_PRECONDITION: "failed precondition",
 })
 """Each code's fixed client-safe message; any other sends the generic internal message."""
 

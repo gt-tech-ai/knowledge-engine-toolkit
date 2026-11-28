@@ -25,6 +25,17 @@ type Plan struct {
 	Marks map[PaneKey]types.Mark
 	// Panes are the pane keys, rows outer, columns inner.
 	Panes []PaneKey
+	// Filter is the spec's filter tree, the population Shape counts against; nil
+	// means every observation.
+	Filter *types.FilterNode
+	// Polarity is the sign of a colour-dimension value, set for a diverging stack
+	// and nil otherwise.
+	Polarity func(value string) (int8, bool)
+	// Stack is how Shape lays a group's values end to end.
+	Stack types.Stack
+	// Reduce is the privacy floor and share Shape applies; its zero value does
+	// neither.
+	Reduce types.Reduce
 	// Query is the store query answering every pane.
 	Query types.AggregateQuery
 }
@@ -35,7 +46,9 @@ type Plan struct {
 // measure, and carries the filter, range, grain and sort. Each pane's mark is the
 // spec's Mark or the inference O×O→text, O×Q→bar, T×Q→line, Q×Q→point. A cube
 // mismatch, a cube without Fields, an undeclared grain, a count_distinct measure
-// (which additive partials cannot answer) or a sort key the query neither groups
+// (which additive partials cannot answer), a cell mark without dimension shelves and a
+// measure colour, a diverging stack whose colour dimension declares no valid polarity,
+// or a sort key the query neither groups
 // by nor computes is CodeInvalidInput. The cube is the listquery.Schema that list
 // endpoints use too.
 // spec must not be nil.
@@ -49,21 +62,57 @@ func Compile(specRef *types.ChartSpec, cube listquery.Schema) (Plan, error) {
 
 	rows, cols := Normalize(spec.Rows), Normalize(spec.Columns)
 
+	err = checkShaping(&spec, &cube, rows, cols)
+	if err != nil {
+		return Plan{}, err
+	}
+
 	query, err := aggregateQuery(&spec, rows, cols)
 	if err != nil {
 		return Plan{}, err
 	}
 
 	plan := Plan{
-		Query: query,
-		Marks: make(map[PaneKey]types.Mark, len(rows)*len(cols)),
-		Panes: nil,
+		Query:    query,
+		Marks:    make(map[PaneKey]types.Mark, len(rows)*len(cols)),
+		Panes:    nil,
+		Filter:   spec.FilterTree,
+		Polarity: polarityOf(&spec, &cube),
+		Stack:    spec.Stack,
+		Reduce:   reduceOf(&spec),
 	}
 	for _, r := range rows {
 		addRowPanes(&plan, r, cols, spec.Mark, cube.Fields)
 	}
 
 	return plan, nil
+}
+
+// reduceOf is the spec's Reduce, or the zero value when it has none.
+func reduceOf(spec *types.ChartSpec) types.Reduce {
+	if spec.Reduce == nil {
+		return types.Reduce{Percent: types.PercentNone, MinCell: 0}
+	}
+
+	return *spec.Reduce
+}
+
+// polarityOf resolves the sign lookup of a diverging stack's colour dimension; any
+// other spec has none. checkShaping has already proved the field declares one.
+func polarityOf(
+	spec *types.ChartSpec,
+	cube *listquery.Schema,
+) func(value string) (int8, bool) {
+	if spec.Stack != types.StackDiverging || spec.Encodings.Color == nil {
+		return nil
+	}
+
+	field, ok := cube.Fields.Lookup(spec.Encodings.Color.Name)
+	if !ok {
+		return nil
+	}
+
+	return field.Polarity
 }
 
 // checkCube rejects a spec the cube cannot answer.

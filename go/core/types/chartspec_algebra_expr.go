@@ -131,6 +131,10 @@ type ChartSpec struct {
 	Grain Grain
 	// Mark, when set, overrides the inferred mark of every pane.
 	Mark Mark
+	// Stack is how the values of one group are laid end to end.
+	Stack Stack
+	// Reduce, when set, hides small cells and turns values into shares.
+	Reduce *Reduce
 	// FilterTree is the filter as a structured tree (wire key "filter", the listquery
 	// grammar); chartspec.Parse compiles it into Filter. Nil means no filter.
 	FilterTree *FilterNode
@@ -151,6 +155,8 @@ func (s *ChartSpec) Wire() ([]byte, error) {
 		Cube:      s.Cube,
 		Grain:     s.Grain,
 		Mark:      s.Mark,
+		Stack:     s.Stack,
+		Reduce:    s.Reduce,
 		Filter:    s.FilterTree,
 		Detail:    s.Detail,
 		Sort:      nil,
@@ -188,6 +194,8 @@ func (s *ChartSpec) UnmarshalJSON(b []byte) error {
 		Cube:       currentChartSpecWire.Cube,
 		Grain:      currentChartSpecWire.Grain,
 		Mark:       currentChartSpecWire.Mark,
+		Stack:      currentChartSpecWire.Stack,
+		Reduce:     currentChartSpecWire.Reduce,
 		FilterTree: currentChartSpecWire.Filter,
 		Detail:     currentChartSpecWire.Detail,
 		Filter:     nil,

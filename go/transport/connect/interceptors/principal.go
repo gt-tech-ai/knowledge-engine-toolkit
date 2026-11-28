@@ -175,6 +175,10 @@ func callerFaultCode(code apperr.ErrorCode) (connect.Code, bool) {
 		return connect.CodePermissionDenied, true
 	}
 
+	if code == apperr.CodeFailedPrecondition {
+		return connect.CodeFailedPrecondition, true
+	}
+
 	return 0, false
 }
 

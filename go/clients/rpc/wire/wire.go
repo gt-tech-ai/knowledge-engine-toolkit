@@ -62,6 +62,11 @@ func callerFault(c connect.Code) (mapping, bool) {
 		return mapping{code: apperr.CodeUnauthorized, msg: "unauthenticated"}, true
 	case connect.CodePermissionDenied:
 		return mapping{code: apperr.CodeForbidden, msg: "permission denied"}, true
+	case connect.CodeFailedPrecondition:
+		return mapping{
+			code: apperr.CodeFailedPrecondition,
+			msg:  "failed precondition",
+		}, true
 	default:
 		return stdx.Zero[mapping](), false
 	}

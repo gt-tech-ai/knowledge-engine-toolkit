@@ -11,8 +11,8 @@ import (
 // The node kinds of a ChartSpec tree. A kind fixes which fields, children and lists a
 // node may carry; renaming one re-addresses every stored spec.
 const (
-	// kindSpec is the root: fields cube, grain, mark; children rows, columns,
-	// encodings, time_range, filter; lists detail, sort.
+	// kindSpec is the root: fields cube, grain, mark, stack, percent, min_cell;
+	// children rows, columns, encodings, time_range, filter; lists detail, sort.
 	kindSpec = "chart_spec"
 	// kindShelf is an operator shelf expression: field op; list args.
 	kindShelf = "chart_shelf"
@@ -36,6 +36,9 @@ const (
 	memberCube      = "cube"
 	memberGrain     = "grain"
 	memberMark      = "mark"
+	memberStack     = "stack"
+	memberPercent   = "percent"
+	memberMinCell   = "min_cell"
 	memberRows      = "rows"
 	memberColumns   = "columns"
 	memberEncodings = "encodings"
@@ -124,6 +127,33 @@ func setField[T comparable](node *Node, name string, value T) {
 	node.Fields[name] = value
 }
 
+// The number formats min_cell is written and read in.
+const (
+	// decimal is the base min_cell is written in.
+	decimal = 10
+	// int64Bits is the width min_cell is parsed into.
+	int64Bits = 64
+)
+
+// setShaping records the stack mode and the reduce block as scalars on the spec node.
+// min_cell is a decimal string, so the hash does not depend on the number type a store
+// reads back; an unset stack or reduce records nothing, which keeps the address of every
+// spec written before they existed.
+func setShaping(node *Node, chartSpec *types.ChartSpec) {
+	setField(node, memberStack, string(chartSpec.Stack))
+
+	if chartSpec.Reduce == nil {
+		return
+	}
+
+	setField(node, memberPercent, string(chartSpec.Reduce.Percent))
+
+	if chartSpec.Reduce.MinCell != 0 {
+		minCell := strconv.FormatInt(chartSpec.Reduce.MinCell, decimal)
+		setField(node, memberMinCell, minCell)
+	}
+}
+
 // setChild records a child reference unless it is absent.
 func setChild(node *Node, name string, hash Hash) {
 	if hash.IsZero() {
@@ -158,6 +188,7 @@ func (e *encoder) spec(sRef *types.ChartSpec) (Hash, error) {
 	setField(&node, memberCube, chartSpec.Cube)
 	setField(&node, memberGrain, string(chartSpec.Grain))
 	setField(&node, memberMark, string(chartSpec.Mark))
+	setShaping(&node, &chartSpec)
 
 	children := []struct {
 		build func() (Hash, error)

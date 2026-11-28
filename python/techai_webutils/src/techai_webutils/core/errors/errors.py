@@ -253,6 +253,25 @@ class QuotaExceededError(AppError):
         )
 
 
+class FailedPreconditionError(AppError):
+    """The system's state cannot honour the request yet (``FAILED_PRECONDITION``).
+
+    Not a malformed request: the same input succeeds once the state is right (a stale
+    revision, an unsupported language, a population below a privacy floor). It is neither
+    transient nor permanent, so the resiliency stack never retries it.
+    """
+
+    def __init__(self, message: str, **kwargs: str) -> None:
+        """Initialize with a message; extra keyword args become error details.
+
+        Args:
+            message: Which precondition failed and what would satisfy it.
+            **kwargs: Structured context, stored as the error's details.
+
+        """
+        super().__init__(ErrorCode.FAILED_PRECONDITION, message, details=kwargs)
+
+
 # Coded errors named for the builtin they replace. They are not builtins: catch them by
 # their coded base (``InvalidInputError``, ``InternalError``, ``NotFoundError``) or
 # ``AppError``; a bare ``except ValueError`` no longer sees them.

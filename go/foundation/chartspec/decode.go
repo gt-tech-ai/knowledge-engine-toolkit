@@ -2,6 +2,7 @@ package chartspec
 
 import (
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
@@ -103,22 +104,10 @@ func (d decoder) spec(root Hash) (types.ChartSpec, error) {
 
 	var chartSpec types.ChartSpec
 
-	chartSpec.Cube, err = fieldOf[string](node, memberCube)
+	err = specScalars(node, &chartSpec)
 	if err != nil {
 		return types.ChartSpec{}, err
 	}
-
-	grain, err := fieldOf[string](node, memberGrain)
-	if err != nil {
-		return types.ChartSpec{}, err
-	}
-
-	mark, err := fieldOf[string](node, memberMark)
-	if err != nil {
-		return types.ChartSpec{}, err
-	}
-
-	chartSpec.Grain, chartSpec.Mark = types.Grain(grain), types.Mark(mark)
 
 	err = d.specChildren(node, &chartSpec)
 	if err != nil {
@@ -131,6 +120,70 @@ func (d decoder) spec(root Hash) (types.ChartSpec, error) {
 	}
 
 	return chartSpec, nil
+}
+
+// specScalars decodes the root's scalar members into chartSpec: cube, grain, mark,
+// stack and the reduce block.
+func specScalars(node Node, chartSpec *types.ChartSpec) error {
+	var err error
+
+	chartSpec.Cube, err = fieldOf[string](node, memberCube)
+	if err != nil {
+		return err
+	}
+
+	grain, err := fieldOf[string](node, memberGrain)
+	if err != nil {
+		return err
+	}
+
+	mark, err := fieldOf[string](node, memberMark)
+	if err != nil {
+		return err
+	}
+
+	stack, err := fieldOf[string](node, memberStack)
+	if err != nil {
+		return err
+	}
+
+	chartSpec.Grain = types.Grain(grain)
+	chartSpec.Mark = types.Mark(mark)
+	chartSpec.Stack = types.Stack(stack)
+
+	return reduceInto(node, chartSpec)
+}
+
+// reduceInto decodes percent and min_cell into chartSpec.Reduce; neither present
+// leaves it nil.
+func reduceInto(node Node, chartSpec *types.ChartSpec) error {
+	percent, err := fieldOf[string](node, memberPercent)
+	if err != nil {
+		return err
+	}
+
+	text, err := fieldOf[string](node, memberMinCell)
+	if err != nil {
+		return err
+	}
+
+	if percent == "" && text == "" {
+		return nil
+	}
+
+	var minCell int64
+
+	if text != "" {
+		minCell, err = strconv.ParseInt(text, decimal, int64Bits)
+		if err != nil {
+			return apperr.Wrap(err, apperr.CodeInvalidInput,
+				"chartspec: min_cell is not a number")
+		}
+	}
+
+	chartSpec.Reduce = &types.Reduce{Percent: types.Percent(percent), MinCell: minCell}
+
+	return nil
 }
 
 // specChildren decodes the root's singular children into s.

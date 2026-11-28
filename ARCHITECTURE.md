@@ -567,6 +567,19 @@ node it reads (missing → `CodeNotFound`, content not matching its address → 
 `Diff` compares two roots and returns the changed paths (`columns.args[0].agg`), descending only
 where hashes differ. `testdata/chartspec/*.golden.json` pins the node and root hashes.
 
+A spec can also shape what it draws. `Mark` gains `cell` (dimension × dimension, each cell coloured
+by a measure; `Compile` rejects a measure on a shelf or a colour that is not a measure).
+`Stack` lays a group's values end to end — `zero` from zero, `normalize` scaled to span one,
+`diverging` away from zero by the polarity a colour dimension declares (`listquery.Field.WithPolarity`:
+-1 below, 0 split across both sides, +1 above; `Compile` rejects a diverging stack whose colour
+dimension has none). `Reduce` carries `percent: percent_of_total` and `min_cell`. Both travel as
+scalar members of the spec node, so a spec without them keeps its hash. `(*Plan).Shape` applies them
+to the cells a query returned, in order: `ApplyMinCell` suppresses each cell backed by fewer than
+`min_cell` observations (value 0, `Suppressed` set), `PercentOfTotal` turns the visible values into
+shares, and `StackCells` returns each cell's `Segment`. The floor needs the population, which
+`core/interfaces.CountSource` answers (a mock ships in `tests/mocks`); a population below the floor is
+`FAILED_PRECONDITION`, and a floor with no count source is `INVALID_INPUT`.
+
 `core/interfaces.AnalyticsStore` (`Aggregate` → a pull-based, page-at-a-time `RowStream`; idempotent
 `Write`; optional `AnalyticsCompactor`) is built by `clients/analytics` (`KindStub` default,
 `KindCassandra`). The Cassandra store sits on `core/interfaces.CQLSession`, built by `clients/cql`
@@ -778,7 +791,10 @@ which maps codes and captures the real cause for the request log). Python raises
 and `http_status` derive from the code, retries retry only transient `AppError`s, and boundary
 helpers translate SDK errors (`foundation/resilience/grpc_boundary.py`,
 `foundation/resilience/aws_boundary.py`). `RESOURCE_EXHAUSTED` (a spent quota, HTTP 429 / gRPC 8) is
-neither transient nor permanent, so no retry layer in either language retries it. Policies that
+neither transient nor permanent, so no retry layer in either language retries it; nor does
+`FAILED_PRECONDITION` (HTTP 400 / gRPC 9: the request is well formed but the state it runs
+against refuses it — a stale revision, an unsupported language, a population below a privacy
+floor), which retrying cannot change. Policies that
 are not facts of a code stay hand-written beside their use: the retry policy, the principal
 interceptor's status for an unresolvable caller, and the command-line exit codes.
 
