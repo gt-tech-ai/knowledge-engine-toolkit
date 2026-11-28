@@ -3,7 +3,9 @@ package unit_test
 import (
 	"context"
 	"net"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,22 +20,29 @@ import (
 	grpcserver "github.com/gt-tech-ai/knowledge-engine-toolkit/go/transport/grpc"
 )
 
-// lbCalls is how many health checks the round-robin test fans across the backends.
-const lbCalls = 6
+const (
+	// lbCalls is how many health checks the pick-first case fans across the backends.
+	lbCalls = 6
+	// lbReadyWait bounds how long round robin may take to see both subchannels READY.
+	lbReadyWait = 10 * time.Second
+	// lbTick is the pause between the health checks that wait for both backends.
+	lbTick = 10 * time.Millisecond
+)
 
 // startCountingHealthServer starts a health server on a fresh port that counts the
-// Check calls it serves, and returns its address and the counter.
-func startCountingHealthServer(t *testing.T) (addr string, count *int) {
+// Check calls it serves, and returns its address and the counter. The counter is
+// atomic because the server's goroutine increments it while the test reads it.
+func startCountingHealthServer(t *testing.T) (addr string, count *atomic.Int64) {
 	t.Helper()
 
-	served := 0
+	served := new(atomic.Int64)
 	srv := grpcserver.NewServer(
 		grpcserver.DefaultServerConfig(),
 		grpc.ChainUnaryInterceptor(func(
 			ctx context.Context, req any, _ *grpc.UnaryServerInfo,
 			handler grpc.UnaryHandler,
 		) (any, error) {
-			served++
+			served.Add(1)
 
 			return handler(ctx, req)
 		}),
@@ -47,7 +56,7 @@ func startCountingHealthServer(t *testing.T) (addr string, count *int) {
 
 	t.Cleanup(srv.GracefulStop)
 
-	return lis.Addr().String(), &served
+	return lis.Addr().String(), served
 }
 
 // twoAddressResolver returns a manual resolver advertising exactly addr1 and addr2.
@@ -131,14 +140,28 @@ func runLoadBalancingCase(
 	t.Cleanup(func() { _ = conn.Close() })
 
 	client := healthpb.NewHealthClient(conn)
-	for range lbCalls {
+	checkOnce := func() {
 		_, checkErr := client.Check(
 			context.Background(), new(healthpb.HealthCheckRequest),
 		)
 		require.NoError(t, checkErr)
 	}
 
-	check(t, *count1, *count2)
+	if policy == platformgrpc.LoadBalancingRoundRobin {
+		// round_robin rotates only over READY subchannels, so the first calls can all
+		// land on the one that connected first: call until both backends have served.
+		require.Eventually(t, func() bool {
+			checkOnce()
+
+			return count1.Load() > 0 && count2.Load() > 0
+		}, lbReadyWait, lbTick, "round robin never reached both backends")
+	} else {
+		for range lbCalls {
+			checkOnce()
+		}
+	}
+
+	check(t, int(count1.Load()), int(count2.Load()))
 }
 
 // TestNewClient_UnknownLoadBalancingFailsCoded tests the factory's unknown-kind guard.

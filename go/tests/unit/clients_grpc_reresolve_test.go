@@ -165,5 +165,7 @@ func TestNewClient_ResolveIntervalRoundRobinServesCalls(t *testing.T) {
 		require.NoError(t, checkErr)
 	}
 
-	assert.Positive(t, *count, "resolve-interval round_robin client reaches the backend")
+	assert.Positive(
+		t, count.Load(), "resolve-interval round_robin client reaches the backend",
+	)
 }
