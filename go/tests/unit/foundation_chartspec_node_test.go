@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cas"
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/chartspec"
 )
 
@@ -23,7 +24,8 @@ import (
 // What it tests:
 //   - each corpus node encodes to exactly its RFC 8785 canonical bytes (the RFC's number
 //     and key-order vectors, unicode keys, zero members and empty lists omitted, hashes
-//     as lowercase hex) and hashes to its pinned SHA-256 address.
+//     as lowercase hex) and hashes to its pinned SHA-256 address, which is also what
+//     cas.Sum returns for the canonical bytes under the "chartspec/v1" domain.
 func TestNodeHash_GoldenCorpus(t *testing.T) {
 	t.Parallel()
 
@@ -64,9 +66,20 @@ func TestNodeHash_GoldenCorpus(t *testing.T) {
 			currentShapeCases.Name,
 		)
 
-		h, err := currentShapeCases.Node.Hash()
+		nodeHash, err := currentShapeCases.Node.Hash()
 		require.NoError(t, err, currentShapeCases.Name)
-		assert.Equal(t, currentShapeCases.Hash, h.String(), currentShapeCases.Name)
+		assert.Equal(
+			t,
+			currentShapeCases.Hash,
+			nodeHash.String(),
+			currentShapeCases.Name,
+		)
+		assert.Equal(
+			t,
+			cas.Sum("chartspec/v1", canonical).String(),
+			nodeHash.String(),
+			currentShapeCases.Name,
+		)
 	}
 }
 

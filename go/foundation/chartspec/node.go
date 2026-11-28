@@ -2,7 +2,6 @@ package chartspec
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"reflect"
@@ -10,11 +9,14 @@ import (
 	"github.com/gowebpki/jcs"
 
 	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/apperr"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/core/types"
+	"github.com/gt-tech-ai/knowledge-engine-toolkit/go/foundation/cas"
 )
 
-// hashDomain prefixes every hashed node, so a node hash can never collide with a hash
-// of some other format's bytes. The version changes only with the node encoding.
-const hashDomain = "chartspec/v1\x00"
+// hashDomain separates a node hash from a hash of any other format's bytes: cas.Sum
+// prefixes it, and a NUL, to the canonical bytes. The version changes only with the
+// node encoding.
+const hashDomain types.Domain = "chartspec/v1"
 
 // Hash is the SHA-256 content address of a Node.
 type Hash [32]byte
@@ -294,22 +296,13 @@ func (n Node) Canonical() ([]byte, error) {
 	return out, nil
 }
 
-// Hash returns the node's content address: SHA-256 over the domain prefix
-// "chartspec/v1\x00" followed by Canonical.
+// Hash returns the node's content address: cas.Sum over Canonical under the
+// "chartspec/v1" domain, so the bytes hashed are the domain, a NUL and Canonical.
 func (n Node) Hash() (Hash, error) {
 	canonical, err := n.Canonical()
 	if err != nil {
 		return Hash{}, err
 	}
 
-	hash := sha256.New()
-
-	_, _ = hash.Write([]byte(hashDomain))
-	_, _ = hash.Write(canonical)
-
-	var out Hash
-
-	copy(out[:], hash.Sum(nil))
-
-	return out, nil
+	return Hash(cas.Sum(hashDomain, canonical)), nil
 }
