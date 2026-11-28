@@ -4,6 +4,24 @@ All notable changes to this project are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/). Go and Python (`techai-webutils`) ship together from one tag.
 
+## [0.0.88] - 2026-11-27
+
+### Added
+
+- Content-addressed store: `core/types` gains `Hash`, `Domain`, `Node`, `NodeKey`,
+  `PutResult`, `RefKey` and `RefMove`; `core/interfaces` gains `NodeStore` (insert-only
+  `Put`/`Get` of a node under its hash) and `RefStore` (a named pointer moved by
+  compare-and-swap, where losing the race is `false` with no error). `foundation/cas` hashes
+  any JSON value as SHA-256 over `domain ‖ 0x00 ‖ JCS (RFC 8785) canonical bytes`, so key order
+  and whitespace never change a hash and two domains never collide. `stores/cas` is the
+  `Kind` factory (`stub` default, `postgres`) with a `schema.sql` and configurable table
+  names; a write joins the transaction `stores/sqltx` bound to the context. Conformance suites
+  for both interfaces ship in `tests/fixtures/castest`, and mocks in `tests/mocks`.
+
+### Changed
+
+- `foundation/chartspec` computes `Node.Hash` through `cas.Sum`; every hash is unchanged.
+
 ## [0.0.87] - 2026-11-25
 
 ### Added

@@ -22,6 +22,8 @@ go/
   clients/              Layer 2 — external-system integration (db, cache, messaging, rpc, storage, lock, codebase,
                         git/helm/kubectl/docker/terraform, AWS, process, toolchain)
   repos/                Layer 3 — data-access base (repository, cursor, decorators)
+  stores/               Kind-selected data stores over a database: outbox, cas (content-addressed nodes +
+                        compare-and-swap refs), sqltx (transactions), and the ent/gorm store bases
   services/             Layer 4 — domain-service base, probe sets, tool runs
   pipelines/            Layer 5 — stateless transforms
   workflows/            Layer 6 — multi-step orchestration
